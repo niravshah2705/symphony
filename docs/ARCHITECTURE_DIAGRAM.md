@@ -4,8 +4,9 @@ This diagram shows the preset-routed agent architecture. The browser-facing,
 SDK-free **gateway** retains browser/domain APIs and proxies the isolated agent
 surface. The **orchestrator** is the single internal agent service: the
 browser-facing agent surface (the retired planner/coder services' routes), the
-durable `plan → code → test → deploy` control plane, and the Agent Substrate
-control plane; the approval-gated **deployer** stays rollout-gated beside it.
+durable `plan → code → test` control plane, and the Agent Substrate
+control plane. The approval-gated deployer was retired (2026-11): runs end
+after test.
 Every agent run itself executes in an **Agent Substrate actor** — an ephemeral
 gVisor sandbox per run, not a service. Linear is the ticket system, Ollama/LM Studio/OMLX provide
 the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runtime
@@ -13,7 +14,7 @@ the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runti
 and execute work.
 
 The browser-local workflow canvas is deliberately not executable. The one
-canonical runtime graph is the versioned `plan → code → test → deploy` pipeline;
+canonical runtime graph is the versioned `plan → code → test` pipeline;
 Firestore PipelineRun/StageRun records and LangGraph checkpoints are its source
 of truth. Linear terminal labels are projections, not the control bus.
 

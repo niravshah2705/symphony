@@ -61,12 +61,6 @@ variable "orchestrator_image_tag" {
   default     = ""
 }
 
-variable "deployer_image_tag" {
-  type        = string
-  description = "Per-service image tag for the brokered pipeline deployer."
-  default     = ""
-}
-
 variable "org_image_tag" {
   type        = string
   description = "Per-service image tag override for the org service (FastAPI/Firestore)."
@@ -101,11 +95,6 @@ variable "gateway_service_name" {
 variable "orchestrator_service_name" {
   type    = string
   default = "pipeline-orchestrator"
-}
-
-variable "deployer_service_name" {
-  type    = string
-  default = "pipeline-deployer"
 }
 
 variable "org_service_name" {
@@ -434,7 +423,7 @@ variable "internal_api_token" {
 variable "internal_ingress" {
   type        = string
   description = <<-EOT
-    Ingress for the non-public services (orchestrator, deployer, provisioner).
+    Ingress for the non-public services (orchestrator, provisioner).
     Default is
     INGRESS_TRAFFIC_ALL, but they remain IAM-gated (no allUsers invoker) — every
     caller MUST present an OIDC token for gateway-sa or pubsub-push-sa. This lets
@@ -581,11 +570,6 @@ variable "pipeline_test_topic" {
   default = "pipeline-test-commands"
 }
 
-variable "pipeline_deploy_topic" {
-  type    = string
-  default = "pipeline-deploy-commands"
-}
-
 variable "pipeline_plan_results_topic" {
   type    = string
   default = "pipeline-plan-results"
@@ -601,20 +585,9 @@ variable "pipeline_test_results_topic" {
   default = "pipeline-test-results"
 }
 
-variable "pipeline_deploy_results_topic" {
-  type    = string
-  default = "pipeline-deploy-results"
-}
-
 variable "pipeline_orchestrator_enabled" {
   type        = bool
   description = "Create and enable the durable fixed-stage pipeline topology. False preserves the legacy autonomous label flow and creates no pipeline Cloud Run/Pub/Sub resources."
-  default     = false
-}
-
-variable "pipeline_deployment_enabled" {
-  type        = bool
-  description = "Allow the deploy stage after the full plan/code/test/deploy sequence. False is the fail-closed default."
   default     = false
 }
 

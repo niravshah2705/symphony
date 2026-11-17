@@ -40,7 +40,6 @@ substitutions:
   _EMAIL_SMTP_REQUIRE_TLS: "true"
   _EMAIL_FROM: ""
   _PIPELINE_ORCHESTRATOR_ENABLED: "false"
-  _PIPELINE_DEPLOYMENT_ENABLED: "false"
   _SETTINGS_OPERATOR_INVOKER: ""
   _OMLX_PROXY_UPSTREAM: ""
   _OLLAMA_PROXY_UPSTREAM: ""
@@ -83,17 +82,6 @@ steps:
       - deploy/gcp/Dockerfile.orchestrator
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-orchestrator:${_IMAGE_TAG}
-      - .
-
-  - id: build-deployer
-    name: gcr.io/cloud-builders/docker
-    waitFor: ["-"]
-    args:
-      - build
-      - -f
-      - deploy/gcp/Dockerfile.deployer
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-deployer:${_IMAGE_TAG}
       - .
 
   - id: build-proxy
@@ -257,11 +245,6 @@ steps:
     waitFor: [build-orchestrator, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-orchestrator:${_IMAGE_TAG}"]
 
-  - id: push-deployer
-    name: gcr.io/cloud-builders/docker
-    waitFor: [build-deployer, tf-bootstrap]
-    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-deployer:${_IMAGE_TAG}"]
-
   - id: push-proxy
     name: gcr.io/cloud-builders/docker
     waitFor: [build-proxy, tf-bootstrap]
@@ -382,7 +365,6 @@ steps:
           -var="artifact_repo=${_REPO}" \
           -var="image_tag=${_IMAGE_TAG}" \
           -var="orchestrator_image_tag=${_IMAGE_TAG}" \
-          -var="deployer_image_tag=${_IMAGE_TAG}" \
           -var="proxy_image_tag=${_IMAGE_TAG}" \
           -var="spa_bucket_name=${_BUCKET}" \
           -var="firestore_location=${_FIRESTORE_LOCATION}" \
@@ -391,7 +373,6 @@ steps:
           -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}" \
           -var="custom_domain=$${CUSTOM_DOMAIN_ARG}" \
           -var="pipeline_orchestrator_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
-          -var="pipeline_deployment_enabled=${_PIPELINE_DEPLOYMENT_ENABLED}" \
           -var="settings_operator_invoker=${_SETTINGS_OPERATOR_INVOKER}" \
           -var="omlx_proxy_upstream=${_OMLX_PROXY_UPSTREAM}" \
           -var="ollama_proxy_upstream=${_OLLAMA_PROXY_UPSTREAM}" \

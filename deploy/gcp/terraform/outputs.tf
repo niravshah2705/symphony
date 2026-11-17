@@ -27,22 +27,15 @@ output "pipeline_orchestrator_uri" {
   value       = google_cloud_run_v2_service.orchestrator.uri
 }
 
-output "pipeline_deployer_uri" {
-  description = "IAM-gated brokered deployer URL (null while the rollout flag is off)."
-  value       = one(google_cloud_run_v2_service.deployer[*].uri)
-}
-
 output "pipeline_topics" {
   description = "Dedicated durable pipeline topics. Empty while the rollout flag is off."
   value = var.pipeline_orchestrator_enabled ? {
     plan           = google_pubsub_topic.pipeline_plan[0].name
     code           = google_pubsub_topic.pipeline_code[0].name
     test           = google_pubsub_topic.pipeline_test[0].name
-    deploy         = google_pubsub_topic.pipeline_deploy[0].name
     plan_results   = google_pubsub_topic.pipeline_results["plan"].name
     code_results   = google_pubsub_topic.pipeline_results["code"].name
     test_results   = google_pubsub_topic.pipeline_results["test"].name
-    deploy_results = google_pubsub_topic.pipeline_results["deploy"].name
   } : {}
 }
 

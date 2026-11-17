@@ -83,7 +83,7 @@ resource "google_secret_manager_secret_iam_member" "stream_token_broker" {
 #   - pubsub-push-sa (Pub/Sub push + Cloud Scheduler ticks)
 #   - substrate_actor_member, and only when an operator names it (see below)
 # There is intentionally NO allUsers binding on these services. The orchestrator
-# and deployer invoke bindings (gateway_invokes_orchestrator,
+# invoke bindings (gateway_invokes_orchestrator,
 # push_invokes_pipeline, pipeline_proxy_invokes_settings) live in pipeline.tf
 # next to the services they gate.
 

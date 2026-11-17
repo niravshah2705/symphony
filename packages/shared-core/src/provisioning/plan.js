@@ -35,7 +35,7 @@ function labelValue(value) {
  *     shared); AGENT_URL/ORCHESTRATOR_URL = this tenant's own orchestrator, which
  *     hosts both the agent surface (planner browser routes + legacy planner queue)
  *     and the plan/code/test stage handlers.
- *   - orchestrator/deployer/pipeline services have no allUsers binding; their IAM
+ *   - orchestrator/pipeline services have no allUsers binding; their IAM
  *     invokers are the gateway and/or push SA. Ingress defaults to ALL so the
  *     run.app path works without VPC egress, while IAM remains fail-closed.
  *     ONLY the gateway is unauthenticated at Cloud Run — app-auth guards it.
@@ -58,7 +58,7 @@ function labelValue(value) {
  * @param {string} [cfg.substratePlannerImage] actor image
  * @param {string} cfg.deadLetterTopic     shared dead-letter topic id
  * @param {string} cfg.emailTopic          shared transactional email topic id
- * @param {object} cfg.serviceAccounts     { gateway, orchestrator, deployer, pubsubPush } emails
+ * @param {object} cfg.serviceAccounts     { gateway, orchestrator, pubsubPush } emails
  */
 function buildPlan(slug, cfg) {
   const n = names(slug);
@@ -123,12 +123,10 @@ function buildPlan(slug, cfg) {
     STORE_NAMESPACE: slug,
     PUBSUB_PLANNER_TOPIC: n.plannerTopic,
     PIPELINE_ORCHESTRATOR_ENABLED: String(pipelineEnabled),
-    PIPELINE_DEPLOYMENT_ENABLED: String(cfg.pipelineDeploymentEnabled === true),
     ...(pipelineEnabled ? {
       PUBSUB_PIPELINE_PLAN_TOPIC: n.pipelinePlanTopic,
       PUBSUB_PIPELINE_CODE_TOPIC: n.pipelineCodeTopic,
       PUBSUB_PIPELINE_TEST_TOPIC: n.pipelineTestTopic,
-      PUBSUB_PIPELINE_DEPLOY_TOPIC: n.pipelineDeployTopic,
       PIPELINE_STAGE_STORE_BACKEND: 'firestore',
     } : {}),
     ...(cfg.orgId ? { FLEET_ORG_ID: cfg.orgId } : {}),
@@ -156,7 +154,7 @@ function buildPlan(slug, cfg) {
   };
 
   // Per-tenant patch overlaid onto the cloned egress-proxy SIDECAR container
-  // (orchestrator/deployer). It needs this tenant's store namespace (to read the
+  // (orchestrator). It needs this tenant's store namespace (to read the
   // tenant's OAuth token sets) and org id + derived bearer (to resolve only that
   // tenant's encrypted vault). The derivation root remains in settings and the
   // provisioner; it is never cloned into an agent or proxy container.
@@ -243,44 +241,15 @@ function buildPlan(slug, cfg) {
     },
   };
 
-  const deployer = pipelineEnabled ? {
-    name: n.deployer,
-    sourceName: srcNames.deployer,
-    labels: withComponent('pipeline-deployer'),
-    url: u.deployer,
-    ingress: internalIngress,
-    allowUnauthenticated: false,
-    port: 8080,
-    serviceAccount: sa.deployer,
-    maxInstanceCount: 1,
-    requestTimeoutSeconds: 3600,
-    invokers: [sa.pubsubPush].filter(Boolean),
-    sidecarEnv,
-    requireSecretFreePrimary: true,
-    requireEgressProxy: true,
-    env: {
-      ...agentEnv,
-      DEPLOYER_SERVICE_PORT: '8080',
-      SETTINGS_URL: cfg.sharedSettingsUrl,
-      ORG_URL: cfg.sharedOrgUrl,
-      ORCHESTRATOR_URL: u.orchestrator,
-      PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC: n.pipelineDeployResultsTopic,
-      PUBSUB_PUSH_AUDIENCE: u.deployer,
-      PUBSUB_PUSH_SA: sa.pubsubPush || '',
-    },
-  } : null;
-
   const topics = [
     { name: n.plannerTopic, labels: withComponent('planner'), publishers: [sa.gateway].filter(Boolean) },
     ...(pipelineEnabled ? [
       { name: n.pipelinePlanTopic, labels: withComponent('pipeline-plan'), publishers: [sa.orchestrator].filter(Boolean) },
       { name: n.pipelineCodeTopic, labels: withComponent('pipeline-code'), publishers: [sa.orchestrator].filter(Boolean) },
       { name: n.pipelineTestTopic, labels: withComponent('pipeline-test'), publishers: [sa.orchestrator].filter(Boolean) },
-      { name: n.pipelineDeployTopic, labels: withComponent('pipeline-deploy'), publishers: [sa.orchestrator].filter(Boolean) },
       { name: n.pipelinePlanResultsTopic, labels: withComponent('pipeline-plan-results'), publishers: [sa.orchestrator].filter(Boolean) },
       { name: n.pipelineCodeResultsTopic, labels: withComponent('pipeline-code-results'), publishers: [sa.orchestrator].filter(Boolean) },
       { name: n.pipelineTestResultsTopic, labels: withComponent('pipeline-test-results'), publishers: [sa.orchestrator].filter(Boolean) },
-      { name: n.pipelineDeployResultsTopic, labels: withComponent('pipeline-deploy-results'), publishers: [sa.deployer].filter(Boolean) },
     ] : []),
   ];
   const deadLetterSubscriber = cfg.projectNumber
@@ -315,22 +284,10 @@ function buildPlan(slug, cfg) {
         deadLetterSubscriber,
         ackDeadlineSeconds: 600,
       })),
-      {
-        name: n.pipelineDeployPushSub,
-        topic: n.pipelineDeployTopic,
-        labels: withComponent('pipeline-deploy'),
-        pushEndpoint: `${u.deployer}/pubsub/pipeline-stage`,
-        audience: u.deployer,
-        oidcServiceAccount: sa.pubsubPush,
-        deadLetterTopic: cfg.deadLetterTopic,
-        deadLetterSubscriber,
-        ackDeadlineSeconds: 600,
-      },
       ...[
         ['plan', n.pipelinePlanResultsTopic, n.pipelinePlanResultsPushSub],
         ['code', n.pipelineCodeResultsTopic, n.pipelineCodeResultsPushSub],
         ['test', n.pipelineTestResultsTopic, n.pipelineTestResultsPushSub],
-        ['deploy', n.pipelineDeployResultsTopic, n.pipelineDeployResultsPushSub],
       ].map(([stage, topic, name]) => ({
         name,
         topic,
@@ -352,7 +309,6 @@ function buildPlan(slug, cfg) {
     services: {
       gateway,
       orchestrator,
-      ...(pipelineEnabled ? { deployer } : {}),
     },
     topics,
     subscriptions,
@@ -361,7 +317,6 @@ function buildPlan(slug, cfg) {
     deploymentUrls: {
       gateway: u.gateway,
       orchestrator: u.orchestrator,
-      ...(pipelineEnabled ? { deployer: u.deployer } : {}),
     },
   };
 }

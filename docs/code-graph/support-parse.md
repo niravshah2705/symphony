@@ -4,22 +4,22 @@
 
 ## Overview
 
-Community of 107 nodes
+Community of 106 nodes
 
-- **Size**: 107 nodes
-- **Cohesion**: 0.2805
+- **Size**: 106 nodes
+- **Cohesion**: 0.2830
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| liveConfig | Function | ./e2e-live/full-pipeline.spec.js | 23-26 |
-| requiredPipelineFixture | Function | ./e2e-live/full-pipeline.spec.js | 35-45 |
-| issueFromResponse | Function | ./e2e-live/full-pipeline.spec.js | 47-53 |
-| finalEvidence | Function | ./e2e-live/full-pipeline.spec.js | 55-86 |
-| test:03 — Tenant A completes the approved plan → code → test → deploy pipeline@L88 | Test | ./e2e-live/full-pipeline.spec.js | 88-290 |
-| load | Function | ./e2e-live/full-pipeline.spec.js | 169-173 |
+| liveConfig | Function | ./e2e-live/full-pipeline.spec.js | 22-25 |
+| requiredPipelineFixture | Function | ./e2e-live/full-pipeline.spec.js | 34-44 |
+| issueFromResponse | Function | ./e2e-live/full-pipeline.spec.js | 46-52 |
+| finalEvidence | Function | ./e2e-live/full-pipeline.spec.js | 54-75 |
+| test:03 — Tenant A completes the plan → code → test pipeline and the deploy stage stays retired@L77 | Test | ./e2e-live/full-pipeline.spec.js | 77-232 |
+| load | Function | ./e2e-live/full-pipeline.spec.js | 168-172 |
 | contextHeaders | Function | ./e2e-live/scripts/audit.js | 20-27 |
 | readBoundedJson | Function | ./e2e-live/scripts/audit.js | 29-39 |
 | requestJson | Function | ./e2e-live/scripts/audit.js | 41-64 |
@@ -65,7 +65,7 @@ Community of 107 nodes
 | test:02 — Tenant A cannot discover or control Tenant B through UI or API@L374 | Test | ./e2e-live/security-evidence.spec.js | 374-673 |
 | requiredString | Function | ./e2e-live/support/config.js | 17-23 |
 
-*... and 57 more members.*
+*... and 56 more members.*
 
 ## Execution Flows
 
@@ -75,13 +75,13 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (73 edge(s))
-- `toBe` (29 edge(s))
+- `expect` (65 edge(s))
 - `locator` (28 edge(s))
 - `equal` (26 edge(s))
-- `encodeURIComponent` (24 edge(s))
+- `toBe` (25 edge(s))
 - `String` (24 edge(s))
-- `join` (22 edge(s))
+- `encodeURIComponent` (22 edge(s))
+- `join` (21 edge(s))
 - `trim` (19 edge(s))
 - `startsWith` (19 edge(s))
 - `stringify` (18 edge(s))
@@ -93,18 +93,18 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `expect` (56 edge(s))
+- `expect` (48 edge(s))
 - `./e2e-live/scripts/audit.js` (27 edge(s))
-- `toBe` (26 edge(s))
 - `equal` (26 edge(s))
 - `./e2e-live/support/config.js` (24 edge(s))
+- `toBe` (22 edge(s))
 - `./e2e-live/support/security-evidence.js` (22 edge(s))
-- `./e2e-live/support/pipeline-evidence.js` (21 edge(s))
+- `./e2e-live/support/pipeline-evidence.js` (19 edge(s))
 - `./e2e-live/security-evidence.spec.js` (17 edge(s))
-- `encodeURIComponent` (16 edge(s))
 - `throws` (16 edge(s))
+- `encodeURIComponent` (14 edge(s))
 - `locator` (11 edge(s))
 - `./e2e-live/scripts/capture-auth.js` (11 edge(s))
-- `toEqual` (10 edge(s))
 - `toISOString` (8 edge(s))
+- `toEqual` (8 edge(s))
 - `map` (8 edge(s))

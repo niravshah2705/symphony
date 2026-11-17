@@ -7,7 +7,7 @@
 Community of 3 nodes
 
 - **Size**: 3 nodes
-- **Cohesion**: 0.1622
+- **Cohesion**: 0.1143
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,7 @@ Community of 3 nodes
 |------|------|------|-------|
 | tfFile | Function | ./deploy/gcp/substrate-env.test.js | 28-28 |
 | envLocal | Function | ./deploy/gcp/substrate-env.test.js | 152-159 |
-| test:substrate env reaches the dispatchers and no other workload@L212 | Test | ./deploy/gcp/substrate-env.test.js | 212-235 |
+| test:substrate env reaches the dispatchers and no other workload@L212 | Test | ./deploy/gcp/substrate-env.test.js | 212-234 |
 
 ## Execution Flows
 

@@ -42,8 +42,8 @@ Community of 31 nodes
 | test:delivers a valid invitation once and acknowledges a duplicate@L108 | Test | ./services/email/src/app.test.js | 108-120 |
 | test:dispatches the allow-listed billing alert contract@L140 | Test | ./services/email/src/app.test.js | 140-152 |
 | test:gateway source imports shared-core and no heavy AI workspace or agent package@L25 | Test | ./services/gateway/src/dependency-boundary.test.js | 25-44 |
-| test:settings preflight outage and non-ready decisions fail closed without orchestrator dispatch@L205 | Test | ./services/gateway/src/pipeline-admission.test.js | 205-243 |
-| test:the SDK-free billing gate uses authoritative tenant scope and blocks before external admission@L271 | Test | ./services/gateway/src/pipeline-admission.test.js | 271-287 |
+| test:settings preflight outage and non-ready decisions fail closed without orchestrator dispatch@L198 | Test | ./services/gateway/src/pipeline-admission.test.js | 198-236 |
+| test:the SDK-free billing gate uses authoritative tenant scope and blocks before external admission@L264 | Test | ./services/gateway/src/pipeline-admission.test.js | 264-280 |
 | test:identity verification source imports shared-core and no heavy AI workspace@L25 | Test | ./services/identity-verification/src/dependency-boundary.test.js | 25-44 |
 
 ## Execution Flows

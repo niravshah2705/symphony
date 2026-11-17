@@ -16,15 +16,11 @@ variables. Nothing GCP-specific is required for local development.
   service account receives only `roles/run.invoker` on this service. One broker
   instance stays warm by default so token RPCs do not depend on a cold start.
 - **orchestrator** → the single internal agent service. It hosts the
-  browser-facing agent surface (the retired planner/coder routes), the legacy
-  planner queue, the durable pipeline control plane (PipelineRun/StageRun state,
+  browser-facing agent surface (the retired planner/coder routes), the durable
+  pipeline control plane (PipelineRun/StageRun state,
   a Firestore checkpointer, per-stage command publishing), and the substrate
   control plane + actor callback. Agent runs themselves execute in substrate
   actors, not in this service.
-- **deployer** → internal, rollout-gated stage service. Its agent container uses
-  an egress-proxy sidecar and never receives raw provider,
-  tracker, repository, or CI credentials. The deployer can invoke only
-  repository-allowlisted CI/CD after server policy/approval gates.
 - **Firestore** replaces `data/store.json` and relays SSE events. The settings
   service encrypts customer credentials per organization/project; egress
   sidecars resolve and inject them without exposing raw values to agent apps.
@@ -62,7 +58,7 @@ availability risk.
 
 ### Durable pipeline prerequisites
 
-Production orchestrator and deployer revisions must set
+Production orchestrator revisions must set
 `PIPELINE_STAGE_STORE_BACKEND=firestore`. Terraform does this when the pipeline
 rollout is enabled. A worker transactionally claims each `StageCommandV1`
 idempotency key and stores the final `StageResultV1` before publication. A
@@ -79,9 +75,9 @@ IPC. Do not remove the launcher, `libseccomp`, or the production
 every production shell command in it unconditionally, and the model-controlled
 tests must not mint workload credentials.
 
-The pipeline uses four command topics and four result topics. Each stage
-publisher can publish only its own result topic (`orchestrator → plan/code/test`,
-`deployer → deploy`), and each result subscription pushes to
+The pipeline uses three command topics and three result topics. Each stage
+publisher can publish only its own result topic (`orchestrator → plan/code/test`),
+and each result subscription pushes to
 the matching `/pubsub/pipeline-stage-results/{stage}` route. Do not collapse
 these into a shared result topic: the split is the capability boundary that
 prevents a compromised earlier-stage service from forging later-stage results.
@@ -340,8 +336,8 @@ permission domains (`packages/shared/src/authz.js`):
 - Pub/Sub push and Cloud Scheduler calls carry **OIDC tokens** verified on
   `/pubsub/*` (audience + expected SA).
 - The durable pipeline is fail-safe off until
-  `PIPELINE_ORCHESTRATOR_ENABLED=true`; deployment has the separate
-  `PIPELINE_DEPLOYMENT_ENABLED=false` default and production approval gate.
+  `PIPELINE_ORCHESTRATOR_ENABLED=true`; the deploy stage was retired with the
+  Cloud Run deployer (2026-11) and is rejected with `410 pipeline_deploy_retired`.
 - **CORS** reflects only the exact `SPA_ORIGIN` (never `*` with credentials).
 - Secrets live in **Secret Manager**, never in images or committed files
   (`data/` stays gitignored).
@@ -377,7 +373,7 @@ Where the address goes, and where it never goes:
 |---|---|---|
 | orchestrator | control plane **+ actor callback pair** | it routes every run to an actor and is the only service with the endpoint that verifies an actor's JWT (`packages/shared/src/agent/framework.js` → `pattern-router.js`) |
 | provisioner | control plane | `substrate.atespace` is a call to the control plane; without a URL the step answers SKIPPED forever |
-| deployer, and every other Cloud Run workload | nothing | stage executors inside the boundary. Teaching a workload the control-plane address hands whatever it runs the API that creates, assigns and deletes actors in **other tenants'** atespaces |
+| every other Cloud Run workload | nothing | stage executors inside the boundary. Teaching a workload the control-plane address hands whatever it runs the API that creates, assigns and deletes actors in **other tenants'** atespaces |
 | substrate actor | the actor-JWT verification names only (forwarded by `upsertActorTemplate`) | the actor answers its own dispatch; it never drives the pattern |
 
 `SUBSTRATE_TOKEN` (a bearer for the control plane, honoured at

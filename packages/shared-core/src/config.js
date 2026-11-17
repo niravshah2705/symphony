@@ -665,7 +665,6 @@ const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'publ
  * hosts/containers without a code change.
  */
 const AGENT_SERVICE_PORT = Number(process.env.AGENT_SERVICE_PORT) || 4010;
-const DEPLOYER_SERVICE_PORT = Number(process.env.DEPLOYER_SERVICE_PORT) || 4060;
 const ORCHESTRATOR_SERVICE_PORT = Number(process.env.ORCHESTRATOR_SERVICE_PORT) || 4070;
 const IDENTITY_SERVICE_PORT = Number(process.env.IDENTITY_SERVICE_PORT) || 4080;
 const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
@@ -681,14 +680,12 @@ const LITELLM_SERVICE_PORT = Number(process.env.LITELLM_SERVICE_PORT) || 4090;
 const SERVICES = Object.freeze({
   gatewayPort: PORT,
   agentPort: AGENT_SERVICE_PORT,
-  deployerPort: DEPLOYER_SERVICE_PORT,
   orchestratorPort: ORCHESTRATOR_SERVICE_PORT,
   identityPort: IDENTITY_SERVICE_PORT,
   emailPort: EMAIL_SERVICE_PORT,
   billingPort: BILLING_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
   agentUrl: process.env.AGENT_URL || `http://localhost:${AGENT_SERVICE_PORT}`,
-  deployerUrl: process.env.DEPLOYER_URL || `http://localhost:${DEPLOYER_SERVICE_PORT}`,
   orchestratorUrl: process.env.ORCHESTRATOR_URL || `http://localhost:${ORCHESTRATOR_SERVICE_PORT}`,
   identityUrl: process.env.IDENTITY_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${IDENTITY_SERVICE_PORT}`),
   // Shared transactional email service. Producers publish allow-listed jobs to
@@ -770,18 +767,15 @@ const GCP = Object.freeze({
   region: process.env.GCP_REGION || 'us-central1',
   plannerTopic: process.env.PUBSUB_PLANNER_TOPIC || 'planner-requests',
   testerTopic: process.env.PUBSUB_TESTER_TOPIC || 'tester-requests',
-  deployerTopic: process.env.PUBSUB_DEPLOYER_TOPIC || 'deployer-requests',
   orchestratorTopic: process.env.PUBSUB_ORCHESTRATOR_TOPIC || 'orchestrator-requests',
   // StageCommandV1 uses dedicated topics. Never reuse the legacy planner/coder
   // request topics: those subscriptions expect different wire contracts.
   pipelinePlanTopic: process.env.PUBSUB_PIPELINE_PLAN_TOPIC || 'pipeline-plan-commands',
   pipelineCodeTopic: process.env.PUBSUB_PIPELINE_CODE_TOPIC || 'pipeline-code-commands',
   pipelineTestTopic: process.env.PUBSUB_PIPELINE_TEST_TOPIC || 'pipeline-test-commands',
-  pipelineDeployTopic: process.env.PUBSUB_PIPELINE_DEPLOY_TOPIC || 'pipeline-deploy-commands',
   pipelinePlanResultsTopic: process.env.PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC || 'pipeline-plan-results',
   pipelineCodeResultsTopic: process.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC || 'pipeline-code-results',
   pipelineTestResultsTopic: process.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC || 'pipeline-test-results',
-  pipelineDeployResultsTopic: process.env.PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC || 'pipeline-deploy-results',
   emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
   // Pub/Sub push OIDC verification (enforced only when MESSAGING_MODE=pubsub):
   //   pushAudience        expected `aud` of the push token (the push endpoint URL)
@@ -805,7 +799,6 @@ const GCP = Object.freeze({
  */
 const PIPELINE = Object.freeze({
   orchestratorEnabled: boolEnv(process.env, 'PIPELINE_ORCHESTRATOR_ENABLED', false),
-  deploymentEnabled: boolEnv(process.env, 'PIPELINE_DEPLOYMENT_ENABLED', false),
 });
 
 /**

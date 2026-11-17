@@ -15,11 +15,11 @@ Community of 6 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | fakeClients | Function | ./packages/shared/src/provisioning/provisioning.test.js | 31-46 |
-| test:provision reuses live images and creates the full stack, returning the deployments map@L395 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 395-423 |
-| test:provision is idempotent — already-existing resources do not fail@L425 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 425-432 |
-| test:pipeline provision clones the orchestrator + deployer and writes back their URLs@L434 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 434-457 |
-| test:invalid slug is rejected before any client call@L459 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 459-464 |
-| test:teardown deletes every per-tenant resource@L468 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 468-478 |
+| test:provision reuses live images and creates the full stack, returning the deployments map@L374 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 374-402 |
+| test:provision is idempotent — already-existing resources do not fail@L404 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 404-411 |
+| test:pipeline provision clones the gateway + orchestrator and writes back their URLs@L413 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 413-428 |
+| test:invalid slug is rejected before any client call@L430 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 430-435 |
+| test:teardown deletes every per-tenant resource@L439 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 439-449 |
 
 ## Execution Flows
 

@@ -80,7 +80,6 @@ jobs:
             # digest, not a tag).
             substrate_actor: ['deploy/gcp/Dockerfile.substrate-actor', 'services/orchestrator/src/substrate-actor-entry.js']
             orchestrator: ['services/orchestrator/**', 'deploy/gcp/Dockerfile.orchestrator']
-            deployer:     ['services/deployer/**',     'deploy/gcp/Dockerfile.deployer']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
             # A release-tooling change must publish the newly transformed SPA;
@@ -114,8 +113,6 @@ jobs:
           GATEWAY: ${{ steps.filter.outputs.gateway }}
           SUBSTRATE_ACTOR: ${{ steps.filter.outputs.substrate_actor }}
           ORCHESTRATOR: ${{ steps.filter.outputs.orchestrator }}
-          DEPLOYER: ${{ steps.filter.outputs.deployer }}
-          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONER: ${{ steps.filter.outputs.provisioner }}
           PROXY: ${{ steps.filter.outputs.proxy }}
           SPA: ${{ steps.filter.outputs.spa }}
@@ -145,7 +142,6 @@ jobs:
           if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
           if [ "$all" = "true" ] || [ "$SUBSTRATE_ACTOR" = "true" ]; then push substrate-actor substrate-actor deploy/gcp/Dockerfile.substrate-actor . ; fi
           if [ "$all" = "true" ] || [ "$ORCHESTRATOR" = "true" ] || [ "$INFRA" = "true" ]; then push orchestrator pipeline-orchestrator deploy/gcp/Dockerfile.orchestrator . ; fi
-          if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           if [ "$all" = "true" ] || [ "$IDENTITY" = "true" ]; then push identity identity-verification deploy/gcp/Dockerfile.identity-verification . ; fi
           if [ "$all" = "true" ] || [ "$BILLING"  = "true" ]; then push billing billing deploy/gcp/Dockerfile.billing . ; fi
@@ -337,7 +333,6 @@ jobs:
         id: tags
         env:
           SERVICES: ${{ needs.changes.outputs.services }}
-          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONING_ENABLED: ${{ vars.PROVISIONING_ENABLED || 'false' }}
           LITELLM_ENABLED: ${{ vars.LITELLM_ENABLED || 'false' }}
         run: |
@@ -400,7 +395,6 @@ jobs:
           {
             write_tag gateway resolve gateway gateway
             write_tag orchestrator resolve orchestrator pipeline-orchestrator
-            write_tag deployer resolve_optional deployer pipeline-deployer "$PIPELINE_ENABLED"
             write_tag provisioner resolve_optional provisioner provisioner "$PROVISIONING_ENABLED"
             # One proxy artifact backs both sidecars and the standalone broker.
             # It is built on every terraform-running deploy (see the plan step),
@@ -594,7 +588,6 @@ jobs:
             -var="laya_model_version=${{ vars.LAYA_MODEL_VERSION || 'v1' }}"
             -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
             -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
-            -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"
             # Off by default: the gateway (3 containers + 4 secrets) only exists when
             # the repo variable says so. This is the infra knob only — admitting the
             # browser's `litellm` flag is the separate out-of-band
@@ -620,7 +613,6 @@ jobs:
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.orchestrator }}" ] && apply_args+=(-var="orchestrator_image_tag=${{ steps.tags.outputs.orchestrator }}") || true
-          [ -n "${{ steps.tags.outputs.deployer }}" ] && apply_args+=(-var="deployer_image_tag=${{ steps.tags.outputs.deployer }}") || true
           [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
           [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true

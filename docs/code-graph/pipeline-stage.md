@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 134 nodes
+Community of 135 nodes
 
-- **Size**: 134 nodes
-- **Cohesion**: 0.4959
+- **Size**: 135 nodes
+- **Cohesion**: 0.4956
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 134 nodes
 | validateStageResultV1 | Function | ./packages/shared-core/src/pipeline/contracts.js | 457-457 |
 | clock | Function | ./packages/shared-core/src/pipeline/contracts.test.js | 18-18 |
 
-*... and 84 more members.*
+*... and 85 more members.*
 
 ## Execution Flows
 
@@ -78,16 +78,16 @@ No execution flows pass through this community.
 - `equal` (78 edge(s))
 - `throws` (23 edge(s))
 - `deepEqual` (18 edge(s))
+- `has` (16 edge(s))
 - `stringify` (15 edge(s))
-- `has` (15 edge(s))
+- `getRun` (15 edge(s))
 - `includes` (14 edge(s))
-- `getRun` (14 edge(s))
-- `./packages/shared-core/src/pipeline/repository.js::PipelineRunRepository.clock` (12 edge(s))
+- `./packages/shared-core/src/pipeline/repository.js::PipelineRunRepository.clock` (13 edge(s))
+- `setRun` (12 edge(s))
 - `test` (11 edge(s))
-- `setRun` (11 edge(s))
+- `transaction` (11 edge(s))
 - `repeat` (10 edge(s))
 - `map` (10 edge(s))
-- `transaction` (10 edge(s))
 - `parse` (9 edge(s))
 - `get` (8 edge(s))
 

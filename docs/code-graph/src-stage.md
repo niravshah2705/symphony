@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 135 nodes
+Community of 128 nodes
 
-- **Size**: 135 nodes
-- **Cohesion**: 0.3007
+- **Size**: 128 nodes
+- **Cohesion**: 0.2932
 - **Dominant Language**: javascript
 
 ## Members
@@ -52,20 +52,20 @@ Community of 135 nodes
 | bool | Function | ./services/orchestrator/src/config.js | 5-8 |
 | csv | Function | ./services/orchestrator/src/config.js | 10-12 |
 | stageEndpoint | Function | ./services/orchestrator/src/config.js | 14-17 |
-| loadConfig | Function | ./services/orchestrator/src/config.js | 19-59 |
+| loadConfig | Function | ./services/orchestrator/src/config.js | 19-55 |
 | test:PIPELINE_ORCHESTRATOR_ENABLED is an explicit rollback switch and defaults off@L9 | Test | ./services/orchestrator/src/config.test.js | 9-12 |
-| test:production defaults deployment approval on while deployment itself stays off@L14 | Test | ./services/orchestrator/src/config.test.js | 14-21 |
-| test:settings approval service URL is explicit and normalized@L23 | Test | ./services/orchestrator/src/config.test.js | 23-26 |
-| test:pipeline messaging uses dedicated StageCommand topics@L28 | Test | ./services/orchestrator/src/config.test.js | 28-39 |
-| test:pipeline topic env names and push identity are configurable@L41 | Test | ./services/orchestrator/src/config.test.js | 41-56 |
-| approvalFromClaim | Function | ./services/orchestrator/src/controller.js | 12-26 |
-| PipelineOrchestrator | Class | ./services/orchestrator/src/controller.js | 28-293 |
-| constructor | Function | ./services/orchestrator/src/controller.js | 29-57 |
-| info | Function | ./services/orchestrator/src/controller.js | 48-48 |
-| error | Function | ./services/orchestrator/src/controller.js | 48-48 |
-| start | Function | ./services/orchestrator/src/controller.js | 59-76 |
+| test:production defaults to the durable Firestore + Pub/Sub stack with no deploy stage@L14 | Test | ./services/orchestrator/src/config.test.js | 14-23 |
+| test:pipeline messaging uses dedicated StageCommand topics@L25 | Test | ./services/orchestrator/src/config.test.js | 25-35 |
+| test:pipeline topic env names and push identity are configurable@L37 | Test | ./services/orchestrator/src/config.test.js | 37-50 |
+| PipelineOrchestrator | Class | ./services/orchestrator/src/controller.js | 12-204 |
+| constructor | Function | ./services/orchestrator/src/controller.js | 13-37 |
+| info | Function | ./services/orchestrator/src/controller.js | 30-30 |
+| error | Function | ./services/orchestrator/src/controller.js | 30-30 |
+| start | Function | ./services/orchestrator/src/controller.js | 39-56 |
+| advance | Function | ./services/orchestrator/src/controller.js | 58-85 |
+| _dispatchNewStage | Function | ./services/orchestrator/src/controller.js | 87-124 |
 
-*... and 85 more members.*
+*... and 78 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 135 nodes
 
 ### Outgoing
 
-- `equal` (107 edge(s))
-- `deepEqual` (30 edge(s))
+- `equal` (98 edge(s))
+- `deepEqual` (29 edge(s))
 - `json` (25 edge(s))
 - `status` (24 edge(s))
-- `String` (23 edge(s))
 - `use` (21 edge(s))
-- `trim` (17 edge(s))
+- `String` (20 edge(s))
 - `map` (15 edge(s))
+- `trim` (14 edge(s))
 - `next` (13 edge(s))
 - `push` (13 edge(s))
 - `post` (9 edge(s))
-- `includes` (7 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP cancellation reports requested until the active worker result actually stops it@L181` (7 edge(s))
-- `repeat` (7 edge(s))
 - `get` (6 edge(s))
+- `./services/orchestrator/src/app.test.js::test:direct HTTP retry returns typed 409 at attempt 100 without reopening the failed run@L224` (6 edge(s))
+- `./services/orchestrator/src/app.test.js::test:control API starts, reads, resumes, and cancels a scoped run@L133` (6 edge(s))
 
 ### Incoming
 
-- `equal` (107 edge(s))
-- `deepEqual` (30 edge(s))
+- `equal` (98 edge(s))
+- `deepEqual` (29 edge(s))
 - `./services/orchestrator/src/pipeline-stage.js` (20 edge(s))
 - `./services/orchestrator/src/app.js` (17 edge(s))
-- `./services/orchestrator/src/controller.test.js` (16 edge(s))
+- `./services/orchestrator/src/controller.test.js` (14 edge(s))
 - `./services/orchestrator/src/pipeline-stage.test.js` (12 edge(s))
 - `push` (10 edge(s))
 - `./services/orchestrator/src/index.js` (8 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP cancellation reports requested until the active worker result actually stops it@L181` (7 edge(s))
 - `./services/orchestrator/src/checkpointer.js` (7 edge(s))
 - `map` (7 edge(s))
-- `./services/orchestrator/src/index.test.js` (7 edge(s))
 - `./services/orchestrator/src/store-context.js` (7 edge(s))
 - `./services/orchestrator/src/app.test.js::test:direct HTTP retry returns typed 409 at attempt 100 without reopening the failed run@L224` (6 edge(s))
 - `./services/orchestrator/src/app.test.js::test:control API starts, reads, resumes, and cancels a scoped run@L133` (6 edge(s))
+- `./services/orchestrator/src/index.test.js` (6 edge(s))

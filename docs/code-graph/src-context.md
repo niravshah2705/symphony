@@ -7,7 +7,7 @@
 Community of 230 nodes
 
 - **Size**: 230 nodes
-- **Cohesion**: 0.3479
+- **Cohesion**: 0.3473
 - **Dominant Language**: javascript
 
 ## Members
@@ -75,8 +75,8 @@ Community of 230 nodes
 
 ### Outgoing
 
-- `equal` (271 edge(s))
-- `deepEqual` (72 edge(s))
+- `equal` (268 edge(s))
+- `deepEqual` (70 edge(s))
 - `trim` (37 edge(s))
 - `String` (35 edge(s))
 - `map` (32 edge(s))
@@ -93,9 +93,9 @@ Community of 230 nodes
 
 ### Incoming
 
-- `equal` (271 edge(s))
+- `equal` (268 edge(s))
 - `./services/gateway/src/index.js` (98 edge(s))
-- `deepEqual` (72 edge(s))
+- `deepEqual` (70 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (27 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))

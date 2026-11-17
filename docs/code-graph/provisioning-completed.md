@@ -15,7 +15,7 @@ Community of 2 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | completedOperation | Function | ./packages/shared/src/provisioning/provisioning.test.js | 52-59 |
-| updateService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 363-366 |
+| updateService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 342-345 |
 
 ## Execution Flows
 

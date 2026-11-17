@@ -8,7 +8,7 @@ const { names } = require('./naming');
  *
  * Given a validated deployment slug + config + an injected `clients` adapter
  * (see index.js for the real @google-cloud adapter), it provisions a tenant's
- * gateway + orchestrator services (plus the deployer when the pipeline is on),
+ * gateway + orchestrator services,
  * per-tenant Pub/Sub topics + push subscriptions, and the planner tick —
  * REUSING the live SHARED services' images (no rebuild). All operations are
  * idempotent (create-if-absent), so a retried provision does not duplicate
@@ -31,19 +31,17 @@ function nowIso() {
 /**
  * Provision a tenant stack. Returns the Organization.deployments map to persist.
  * @param {string} slug
- * @param {object} cfg  see plan.buildPlan cfg + { sourceServiceNames: {gateway,orchestrator,deployer} }
+ * @param {object} cfg  see plan.buildPlan cfg + { sourceServiceNames: {gateway,orchestrator} }
  * @param {object} deps { clients }
  */
 async function provision(slug, cfg, { clients }) {
   const plan = buildPlan(slug, cfg);
   const src = cfg.sourceServiceNames || {};
-  const pipelineEnabled = cfg.pipelineOrchestratorEnabled === true;
 
   // 1. Reuse the ORIGINAL images from the live SHARED services (no rebuild).
-  const [gatewayImage, orchestratorImage, deployerImage] = await Promise.all([
+  const [gatewayImage, orchestratorImage] = await Promise.all([
     clients.getServiceImage(src.gateway),
     clients.getServiceImage(src.orchestrator),
-    pipelineEnabled ? clients.getServiceImage(src.deployer) : Promise.resolve(''),
   ]);
 
   // 2. Per-tenant topics (before subscriptions).
@@ -51,9 +49,6 @@ async function provision(slug, cfg, { clients }) {
 
   // 3. Internal services first (their URLs back the subs/scheduler/gateway).
   await clients.createService({ ...plan.services.orchestrator, image: orchestratorImage });
-  if (pipelineEnabled) {
-    await clients.createService({ ...plan.services.deployer, image: deployerImage });
-  }
   // 4. Public gateway (front-facing origin).
   await clients.createService({ ...plan.services.gateway, image: gatewayImage });
 
@@ -66,9 +61,6 @@ async function provision(slug, cfg, { clients }) {
     slug,
     gateway: { name: plan.services.gateway.name, url: plan.deploymentUrls.gateway, status: 'provisioned' },
     orchestrator: { name: plan.services.orchestrator.name, url: plan.deploymentUrls.orchestrator, status: 'provisioned' },
-    ...(pipelineEnabled ? {
-      deployer: { name: plan.services.deployer.name, url: plan.deploymentUrls.deployer, status: 'provisioned' },
-    } : {}),
     error: null,
     updated_at: nowIso(),
   };
@@ -88,13 +80,11 @@ async function teardown(slug, { clients }) {
     n.pipelinePlanPushSub,
     n.pipelineCodePushSub,
     n.pipelineTestPushSub,
-    n.pipelineDeployPushSub,
     n.pipelinePlanResultsPushSub,
     n.pipelineCodeResultsPushSub,
     n.pipelineTestResultsPushSub,
-    n.pipelineDeployResultsPushSub,
   ]) await clients.deleteSubscription(sub);
-  for (const svc of [n.gateway, n.orchestrator, n.deployer]) {
+  for (const svc of [n.gateway, n.orchestrator]) {
     await clients.deleteService(svc);
   }
   for (const topic of [
@@ -102,11 +92,9 @@ async function teardown(slug, { clients }) {
     n.pipelinePlanTopic,
     n.pipelineCodeTopic,
     n.pipelineTestTopic,
-    n.pipelineDeployTopic,
     n.pipelinePlanResultsTopic,
     n.pipelineCodeResultsTopic,
     n.pipelineTestResultsTopic,
-    n.pipelineDeployResultsTopic,
   ]) await clients.deleteTopic(topic);
   return { status: 'torn_down', slug, updated_at: nowIso() };
 }

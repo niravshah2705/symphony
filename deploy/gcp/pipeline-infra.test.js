@@ -23,10 +23,9 @@ function resourceBlock(source, type, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-test('pipeline rollout and deployment are fail-closed Terraform defaults', () => {
+test('pipeline rollout is a fail-closed Terraform default', () => {
   const variables = read('deploy/gcp/terraform/variables.tf');
   assert.match(variableBlock(variables, 'pipeline_orchestrator_enabled'), /default\s*=\s*false/);
-  assert.match(variableBlock(variables, 'pipeline_deployment_enabled'), /default\s*=\s*false/);
 });
 
 test('all Cloud Run services use the gen2 execution environment', () => {
@@ -37,7 +36,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['settings_service.tf', ['settings']],
     ['email_service.tf', ['email']],
     ['identity_service.tf', ['identity']],
-    ['pipeline.tf', ['orchestrator', 'deployer']],
+    ['pipeline.tf', ['orchestrator']],
     ['provisioner.tf', ['provisioner']],
     ['stream_token_service.tf', ['stream_token_broker']],
     ['laya_inference.tf', ['laya']],
@@ -49,7 +48,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 13);
+  assert.equal(expectedInventory.length, 12);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
@@ -120,7 +119,7 @@ test('skills mounts preserve configured Cloud Run service and proxy CPUs', () =>
     'skills mounts must not replace configured CPU values with local clamps',
   );
 
-  for (const service of ['orchestrator', 'deployer']) {
+  for (const service of ['orchestrator']) {
     const resource = resourceBlock(pipeline, 'google_cloud_run_v2_service', service);
     assert.match(resource, /cpu\s*=\s*var\.cloud_run_service_cpu/);
     assert.match(resource, /cpu\s*=\s*var\.cloud_run_proxy_cpu/);
@@ -140,7 +139,6 @@ test('every Cloud Run egress sidecar explicitly opts into the wildcard bind', ()
 
   const sidecars = [
     [pipeline, 'google_cloud_run_v2_service', 'orchestrator'],
-    [pipeline, 'google_cloud_run_v2_service', 'deployer'],
   ];
   assert.equal(
     ((`${cloudRun}\n${pipeline}`).match(/name\s*=\s*"egress-proxy"/g) || []).length,
@@ -181,13 +179,11 @@ test('deploy workflow does not query disabled optional Cloud Run services', () =
   const end = workflow.indexOf('\n\n          {', start);
   const resolver = workflow.slice(start, end);
   assert.ok(start >= 0 && end > start);
-  assert.match(workflow, /PIPELINE_ENABLED: \$\{\{ vars\.PIPELINE_ORCHESTRATOR_ENABLED \|\| 'false' \}\}/);
   assert.match(workflow, /PROVISIONING_ENABLED: \$\{\{ vars\.PROVISIONING_ENABLED \|\| 'false' \}\}/);
   assert.match(resolver, /true\) live_tag "\$2"/);
   assert.match(resolver, /false\)[\s\S]*release_tag "\$GITHUB_SHA" "disabled optional service \$2"/);
   assert.match(resolver, /Invalid enablement flag for optional service/);
   assert.match(workflow, /write_tag orchestrator resolve orchestrator pipeline-orchestrator/);
-  assert.match(workflow, /write_tag deployer resolve_optional deployer pipeline-deployer "\$PIPELINE_ENABLED"/);
   assert.match(workflow, /write_tag provisioner resolve_optional provisioner provisioner "\$PROVISIONING_ENABLED"/);
   assert.match(workflow, /-var="provisioning_enabled=\$\{\{ vars\.PROVISIONING_ENABLED \|\| 'false' \}\}"/);
 
@@ -317,10 +313,10 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   assert.match(pipeline, /check "pipeline_topics_are_dedicated"/);
   assert.match(pipeline, /var\.planner_topic/);
   assert.doesNotMatch(`${pipeline}\n${variables}`, /var\.coder_topic\b/);
-  for (const stage of ['plan', 'code', 'test', 'deploy', 'results']) {
+  for (const stage of ['plan', 'code', 'test', 'results']) {
     assert.match(pipeline, new RegExp(`google_pubsub_topic" "pipeline_${stage}"`));
   }
-  for (const stage of ['plan', 'code', 'test', 'deploy']) {
+  for (const stage of ['plan', 'code', 'test']) {
     assert.match(variables, new RegExp(`variable "pipeline_${stage}_results_topic"`));
     assert.match(pipeline, new RegExp(`${stage}\\s*=\\s*var\\.pipeline_${stage}_results_topic`));
     assert.match(
@@ -331,16 +327,16 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   assert.match(pipeline, /resource "google_pubsub_topic_iam_member" "pipeline_result_publish"/);
   assert.match(pipeline, /topic\s*=\s*google_pubsub_topic\.pipeline_results\[each\.key\]\.name/);
   // plan/code/test all execute inside the orchestrator (or its substrate actors),
-  // so one publisher identity covers the three; deploy stays the deployer's.
+  // so one publisher identity covers the three. The brokered deployer was
+  // retired (2026-11): no deploy-stage wiring may reappear in pipeline.tf.
   assert.equal((pipeline.match(/= google_service_account\.orchestrator\.email/g) || []).length >= 3, true);
-  assert.match(pipeline, /deploy\s*=\s*google_service_account\.deployer\[0\]\.email/);
+  assert.doesNotMatch(pipeline, /google_service_account\.deployer|google_cloud_run_v2_service\.deployer|pipeline_deploy_topic|pipeline-deployer/);
   assert.doesNotMatch(pipeline, /google_service_account\.(planner|coder|tester)/);
   assert.doesNotMatch(`${pipeline}\n${cloudRun}`, /PIPELINE_RESULTS_TOPIC\s*=/);
   assert.match(pipeline, /PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC\s*=\s*var\.pipeline_plan_results_topic/);
   assert.match(pipeline, /PUBSUB_PIPELINE_CODE_RESULTS_TOPIC\s*=\s*var\.pipeline_code_results_topic/);
   assert.match(pipeline, /PUBSUB_PIPELINE_TEST_RESULTS_TOPIC\s*=\s*var\.pipeline_test_results_topic/);
-  assert.match(pipeline, /PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC\s*=\s*var\.pipeline_deploy_results_topic/);
-  assert.equal((pipeline.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
+  assert.equal((pipeline.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 1);
   assert.equal((cloudRun.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 0);
   assert.match(pipeline, /check "pipeline_agent_egress_is_brokered"/);
   assert.match(pipeline, /trimspace\(nonsensitive\(var\.internal_api_token\)\) != ""/);
@@ -351,16 +347,6 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
     1,
   );
 
-  for (const service of ['deployer']) {
-    const start = pipeline.indexOf(`resource "google_cloud_run_v2_service" "${service}"`);
-    const end = pipeline.indexOf('\nresource "google_cloud_run_v2_service"', start + 1);
-    const resource = pipeline.slice(start, end === -1 ? pipeline.length : end);
-    const appEnd = resource.indexOf('name  = "egress-proxy"');
-    assert.ok(appEnd > 0, `${service} must include the egress-proxy sidecar`);
-    assert.doesNotMatch(resource.slice(0, appEnd), /secret_key_ref/);
-    assert.match(resource, /local\.proxy_plain_env/);
-    assert.match(resource, /depends_on\s*=\s*\["egress-proxy"\]/);
-  }
 });
 
 test('stream-token broker owns the signing secret behind private IAM', () => {
@@ -448,7 +434,7 @@ test('stream-token broker owns the signing secret behind private IAM', () => {
   assert.equal(brokerIamBindings.length, 1, 'the broker must have one explicit invoker binding');
   assert.doesNotMatch(brokerIamBindings[0][2], /allUsers/, 'the broker must never be publicly invokable');
 
-  for (const service of ['orchestrator', 'deployer']) {
+  for (const service of ['orchestrator']) {
     const resource = resourceBlock(pipeline, 'google_cloud_run_v2_service', service);
     const proxy = resource.indexOf('name  = "egress-proxy"');
     assert.ok(proxy > 0);

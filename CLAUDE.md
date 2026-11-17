@@ -139,7 +139,7 @@ first for orientation). graphify's community report is
 isolated planner + coder deep agents as Agent Substrate actors (gVisor on GKE)
 over a shared library. npm
 workspaces: `packages/*` (shared libs, CLI) and `services/*` (gateway,
-orchestrator, deployer, provisioner, org, settings, proxy). Product docs and setup live in [`README.md`](./README.md).
+orchestrator, provisioner, org, settings, proxy). Product docs and setup live in [`README.md`](./README.md).
 
 ## Egress isolation: the proxy sidecar (agents hold no raw secrets)
 
@@ -207,7 +207,7 @@ outbound call.
 - **Substrate env is a capability, not a URL:** `deploy/gcp/terraform/substrate.tf`
   renders the `SUBSTRATE_*` map and decides who receives it — orchestrator
   (control plane + the actor-callback pair) and provisioner (control plane
-  only). The deployer and every other workload get none of it, and the reason is the
+  only). Every other workload gets none of it, and the reason is the
   difference between the two deployment shapes: a per-tenant stack can hand its
   job runners the control-plane address because `SUBSTRATE_ALLOWED_ATESPACES` pins it
   to one nameable space and its in-cluster Role reaches only that namespace,

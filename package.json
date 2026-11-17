@@ -14,7 +14,6 @@
     "dev": "node --env-file-if-exists=.env scripts/start-all.js --watch",
     "start:gateway": "npm start -w @ai-fleet/gateway",
     "start:agent": "node services/orchestrator/src/agent-server.js",
-    "start:deployer": "npm start -w @ai-fleet/deployer",
     "start:orchestrator": "npm start -w @ai-fleet/orchestrator",
     "start:email": "npm start -w @ai-fleet/email",
     "start:billing": "npm start -w @ai-fleet/billing",

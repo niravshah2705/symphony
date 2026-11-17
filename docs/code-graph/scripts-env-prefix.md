@@ -7,20 +7,20 @@
 Community of 8 nodes
 
 - **Size**: 8 nodes
-- **Cohesion**: 0.1505
+- **Cohesion**: 0.1522
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| envFor | Function | ./scripts/start-all.js | 75-120 |
-| prefixStream | Function | ./scripts/start-all.js | 122-133 |
-| startService | Function | ./scripts/start-all.js | 135-151 |
-| waitForHealth | Function | ./scripts/start-all.js | 153-170 |
-| probe | Function | ./scripts/start-all.js | 156-167 |
-| shutdown | Function | ./scripts/start-all.js | 172-179 |
-| main | Function | ./scripts/start-all.js | 181-188 |
+| envFor | Function | ./scripts/start-all.js | 74-119 |
+| prefixStream | Function | ./scripts/start-all.js | 121-132 |
+| startService | Function | ./scripts/start-all.js | 134-150 |
+| waitForHealth | Function | ./scripts/start-all.js | 152-169 |
+| probe | Function | ./scripts/start-all.js | 155-166 |
+| shutdown | Function | ./scripts/start-all.js | 171-178 |
+| main | Function | ./scripts/start-all.js | 180-187 |
 | test:local stream-token broker is standalone and exclusively receives its secret@L6 | Test | ./scripts/start-all.test.js | 6-32 |
 
 ## Execution Flows
@@ -44,8 +44,8 @@ No execution flows pass through this community.
 - `filter` (1 edge(s))
 - `entries` (1 edge(s))
 - `test` (1 edge(s))
-- `includes` (1 edge(s))
 - `toLowerCase` (1 edge(s))
+- `Number` (1 edge(s))
 
 ### Incoming
 

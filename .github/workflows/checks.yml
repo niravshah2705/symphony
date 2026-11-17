@@ -34,7 +34,6 @@ jobs:
           "public/js/*.test.mjs"
           "services/gateway/src/**/*.test.js"
           "services/orchestrator/src/**/*.test.js"
-          "services/deployer/src/**/*.test.js"
           "services/email/src/**/*.test.js"
           "services/proxy/src/**/*.test.js"
           "services/billing/src/**/*.test.js"

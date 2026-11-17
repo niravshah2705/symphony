@@ -33,25 +33,20 @@ function names(slug) {
   return {
     gateway: `gw-${slug}`,
     orchestrator: `po-${slug}`,
-    deployer: `pd-${slug}`,
     plannerTopic: `planner-${slug}`,
     plannerPushSub: `planner-${slug}-push`,
     pipelinePlanTopic: `pipeline-plan-${slug}`,
     pipelineCodeTopic: `pipeline-code-${slug}`,
     pipelineTestTopic: `pipeline-test-${slug}`,
-    pipelineDeployTopic: `pipeline-deploy-${slug}`,
     pipelinePlanResultsTopic: `pipeline-plan-results-${slug}`,
     pipelineCodeResultsTopic: `pipeline-code-results-${slug}`,
     pipelineTestResultsTopic: `pipeline-test-results-${slug}`,
-    pipelineDeployResultsTopic: `pipeline-deploy-results-${slug}`,
     pipelinePlanPushSub: `pipeline-plan-${slug}-push`,
     pipelineCodePushSub: `pipeline-code-${slug}-push`,
     pipelineTestPushSub: `pipeline-test-${slug}-push`,
-    pipelineDeployPushSub: `pipeline-deploy-${slug}-push`,
     pipelinePlanResultsPushSub: `pipeline-plan-results-${slug}-push`,
     pipelineCodeResultsPushSub: `pipeline-code-results-${slug}-push`,
     pipelineTestResultsPushSub: `pipeline-test-results-${slug}-push`,
-    pipelineDeployResultsPushSub: `pipeline-deploy-results-${slug}-push`,
     plannerTick: `planner-tick-${slug}`,
   };
 }
@@ -67,7 +62,6 @@ function urls(slug, { projectNumber, region }) {
   return {
     gateway: `https://${n.gateway}-${suffix}`,
     orchestrator: `https://${n.orchestrator}-${suffix}`,
-    deployer: `https://${n.deployer}-${suffix}`,
   };
 }
 

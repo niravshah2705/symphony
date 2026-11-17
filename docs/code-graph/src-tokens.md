@@ -79,7 +79,7 @@ Community of 194 nodes
 - **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
 - **refreshTokens** (criticality: 0.67, depth: 2)
 - **main** (criticality: 0.67, depth: 4)
-- *... and 17 more flows.*
+- *... and 16 more flows.*
 
 ## Dependencies
 

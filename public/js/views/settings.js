@@ -2155,7 +2155,7 @@ const LLM_ROLES = Object.freeze([
     provider: 'deploymentLlmProvider',
     preset: 'deploymentLlmPresetId',
     heading: 'Deployment · release',
-    description: 'Used by the deployer after a successful full test stage and approval.',
+    description: 'Reserved for the retired deploy stage; runs currently end after testing.',
   },
 ]);
 const ROLE_FIELDS = Object.freeze(Object.fromEntries(

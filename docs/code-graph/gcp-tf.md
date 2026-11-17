@@ -28,10 +28,10 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L387` (4 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L386` (4 edge(s))
 - `String` (2 edge(s))
 - `match` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L425` (2 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L424` (2 edge(s))
 - `stringify` (2 edge(s))
 - `slice` (2 edge(s))
 - `entries` (1 edge(s))
@@ -47,5 +47,5 @@ No execution flows pass through this community.
 ### Incoming
 
 - `./deploy/gcp/substrate-env.test.js` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L387` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L425` (2 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L386` (4 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L424` (2 edge(s))

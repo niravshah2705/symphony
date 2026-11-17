@@ -7,7 +7,7 @@
 Community of 80 nodes
 
 - **Size**: 80 nodes
-- **Cohesion**: 0.3545
+- **Cohesion**: 0.3533
 - **Dominant Language**: javascript
 
 ## Members
@@ -34,17 +34,17 @@ Community of 80 nodes
 | test:pickStateByType resolves the completed (Done) state@L104 | Test | ./packages/shared/src/agent/coder-flow.test.js | 104-106 |
 | test:pickStateByType returns null when no state of the type exists@L108 | Test | ./packages/shared/src/agent/coder-flow.test.js | 108-110 |
 | test:normalizeTshirtSize: trims/uppercases valid sizes and defaults unknown to M@L72 | Test | ./packages/shared/src/agent/model-routing.test.js | 72-78 |
-| cleanId | Function | ./packages/shared/src/agent/pipeline-labels.js | 19-22 |
-| linearProjectId | Function | ./packages/shared/src/agent/pipeline-labels.js | 27-36 |
-| lower | Function | ./packages/shared/src/agent/pipeline-labels.js | 38-40 |
-| projectStageResult | Function | ./packages/shared/src/agent/pipeline-labels.js | 47-80 |
+| cleanId | Function | ./packages/shared/src/agent/pipeline-labels.js | 14-17 |
+| linearProjectId | Function | ./packages/shared/src/agent/pipeline-labels.js | 22-31 |
+| lower | Function | ./packages/shared/src/agent/pipeline-labels.js | 33-35 |
+| projectStageResult | Function | ./packages/shared/src/agent/pipeline-labels.js | 42-75 |
 | command | Function | ./packages/shared/src/agent/pipeline-labels.test.js | 7-14 |
 | dependencies | Function | ./packages/shared/src/agent/pipeline-labels.test.js | 16-27 |
-| test:tester success swaps only aidone and preserves unrelated labels@L34 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 34-46 |
-| test:deployer failure projects aideployfail from aitested@L48 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 48-52 |
-| test:cancelled stages do not masquerade as terminal failures in Linear@L54 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 54-59 |
-| test:a missing expected source label is a no-op because labels are not pipeline authority@L61 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 61-66 |
-| test:native StageCommand project scope is never mistaken for a Linear project id@L68 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 68-75 |
+| test:tester success swaps only aidone and preserves unrelated labels@L36 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 36-48 |
+| test:retired deploy-stage results are never projected to Linear@L50 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 50-55 |
+| test:cancelled stages do not masquerade as terminal failures in Linear@L57 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 57-62 |
+| test:a missing expected source label is a no-op because labels are not pipeline authority@L64 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 64-69 |
+| test:native StageCommand project scope is never mistaken for a Linear project id@L71 | Test | ./packages/shared/src/agent/pipeline-labels.test.js | 71-78 |
 | normalizeTshirtSize | Function | ./packages/shared/src/agent/schema.js | 20-23 |
 | linearGraphqlTool | Function | ./packages/shared/src/agent/tools.js | 43-72 |
 | linearRequest | Function | ./packages/shared/src/linear.js | 25-66 |
@@ -84,7 +84,7 @@ Community of 80 nodes
 - `filter` (9 edge(s))
 - `map` (9 edge(s))
 - `has` (8 edge(s))
-- `deepEqual` (7 edge(s))
+- `deepEqual` (8 edge(s))
 - `get` (6 edge(s))
 - `log` (6 edge(s))
 - `set` (5 edge(s))
@@ -96,8 +96,8 @@ Community of 80 nodes
 - `./packages/shared/src/linear.js` (72 edge(s))
 - `./packages/shared/src/agent/apply.js` (22 edge(s))
 - `strictEqual` (20 edge(s))
+- `deepEqual` (8 edge(s))
 - `./packages/shared/src/agent/pipeline-labels.test.js` (7 edge(s))
-- `deepEqual` (7 edge(s))
 - `./packages/shared/src/agent/pipeline-labels.js` (6 edge(s))
 - `./packages/shared/src/linear.test.js` (5 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (4 edge(s))

@@ -193,15 +193,6 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
   const cfg = {
     ...CFG,
     pipelineOrchestratorEnabled: true,
-    pipelineDeploymentEnabled: false,
-    serviceAccounts: {
-      ...CFG.serviceAccounts,
-      deployer: 'pd@sa',
-    },
-    sourceServiceNames: {
-      ...CFG.sourceServiceNames,
-      deployer: 'pipeline-deployer',
-    },
   };
   const plan = buildPlan(SLUG, cfg);
   const n = names(SLUG);
@@ -213,54 +204,44 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
       n.pipelinePlanTopic,
       n.pipelineCodeTopic,
       n.pipelineTestTopic,
-      n.pipelineDeployTopic,
       n.pipelinePlanResultsTopic,
       n.pipelineCodeResultsTopic,
       n.pipelineTestResultsTopic,
-      n.pipelineDeployResultsTopic,
     ],
   );
+  assert.equal(plan.services.deployer, undefined);
+  assert.equal(plan.topics.some((topic) => /deploy/.test(topic.name)), false);
   assert.notEqual(n.pipelinePlanTopic, n.plannerTopic);
   assert.deepEqual(plan.topics.find((topic) => topic.name === n.pipelinePlanTopic).publishers, ['po@sa']);
   for (const [topic, publisher] of [
     [n.pipelinePlanResultsTopic, 'po@sa'],
     [n.pipelineCodeResultsTopic, 'po@sa'],
     [n.pipelineTestResultsTopic, 'po@sa'],
-    [n.pipelineDeployResultsTopic, 'pd@sa'],
   ]) {
     assert.deepEqual(plan.topics.find((entry) => entry.name === topic).publishers, [publisher]);
   }
   assert.equal(plan.services.gateway.env.ORCHESTRATOR_URL, u.orchestrator);
   assert.equal(plan.services.orchestrator.env.PIPELINE_STORE_BACKEND, 'firestore');
   assert.equal(plan.services.orchestrator.env.SETTINGS_URL, CFG.sharedSettingsUrl);
-  for (const service of [plan.services.orchestrator, plan.services.deployer]) {
-    assert.equal(service.env.PIPELINE_STAGE_STORE_BACKEND, 'firestore');
-  }
+  assert.equal(plan.services.orchestrator.env.PIPELINE_STAGE_STORE_BACKEND, 'firestore');
   assert.equal(plan.services.orchestrator.env.PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC, n.pipelinePlanResultsTopic);
   assert.equal(plan.services.orchestrator.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC, n.pipelineCodeResultsTopic);
   assert.equal(plan.services.orchestrator.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC, n.pipelineTestResultsTopic);
-  assert.equal(plan.services.deployer.env.PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC, n.pipelineDeployResultsTopic);
-  for (const service of [plan.services.orchestrator, plan.services.deployer]) {
+  for (const service of [plan.services.orchestrator]) {
     assert.equal(service.maxInstanceCount, 1);
     assert.equal(service.requestTimeoutSeconds, 3600);
   }
-  for (const service of [plan.services.orchestrator, plan.services.deployer]) {
+  for (const service of [plan.services.orchestrator]) {
     assert.equal(service.requireSecretFreePrimary, true);
     assert.equal(service.requireEgressProxy, true);
     assert.equal(service.env.EGRESS_PROXY_URL, 'http://127.0.0.1:4030');
     assert.equal(service.sidecarEnv.PROXY_ORG_ID, ORG_ID);
     assert.match(service.sidecarEnv.ORG_INTERNAL_API_TOKEN, /^[A-Za-z0-9_-]{43}$/);
   }
-  assert.equal(
-    plan.services.orchestrator.sidecarEnv.ORG_INTERNAL_API_TOKEN,
-    plan.services.deployer.sidecarEnv.ORG_INTERNAL_API_TOKEN,
-  );
-  assert.equal(plan.services.deployer.env.PIPELINE_DEPLOYMENT_ENABLED, 'false');
   for (const [stage, topic] of [
     ['plan', n.pipelinePlanResultsTopic],
     ['code', n.pipelineCodeResultsTopic],
     ['test', n.pipelineTestResultsTopic],
-    ['deploy', n.pipelineDeployResultsTopic],
   ]) {
     assert.equal(
       plan.subscriptions.find((subscription) => subscription.topic === topic).pushEndpoint,
@@ -268,7 +249,8 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
     );
   }
   // Stage commands: plan/code/test land on the orchestrator's stage-bound path
-  // segments; deploy keeps its own service.
+  // segments. The deploy stage was retired with the Cloud Run deployer (2026-11)
+  // — a tenant plan carries no deploy command or results channel at all.
   for (const stage of ['plan', 'code', 'test']) {
     const topic = n[`pipeline${stage[0].toUpperCase()}${stage.slice(1)}Topic`];
     const sub = plan.subscriptions.find((subscription) => subscription.topic === topic);
@@ -276,9 +258,6 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
     assert.equal(sub.audience, u.orchestrator);
     assert.equal(sub.ackDeadlineSeconds, 600);
   }
-  const deploySub = plan.subscriptions.find((subscription) => subscription.topic === n.pipelineDeployTopic);
-  assert.equal(deploySub.pushEndpoint, `${u.deployer}/pubsub/pipeline-stage`);
-  assert.equal(deploySub.ackDeadlineSeconds, 600);
 });
 
 test('mandatory per-tenant egress proxy fails closed without an organization signing key', () => {
@@ -431,29 +410,21 @@ test('provision is idempotent — already-existing resources do not fail', async
   assert.equal(second.status, 'provisioned');
 });
 
-test('pipeline provision clones the orchestrator + deployer and writes back their URLs', async () => {
+test('pipeline provision clones the gateway + orchestrator and writes back their URLs', async () => {
   const clients = fakeClients();
   const cfg = {
     ...CFG,
     pipelineOrchestratorEnabled: true,
-    serviceAccounts: {
-      ...CFG.serviceAccounts,
-      deployer: 'pd@sa',
-    },
-    sourceServiceNames: {
-      ...CFG.sourceServiceNames,
-      deployer: 'pipeline-deployer',
-    },
   };
   const result = await provision(SLUG, cfg, { clients });
   assert.deepEqual(clients.calls.imageReads.sort(), [
-    'gateway', 'pipeline-deployer', 'pipeline-orchestrator',
+    'gateway', 'pipeline-orchestrator',
   ]);
-  assert.equal(clients.calls.createService.length, 3);
-  assert.equal(clients.calls.createTopic.length, 9);
-  assert.equal(clients.calls.createPushSubscription.length, 9);
+  assert.equal(clients.calls.createService.length, 2);
+  assert.equal(clients.calls.createTopic.length, 7);
+  assert.equal(clients.calls.createPushSubscription.length, 7);
   assert.equal(result.orchestrator.url, urls(SLUG, cfg).orchestrator);
-  assert.equal(result.deployer.status, 'provisioned');
+  assert.equal(result.deployer, undefined);
 });
 
 test('invalid slug is rejected before any client call', async () => {
@@ -469,9 +440,9 @@ test('teardown deletes every per-tenant resource', async () => {
   const clients = fakeClients();
   const result = await teardown(SLUG, { clients });
   const kinds = clients.calls.deletes.map((d) => d[0]);
-  assert.equal(kinds.filter((k) => k === 'service').length, 3);
-  assert.equal(kinds.filter((k) => k === 'sub').length, 9);
-  assert.equal(kinds.filter((k) => k === 'topic').length, 9);
+  assert.equal(kinds.filter((k) => k === 'service').length, 2);
+  assert.equal(kinds.filter((k) => k === 'sub').length, 7);
+  assert.equal(kinds.filter((k) => k === 'topic').length, 7);
   assert.equal(kinds.filter((k) => k === 'sched').length, 1);
   assert.equal(kinds.filter((k) => k === 'job').length, 0);
   assert.equal(result.status, 'torn_down');

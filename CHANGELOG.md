@@ -4,6 +4,26 @@ All notable changes to AI Fleet (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
+## 2026-11-18
+
+### Removed
+
+- **The pipeline deploy stage is retired with the Cloud Run deployer.**
+  `services/deployer` and `deploy/gcp/Dockerfile.deployer` are deleted, along
+  with the `pipeline-deployer` Cloud Run service, its service account and IAM
+  bindings, the deploy command/result Pub/Sub topics and subscriptions, the
+  `pipeline_deployment_enabled` / `pipeline_deploy*_topic` Terraform variables,
+  the deployer CI build steps and the per-tenant deployer provisioning. The
+  durable pipeline now runs **plan → code → test** and closes the run as
+  succeeded after test.
+  - New runs that request the deploy stage are rejected at gateway admission
+    and at orchestrator preflight with `410 pipeline_deploy_retired`; a legacy
+    run that reaches the deploy transition is closed as succeeded without
+    dispatching anything (`repository.retireDeployStage`).
+  - **Release note:** terraform destroys the deployer service, its Pub/Sub
+    channels and IAM on the next apply; any organization approval awaiting a
+    deploy will simply close its run after test.
+
 ## 2026-11-17
 
 ### Removed

@@ -225,12 +225,11 @@ test('substrate env reaches the dispatchers and no other workload', () => {
     provisionerTf, new RegExp(k), `the provisioner must not carry ${k}`,
   ));
 
-  // The deployer executes a stage inside the boundary and the cloud_run.tf
-  // services never talk to the control plane: neither learns where it is. This
-  // is the promise substrate.tf makes — a workload that runs or ships code
-  // without confinement must not be handed the address that creates actors.
-  const deployer = envLocal('deployer_env', pipelineTf);
-  assert.doesNotMatch(deployer, /local\.substrate/, 'substrate env reached the deployer');
+  // The retired deployer was the other in-boundary stage executor; the
+  // cloud_run.tf services never talk to the control plane. This is the promise
+  // substrate.tf makes — a workload that runs or ships code without confinement
+  // must not be handed the address that creates actors.
+  assert.doesNotMatch(pipelineTf, /deployer_env/, 'the retired deployer env must not return');
   assert.doesNotMatch(cloudRunTf, /local\.substrate/, 'a cloud_run.tf service receives substrate env');
 });
 

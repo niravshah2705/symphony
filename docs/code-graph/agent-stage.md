@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 170 nodes
+Community of 163 nodes
 
-- **Size**: 170 nodes
-- **Cohesion**: 0.3107
+- **Size**: 163 nodes
+- **Cohesion**: 0.3063
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,46 +65,46 @@ Community of 170 nodes
 | test:a stage admitted on a platform key reports no source at all@L66 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 66-68 |
 | test:a stage snapshot without the decision reports no source@L73 | Test | ./packages/shared/src/agent/pipeline-stage-runtime-provider-source.test.js | 73-75 |
 
-*... and 120 more members.*
+*... and 113 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **trustedTestContext** (criticality: 0.57, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (105 edge(s))
-- `String` (40 edge(s))
+- `equal` (91 edge(s))
+- `String` (39 edge(s))
 - `join` (33 edge(s))
-- `deepEqual` (28 edge(s))
-- `trim` (26 edge(s))
+- `trim` (24 edge(s))
+- `deepEqual` (22 edge(s))
 - `push` (16 edge(s))
-- `toLowerCase` (15 edge(s))
-- `isArray` (15 edge(s))
+- `isArray` (14 edge(s))
 - `stringify` (13 edge(s))
+- `toLowerCase` (12 edge(s))
 - `parse` (11 edge(s))
 - `includes` (11 edge(s))
 - `existsSync` (10 edge(s))
-- `throws` (10 edge(s))
-- `slice` (10 edge(s))
 - `rejects` (10 edge(s))
+- `processCommand` (9 edge(s))
+- `claim` (8 edge(s))
 
 ### Incoming
 
-- `equal` (105 edge(s))
-- `./packages/shared/src/agent/pipeline-stage-runtime.js` (46 edge(s))
+- `equal` (91 edge(s))
+- `./packages/shared/src/agent/pipeline-stage-runtime.js` (39 edge(s))
 - `./packages/shared/src/agent/tools/environments.js` (35 edge(s))
-- `deepEqual` (28 edge(s))
 - `./packages/shared/src/agent/tools/exec.js` (26 edge(s))
+- `deepEqual` (22 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-service.js` (21 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-execution-store.js` (20 edge(s))
 - `./packages/shared/src/agent/tools/docker.js` (15 edge(s))
 - `./packages/shared/src/agent/tools/quality.js` (15 edge(s))
-- `./packages/shared/src/agent/pipeline-stage-runtime.test.js` (14 edge(s))
 - `./packages/shared/src/agent/pipeline-stage-service.test.js` (14 edge(s))
+- `./packages/shared/src/agent/pipeline-stage-runtime.test.js` (11 edge(s))
 - `./packages/shared/src/agent/tools/security.js` (11 edge(s))
 - `./packages/shared/src/agent/tools/exec.test.js` (11 edge(s))
-- `throws` (10 edge(s))
 - `rejects` (10 edge(s))
+- `./packages/shared/src/agent/tools/build.js` (9 edge(s))

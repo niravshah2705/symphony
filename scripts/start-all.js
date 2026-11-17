@@ -58,7 +58,6 @@ const SERVICES = [
   { name: 'identity-verification', entry: 'services/identity-verification/src/index.js' },
   { name: 'agent', entry: 'services/orchestrator/src/agent-server.js' },
   ...(pipelineEnabled ? [
-    { name: 'deployer', entry: 'services/deployer/src/index.js' },
     { name: 'orchestrator', entry: 'services/orchestrator/src/index.js' },
   ] : []),
   { name: 'gateway', entry: 'services/gateway/src/index.js' },
@@ -108,7 +107,7 @@ function envFor(name) {
     env.STREAM_TOKEN_SECRET = localStreamSecret;
   } else if (name === 'gateway') {
     env.STREAM_TOKEN_SERVICE_URL = `http://127.0.0.1:${streamTokenPort}`;
-  } else if (['agent', 'deployer'].includes(name)) {
+  } else if (name === 'agent') {
     env.EGRESS_PROXY_URL = `http://127.0.0.1:${egressProxyPort}`;
   }
   if (String(env.EVENTS_BACKEND || 'memory').toLowerCase() === 'firestore') return env;

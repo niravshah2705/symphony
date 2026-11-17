@@ -106,7 +106,7 @@ Collapsible sections:
 
 1. **Scope vault & connections** — organization administrators store provider credentials in the encrypted organization vault, with optional per-project overrides. Linear is customer-owned and has no process-wide or platform-managed fallback. The UI exposes only masked presence/source metadata and connector readiness.
 2. **Tool integrations** — choose a planning connector (**Linear / Jira / Asana**) and repository host (**GitHub / GitLab**), then save non-secret connector metadata separately from credentials. Agent containers send sentinel credentials to their loopback egress proxy; only the proxy resolves and injects the selected organization/project vault value.
-3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (planner), **Execution** (coder), **Testing** (tester), and **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
+3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (planner), **Execution** (coder), **Testing** (tester), and **Deployment** (retired deploy stage). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
    - **Ollama / LM Studio / OMLX (local)** — the page renders immediately, discovers available models asynchronously, and offers a refresh action. In proxied deployments their network origins are trusted operator configuration on the proxy, never browser-selected targets. Ollama and LM Studio require no key; an optional OMLX key belongs in the scope vault. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
    - **OpenAI / Codex** — browser OAuth is intentionally disabled. An organization administrator imports a Codex token bundle out of band with `adlc admin codex import --org-id <uuid> --settings-url <url>` (stdin by default, or `--token-file`); the IAM-gated settings service encrypts it in the org vault. The browser exposes status/model selection only and never receives the bundle.
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
@@ -136,7 +136,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 ## Durable fixed pipeline
 
 When `PIPELINE_ORCHESTRATOR_ENABLED=true`, new starts use a versioned, durable
-`plan → code → test → deploy` control plane. The gateway performs EULA, billing,
+`plan → code → test` control plane. The gateway performs EULA, billing,
 user-scoped policy, harness, model, and credential-readiness preflight once, then
 persists only the secret-free decision. The LangGraph orchestrator advances from
 typed `StageCommandV1`/`StageResultV1` messages with stable run, attempt, and
@@ -153,7 +153,7 @@ Firestore.
 The wire contract caps raw `StageCommandV1` JSON at 256 KiB, caller request data
 at 64 KiB, a stage-result output at 32 KiB, and a whole result at 48 KiB. Worker
 HTTP parser limits include the calculated base64 expansion plus bounded Pub/Sub
-envelope headroom. Commands and results each use four stage-specific topics;
+envelope headroom. Commands and results each use three stage-specific topics;
 publisher IAM grants a worker only its own result topic, whose subscription is
 bound to `/pubsub/pipeline-stage-results/{stage}`.
 
@@ -167,19 +167,12 @@ identity boundary between untrusted repository scripts and the tester/proxy
 Cloud Run service account.
 
 The rollout flag defaults off and preserves the legacy planner/coder paths. When
-enabled, legacy label polling is disabled to prevent double dispatch. Deployment
-has a second default-off gate (`PIPELINE_DEPLOYMENT_ENABLED=false`), accepts only
-the exact full four-stage sequence, requires a successful tester result, and
-uses a server approval for production plus repository-owned, allowlisted CI/CD
-from `.ai-fleet/deployment.json`. The deployer receives neither raw CI credentials
-nor an unrestricted deployment shell. The local Workflows canvas remains a
+enabled, legacy label polling is disabled to prevent double dispatch. The deploy
+stage was retired with the Cloud Run deployer (2026-11): runs end after test, a
+new start that requests `deploy` is rejected with `410 pipeline_deploy_retired`,
+and a legacy run reaching the deploy transition closes as succeeded without
+dispatching. The local Workflows canvas remains a
 non-executable draft designer and is not a second pipeline schema.
-
-When a run reaches `awaiting_approval`, an organization administrator can run
-`adlc admin deploy approve` with the run, project, repository, environment, and
-settings URL. The CLI reads the scoped run status and binds the approval to the
-exact successful test command, commit/tree SHAs, and preflight digest before the
-orchestrator can claim the deploy command.
 
 Shared-stack pipeline admission accepts platform-managed provider credentials
 only. A customer-selected credential is admitted only on the matching dedicated

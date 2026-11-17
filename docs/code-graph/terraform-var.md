@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 516 nodes
+Community of 502 nodes
 
-- **Size**: 516 nodes
-- **Cohesion**: 0.7252
+- **Size**: 502 nodes
+- **Cohesion**: 0.7206
 - **Dominant Language**: hcl
 
 ## Members
@@ -65,7 +65,7 @@ Community of 516 nodes
 | resource.google_secret_manager_secret.email_smtp_password | Class | ./deploy/gcp/terraform/email_service.tf | 35-43 |
 | resource.google_secret_manager_secret_iam_member.email_smtp_user_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 62-67 |
 
-*... and 466 more members.*
+*... and 452 more members.*
 
 ## Execution Flows
 
@@ -75,12 +75,12 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./deploy/gcp/terraform/variables.tf` (194 edge(s))
-- `./deploy/gcp/terraform/locals.tf` (55 edge(s))
-- `./deploy/gcp/terraform/outputs.tf` (30 edge(s))
-- `./deploy/gcp/terraform/pipeline.tf` (22 edge(s))
+- `./deploy/gcp/terraform/variables.tf` (189 edge(s))
+- `./deploy/gcp/terraform/locals.tf` (52 edge(s))
+- `./deploy/gcp/terraform/outputs.tf` (29 edge(s))
 - `./deploy/gcp/terraform/provisioner.tf` (19 edge(s))
 - `./deploy/gcp/terraform/settings_service.tf` (19 edge(s))
+- `./deploy/gcp/terraform/pipeline.tf` (17 edge(s))
 - `./deploy/gcp/terraform/observability.tf` (15 edge(s))
 - `./deploy/gcp/terraform/email_service.tf` (14 edge(s))
 - `./deploy/gcp/terraform/litellm.tf` (14 edge(s))

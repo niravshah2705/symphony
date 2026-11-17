@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 253 nodes
+Community of 144 nodes
 
-- **Size**: 253 nodes
-- **Cohesion**: 0.2432
+- **Size**: 144 nodes
+- **Cohesion**: 0.2276
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,11 +15,11 @@ Community of 253 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
-| test:optional image resolver uses a SHA placeholder only while disabled@L241 | Test | ./deploy/gcp/pipeline-infra.test.js | 241-287 |
-| test:the worker pool name the planner selects is one string in four places@L567 | Test | ./deploy/gcp/substrate-env.test.js | 567-614 |
-| test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
-| test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
-| test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L237 | Test | ./deploy/gcp/pipeline-infra.test.js | 237-283 |
+| test:the worker pool name the planner selects is one string in four places@L566 | Test | ./deploy/gcp/substrate-env.test.js | 566-613 |
+| test:the power workflow waits only on namespaces the module still creates@L139 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 139-161 |
+| test@L147 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 147-147 |
+| test:the static-IP grant lists the addresses the module owns@L163 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 163-178 |
 | test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357 | Test | ./e2e/persistent-footer.spec.js | 357-461 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
@@ -65,7 +65,7 @@ Community of 253 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 203 more members.*
+*... and 94 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 253 nodes
 
 ### Outgoing
 
-- `equal` (355 edge(s))
-- `match` (62 edge(s))
-- `ok` (47 edge(s))
-- `map` (47 edge(s))
-- `deepEqual` (43 edge(s))
-- `join` (42 edge(s))
-- `includes` (41 edge(s))
-- `String` (39 edge(s))
-- `isArray` (36 edge(s))
-- `filter` (32 edge(s))
+- `equal` (166 edge(s))
+- `match` (42 edge(s))
+- `ok` (33 edge(s))
+- `map` (33 edge(s))
 - `expect` (29 edge(s))
-- `slice` (26 edge(s))
-- `trim` (25 edge(s))
-- `throws` (23 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `filter` (28 edge(s))
+- `isArray` (28 edge(s))
+- `String` (27 edge(s))
+- `slice` (22 edge(s))
+- `deepEqual` (21 edge(s))
+- `trim` (18 edge(s))
+- `includes` (18 edge(s))
+- `throws` (13 edge(s))
+- `join` (12 edge(s))
+- `require` (12 edge(s))
 
 ### Incoming
 
-- `equal` (355 edge(s))
-- `match` (59 edge(s))
-- `ok` (47 edge(s))
-- `deepEqual` (43 edge(s))
+- `equal` (166 edge(s))
+- `match` (39 edge(s))
+- `ok` (33 edge(s))
 - `expect` (29 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
-- `join` (24 edge(s))
-- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
-- `throws` (23 edge(s))
-- `./packages/shared/src/agent/runtimes.test.js` (22 edge(s))
+- `deepEqual` (21 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
-- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
+- `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
+- `filter` (14 edge(s))
+- `./packages/shared/src/agent/memory.js` (14 edge(s))
+- `./packages/shared/src/agent/coverage-service.js` (13 edge(s))
+- `throws` (13 edge(s))
+- `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
+- `trim` (11 edge(s))

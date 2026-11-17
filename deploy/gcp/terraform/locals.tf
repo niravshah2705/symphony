@@ -43,7 +43,6 @@ locals {
   image_base       = "${var.region}-docker.pkg.dev/${var.project_id}/${var.artifact_repo}"
   gateway_tag      = var.gateway_image_tag != "" ? var.gateway_image_tag : var.image_tag
   orchestrator_tag = var.orchestrator_image_tag != "" ? var.orchestrator_image_tag : var.image_tag
-  deployer_tag     = var.deployer_image_tag != "" ? var.deployer_image_tag : var.image_tag
   org_tag          = var.org_image_tag != "" ? var.org_image_tag : var.image_tag
   settings_tag     = var.settings_image_tag != "" ? var.settings_image_tag : var.image_tag
   email_tag        = var.email_image_tag != "" ? var.email_image_tag : var.image_tag
@@ -55,7 +54,6 @@ locals {
 
   gateway_image      = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
   orchestrator_image = "${local.image_base}/${var.orchestrator_service_name}:${local.orchestrator_tag}"
-  deployer_image     = "${local.image_base}/${var.deployer_service_name}:${local.deployer_tag}"
   org_image          = "${local.image_base}/${var.org_service_name}:${local.org_tag}"
   settings_image     = "${local.image_base}/${var.settings_service_name}:${local.settings_tag}"
   email_image        = "${local.image_base}/${var.email_service_name}:${local.email_tag}"
@@ -76,7 +74,6 @@ locals {
   run_url_suffix   = "${local.project_number}.${var.region}.run.app"
   gateway_url      = var.api_base_url != "" ? var.api_base_url : "https://${var.gateway_service_name}-${local.run_url_suffix}"
   orchestrator_url = "https://${var.orchestrator_service_name}-${local.run_url_suffix}"
-  deployer_url     = "https://${var.deployer_service_name}-${local.run_url_suffix}"
   org_url          = "https://${var.org_service_name}-${local.run_url_suffix}"
   settings_url     = "https://${var.settings_service_name}-${local.run_url_suffix}"
   email_url        = "https://${var.email_service_name}-${local.run_url_suffix}"
@@ -102,9 +99,7 @@ locals {
     PUBSUB_PIPELINE_PLAN_TOPIC    = var.pipeline_plan_topic
     PUBSUB_PIPELINE_CODE_TOPIC    = var.pipeline_code_topic
     PUBSUB_PIPELINE_TEST_TOPIC    = var.pipeline_test_topic
-    PUBSUB_PIPELINE_DEPLOY_TOPIC  = var.pipeline_deploy_topic
     PIPELINE_ORCHESTRATOR_ENABLED = tostring(var.pipeline_orchestrator_enabled)
-    PIPELINE_DEPLOYMENT_ENABLED   = tostring(var.pipeline_deployment_enabled)
     AI_FLEET_DATA_DIR             = "/tmp"
     # One JSON object per stdout line (packages/shared-core/src/logger.js). This is
     # NOT cosmetic and not optional: Cloud Logging only builds `jsonPayload` from a
@@ -115,8 +110,8 @@ locals {
     LOG_FORMAT = "json"
     # The shared config (packages/shared/src/config.js) requires AUTH_MODE=firebase
     # when NODE_ENV=production and validates the Firebase web config at load. Only
-    # the gateway actually enforces app-auth, but the orchestrator/deployer import
-    # the same config, so they must satisfy the guard too. The Firebase web config is
+    # the gateway actually enforces app-auth, but the orchestrator imports the
+    # same config, so it must satisfy the guard too. The Firebase web config is
     # PUBLIC (not a secret); internal services build it but never use it.
     AUTH_MODE           = "firebase"
     FIREBASE_PROJECT_ID = var.project_id

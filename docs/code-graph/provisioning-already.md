@@ -16,8 +16,8 @@ Community of 4 nodes
 |------|------|------|-------|
 | alreadyExists | Function | ./packages/shared/src/provisioning/provisioning.test.js | 48-50 |
 | envEntries | Function | ./packages/shared/src/provisioning/provisioning.test.js | 61-63 |
-| test:GCP adapter reconciles a legacy gateway sidecar down to one brokered container@L320 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 320-393 |
-| createService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 360-362 |
+| test:GCP adapter reconciles a legacy gateway sidecar down to one brokered container@L299 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 299-372 |
+| createService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 339-341 |
 
 ## Execution Flows
 

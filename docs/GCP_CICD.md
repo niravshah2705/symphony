@@ -14,10 +14,9 @@ are conditional on it:
 |---|---|
 | `services/gateway/**` (or its Dockerfile) | rebuild **gateway** image → `terraform apply` rolls **only** gateway |
 | `services/orchestrator/**` (or its Dockerfiles) | rebuild **orchestrator** → apply rolls the pipeline-orchestrator service (agent surface + pipeline + substrate control plane); `deploy/gcp/Dockerfile.substrate-actor` additionally rebuilds the actor image |
-| `services/deployer/**` | rebuild and roll only the deployer service |
 | `services/proxy/**` (or its Dockerfile) | rebuild the shared proxy artifact → apply rolls the stream-token broker and egress sidecars |
 | `packages/shared-core/**` | rebuild every consumer, including the SDK-free gateway/orchestrator and agent stages |
-| `packages/shared/**` | rebuild the orchestrator, deployer, and actor images |
+| `packages/shared/**` | rebuild the orchestrator and actor images |
 | root `package.json`/`package-lock.json` | rebuild all service images **and** redeploy the SPA |
 | `deploy/gcp/terraform/**` | rebuild the shared proxy artifact and run `terraform apply` (required for first broker creation) |
 | `deploy/gcp/terraform-substrate-gke/**` | `gke_reconcile` job: plan **and apply** the multi-tenant Substrate GKE module (own state prefix, no images; any delete in the plan fails the run instead of applying) |

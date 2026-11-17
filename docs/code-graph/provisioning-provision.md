@@ -7,7 +7,7 @@
 Community of 14 nodes
 
 - **Size**: 14 nodes
-- **Cohesion**: 0.3214
+- **Cohesion**: 0.3168
 - **Dominant Language**: javascript
 
 ## Members
@@ -18,16 +18,16 @@ Community of 14 nodes
 | provisionTenant | Function | ./packages/shared-core/src/provisioning/index.js | 279-282 |
 | teardownTenant | Function | ./packages/shared-core/src/provisioning/index.js | 285-288 |
 | assertSlug | Function | ./packages/shared-core/src/provisioning/naming.js | 23-28 |
-| names | Function | ./packages/shared-core/src/provisioning/naming.js | 31-57 |
-| urls | Function | ./packages/shared-core/src/provisioning/naming.js | 60-72 |
-| atespace | Function | ./packages/shared-core/src/provisioning/naming.js | 82-85 |
+| names | Function | ./packages/shared-core/src/provisioning/naming.js | 31-52 |
+| urls | Function | ./packages/shared-core/src/provisioning/naming.js | 55-66 |
+| atespace | Function | ./packages/shared-core/src/provisioning/naming.js | 76-79 |
 | deriveOrgInternalToken | Function | ./packages/shared-core/src/provisioning/plan.js | 8-16 |
 | labelValue | Function | ./packages/shared-core/src/provisioning/plan.js | 19-21 |
-| buildPlan | Function | ./packages/shared-core/src/provisioning/plan.js | 63-367 |
+| buildPlan | Function | ./packages/shared-core/src/provisioning/plan.js | 63-322 |
 | withComponent | Function | ./packages/shared-core/src/provisioning/plan.js | 109-109 |
 | nowIso | Function | ./packages/shared-core/src/provisioning/provisioner.js | 26-29 |
-| provision | Function | ./packages/shared-core/src/provisioning/provisioner.js | 37-75 |
-| teardown | Function | ./packages/shared-core/src/provisioning/provisioner.js | 81-112 |
+| provision | Function | ./packages/shared-core/src/provisioning/provisioner.js | 37-67 |
+| teardown | Function | ./packages/shared-core/src/provisioning/provisioner.js | 73-100 |
 
 ## Execution Flows
 
@@ -37,12 +37,12 @@ Community of 14 nodes
 
 ### Outgoing
 
-- `filter` (11 edge(s))
-- `String` (6 edge(s))
-- `getServiceImage` (3 edge(s))
-- `createService` (3 edge(s))
+- `filter` (8 edge(s))
+- `String` (5 edge(s))
 - `trim` (2 edge(s))
 - `map` (2 edge(s))
+- `getServiceImage` (2 edge(s))
+- `createService` (2 edge(s))
 - `test` (1 edge(s))
 - `stringify` (1 edge(s))
 - `digest` (1 edge(s))

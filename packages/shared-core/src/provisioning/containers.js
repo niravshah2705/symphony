@@ -5,7 +5,7 @@
  *
  * A per-tenant stack is cloned from the live SHARED source service. Historically
  * only `containers[0]` was copied — so an egress-proxy SIDECAR added to the
- * shared orchestrator/deployer would NOT propagate to tenant stacks, silently
+ * shared orchestrator would NOT propagate to tenant stacks, silently
  * leaving per-tenant agents with no proxy (and, once secrets move to the
  * sidecar, no credentials). These helpers normally copy EVERY container,
  * overlaying per-tenant plain env on the primary (ingress) container and a

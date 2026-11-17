@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| enabled_value | Function | ./deploy/gcp/deploy.sh | 219-224 |
-| seed_secret | Function | ./deploy/gcp/deploy.sh | 225-231 |
+| enabled_value | Function | ./deploy/gcp/deploy.sh | 217-222 |
+| seed_secret | Function | ./deploy/gcp/deploy.sh | 223-229 |
 
 ## Execution Flows
 

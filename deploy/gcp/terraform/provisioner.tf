@@ -76,16 +76,11 @@ resource "google_project_iam_member" "provisioner_scheduler_admin" {
 # serviceAccountUser on each runtime SA: deploying a service that runs AS that SA
 # requires actAs on it. Scoped per-SA (least privilege), not project-wide.
 resource "google_service_account_iam_member" "provisioner_actas" {
-  for_each = local.provisioning_on ? merge(
-    {
-      gateway      = google_service_account.gateway.name
-      orchestrator = google_service_account.orchestrator.name
-      push         = google_service_account.pubsub_push.name
-    },
-    local.pipeline_on ? {
-      deployer = google_service_account.deployer[0].name
-    } : {},
-  ) : {}
+  for_each = local.provisioning_on ? {
+    gateway      = google_service_account.gateway.name
+    orchestrator = google_service_account.orchestrator.name
+    push         = google_service_account.pubsub_push.name
+  } : {}
   service_account_id = each.value
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.provisioner[0].email}"
@@ -251,15 +246,11 @@ resource "google_cloud_run_v2_service" "provisioner" {
             # Names of the SHARED services to clone images/secrets/config from.
             GATEWAY_SERVICE_NAME      = var.gateway_service_name
             ORCHESTRATOR_SERVICE_NAME = var.orchestrator_service_name
-            DEPLOYER_SERVICE_NAME     = var.deployer_service_name
             INTERNAL_INGRESS          = var.internal_ingress
             # Runtime SAs the per-tenant services run as.
             GATEWAY_SA      = google_service_account.gateway.email
             ORCHESTRATOR_SA = google_service_account.orchestrator.email
           },
-          local.pipeline_on ? {
-            DEPLOYER_SA = google_service_account.deployer[0].email
-          } : {},
           # The atespace step is a call to the substrate control plane, so this is
           # the workload that most needs SUBSTRATE_URL — without it the handler
           # answers every step SKIPPED ("no substrate control plane configured")

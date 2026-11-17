@@ -188,7 +188,7 @@ resource "google_secret_manager_secret_iam_member" "gateway_one_tap" {
 # service SA across all its containers), so the settings-resolver invoker
 # bindings live with the services that carry a sidecar: see
 # google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings in
-# pipeline.tf (orchestrator + deployer). The internal resolver token is
+# pipeline.tf (orchestrator). The internal resolver token is
 # placed directly on the sidecar container; granting Secret Manager access to
 # the shared identity would let model-generated app code retrieve it through
 # the metadata server.

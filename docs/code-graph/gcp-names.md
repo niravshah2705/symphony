@@ -23,19 +23,19 @@ Community of 22 nodes
 | test:Terraform emits only SUBSTRATE_* names that shipped code reads@L176 | Test | ./deploy/gcp/substrate-env.test.js | 176-183 |
 | test:every substrate setting the code can honor is reachable from Terraform@L185 | Test | ./deploy/gcp/substrate-env.test.js | 185-200 |
 | test:no credential-shaped key is ever emitted into the substrate env maps@L202 | Test | ./deploy/gcp/substrate-env.test.js | 202-210 |
-| test:the actor callback opens only with an identity allowed to call it@L237 | Test | ./deploy/gcp/substrate-env.test.js | 237-299 |
-| test@L291 | Test | ./deploy/gcp/substrate-env.test.js | 291-291 |
-| test@L295 | Test | ./deploy/gcp/substrate-env.test.js | 295-295 |
-| test:environment_init reaches the org service under the name its settings class reads@L301 | Test | ./deploy/gcp/substrate-env.test.js | 301-322 |
-| test:the substrate surface is dark until an operator names a control plane@L445 | Test | ./deploy/gcp/substrate-env.test.js | 445-485 |
-| test:atespace names Terraform accepts are names the app will not silently drop@L525 | Test | ./deploy/gcp/substrate-env.test.js | 525-565 |
-| test@L561 | Test | ./deploy/gcp/substrate-env.test.js | 561-561 |
-| test:the worker pool is tainted with the key atelet tolerates@L616 | Test | ./deploy/gcp/substrate-env.test.js | 616-642 |
-| test:the worker pool boots on its own disk and inside the regional SSD quota@L644 | Test | ./deploy/gcp/substrate-env.test.js | 644-717 |
-| declared | Function | ./deploy/gcp/substrate-env.test.js | 671-676 |
-| test@L714 | Test | ./deploy/gcp/substrate-env.test.js | 714-714 |
-| test:rewriting the postgres claim also re-migrates the database@L719 | Test | ./deploy/gcp/substrate-env.test.js | 719-746 |
-| test@L729 | Test | ./deploy/gcp/substrate-env.test.js | 729-729 |
+| test:the actor callback opens only with an identity allowed to call it@L236 | Test | ./deploy/gcp/substrate-env.test.js | 236-298 |
+| test@L290 | Test | ./deploy/gcp/substrate-env.test.js | 290-290 |
+| test@L294 | Test | ./deploy/gcp/substrate-env.test.js | 294-294 |
+| test:environment_init reaches the org service under the name its settings class reads@L300 | Test | ./deploy/gcp/substrate-env.test.js | 300-321 |
+| test:the substrate surface is dark until an operator names a control plane@L444 | Test | ./deploy/gcp/substrate-env.test.js | 444-484 |
+| test:atespace names Terraform accepts are names the app will not silently drop@L524 | Test | ./deploy/gcp/substrate-env.test.js | 524-564 |
+| test@L560 | Test | ./deploy/gcp/substrate-env.test.js | 560-560 |
+| test:the worker pool is tainted with the key atelet tolerates@L615 | Test | ./deploy/gcp/substrate-env.test.js | 615-641 |
+| test:the worker pool boots on its own disk and inside the regional SSD quota@L643 | Test | ./deploy/gcp/substrate-env.test.js | 643-716 |
+| declared | Function | ./deploy/gcp/substrate-env.test.js | 670-675 |
+| test@L713 | Test | ./deploy/gcp/substrate-env.test.js | 713-713 |
+| test:rewriting the postgres claim also re-migrates the database@L718 | Test | ./deploy/gcp/substrate-env.test.js | 718-745 |
+| test@L728 | Test | ./deploy/gcp/substrate-env.test.js | 728-728 |
 
 ## Execution Flows
 
@@ -50,7 +50,7 @@ No execution flows pass through this community.
 - `equal` (18 edge(s))
 - `exec` (14 edge(s))
 - `join` (7 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L567` (6 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L566` (6 edge(s))
 - `doesNotMatch` (6 edge(s))
 - `matchAll` (4 edge(s))
 - `replace` (3 edge(s))
@@ -68,7 +68,7 @@ No execution flows pass through this community.
 - `./deploy/gcp/substrate-env.test.js` (18 edge(s))
 - `equal` (18 edge(s))
 - `exec` (11 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L567` (6 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L566` (6 edge(s))
 - `doesNotMatch` (6 edge(s))
 - `has` (2 edge(s))
 - `deepEqual` (2 edge(s))

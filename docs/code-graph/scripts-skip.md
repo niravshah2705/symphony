@@ -14,8 +14,8 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:the rendered substrate map is the shape the JS side parses@L387 | Test | ./deploy/gcp/substrate-env.test.js | 387-423 |
-| test:the actor callback renders as four names or none, never a half-pair@L425 | Test | ./deploy/gcp/substrate-env.test.js | 425-443 |
+| test:the rendered substrate map is the shape the JS side parses@L386 | Test | ./deploy/gcp/substrate-env.test.js | 386-422 |
+| test:the actor callback renders as four names or none, never a half-pair@L424 | Test | ./deploy/gcp/substrate-env.test.js | 424-442 |
 | skip | Function | ./scripts/flexprice-helm.js | 66-66 |
 
 ## Execution Flows

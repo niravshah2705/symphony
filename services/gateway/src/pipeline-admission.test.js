@@ -141,7 +141,6 @@ function admission(overrides = {}) {
       settingsUrl: 'http://settings.internal',
       orchestratorUrl: 'http://orchestrator.internal',
       orchestratorEnabled: overrides.orchestratorEnabled !== false,
-      deploymentEnabled: overrides.deploymentEnabled === true,
       pinnedOrganizationId: overrides.pinnedOrganizationId || '',
       getSettings: overrides.getSettings || (() => TEST_SETTINGS),
       resolveRepository: overrides.resolveRepository || (() => ({
@@ -168,25 +167,19 @@ test('requested stages are explicit, ordered, unique, and deploy requires the ex
   );
 });
 
-test('deploy is fail-fast disabled by default and injectable only for the exact full sequence', async () => {
+// The deploy stage was retired with the Cloud Run deployer (2026-11): any new
+// run asking for it is turned away at admission, before billing or dispatch.
+test('the retired deploy stage is rejected before any downstream call', async () => {
   let billingCalls = 0;
-  const disabled = admission({
+  const context = admission({
     getBillingStatus: () => { billingCalls += 1; return { blocked: false }; },
   });
   await assert.rejects(
-    () => disabled.value.submit(request({ requestedStages: ['plan', 'code', 'test', 'deploy'] })),
-    (error) => error.status === 403 && error.code === 'pipeline_deployment_disabled',
+    () => context.value.submit(request({ requestedStages: ['plan', 'code', 'test', 'deploy'] })),
+    (error) => error.status === 410 && error.code === 'pipeline_deploy_retired',
   );
   assert.equal(billingCalls, 0);
-  assert.equal(disabled.calls.length, 0);
-
-  const enabled = admission({ deploymentEnabled: true });
-  const accepted = await enabled.value.submit(request({
-    requestedStages: ['plan', 'code', 'test', 'deploy'],
-    request: { workItem: { id: 'ENG-42' }, deployment: { environment: 'production' } },
-  }));
-  assert.deepEqual(accepted.requestedStages, ['plan', 'code', 'test', 'deploy']);
-  assert.equal(enabled.calls.at(-1).path, ORCHESTRATOR_RUNS_PATH);
+  assert.equal(context.calls.length, 0);
 });
 
 test('canonical pipeline control is a typed 503 while the rollout switch is off', async () => {
@@ -408,30 +401,16 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   });
 });
 
-test('deploy admission requires an explicit bounded environment and strips caller approval', async () => {
-  const context = admission({ deploymentEnabled: true });
+test('a valid deployment environment no longer unlocks the retired deploy stage', async () => {
+  const context = admission({});
   await assert.rejects(
     () => context.value.submit(request({
       requestedStages: ['plan', 'code', 'test', 'deploy'],
-      request: { deployment: {} },
+      request: { deployment: { environment: 'Production' } },
     })),
-    (error) => error.code === 'pipeline_deployment_environment_invalid',
+    (error) => error.status === 410 && error.code === 'pipeline_deploy_retired',
   );
-
-  await context.value.submit(request({
-    requestedStages: ['plan', 'code', 'test', 'deploy'],
-    request: {
-      deployment: {
-        environment: 'Production',
-        approval: { approved: true, source: 'caller' },
-      },
-    },
-  }));
-  const start = context.calls.at(-1).options.body;
-  assert.equal(start.request.stageConfiguration.deploy.enabled, true);
-  assert.equal(start.request.stageConfiguration.deploy.environment, 'production');
-  assert.equal(start.request.stageConfiguration.deploy.approval, undefined);
-  assert.deepEqual(start.request.deployment, { environment: 'production' });
+  assert.equal(context.calls.length, 0);
 });
 
 test('repository snapshot is server-derived, project-aware, and rejects unbrokered providers', () => {
