@@ -81,6 +81,12 @@ SECRET_KEYS: tuple[str, ...] = (
     # every organization's traces, so a browser must not repoint that sink.
     "langfusePublicKey",
     "langfuseSecretKey",
+    # Substrate control-plane (ateapi) gRPC credential: a rotating Kubernetes
+    # projected service-account token (~hourly expiry). Platform-managed and
+    # resolved dynamically from Secret Manager by secrets_service — never an env
+    # mount (Cloud Run freezes env at start, so a mount would go stale), never
+    # browser- or customer-writable. The gateway/planner request it by this key.
+    "substrateApiToken",
 )
 
 # Browser-facing org-admin secret CRUD is intentionally narrower than the
@@ -93,7 +99,10 @@ SECRET_KEYS: tuple[str, ...] = (
 # observations into a project the platform does not control. The LiteLLM
 # credential is operator-written too: a browser-writable value would let an org
 # point the platform's LiteLLM-routed traffic at an arbitrary gateway. The
-# agentgateway virtual key is excluded for exactly that reason, one gateway later.
+# agentgateway virtual key is excluded for exactly that reason, one gateway
+# later. The Substrate ateapi token is the platform's own control-plane
+# credential, so it is resolved dynamically and never written through the
+# browser surface either.
 BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
     key
     for key in SECRET_KEYS
@@ -105,6 +114,7 @@ BROWSER_WRITABLE_SECRET_KEYS: tuple[str, ...] = tuple(
         "langfuseSecretKey",
         "litellmApiKey",
         "fleetGatewayApiKey",
+        "substrateApiToken",
     )
 )
 

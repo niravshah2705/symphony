@@ -19,6 +19,7 @@ const power = read('.github', 'workflows', 'substrate-cluster-power.yml');
 const deploy = read('.github', 'workflows', 'deploy.yml');
 const control = read('.github', 'workflows', 'substrate-control-plane.yml');
 const nodepools = read('.github', 'workflows', 'substrate-nodepools.yml');
+const rotate = read('.github', 'workflows', 'substrate-token-rotate.yml');
 const cleanup = read('deploy', 'gcp', 'substrate-cleanup.sh');
 const recreate = read('deploy', 'gcp', 'substrate-recreate.sh');
 const bootstrap = read('deploy', 'gcp', 'bootstrap.sh');
@@ -246,3 +247,93 @@ test('the authorization step reads the policy with the filter form that matches'
   // And an empty read must be named as an unread policy, not as absent grants.
   assert.match(nodepools, /if \[ -z "\$ROLES" \]; then/);
 });
+
+// ── the credential rotator: the same cluster, a mint that cannot leak ────────
+
+test('the rotator drives the cluster the other substrate workflows drive', () => {
+  // A half-renamed rotator mints a token whose `iss` is a cluster this ateapi
+  // does not trust, and ateapi answers 16 UNAUTHENTICATED — which reads as an
+  // expired credential, not as the wrong issuer. Proven the hard way when the
+  // file was written against the retired OpenShell module.
+  assert.doesNotMatch(rotate, /openshell/i, 'substrate-token-rotate.yml still mentions OpenShell');
+  for (const key of ['CLUSTER', 'ZONE']) {
+    assert.equal(envBinding(rotate, key).repoVar, envBinding(power, key).repoVar,
+      `the rotator reads a different ${key} repo variable than the power workflow`);
+  }
+  assert.equal(envBinding(rotate, 'CLUSTER').fallback, envBinding(power, 'CLUSTER').fallback);
+  assert.equal(envBinding(rotate, 'ZONE').fallback, envBinding(power, 'ZONE').fallback);
+  // Its own group with cancel-in-progress false: it writes no cluster object, so
+  // it must not queue behind a drain, and a scheduled run must never cancel a
+  // rotation that is keeping the bearer alive.
+  assert.match(rotate, /^\s+group: substrate-token-rotate$/m);
+  assert.match(rotate, /cancel-in-progress: false/);
+});
+
+test('the rotator never puts the token in a log, an argv or a variable', () => {
+  // A projected SA JWT is longer than the 256 characters `::add-mask::` can
+  // register, so masking is not the control here — never printing it is.
+  assert.match(rotate, /kubectl -n ate-system create token "\$SA_NAME" \\\n\s*--audience="\$AUDIENCE" --duration="\$duration" > "\$token_file"/,
+    'the mint must be redirected straight to the file, not captured then echoed');
+  assert.match(rotate, /--data-file="\$token_file"/, 'publish from the file, never from a value on the command line');
+  assert.doesNotMatch(rotate, /^\s*cat "\$token_file"/m);
+  assert.doesNotMatch(rotate, /echo "\$?token_file/);
+  // Only the four claims ateapi checks are summarised, base64url decoded in one
+  // place — `base64 -d` rejects both the alphabet and the missing padding, which
+  // previously read as "the minted token is not a decodable JWT".
+  assert.match(rotate, /urlsafe_b64decode/);
+  assert.match(rotate, /"iss","aud","sub","exp"/);
+});
+
+test('the mint permission is one verb on one service account', () => {
+  const substrateTf = read(GKE_DIR, 'substrate.tf');
+  const tokenTf = read('deploy', 'gcp', 'terraform', 'substrate_token.tf');
+  // `kubectl create token` writes the `serviceaccounts/token` SUBRESOURCE. A
+  // Role on `serviceaccounts` leaves a 403 that reads like a missing role.
+  assert.match(substrateTf, /resources: \["serviceaccounts\/token"\]/);
+  assert.match(substrateTf, /resourceNames: \["ate-client"\]/,
+    'an unpinned mint grants the job tokens for every SA in ate-system');
+  // A Workload-Identity-Federated GCP SA arrives as a User, not a ServiceAccount.
+  assert.match(substrateTf, /kind: User\n\s+name: \$\{local\.substrate_token_creator_user\}/);
+  // Gated with the public front it serves, so nothing renders into ate-system
+  // on a deployment that publishes no control-plane route.
+  assert.match(substrateTf, /resource "kubectl_manifest" "substrate_ate_client_token_role" \{\n\s*count = local\.substrate_control_plane_public_enabled \? 1 : 0/);
+  // The role that actually applied. secretVersionAdd binds only to a *version*,
+  // which a publisher cannot name before it exists, so it may appear in prose
+  // here but never as a bound role.
+  assert.match(tokenTf, /role\s*=\s*"roles\/secretmanager\.secretVersionManager"/);
+  assert.doesNotMatch(tokenTf, /role\s*=\s*"roles\/secretmanager\.secretVersionAdd"/);
+  assert.match(tokenTf, /role\s*=\s*"roles\/secretmanager\.secretAccessor"/);
+});
+
+test('the ateapi bearer is one name across the three secret maps, and browser-unwritable', () => {
+  // AGENTS.md makes the settings MANAGED_ENV / store SECRET_ENV / vault
+  // SECRET_KEYS trio one contract; a key in two of the three resolves on one
+  // path and silently returns nothing on another.
+  const managed = read('services', 'settings', 'app', 'services', 'secrets_service.py');
+  const store = read('packages', 'shared-core', 'src', 'store.js');
+  const models = read('services', 'settings', 'app', 'models', 'secrets.py');
+  for (const [label, source] of [['settings MANAGED_ENV', managed], ['store SECRET_ENV', store]]) {
+    assert.match(source, /substrateApiToken/, `${label} is missing the key`);
+  }
+  assert.match(models, /"substrateApiToken",\n\s*\)/, 'the vault key list lost substrateApiToken');
+  // Operator-written only: a browser-writable control-plane bearer would let any
+  // org admin point our client at a token of their choosing.
+  assert.match(models, /BROWSER_WRITABLE_SECRET_KEYS[\s\S]*?"substrateApiToken",\n\s*\)\n\)/,
+    'substrateApiToken must stay out of the browser-writable set');
+  // It is the one managed key resolved per request; env-mounted it would be
+  // frozen at container start and served stale for days.
+  assert.match(managed, /_DYNAMIC_SECRET_IDS = \{"substrateApiToken": "substrate-ateapi-token"\}/);
+  assert.match(managed, /SUBSTRATE_ATEAPI_TOKEN_TTL_SECONDS/);
+});
+
+test('the client fails closed on a missing credential instead of opening a socket', () => {
+  const substrateJs = read('packages', 'shared-core', 'src', 'agent', 'substrate.js');
+  // An unauthenticated call answers `16 / missing bearer token`, which reads as
+  // a broken cluster rather than the missing managed secret it is.
+  assert.match(substrateJs, /Substrate credential missing for \$\{method\}/);
+  assert.match(substrateJs, /function withCredentialHint/);
+  assert.match(substrateJs, /async function resolveSubstrateApiToken/);
+  // Never a module-level cache: the credential rotates every six hours.
+  assert.doesNotMatch(substrateJs, /let cachedToken|tokenCache/);
+});
+

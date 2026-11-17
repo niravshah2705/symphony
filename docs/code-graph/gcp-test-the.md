@@ -4,18 +4,27 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 11 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.2353
+- **Size**: 11 nodes
+- **Cohesion**: 0.3797
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:the worker namespace is one name across the scripts and the workflows@L226 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 226-238 |
-| ns | Function | ./deploy/gcp/substrate-workflow-config.test.js | 230-232 |
+| read | Function | ./deploy/gcp/substrate-workflow-config.test.js | 16-16 |
+| tfDefault | Function | ./deploy/gcp/substrate-workflow-config.test.js | 32-37 |
+| envBinding | Function | ./deploy/gcp/substrate-workflow-config.test.js | 42-46 |
+| assertDefault | Function | ./deploy/gcp/substrate-workflow-config.test.js | 48-51 |
+| test:workflow fallbacks are the module defaults they reconcile@L76 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 76-105 |
+| test:the two vars with no module default are named exactly@L107 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 107-115 |
+| test@L160 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 160-160 |
+| test:the rotator drives the cluster the other substrate workflows drive@L253 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 253-270 |
+| test:the mint permission is one verb on one service account@L287 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 287-306 |
+| test:the ateapi bearer is one name across the three secret maps, and browser-unwritable@L308 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 308-327 |
+| test:the client fails closed on a missing credential instead of opening a socket@L329 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 329-338 |
 
 ## Execution Flows
 
@@ -25,11 +34,20 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (5 edge(s))
-- `equal` (2 edge(s))
+- `match` (22 edge(s))
+- `equal` (10 edge(s))
+- `doesNotMatch` (3 edge(s))
+- `ok` (2 edge(s))
+- `./deploy/gcp/substrate-workflow-config.test.js::test:the power workflow waits only on namespaces the module still creates@L139` (2 edge(s))
+- `readFileSync` (1 edge(s))
+- `join` (1 edge(s))
+- `./deploy/gcp/substrate-workflow-config.test.js::test:the static-IP grant lists the addresses the module owns@L163` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-workflow-config.test.js` (2 edge(s))
-- `equal` (2 edge(s))
-- `match` (2 edge(s))
+- `./deploy/gcp/substrate-workflow-config.test.js` (21 edge(s))
+- `match` (19 edge(s))
+- `equal` (9 edge(s))
+- `./deploy/gcp/substrate-workflow-config.test.js::test:the power workflow waits only on namespaces the module still creates@L139` (3 edge(s))
+- `doesNotMatch` (3 edge(s))
+- `./deploy/gcp/substrate-workflow-config.test.js::test:the static-IP grant lists the addresses the module owns@L163` (1 edge(s))
