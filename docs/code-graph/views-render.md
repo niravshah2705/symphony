@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 755 nodes
+Community of 773 nodes
 
-- **Size**: 755 nodes
-- **Cohesion**: 0.4896
+- **Size**: 773 nodes
+- **Cohesion**: 0.4825
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 755 nodes
 | render | Function | ./public/js/app.js | 817-899 |
 | capitalize | Function | ./public/js/app.js | 901-904 |
 
-*... and 705 more members.*
+*... and 723 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 755 nodes
 
 ### Outgoing
 
+- `append` (231 edge(s))
 - `addEventListener` (227 edge(s))
-- `append` (221 edge(s))
-- `map` (168 edge(s))
-- `push` (129 edge(s))
-- `String` (117 edge(s))
-- `trim` (97 edge(s))
-- `equal` (94 edge(s))
-- `filter` (86 edge(s))
+- `map` (172 edge(s))
+- `push` (143 edge(s))
+- `String` (120 edge(s))
+- `equal` (109 edge(s))
+- `trim` (108 edge(s))
+- `filter` (87 edge(s))
 - `isArray` (85 edge(s))
-- `Boolean` (70 edge(s))
-- `has` (63 edge(s))
+- `Boolean` (71 edge(s))
+- `setAttribute` (65 edge(s))
+- `has` (65 edge(s))
 - `catch` (62 edge(s))
-- `setAttribute` (61 edge(s))
+- `slice` (56 edge(s))
 - `Number` (55 edge(s))
-- `querySelector` (52 edge(s))
 
 ### Incoming
 
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (94 edge(s))
+- `equal` (109 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/workflow-designer-model.mjs` (65 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `match` (29 edge(s))
+- `match` (31 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
+- `deepEqual` (25 edge(s))
 - `./public/js/auth.js` (24 edge(s))
-- `deepEqual` (22 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (18 edge(s))
 - `./public/js/api.js` (15 edge(s))

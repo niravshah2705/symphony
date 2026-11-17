@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 307 nodes
+Community of 306 nodes
 
-- **Size**: 307 nodes
-- **Cohesion**: 0.2382
+- **Size**: 306 nodes
+- **Cohesion**: 0.2379
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,16 +65,13 @@ Community of 307 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 257 more members.*
+*... and 256 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 

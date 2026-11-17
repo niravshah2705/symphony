@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 374 nodes
+Community of 362 nodes
 
-- **Size**: 374 nodes
-- **Cohesion**: 0.3343
+- **Size**: 362 nodes
+- **Cohesion**: 0.3380
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,48 +65,47 @@ Community of 374 nodes
 | test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
 | clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
 
-*... and 324 more members.*
+*... and 312 more members.*
 
 ## Execution Flows
 
 - **resume** (criticality: 0.67, depth: 8)
-- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.65, depth: 5)
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (288 edge(s))
-- `String` (59 edge(s))
-- `deepEqual` (55 edge(s))
+- `equal` (275 edge(s))
+- `String` (57 edge(s))
+- `deepEqual` (52 edge(s))
 - `push` (49 edge(s))
 - `strictEqual` (40 edge(s))
 - `step` (37 edge(s))
-- `filter` (32 edge(s))
-- `map` (30 edge(s))
-- `ok` (25 edge(s))
+- `filter` (30 edge(s))
+- `map` (28 edge(s))
 - `warn` (25 edge(s))
 - `toISOString` (24 edge(s))
+- `ok` (24 edge(s))
 - `rejects` (23 edge(s))
-- `test` (23 edge(s))
-- `trim` (22 edge(s))
+- `test` (22 edge(s))
+- `trim` (21 edge(s))
 - `after` (21 edge(s))
 
 ### Incoming
 
-- `equal` (288 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (78 edge(s))
+- `equal` (275 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (77 edge(s))
 - `./packages/shared/src/linear.js` (72 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (56 edge(s))
-- `deepEqual` (55 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
+- `deepEqual` (52 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
 - `strictEqual` (40 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (32 edge(s))
-- `ok` (25 edge(s))
+- `ok` (24 edge(s))
 - `rejects` (23 edge(s))
 - `./packages/shared/src/agent/apply.js` (22 edge(s))
 - `after` (21 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (20 edge(s))
+- `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))
 - `./packages/shared/src/agent/approval-gate.js` (15 edge(s))
