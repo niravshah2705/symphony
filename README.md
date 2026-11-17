@@ -599,8 +599,8 @@ rather than stuck in "running".
 
 Contributions from authorized collaborators are welcome. Please read:
 
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, tests, the code-map pre-commit
-  hook, commit conventions, and the PR flow.
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, tests, commit
+  conventions, and the PR flow.
 - [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) — expected behavior in the community.
 - [`SECURITY.md`](./SECURITY.md) — how to report a vulnerability **privately** (please
   don't open public issues for security problems).

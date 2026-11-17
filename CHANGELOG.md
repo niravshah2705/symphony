@@ -8,6 +8,11 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
 
 ### Removed
 
+- **The code-docs pre-commit gate is gone.** `.githooks/pre-commit` (the
+  drift check that regenerated `docs/code-graph/` and blocked commits) is
+  deleted and `docs/code-graph/` is now gitignored — the map is local-only
+  output of `npm run docs:code`. `.githooks/post-commit` still refreshes the
+  local query indexes in the background.
 - **The pipeline deploy stage is retired with the Cloud Run deployer.**
   `services/deployer` and `deploy/gcp/Dockerfile.deployer` are deleted, along
   with the `pipeline-deployer` Cloud Run service, its service account and IAM
