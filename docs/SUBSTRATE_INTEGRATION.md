@@ -420,6 +420,116 @@ kubectl -n substrate-workers get pods -l ate.dev/worker-pool=planner-pool -o wid
 kubectl -n ate-system get pods -l app=atelet -o wide    # one per worker node, or the taint is wrong
 ```
 
+### 5.4 Rotating the control-plane bearer
+
+§5.3 makes a pool exist; this makes a *caller* exist. `api` in `ate-system` admits exactly
+one credential — ConfigMap `ate-api-authentication` names one jwtProvider: issuer
+`https://container.googleapis.com/v1/projects/<project>/locations/<zone>/clusters/<cluster>`,
+audience `api.ate-system.svc`, subject `system:serviceaccount:ate-system:ate-client`. So the
+only bearer it accepts is a Kubernetes **projected service-account token**, which only the
+cluster's own API server mints, and the planner runs on Cloud Run. Something with cluster
+access has to mint on its behalf and hand the result over before it expires. That is
+`.github/workflows/substrate-token-rotate.yml` plus Secret Manager.
+
+```bash
+kubectl -n ate-system create token ate-client \
+  --audience=api.ate-system.svc --duration=43200s
+```
+
+**The job.** A six-hour cron plus `workflow_dispatch`, authenticating as the same CI
+deployer identity **Deploy to GCP** uses (no new credential introduced). It runs exactly the
+mint above, decodes the JWT's own `iss`/`aud`/`sub`/`exp` and fails the run if they are not
+what ateapi will check, publishes with `gcloud secrets versions add --data-file=…`, then
+re-probes the live control plane through the public hostname with the version it just
+published and requires `grpc-status: 0`. That last step is what makes a green run mean *the
+caller can authenticate right now*, rather than *something was written*.
+
+The token is never printed, never an argv, and never a variable: a projected SA JWT is
+longer than the 256 characters `::add-mask::` can register, so masking is not the control —
+not echoing is. kubectl's stdout goes straight to a `umask 077` temp file and
+`--data-file` reads it from there. The probe sends the bearer through `curl --config` for
+the same reason (`ps` would show a `-H` value).
+
+**Why 12 hours against a 6-hour cadence.** GKE will mint far longer — a 7-day `--duration`
+was accepted when the ceiling was probed. The short lifetime is deliberate: this bearer
+creates and deletes actors and mints actor JWTs, so a leaked one should expire by itself.
+The gap between lifetime and cadence is the outage budget — **two missed runs of slack** —
+and it is needed because GitHub runs *scheduled* workflows from the **default branch's**
+copy and does not guarantee their start time. Consequence: **the rotator is live only after
+merge.** Until this file is on the default branch nothing rotates anything, and
+`credentialConfigured: false` from a branch is expected, not a bug.
+
+**Storage and grants** (`deploy/gcp/terraform/substrate_token.tf`, in the **root** stack, so
+`deploy.yml`'s terraform job applies it — not `gke_reconcile`): the secret container plus
+exactly two bindings, `roles/secretmanager.secretAccessor` for `settings-sa` and
+`roles/secretmanager.secretVersionManager` for `gh-deployer`, both scoped to this one secret
+so holding them grants no visibility into the provider keys the same service account mounts.
+Terraform creates the container and never writes a **value** — the rotator fills it, the same
+rule `secrets.tf` follows. Two things were learned the expensive way here:
+
+- The writer role is **not** `roles/secretmanager.secretVersionAdd`, tempting as that reads.
+  The extra fine-grained version roles bind only to a *version*, which a publisher cannot
+  address before the version exists, and the apply said so:
+  `Role roles/secretmanager.secretVersionAdd is not supported for this resource`.
+  `secretVersionManager` is the smallest role Secret Manager accepts at secret scope, and it
+  genuinely matches the job — the rotator reads its version back to send the probe frame, so
+  it needs `versions.access` as well as `versions.add`.
+- Minting is not delegated to `roles/container.admin` implying something. GKE's RBAC model
+  does not promise that an IAM role implies a Kubernetes rule, so that shortcut breaks in a
+  03:00 CI run rather than at apply. `terraform-substrate-gke/substrate.tf` renders a
+  `Role`/`RoleBinding` granting one verb — `create` on the **`serviceaccounts/token`
+  subresource** (`get`/`create` on `serviceaccounts` is a different permission and leaves
+  `kubectl create token` at a 403 that reads like a missing role), pinned by
+  `resourceNames: ["ate-client"]` so the job cannot mint the installer's own privileged
+  accounts. The subject is `kind: User` with the deployer's email, because a GCP service
+  account arriving through Workload Identity Federation is presented with its email as its
+  Kubernetes **username**; a `kind: ServiceAccount` subject names only an in-cluster SA and
+  binds nothing.
+
+**Why resolved per request rather than env-mounted.** `substrateApiToken` is a managed key
+(`services/settings/app/models/secrets.py`) held out of `BROWSER_WRITABLE_SECRET_KEYS` — an
+org admin who could write it could point our control-plane client at a token of their
+choosing — and it is the only managed key resolved at request time:
+`services/settings/app/core/secret_manager.py` reads `versions/latest` over REST with ADC
+(no new SDK, and it never puts the payload in an exception) while `secrets_service.py`
+memoises it for `SUBSTRATE_ATEAPI_TOKEN_TTL_SECONDS` (default **300**). The reason is Cloud
+Run: container env is frozen at start, so a 12-hour bearer mounted as an env would be served
+stale — and rejected as expired — for days. 300 s is what tracks a 21600 s rotation. Two
+behaviours matter when tuning it: a failed Secret Manager read yields the key **absent**,
+never an error, so an outage degrades to `credentialConfigured: false` instead of a 500 on
+`/internal/s2s/managed-secrets`; and a non-numeric or non-positive TTL falls back to 300.
+Lower it to recover from an outage sooner; never raise it past the cadence.
+
+**Callers.** `resolveSubstrateApiToken()` (`packages/shared-core/src/agent/substrate.js`)
+resolves per run/request, deliberately uncached, in order: caller-supplied value → the store
+/ non-proxied managed overlay → the S2S managed path (`fetchS2sSecrets`), and hands the
+result to `grpcCall` as `options.token`. `runPlanningOnSubstrate` resolves **once per run**
+and threads that one value into every RPC, so a run cannot straddle a rotation with half its
+calls authenticated. The client fails closed **before opening a socket** when nothing
+resolved — an unauthenticated call answers `16 / missing bearer token`, which reads as a
+broken cluster rather than the missing managed secret it is — and `withCredentialHint` turns
+a returned 16 into a message naming `substrateApiToken`. `SUBSTRATE_TOKEN` survives only as
+the local-dev/test fallback and is still never a repo variable or an agent env.
+
+**Invariant to preserve:** `substrateApiToken` is **not** synced into the actor's
+`substrate-credentials` namespace. `syncSubstrateSecrets` reads `githubToken`,
+`openrouterApiKey` and `imageRegistryPassword` by name and nothing else; adding this key
+would copy a cluster-privileged bearer into a namespace reachable by sandbox workload, which
+is the exact exfiltration path the egress boundary exists to close.
+
+| Task | How |
+|---|---|
+| First-time setup | Deploy to GCP's terraform job creates the secret + both grants and the mint Role, then **dispatch the rotator once by hand**; the cron takes over |
+| Rotate now | `gh workflow run substrate-token-rotate.yml` — also the recovery after a missed schedule |
+| Prove without the app | the `kubectl create token` mint above, then the probe the job's last step runs |
+| Retire | drop the cron trigger and revoke both bindings; disable the secret's versions rather than deleting them, which keeps the audit trail |
+
+Inputs that matter: `GCP_PROJECT_ID` / the WIF provider + deployer SA (who mints),
+`SUBSTRATE_CLUSTER_NAME` / `SUBSTRATE_CLUSTER_ZONE` (whose issuer is trusted — the job
+checks `iss` against it), `SUBSTRATE_INGRESS_HOSTNAME` (what the closing probe dials),
+`SUBSTRATE_ATEAPI_AUDIENCE`, `SUBSTRATE_TOKEN_SECRET`, `SUBSTRATE_TOKEN_DURATION`. No token
+value is ever any of them.
+
 ## 6. Key files
 
 
@@ -433,7 +543,15 @@ kubectl -n ate-system get pods -l app=atelet -o wide    # one per worker node, o
 - `services/orchestrator/src/routes/agent.js` — `/agent/substrate/*` and `/agent/guardrail` routes.
 - `packages/shared/src/agent/substrate-actor.js` — actor-side `POST /internal/plan/run` (only mounted when `SUBSTRATE_ACTOR_MODE=true`).
 - `packages/shared/src/agent/substrate-jwks.js` — cached JWKS fetcher used by the actor route.
-- `deploy/gcp/terraform-substrate-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
+- `deploy/gcp/terraform-substrate-gke/substrate.tf` — pool, namespaces, snapshots, ingress
+  and the `serviceaccounts/token` Role that lets the rotator mint the bearer (§5.4).
+- `deploy/gcp/terraform/substrate_token.tf` — the `substrate-ateapi-token` secret plus
+  the writer (rotator) and reader (settings) grants.
+- `.github/workflows/substrate-token-rotate.yml` — mints, publishes and verifies the
+  control-plane bearer (§5.4).
+- `services/settings/app/core/secret_manager.py` — reads the *latest* secret version on
+  demand over REST, so a rotating bearer is served fresh instead of being pinned into
+  the container env at deploy time.
 - `public/js/views/settings.js` — pattern selector + guardrails panel.
 
 ### Actor-mode env vars (set on the substrate ActorTemplate's container)
@@ -469,6 +587,22 @@ The **first apply with `substrate_enabled = true` shows the new resources as
 `create`** (pool, namespaces, snapshot class, ingress) — this is expected and does
 **not** destroy anything, so it passes the destroy gate. Do not set
 `gke_allow_destroy` for it.
+
+`.github/workflows/substrate-token-rotate.yml` (§5.4) is the third substrate workflow
+and the only scheduled one. It gets its **own** `concurrency.group:
+substrate-token-rotate` with `cancel-in-progress: false`: a rotation publishes and then
+re-reads the version it just wrote to prove the application will accept it, so
+interrupting one mid-flight can leave the newest version unproven — which is exactly
+what a silent credential expiry looks like from the outside.
+It deliberately does not join `substrate-cluster-power` — minting a token needs the
+control plane *up*, and the power workflow is what takes it down.
+
+The kubectl RBAC it needs (`substrate_ate_client_token_role`) renders from the
+`terraform-substrate-gke` module, so it exists only where the substrate cluster state
+does; the workflow itself touches no Terraform state. It is also gated on the same
+`substrate_control_plane_public` switch as the route it authorizes, which keeps the
+default deployment from granting a cloud identity the right to mint actors in a space
+nobody exposed.
 
 ## 8. Verification
 
@@ -548,6 +682,11 @@ missing atespace/worker pool is the §5.1 field table, not a broken install.
   unsupported. Cloud Hypervisor microVM is the fallback.
 - Actor cold-start / resume latency must fit inside the dispatching stage's request
   budget; measure on staging before defaulting orgs to `substrate`.
+- The control-plane bearer (§5.4) is a *deployment* dependency, not a config one: the
+  rotator only schedules once merged, and its kubectl permission only exists after a
+  `terraform-substrate-gke` apply. Until both land, every ateapi call fails closed with
+  the credential hint instead of silently trying anonymous — which reads as "the
+  control plane is down" in the status tile.
 
 ## 10. Operator access — why the panel can be missing
 

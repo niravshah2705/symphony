@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 513 nodes
+Community of 516 nodes
 
-- **Size**: 513 nodes
-- **Cohesion**: 0.7251
+- **Size**: 516 nodes
+- **Cohesion**: 0.7252
 - **Dominant Language**: hcl
 
 ## Members
@@ -65,7 +65,7 @@ Community of 513 nodes
 | resource.google_secret_manager_secret.email_smtp_password | Class | ./deploy/gcp/terraform/email_service.tf | 35-43 |
 | resource.google_secret_manager_secret_iam_member.email_smtp_user_accessor | Class | ./deploy/gcp/terraform/email_service.tf | 62-67 |
 
-*... and 463 more members.*
+*... and 466 more members.*
 
 ## Execution Flows
 

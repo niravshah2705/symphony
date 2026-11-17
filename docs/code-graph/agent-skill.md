@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 230 nodes
+Community of 244 nodes
 
-- **Size**: 230 nodes
-- **Cohesion**: 0.2378
+- **Size**: 244 nodes
+- **Cohesion**: 0.2413
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,12 +65,13 @@ Community of 230 nodes
 | test:leaves a correct call untouched (same reference, no rewrite)@L37 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 37-40 |
 | test:does not rewrite glob/grep, which legitimately use `path@L42 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 42-47 |
 
-*... and 180 more members.*
+*... and 194 more members.*
 
 ## Execution Flows
 
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
+- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **startScheduler** (criticality: 0.65, depth: 5)
@@ -83,33 +84,33 @@ Community of 230 nodes
 - `equal` (150 edge(s))
 - `join` (87 edge(s))
 - `deepEqual` (47 edge(s))
-- `strictEqual` (39 edge(s))
+- `strictEqual` (42 edge(s))
+- `deepStrictEqual` (37 edge(s))
+- `isArray` (31 edge(s))
 - `require` (30 edge(s))
-- `isArray` (30 edge(s))
 - `step` (30 edge(s))
-- `String` (28 edge(s))
+- `String` (29 edge(s))
 - `map` (28 edge(s))
-- `trim` (23 edge(s))
-- `slice` (22 edge(s))
+- `trim` (24 edge(s))
+- `slice` (23 edge(s))
 - `filter` (20 edge(s))
 - `after` (19 edge(s))
 - `Boolean` (18 edge(s))
-- `existsSync` (18 edge(s))
 
 ### Incoming
 
 - `equal` (150 edge(s))
 - `join` (48 edge(s))
 - `deepEqual` (47 edge(s))
-- `strictEqual` (39 edge(s))
+- `strictEqual` (42 edge(s))
+- `deepStrictEqual` (37 edge(s))
 - `./packages/shared/src/agent/framework.js` (26 edge(s))
 - `./packages/shared/src/agent/langfuse.js` (24 edge(s))
 - `./packages/shared/src/agent/settings-policy.js` (24 edge(s))
 - `./packages/shared/src/agent/coder.js` (22 edge(s))
 - `after` (19 edge(s))
-- `deepStrictEqual` (17 edge(s))
 - `./packages/shared/src/agent/plan.js` (17 edge(s))
+- `./packages/shared/src/agent/trace-annotations.test.js` (16 edge(s))
 - `mkdtempSync` (15 edge(s))
 - `tmpdir` (15 edge(s))
 - `rmSync` (15 edge(s))
-- `./packages/shared/src/agent/langfuse.test.js` (14 edge(s))

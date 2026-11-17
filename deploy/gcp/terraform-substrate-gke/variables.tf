@@ -308,6 +308,24 @@ EOT
   default     = false
 }
 
+variable "substrate_token_creator_user" {
+  description = <<EOT
+    Kubernetes USER allowed to mint the ate-client token that
+    substrate-token-rotate.yml publishes. Empty derives the identity the
+    workflows federate as, gh-deployer@<project>.iam.gserviceaccount.com —
+    spelled from var.project_id rather than read through a data source,
+    because bootstrap.sh creates that service account outside this state.
+
+    Subject kind matters: a GCP service account reaching GKE through Workload
+    Identity Federation arrives with its email as its Kubernetes username, so
+    this names a User. Putting a `serviceAccount:` member there binds nothing
+    and the mint fails as a 403 on the `serviceaccounts/token` subresource,
+    which is easy to misread as a missing verb.
+EOT
+  type        = string
+  default     = ""
+}
+
 variable "substrate_snapshot_storage_class" {
   description = "StorageClass backing atelet actor snapshots (PersistentVolumes)"
   type        = string

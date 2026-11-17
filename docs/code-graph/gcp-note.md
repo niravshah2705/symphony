@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 46 nodes
+Community of 49 nodes
 
-- **Size**: 46 nodes
-- **Cohesion**: 0.0051
+- **Size**: 49 nodes
+- **Cohesion**: 0.0049
 - **Dominant Language**: javascript
 
 ## Members
@@ -42,8 +42,11 @@ Community of 46 nodes
 | test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81 | Test | ./services/orchestrator/src/pubsub.test.js | 81-104 |
 | test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106 | Test | ./services/orchestrator/src/pubsub.test.js | 106-156 |
 | test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158 | Test | ./services/orchestrator/src/pubsub.test.js | 158-186 |
-| test:GET /substrate/status answers instead of throwing when the control plane is up@L59 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 59-67 |
-| test:GET /substrate/status skips the actor list when the control plane is unreachable@L69 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 69-76 |
+| test:GET /substrate/status answers instead of throwing when the control plane is up@L105 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 105-113 |
+| test:GET /substrate/status skips the actor list when the control plane is unreachable@L115 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 115-122 |
+| test:GET /substrate/status resolves the credential per request and threads it to both RPCs@L124 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 124-134 |
+| test:GET /substrate/status reports configured:false when no credential resolves@L136 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 136-143 |
+| test:POST /substrate/run resolves substrateApiToken over S2S and hands it to the runner@L145 | Test | ./services/orchestrator/src/routes/agent.substrate.test.js | 145-177 |
 | test:omnibox policy routes greetings and unsafe requests before local inference@L66 | Test | ./services/orchestrator/src/routes/agent.test.js | 66-96 |
 | test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98 | Test | ./services/orchestrator/src/routes/agent.test.js | 98-142 |
 | test:memory write, list, and delete round-trip with server-side validation@L144 | Test | ./services/orchestrator/src/routes/agent.test.js | 144-173 |
@@ -69,36 +72,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (153 edge(s))
-- `after` (41 edge(s))
+- `equal` (164 edge(s))
+- `after` (45 edge(s))
 - `./services/orchestrator/src/routes/agent.test.js::call` (35 edge(s))
 - `./services/orchestrator/src/routes/agent.test.js::handlerFor` (35 edge(s))
 - `./services/orchestrator/src/app.test.js::jsonRequest` (29 edge(s))
 - `require` (27 edge(s))
 - `deepEqual` (26 edge(s))
-- `ok` (21 edge(s))
+- `ok` (22 edge(s))
 - `resolve` (19 edge(s))
 - `./services/orchestrator/src/app.test.js::listen` (15 edge(s))
 - `close` (15 edge(s))
+- `includes` (13 edge(s))
 - `./services/orchestrator/src/app.test.js::setup` (12 edge(s))
-- `includes` (12 edge(s))
 - `json` (11 edge(s))
-- `push` (9 edge(s))
+- `push` (10 edge(s))
 
 ### Incoming
 
-- `equal` (153 edge(s))
+- `equal` (164 edge(s))
 - `./deploy/gcp/substrate-cleanup.sh` (56 edge(s))
-- `after` (41 edge(s))
+- `after` (45 edge(s))
 - `./services/orchestrator/src/routes/agent.test.js::call` (35 edge(s))
 - `./services/orchestrator/src/routes/agent.test.js::handlerFor` (35 edge(s))
 - `./services/orchestrator/src/app.test.js::jsonRequest` (29 edge(s))
 - `require` (27 edge(s))
 - `deepEqual` (26 edge(s))
-- `ok` (21 edge(s))
+- `ok` (22 edge(s))
 - `resolve` (19 edge(s))
 - `./services/orchestrator/src/app.test.js` (15 edge(s))
 - `./services/orchestrator/src/app.test.js::listen` (15 edge(s))
 - `close` (15 edge(s))
+- `includes` (13 edge(s))
 - `./services/orchestrator/src/routes/agent.test.js` (13 edge(s))
-- `./services/orchestrator/src/app.test.js::setup` (12 edge(s))
