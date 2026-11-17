@@ -39,6 +39,7 @@ const egressProxyPort = Number(process.env.LOCAL_EGRESS_PROXY_PORT) || 4030;
 const streamTokenPort = Number(
   process.env.LOCAL_STREAM_TOKEN_PORT || process.env.LOCAL_STREAM_PROXY_PORT,
 ) || 4031;
+const agentServicePort = Number(process.env.AGENT_SERVICE_PORT) || 4010;
 
 const LOCAL_DEPENDENCIES = [
   { name: 'egress-proxy', entry: 'services/proxy/src/index.js', healthPort: egressProxyPort },
@@ -109,6 +110,7 @@ function envFor(name) {
     env.STREAM_TOKEN_SERVICE_URL = `http://127.0.0.1:${streamTokenPort}`;
   } else if (name === 'agent') {
     env.EGRESS_PROXY_URL = `http://127.0.0.1:${egressProxyPort}`;
+    env.PORT = String(agentServicePort);
   }
   if (String(env.EVENTS_BACKEND || 'memory').toLowerCase() === 'firestore') return env;
   const gatewayPort = Number(env.PORT) || 4000;
