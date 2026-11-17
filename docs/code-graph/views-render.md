@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 773 nodes
+Community of 798 nodes
 
-- **Size**: 773 nodes
-- **Cohesion**: 0.4825
+- **Size**: 798 nodes
+- **Cohesion**: 0.4859
 - **Dominant Language**: javascript
 
 ## Members
@@ -29,11 +29,11 @@ Community of 773 nodes
 | getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
-| openStream | Function | ./public/js/api.js | 253-332 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 260-264 |
-| scheduleReconnect | Function | ./public/js/api.js | 266-279 |
-| connect | Function | ./public/js/api.js | 281-314 |
-| close | Function | ./public/js/api.js | 326-330 |
+| openStream | Function | ./public/js/api.js | 257-336 |
+| mintFailureCanRetry | Function | ./public/js/api.js | 264-268 |
+| scheduleReconnect | Function | ./public/js/api.js | 270-283 |
+| connect | Function | ./public/js/api.js | 285-318 |
+| close | Function | ./public/js/api.js | 330-334 |
 | ensureStylesheet | Function | ./public/js/app.js | 45-67 |
 | load | Function | ./public/js/app.js | 74-86 |
 | currentRoute | Function | ./public/js/app.js | 138-145 |
@@ -65,14 +65,14 @@ Community of 773 nodes
 | render | Function | ./public/js/app.js | 817-899 |
 | capitalize | Function | ./public/js/app.js | 901-904 |
 
-*... and 723 more members.*
+*... and 748 more members.*
 
 ## Execution Flows
 
 - **onMove** (criticality: 0.84, depth: 9)
-- **onUp** (criticality: 0.81, depth: 6)
 - **start** (criticality: 0.81, depth: 6)
-- **renderWorkflows** (criticality: 0.81, depth: 6)
+- **onUp** (criticality: 0.81, depth: 6)
+- **renderWorkflows** (criticality: 0.79, depth: 6)
 - **initializeAuthentication** (criticality: 0.78, depth: 4)
 - **beginSignIn** (criticality: 0.76, depth: 6)
 - **beginMicrosoftSignIn** (criticality: 0.76, depth: 6)
@@ -85,36 +85,36 @@ Community of 773 nodes
 
 ### Outgoing
 
-- `append` (231 edge(s))
-- `addEventListener` (227 edge(s))
-- `map` (172 edge(s))
-- `push` (143 edge(s))
-- `String` (120 edge(s))
-- `equal` (109 edge(s))
-- `trim` (108 edge(s))
-- `filter` (87 edge(s))
-- `isArray` (85 edge(s))
-- `Boolean` (71 edge(s))
-- `setAttribute` (65 edge(s))
-- `has` (65 edge(s))
+- `addEventListener` (228 edge(s))
+- `append` (221 edge(s))
+- `map` (189 edge(s))
+- `equal` (141 edge(s))
+- `push` (134 edge(s))
+- `String` (118 edge(s))
+- `trim` (97 edge(s))
+- `filter` (93 edge(s))
+- `isArray` (90 edge(s))
+- `has` (73 edge(s))
+- `Boolean` (72 edge(s))
 - `catch` (62 edge(s))
-- `slice` (56 edge(s))
+- `setAttribute` (61 edge(s))
 - `Number` (55 edge(s))
+- `querySelector` (52 edge(s))
 
 ### Incoming
 
+- `equal` (141 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (109 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/workflow-designer-model.mjs` (65 edge(s))
-- `./public/js/views/workflows.js` (61 edge(s))
+- `./public/js/views/workflows.js` (63 edge(s))
+- `deepEqual` (43 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `match` (31 edge(s))
+- `match` (29 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
-- `deepEqual` (25 edge(s))
 - `./public/js/auth.js` (24 edge(s))
-- `./public/js/workflow-designer-model.test.mjs` (18 edge(s))
-- `./public/js/api.js` (15 edge(s))
+- `./public/js/workflow-sync.test.mjs` (23 edge(s))
+- `map` (20 edge(s))

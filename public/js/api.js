@@ -209,6 +209,10 @@ async function request(path, options = {}) {
     const error = new Error(message || `Request failed (${res.status})`);
     error.status = res.status;
     error.code = errorCode(data);
+    // Some rejections carry the authoritative payload alongside the message -
+    // a workflow revision conflict returns the current server graph. Without
+    // this the caller could only re-fetch to discover what it overwrote.
+    error.payload = data;
     // Connected tools can also return 401. Lock the whole workspace only when
     // the gateway identified an application-auth failure (or while confirming
     // the current application identity), not for an unrelated provider key.
@@ -347,6 +351,19 @@ export const api = {
 
   // Settings
   getSettings: (options = {}) => request('/settings', options),
+
+  // Workflow designer (per-organization, schema v2). PUT carries the revision
+  // the server last returned, so a concurrent edit surfaces as a conflict
+  // carrying the server copy instead of silently overwriting it.
+  getWorkflows: () => request('/workflows'),
+  createWorkflow: (graph) => request('/workflows', { method: 'POST', body: JSON.stringify(graph) }),
+  putWorkflow: (id, graph, revision) => request(`/workflows/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    ...(revision == null ? {} : { headers: { 'If-Match': String(revision) } }),
+    body: JSON.stringify(graph),
+  }),
+  deleteWorkflow: (id) => request(`/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  importWorkflows: (workflows) => request('/workflows/import', { method: 'POST', body: JSON.stringify({ workflows }) }),
 
   // Projects
   getProjects: () => request('/projects'),

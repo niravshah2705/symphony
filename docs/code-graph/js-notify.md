@@ -7,7 +7,7 @@
 Community of 20 nodes
 
 - **Size**: 20 nodes
-- **Cohesion**: 0.1246
+- **Cohesion**: 0.1224
 - **Dominant Language**: javascript
 
 ## Members
@@ -19,7 +19,7 @@ Community of 20 nodes
 | readJson | Function | ./public/js/api.js | 77-83 |
 | errorCode | Function | ./public/js/api.js | 87-90 |
 | notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
-| request | Function | ./public/js/api.js | 148-226 |
+| request | Function | ./public/js/api.js | 148-230 |
 | shouldRetryAuth | Function | ./public/js/auth-retry.mjs | 17-19 |
 | shouldNotifyAuthenticationRequired | Function | ./public/js/auth-retry.mjs | 31-33 |
 | test:shouldRetryAuth: 401 with authentication_required is retryable@L14 | Test | ./public/js/auth-retry.test.mjs | 14-16 |
@@ -61,7 +61,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./public/js/api.js` (182 edge(s))
+- `./public/js/api.js` (187 edge(s))
 - `./public/js/auth-retry.test.mjs` (12 edge(s))
 - `equal` (12 edge(s))
 - `./public/js/auth-retry.mjs` (2 edge(s))

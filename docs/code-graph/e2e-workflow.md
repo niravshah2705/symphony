@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 10 nodes
+Community of 21 nodes
 
-- **Size**: 10 nodes
-- **Cohesion**: 0.0932
+- **Size**: 21 nodes
+- **Cohesion**: 0.1507
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,14 +16,25 @@ Community of 10 nodes
 |------|------|------|-------|
 | json | Function | ./e2e/workflow-designer.spec.js | 47-53 |
 | workflowStorageKey | Function | ./e2e/workflow-designer.spec.js | 55-57 |
-| installDesignerStubs | Function | ./e2e/workflow-designer.spec.js | 59-147 |
-| test@L83 | Test | ./e2e/workflow-designer.spec.js | 83-83 |
-| openDesigner | Function | ./e2e/workflow-designer.spec.js | 149-154 |
-| profileField | Function | ./e2e/workflow-designer.spec.js | 156-160 |
-| selectCanvasNode | Function | ./e2e/workflow-designer.spec.js | 162-170 |
-| expectNoWorkflowBackendCalls | Function | ./e2e/workflow-designer.spec.js | 172-175 |
-| test:organization members can inspect workflows but cannot mutate the local copy@L361 | Test | ./e2e/workflow-designer.spec.js | 361-387 |
-| test:an authenticated user without an organization is routed to organization onboarding@L389 | Test | ./e2e/workflow-designer.spec.js | 389-401 |
+| createWorkflowStore | Function | ./e2e/workflow-designer.spec.js | 64-132 |
+| revisionFor | Function | ./e2e/workflow-designer.spec.js | 67-71 |
+| graphsFor | Function | ./e2e/workflow-designer.spec.js | 74-77 |
+| list | Function | ./e2e/workflow-designer.spec.js | 78-78 |
+| read | Function | ./e2e/workflow-designer.spec.js | 83-96 |
+| create | Function | ./e2e/workflow-designer.spec.js | 97-104 |
+| update | Function | ./e2e/workflow-designer.spec.js | 105-117 |
+| remove | Function | ./e2e/workflow-designer.spec.js | 118-124 |
+| import | Function | ./e2e/workflow-designer.spec.js | 125-130 |
+| installDesignerStubs | Function | ./e2e/workflow-designer.spec.js | 134-265 |
+| test@L163 | Test | ./e2e/workflow-designer.spec.js | 163-163 |
+| postedGraph | Function | ./e2e/workflow-designer.spec.js | 166-172 |
+| openDesigner | Function | ./e2e/workflow-designer.spec.js | 267-272 |
+| profileField | Function | ./e2e/workflow-designer.spec.js | 274-278 |
+| selectCanvasNode | Function | ./e2e/workflow-designer.spec.js | 280-288 |
+| expectWorkflowReadsOnly | Function | ./e2e/workflow-designer.spec.js | 295-298 |
+| test:organization members read the shared workflows and cannot change them for anyone@L495 | Test | ./e2e/workflow-designer.spec.js | 495-521 |
+| test:a teammate saving first surfaces a conflict instead of being overwritten@L523 | Test | ./e2e/workflow-designer.spec.js | 523-549 |
+| test:an authenticated user without an organization is routed to organization onboarding@L551 | Test | ./e2e/workflow-designer.spec.js | 551-563 |
 
 ## Execution Flows
 
@@ -33,36 +44,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (25 edge(s))
-- `./e2e/workflow-designer.spec.js::test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235` (19 edge(s))
-- `getByRole` (14 edge(s))
+- `expect` (26 edge(s))
+- `./e2e/workflow-designer.spec.js::test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L358` (18 edge(s))
+- `getByRole` (16 edge(s))
+- `set` (9 edge(s))
+- `locator` (9 edge(s))
 - `toBeDisabled` (9 edge(s))
-- `locator` (8 edge(s))
+- `method` (6 edge(s))
+- `find` (5 edge(s))
+- `map` (5 edge(s))
+- `toEqual` (4 edge(s))
 - `fulfill` (4 edge(s))
-- `./e2e/workflow-designer.spec.js::test:lazy Workflows route renders the selected organization and five realistic examples@L177` (3 edge(s))
+- `./e2e/workflow-designer.spec.js::test:lazy Workflows route renders the selected organization and five realistic examples@L300` (3 edge(s))
 - `route` (3 edge(s))
+- `toBeTruthy` (3 edge(s))
 - `toBeVisible` (3 edge(s))
-- `toEqual` (2 edge(s))
-- `method` (2 edge(s))
-- `push` (2 edge(s))
-- `goto` (2 edge(s))
-- `toBeTruthy` (2 edge(s))
-- `ok` (2 edge(s))
 
 ### Incoming
 
-- `./e2e/workflow-designer.spec.js::test:organization admin creates a safe custom agent, links nodes, and persists isolated drafts@L235` (19 edge(s))
-- `expect` (17 edge(s))
-- `getByRole` (14 edge(s))
-- `./e2e/workflow-designer.spec.js` (9 edge(s))
+- `./e2e/workflow-designer.spec.js` (20 edge(s))
+- `./e2e/workflow-designer.spec.js::test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L358` (18 edge(s))
+- `expect` (18 edge(s))
+- `getByRole` (16 edge(s))
 - `toBeDisabled` (9 edge(s))
-- `./e2e/workflow-designer.spec.js::test:lazy Workflows route renders the selected organization and five realistic examples@L177` (3 edge(s))
-- `locator` (3 edge(s))
-- `toBeVisible` (2 edge(s))
-- `goto` (1 edge(s))
-- `toBeTruthy` (1 edge(s))
-- `ok` (1 edge(s))
-- `toHaveURL` (1 edge(s))
-- `toHaveCount` (1 edge(s))
-- `toHaveAttribute` (1 edge(s))
-- `toContainText` (1 edge(s))
+- `find` (4 edge(s))
+- `locator` (4 edge(s))
+- `./e2e/workflow-designer.spec.js::test:lazy Workflows route renders the selected organization and five realistic examples@L300` (3 edge(s))
+- `poll` (3 edge(s))
+- `graphs` (3 edge(s))
+- `click` (2 edge(s))
+- `fill` (2 edge(s))
+- `getByLabel` (2 edge(s))
+- `toBeTruthy` (2 edge(s))
+- `toContainText` (2 edge(s))

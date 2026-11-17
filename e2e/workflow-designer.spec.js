@@ -56,12 +56,92 @@ function workflowStorageKey(organizationId) {
   return `${STORAGE_PREFIX}${organizationId}`;
 }
 
+/**
+ * The designer's server side, in the test process. Graphs are keyed by the
+ * organization header the browser stamps on every request, and PUT is
+ * revision-checked exactly like the gateway's /api/workflows routes.
+ */
+function createWorkflowStore(defaults, initial = {}) {
+  const byOrg = new Map(Object.entries(initial).map(([id, graphs]) => [id, graphs.map((g) => ({ ...g }))]));
+  const revisions = new Map();
+  const revisionFor = (orgId, graph) => {
+    const key = `${orgId}:${graph.id}`;
+    if (!revisions.has(key)) revisions.set(key, 1);
+    return revisions.get(key);
+  };
+  // The gateway seeds platform defaults into a tenant on read; do the same, so
+  // these specs exercise the shared-collection path rather than the fallback.
+  const graphsFor = (orgId) => {
+    if (!byOrg.has(orgId)) byOrg.set(orgId, defaults.map((graph) => ({ ...graph })));
+    return byOrg.get(orgId);
+  };
+  const list = (orgId) => graphsFor(orgId).map((graph) => ({ ...graph, revision: revisionFor(orgId, graph) }));
+
+  return {
+    list,
+    graphs: graphsFor,
+    read(orgId) {
+      // The same shape the gateway returns: no active-workflow id, so the
+      // browser's draft decides which graph the canvas opens on.
+      return {
+        workflows: list(orgId),
+        agents: [],
+        persona: 'builder',
+        displayName: 'Workflow Operator',
+        grants: null,
+        personas: ['builder'],
+        gateTemplate: null,
+        canAdminDefaults: false,
+      };
+    },
+    create(orgId, graph) {
+      const graphs = graphsFor(orgId);
+      const clash = graphs.find((item) => item.id === graph.id);
+      if (clash) return { conflict: { ...clash, revision: revisionFor(orgId, clash) } };
+      byOrg.set(orgId, [...graphs, { ...graph }]);
+      revisions.set(`${orgId}:${graph.id}`, 1);
+      return { ok: true, workflow: { ...graph, revision: 1 } };
+    },
+    update(orgId, graph, ifMatch) {
+      const graphs = graphsFor(orgId);
+      const index = graphs.findIndex((item) => item.id === graph.id);
+      if (index < 0) return { missing: true };
+      const current = revisionFor(orgId, graphs[index]);
+      if (ifMatch != null && ifMatch !== '' && Number(ifMatch) !== current) {
+        return { conflict: { ...graphs[index], revision: current } };
+      }
+      const next = current + 1;
+      revisions.set(`${orgId}:${graph.id}`, next);
+      byOrg.set(orgId, graphs.map((item, i) => (i === index ? { ...graph } : item)));
+      return { ok: true, workflow: { ...graph, revision: next } };
+    },
+    remove(orgId, id) {
+      const graphs = graphsFor(orgId);
+      const index = graphs.findIndex((item) => item.id === id);
+      if (index < 0) return { missing: true };
+      byOrg.set(orgId, graphs.filter((item) => item.id !== id));
+      return { ok: true };
+    },
+    import(orgId, workflows) {
+      if (graphsFor(orgId).length) return { imported: 0, skipped: true, workflows: list(orgId) };
+      byOrg.set(orgId, workflows.map((graph) => ({ ...graph })));
+      for (const graph of workflows) revisions.set(`${orgId}:${graph.id}`, 1);
+      return { imported: workflows.length, skipped: false, workflows: list(orgId) };
+    },
+  };
+}
+
 async function installDesignerStubs(page, {
   organizations = [PRIMARY_ORG],
   permissions = { org: 'read' },
+  workflows = {},
 } = {}) {
   const apiMutations = [];
   const workflowApiRequests = [];
+  // The gateway seeds platform defaults into a tenant the first time it is
+  // read, so the stub starts from the same example graphs the model ships.
+  const { createInitialState } = await import('../public/js/workflow-designer-model.mjs');
+  const store = createWorkflowStore(createInitialState().workflows, workflows);
 
   await page.addInitScript(() => {
     localStorage.setItem('ai-fleet.locale', 'en');
@@ -81,6 +161,44 @@ async function installDesignerStubs(page, {
     const pathname = new URL(request.url()).pathname;
     if (request.method() !== 'GET') apiMutations.push(`${request.method()} ${pathname}`);
     if (/workflow/i.test(pathname)) workflowApiRequests.push(`${request.method()} ${pathname}`);
+
+    const organizationHeader = request.headers()['x-ai-fleet-organization-id'] || organizations[0]?.id || '';
+    const postedGraph = () => {
+      try {
+        return JSON.parse(request.postData() || '{}');
+      } catch (_) {
+        return {};
+      }
+    };
+    if (pathname === '/api/workflows' && request.method() === 'GET') {
+      return json(route, store.read(organizationHeader));
+    }
+    if (pathname === '/api/workflows' && request.method() === 'POST') {
+      const created = store.create(organizationHeader, postedGraph());
+      if (created.conflict) {
+        return json(route, { error: 'Workflow id already exists.', code: 'already_exists', workflow: created.conflict }, 409);
+      }
+      return json(route, created.workflow, 201);
+    }
+    if (pathname === '/api/workflows/import') {
+      return json(route, store.import(organizationHeader, postedGraph().workflows || []));
+    }
+    if (pathname.startsWith('/api/workflows/') && request.method() === 'PUT') {
+      const id = decodeURIComponent(pathname.slice('/api/workflows/'.length));
+      const saved = store.update(organizationHeader, { ...postedGraph(), id }, request.headers()['if-match']);
+      if (saved.conflict) {
+        return json(route, { error: 'revision_conflict', code: 'revision_conflict', workflow: saved.conflict }, 409);
+      }
+      if (saved.missing) return json(route, { error: 'Workflow was not found.' }, 404);
+      return json(route, saved.workflow);
+    }
+    if (pathname.startsWith('/api/workflows/') && request.method() === 'DELETE') {
+      const id = decodeURIComponent(pathname.slice('/api/workflows/'.length));
+      const gone = store.remove(organizationHeader, id);
+      return gone.missing
+        ? json(route, { error: 'Workflow was not found.' }, 404)
+        : json(route, { ok: true, id });
+    }
 
     if (pathname === '/api/auth/config') {
       return json(route, {
@@ -143,7 +261,7 @@ async function installDesignerStubs(page, {
     return json(route, {});
   });
 
-  return { apiMutations, workflowApiRequests };
+  return { apiMutations, workflowApiRequests, store };
 }
 
 async function openDesigner(page) {
@@ -169,9 +287,14 @@ async function selectCanvasNode(page, name) {
   return node;
 }
 
-async function expectNoWorkflowBackendCalls(recording) {
-  expect(recording.workflowApiRequests).toEqual([]);
-  expect(recording.apiMutations).toEqual([]);
+/**
+ * The designer reads the organization's graphs on open. It must not write
+ * anything the operator did not ask for: no import of the built-in examples,
+ * no re-create of a graph the server already has.
+ */
+function expectWorkflowReadsOnly(recording) {
+  expect(recording.workflowApiRequests, 'opening the designer loads the shared graphs').toEqual(['GET /api/workflows']);
+  expect(recording.apiMutations, 'viewing workflows must never mutate the organization').toEqual([]);
 }
 
 test('lazy Workflows route renders the selected organization and five realistic examples', async ({ page }) => {
@@ -229,10 +352,10 @@ test('lazy Workflows route renders the selected organization and five realistic 
     });
   }
 
-  await expectNoWorkflowBackendCalls(recording);
+  await expectWorkflowReadsOnly(recording);
 });
 
-test('organization admin creates a safe custom agent, links nodes, and persists isolated drafts', async ({ page }) => {
+test('organization admin creates a safe custom agent, links nodes, and shares the graph with the organization', async ({ page }) => {
   const recording = await installDesignerStubs(page, {
     organizations: [PRIMARY_ORG, SECONDARY_ORG],
   });
@@ -316,6 +439,13 @@ test('organization admin creates a safe custom agent, links nodes, and persists 
     skills: ['observability-analysis'],
   });
 
+  // The organization's copy, not just this browser's: the graph the admin drew
+  // is what a teammate would load.
+  await expect.poll(() => {
+    const shared = recording.store.graphs(PRIMARY_ORG.id).find((graph) => graph.name === 'Immediate persistence flow');
+    return shared ? { nodes: shared.nodes.length, edges: shared.edges.length, viewport: shared.viewport } : null;
+  }).toMatchObject({ nodes: 2, edges: 1, viewport: { x: 360, y: 120 } });
+
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
   await expect(page.getByRole('heading', { name: 'Acme Platform workflows' })).toBeVisible();
@@ -334,10 +464,13 @@ test('organization admin creates a safe custom agent, links nodes, and persists 
   await expect(page.getByRole('button', { name: 'Add Observability Steward to workflow' })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Active workflow' }).locator('option')).toHaveCount(5);
 
+  // Switching organizations swaps server collections; nothing from Acme reaches
+  // Beta Labs, and the browser keeps a separate draft cache per organization.
   const secondaryKey = workflowStorageKey(SECONDARY_ORG.id);
-  expect(await page.evaluate((key) => localStorage.getItem(key), secondaryKey)).toBeNull();
+  expect(recording.store.graphs(SECONDARY_ORG.id).map((graph) => graph.name)).not.toContain('Immediate persistence flow');
   await page.getByRole('button', { name: 'New blank', exact: true }).click();
   await expect.poll(() => page.evaluate((key) => Boolean(localStorage.getItem(key)), secondaryKey)).toBe(true);
+  await expect.poll(() => recording.store.graphs(SECONDARY_ORG.id).some((graph) => graph.name === 'Untitled workflow')).toBe(true);
   const isolated = await page.evaluate(([firstKey, secondKey]) => {
     const first = JSON.parse(localStorage.getItem(firstKey));
     const second = JSON.parse(localStorage.getItem(secondKey));
@@ -355,10 +488,11 @@ test('organization admin creates a safe custom agent, links nodes, and persists 
     secondActiveName: 'Untitled workflow',
   });
 
-  await expectNoWorkflowBackendCalls(recording);
+  expect(recording.workflowApiRequests, 'edits are per-graph writes, never a whole-collection import')
+    .not.toContain('POST /api/workflows/import');
 });
 
-test('organization members can inspect workflows but cannot mutate the local copy', async ({ page }) => {
+test('organization members read the shared workflows and cannot change them for anyone', async ({ page }) => {
   const memberOrg = { ...PRIMARY_ORG, role: 'MEMBER' };
   const recording = await installDesignerStubs(page, { organizations: [memberOrg] });
 
@@ -381,9 +515,37 @@ test('organization members can inspect workflows but cannot mutate the local cop
   await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await page.getByRole('combobox', { name: 'Active workflow' }).selectOption({ label: 'Independent operations · example' });
   await page.waitForTimeout(400);
-  expect(await page.evaluate((key) => localStorage.getItem(key), workflowStorageKey(memberOrg.id))).toBeNull();
+  // Looking is not editing: a member's session sends no write at all, so nobody
+  // else's workflow moves because this tab was open.
+  await expectWorkflowReadsOnly(recording);
+});
 
-  await expectNoWorkflowBackendCalls(recording);
+test('a teammate saving first surfaces a conflict instead of being overwritten', async ({ page }) => {
+  const recording = await installDesignerStubs(page);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'New blank', exact: true }).click();
+  const inspector = page.getByRole('complementary', { name: 'Workflow inspector' });
+  await inspector.getByLabel('Name', { exact: true }).fill('Contested flow');
+  await expect.poll(() => recording.store.graphs(PRIMARY_ORG.id)
+    .find((graph) => graph.name === 'Contested flow')).toBeTruthy();
+
+  // A second editor wins the revision while this tab is idle.
+  const contested = recording.store.graphs(PRIMARY_ORG.id).find((graph) => graph.name === 'Contested flow');
+  recording.store.update(PRIMARY_ORG.id, { ...contested, name: 'Renamed by a teammate' }, 1);
+
+  await inspector.getByLabel('Description', { exact: true }).fill('Edited from the first tab.');
+  await expect(page.locator('.workflow-toolbar-status')).toContainText('Someone saved a newer copy');
+
+  // Last-write-wins is the wrong answer here: the teammate's name stays on the
+  // server, and this tab's edit survives as the local draft.
+  await expect.poll(() => recording.store.graphs(PRIMARY_ORG.id)
+    .find((graph) => graph.id === contested.id).name).toBe('Renamed by a teammate');
+  await expect.poll(() => page.evaluate((key) => {
+    const state = JSON.parse(localStorage.getItem(key) || 'null');
+    const workflow = state?.workflows?.find((item) => item.id === state.activeWorkflowId);
+    return { name: workflow?.name, description: workflow?.description };
+  }, workflowStorageKey(PRIMARY_ORG.id))).toEqual({ name: 'Contested flow', description: 'Edited from the first tab.' });
 });
 
 test('an authenticated user without an organization is routed to organization onboarding', async ({ page }) => {
@@ -396,6 +558,6 @@ test('an authenticated user without an organization is routed to organization on
   await expect(page.getByRole('heading', { name: 'Organization & projects' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Create an organization' })).toBeVisible();
   await expect(page.locator('.workflow-designer')).toHaveCount(0);
-
-  await expectNoWorkflowBackendCalls(recording);
+  // With no active organization there is no tenant to read graphs for.
+  expect(recording.workflowApiRequests).toEqual([]);
 });

@@ -4,16 +4,17 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 3 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.1667
+- **Size**: 3 nodes
+- **Cohesion**: 0.2500
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| allowedByPersona | Function | ./public/js/views/workflows.js | 522-522 |
 | allowedCategoriesForPersona | Function | ./public/js/workflow-designer-model.mjs | 1444-1448 |
 | personaAllowsCategory | Function | ./public/js/workflow-designer-model.mjs | 1450-1454 |
 
@@ -32,3 +33,4 @@ No execution flows pass through this community.
 ### Incoming
 
 - `./public/js/workflow-designer-model.mjs` (2 edge(s))
+- `./public/js/views/workflows.js` (1 edge(s))

@@ -4,6 +4,9 @@ import {
   activeWorkspaceOrganization,
   getWorkspaceContext,
 } from '../workspace-context.js';
+import { api } from '../api.js';
+import { createWorkflowSync } from '../workflow-sync.mjs';
+import * as designerModel from '../workflow-designer-model.mjs';
 import {
   addEdge,
   addNode,
@@ -22,14 +25,13 @@ import {
   getContextCatalog,
   graphSummary,
   moveNode,
-  readStateFromStorage,
+  personaAllowsCategory,
   resetSeededWorkflows,
   updateCustomAgent,
   updateCustomContext,
   updateEdge,
   updateNode,
   upsertWorkflow,
-  writeStateToStorage,
 } from '../workflow-designer-model.mjs';
 
 const CANVAS_WIDTH = 2500;
@@ -60,6 +62,7 @@ const AGENT_CATEGORIES = Object.freeze([
 
 let fieldSequence = 0;
 let flushPendingDesignerSave = null;
+let onDesignerReconnect = null;
 let persistenceEventsBound = false;
 
 function bindPersistenceEvents() {
@@ -70,6 +73,9 @@ function bindPersistenceEvents() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
   });
+  // A reconnect is the only retry: keystrokes must not re-open a request while
+  // the browser still knows it is offline.
+  window.addEventListener('online', () => onDesignerReconnect?.());
 }
 
 function browserStorage() {
@@ -174,13 +180,15 @@ function workflowById(state, id) {
 }
 
 /**
- * Frontend-only organization workflow designer. It deliberately performs no API
- * calls: drafts live under an organization-keyed localStorage record and the UI
- * calls out that graphs are non-executable prototypes.
+ * Organization workflow designer. Graphs persist per organization through
+ * /api/workflows; localStorage keeps the draft that lets an offline or closed
+ * tab pick up where it left off. Graphs stay design drafts — saving never
+ * starts an agent run.
  */
 export async function renderWorkflows(view) {
   flushPendingDesignerSave?.();
   flushPendingDesignerSave = null;
+  onDesignerReconnect = null;
   const workspace = getWorkspaceContext();
   const organization = activeWorkspaceOrganization(workspace);
   if (!organization) {
@@ -197,8 +205,16 @@ export async function renderWorkflows(view) {
 
   const canEdit = String(organization.role || '').toUpperCase() === 'ORG_ADMIN';
   const storage = browserStorage();
-  const loaded = readStateFromStorage(storage, organization.id);
+  const sync = createWorkflowSync({
+    client: api, model: designerModel, storage, organizationId: organization.id, canWrite: canEdit,
+  });
+  const loaded = await sync.load();
   let state = loaded.state;
+  // Grants only filter the palette; the gateway is what refuses a write the
+  // persona may not make, so nothing here is a security boundary.
+  const persona = loaded.context.persona;
+  const grants = loaded.context.grants;
+  let syncedWithServer = loaded.source === 'server' || loaded.source === 'imported';
   let selected = { kind: 'workflow', id: state.activeWorkflowId };
   let connectSource = '';
   let paletteQuery = '';
@@ -223,20 +239,70 @@ export async function renderWorkflows(view) {
     statusHost.dataset.state = tone === 'ok' ? 'saved' : tone === 'error' ? 'error' : 'dirty';
   }
 
+  function applySyncStatus(result) {
+    syncedWithServer = result.status === 'saved' || syncedWithServer;
+    if (result.status === 'saved') {
+      setSaveStatus(`Saved · shared with your organization${persona ? ` · ${persona}` : ''}`, 'ok');
+      return;
+    }
+    if (result.status === 'readonly') {
+      setSaveStatus('Read-only view · changes not saved');
+      return;
+    }
+    if (result.status === 'conflict') {
+      setSaveStatus('Someone saved a newer copy · reload to compare', 'error');
+      toast('This workflow changed on the server since you loaded it. Your draft is kept on this device; reload the page to compare before saving again.', 'err');
+      return;
+    }
+    if (result.status === 'offline') {
+      setSaveStatus('Offline · saved on this device', 'error');
+      return;
+    }
+    setSaveStatus('Could not save · draft kept on this device', 'error');
+  }
+
+  let pushing = false;
+  let pushAgain = false;
+
+  async function pushToServer() {
+    if (pushing) {
+      pushAgain = true;
+      return;
+    }
+    pushing = true;
+    do {
+      pushAgain = false;
+      try {
+        applySyncStatus(await sync.flush(state));
+      } catch (error) {
+        // An auth refusal is the session handler's problem, not a save failure.
+        if (error && (error.status === 401 || error.status === 403)) {
+          setSaveStatus(error.status === 403 ? 'Not allowed to save this workflow' : 'Sign in again to save', 'error');
+        } else {
+          setSaveStatus('Could not reach the server · draft kept', 'error');
+        }
+      }
+    } while (pushAgain);
+    pushing = false;
+  }
+
   function persistNow({ silent = false } = {}) {
     if (persistTimer) window.clearTimeout(persistTimer);
     persistTimer = null;
-    const result = writeStateToStorage(storage, organization.id, state);
-    if (result.ok) setSaveStatus('Saved locally · not shared', 'ok');
-    else {
+    // Draft first, always: a failed request must never cost the user the edit.
+    const result = sync.writeDraft(state);
+    if (!result.ok) {
       setSaveStatus('Could not save · session copy retained', 'error');
       if (!silent) toast(result.error || 'Browser storage is unavailable. Your current session is still usable.', 'err');
+      return result;
     }
+    if (!syncedWithServer && !sync.isOffline()) setSaveStatus('Saving…');
+    pushToServer();
     return result;
   }
 
   function schedulePersist() {
-    setSaveStatus('Saving locally…');
+    setSaveStatus(syncedWithServer ? 'Saving…' : 'Saving locally…');
     if (persistTimer) window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(() => persistNow(), SAVE_DELAY_MS);
   }
@@ -253,6 +319,11 @@ export async function renderWorkflows(view) {
   flushPendingDesignerSave = () => {
     persistPendingViewport();
     if (persistTimer) persistNow({ silent: true });
+  };
+  onDesignerReconnect = async () => {
+    sync.setOnline();
+    if (syncedWithServer && !persistTimer) return;
+    await pushToServer();
   };
   bindPersistenceEvents();
 
@@ -446,7 +517,12 @@ export async function renderWorkflows(view) {
     const query = paletteQuery.trim().toLowerCase();
     const matches = (item) => !query || [item.name, item.description, item.purpose, item.category]
       .filter(Boolean).join(' ').toLowerCase().includes(query);
-    const agents = getAgentCatalog(state).filter(matches);
+    // Grants filter this list for convenience only — the gateway is what actually
+    // refuses a save the persona may not make.
+    const allowedByPersona = (profile) => !grants || personaAllowsCategory(persona, profile.category, grants);
+    const searchableAgents = getAgentCatalog(state).filter(matches);
+    const agents = searchableAgents.filter(allowedByPersona);
+    const withheld = searchableAgents.length - agents.length;
     const contexts = getContextCatalog(state).filter(matches);
     const search = el('input', {
       type: 'search', value: paletteQuery, placeholder: 'Search agents and contexts',
@@ -475,6 +551,7 @@ export async function renderWorkflows(view) {
       ]),
       el('div', { class: 'workflow-palette-tools' }, [search, el('div', { class: 'workflow-palette-create' }, [newAgent, newContext])]),
       el('div', { class: 'workflow-panel-body' }, [
+        withheld ? el('p', { class: 'muted workflow-palette-note' }, `${withheld} agent${withheld === 1 ? '' : 's'} outside the ${persona || 'default'} persona ${withheld === 1 ? 'is' : 'are'} hidden; the organization can grant them.`) : null,
         paletteSection('Agents', agents.map((profile) => paletteItem({ kind: 'agent', ...profile, custom: profile.source === 'custom' || state.customAgents.some((item) => item.id === profile.id) }))),
         paletteSection('Execution contexts', contexts.map((context) => paletteItem({ kind: 'environment', ...context, category: 'Context', custom: context.source === 'custom' || state.customContexts.some((item) => item.id === context.id) }))),
         paletteSection('Control', query && !'human approval role gate review'.includes(query) ? [] : [paletteItem({
@@ -795,7 +872,7 @@ export async function renderWorkflows(view) {
     const deleteButton = el('button', { type: 'button', class: 'danger', disabled: !canEdit || state.workflows.length < 2 }, 'Delete workflow');
     deleteButton.addEventListener('click', () => { selected = { kind: 'confirm-workflow-delete', id: workflow.id }; renderInspector(); });
     return [
-      inspectorHeader('Workflow', workflow.exampleId ? 'Seeded ADLC example' : 'Browser-local draft'),
+      inspectorHeader('Workflow', workflow.exampleId ? 'Seeded ADLC example' : 'Organization draft'),
       el('div', { class: 'workflow-panel-body' }, [
         field('Name', name),
         field('Description', description),
@@ -1026,11 +1103,12 @@ export async function renderWorkflows(view) {
     }
     if (selected.kind === 'confirm-workflow-delete') {
       return [inspectorHeader('Delete workflow'), el('div', { class: 'workflow-panel-body' }, [inlineConfirm({
-        title: `Delete ${workflow.name}?`, body: 'This browser-local draft and all of its nodes will be removed.', confirmLabel: 'Delete workflow',
+        title: `Delete ${workflow.name}?`, body: 'This removes the workflow for everyone in your organization, along with all of its nodes.', confirmLabel: 'Delete workflow',
         onCancel: () => { selected = { kind: 'workflow', id: workflow.id }; renderInspector(); },
         onConfirm: () => {
           const result = deleteWorkflow(state, workflow.id);
           if (!result.ok) return toast(result.error || 'The workflow could not be deleted.', 'err');
+          sync.forget(workflow.id);
           selected = { kind: 'workflow', id: result.state.activeWorkflowId };
           acceptState(result.state, { palette: false, canvas: true, inspector: true });
         },
@@ -1111,7 +1189,7 @@ export async function renderWorkflows(view) {
       designer?.classList.remove('is-palette-open');
       designer?.classList.add('is-inspector-open');
     });
-    statusHost = el('span', { class: 'workflow-toolbar-status', role: 'status', 'aria-live': 'polite' }, 'Saved locally · not shared');
+    statusHost = el('span', { class: 'workflow-toolbar-status', role: 'status', 'aria-live': 'polite' }, 'Loading…');
     summaryHost = el('span', { class: 'workflow-summary' });
     paletteHost = el('aside', { class: 'workflow-panel workflow-palette', 'aria-label': 'Agent palette' });
     canvasHost = el('section', { class: 'workflow-canvas-shell', 'aria-label': 'Workflow canvas' });
@@ -1136,12 +1214,16 @@ export async function renderWorkflows(view) {
     }, [
       header,
       !canEdit ? el('div', { class: 'workflow-readonly-banner', role: 'note' }, [
-        icon('info', { size: 16 }), el('span', {}, 'Read-only organization view. An organization admin can edit this browser-local copy.'),
+        icon('info', { size: 16 }), el('span', {}, 'Read-only organization view. An organization admin can edit these workflows.'),
       ]) : null,
-      loaded.error ? el('div', { class: 'workflow-recovery-banner', role: 'status' },
-        /storage/i.test(loaded.error)
-          ? `${loaded.error} Changes will last only for this session.`
-          : 'A damaged or outdated local draft was replaced with safe examples.') : null,
+      loaded.source === 'offline' ? el('div', { class: 'workflow-recovery-banner', role: 'status' }, [
+        icon('info', { size: 16 }),
+        el('span', {}, 'Working offline — showing the draft saved on this device. Edits resume syncing when the connection returns.'),
+      ]) : null,
+      !storage ? el('div', { class: 'workflow-recovery-banner', role: 'status' }, [
+        icon('info', { size: 16 }),
+        el('span', {}, 'This browser will not store a local draft, so unsaved edits are lost if the tab closes.'),
+      ]) : null,
       designer,
     ]));
     renderWorkflowOptions();
@@ -1149,7 +1231,10 @@ export async function renderWorkflows(view) {
     renderCanvas();
     renderInspector();
     updateSummary();
-    if (loaded.error && /storage/i.test(loaded.error)) setSaveStatus('Session only · storage unavailable', 'error');
+    if (loaded.sync) applySyncStatus(loaded.sync);
+    else if (loaded.source === 'offline') setSaveStatus('Offline · saved on this device', 'error');
+    else if (loaded.source === 'seed') setSaveStatus('Example workflow · not saved yet');
+    else setSaveStatus(`Shared with your organization${persona ? ` · ${persona}` : ''}`, 'ok');
   }
 
   mount();
