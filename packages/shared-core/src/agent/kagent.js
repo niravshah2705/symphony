@@ -206,19 +206,42 @@ function createKagentClient(config = CONFIG.KAGENT, requestImpl = null) {
     return res.body;
   }
 
-  /** Apply = PUT over the whole object; create on 404 via POST. K8s semantics. */
+  /**
+   * Apply = create when absent, replace when present.
+   *
+   * The replace must carry the stored object's `resourceVersion`: a PUT without
+   * one is rejected `422 metadata.resourceVersion: Invalid value: 0: must be
+   * specified for an update`, so a second publish of the same node would fail
+   * every time while a first publish looked fine (404 → POST). The rendered CR
+   * cannot know the version, so the live copy is read first. A 409 means it
+   * moved between the read and the write — re-read and retry once rather than
+   * clobbering whoever won.
+   */
   async function apply(object) {
     const kindLower = String(object.kind) === 'ConfigMap'
       ? 'configMap'
       : Object.keys(PLURALS).find((key) => String(object.kind).toLowerCase() === key.toLowerCase());
     if (!kindLower) throw new Error(`Cannot apply ${object.kind} from this adapter`);
     const name = object.metadata.name;
-    const put = await request('PUT', collectionPath(kindLower, name), object);
-    if (put.status === 200 || put.status === 201) return { ok: true, created: false, body: put.body };
-    if (put.status !== 404) throw new Error(`kagent apply ${object.kind}/${name} failed: ${put.status} ${String(put.text || '').slice(0, 300)}`);
-    const post = await request('POST', collectionPath(kindLower), object);
-    if (post.status === 201 || post.status === 200) return { ok: true, created: true, body: post.body };
-    throw new Error(`kagent create ${object.kind}/${name} failed: ${post.status} ${String(post.text || '').slice(0, 300)}`);
+    const collection = collectionPath(kindLower);
+    const named = collectionPath(kindLower, name);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const live = await get(kindLower, name);
+      if (!live) {
+        const post = await request('POST', collection, object);
+        if (post.status === 201 || post.status === 200) return { ok: true, created: true, body: post.body };
+        if (post.status === 409) continue; // created while we were asking: replace it
+        throw new Error(`kagent create ${object.kind}/${name} failed: ${post.status} ${String(post.text || '').slice(0, 300)}`);
+      }
+      const put = await request('PUT', named, {
+        ...object,
+        metadata: { ...object.metadata, resourceVersion: live.metadata.resourceVersion },
+      });
+      if (put.status === 200 || put.status === 201) return { ok: true, created: false, body: put.body };
+      if (put.status === 404 || put.status === 409) continue; // deleted or edited under us
+      throw new Error(`kagent apply ${object.kind}/${name} failed: ${put.status} ${String(put.text || '').slice(0, 300)}`);
+    }
+    throw new Error(`kagent apply ${object.kind}/${name} failed: the stored object changed on every attempt.`);
   }
 
   async function remove(kind, name) {
@@ -259,9 +282,19 @@ function createKagentClient(config = CONFIG.KAGENT, requestImpl = null) {
     };
   }
 
+  /**
+   * Un-publishing must remove both CRs the publish path may have written. A
+   * prompt that crossed the inline limit lives in `<name>-prompts`, and deleting
+   * only the Agent strands that ConfigMap in the namespace with nothing left to
+   * own it — re-publishing then reuses it with stale text if the new prompt is
+   * short enough to go inline.
+   */
   async function unpublishProfile(id) {
     if (!enabled()) return { ok: false, error: 'kagent_not_configured' };
-    return remove('agent', dnsLabel(id));
+    const name = dnsLabel(id);
+    const outcome = await remove('agent', name);
+    await remove('configMap', dnsLabel(`${name}-prompts`));
+    return outcome;
   }
 
   async function status() {

@@ -217,25 +217,75 @@ test('client reports kagent_not_configured when disabled, for every verb', async
   assert.deepEqual(await client.status(), { enabled: false, reason: 'kagent_not_configured' });
 });
 
-test('publishProfile applies the ConfigMap before the Agent it references', async () => {
-  const { client, calls } = stubClient(async () => ({ status: 200, body: {}, text: '' }));
-  const out = await client.publishProfile(LONG_COMPOSITION_PROFILE);
+test('unpublishProfile deletes the prompt ConfigMap along with the Agent', async () => {
+  const { client, calls } = stubClient(async (method) => (method === 'DELETE'
+    ? { status: 200, body: {}, text: '' }
+    : { status: 404, body: null, text: '' }));
+  const out = await client.unpublishProfile('builder coding');
   assert.equal(out.ok, true);
-  assert.equal(calls[0].method, 'PUT');
-  assert.match(calls[0].url, /^\/api\/v1\/namespaces\/kagent\/configmaps\/builder-coding-prompts$/);
-  assert.match(calls[1].url, /^\/apis\/api\.kagent\.dev\/v1alpha3\/namespaces\/kagent\/agents\/builder-coding$/);
+  assert.deepEqual(calls.map((call) => call.method), ['DELETE', 'DELETE']);
+  assert.deepEqual(calls.map((call) => call.url), [
+    '/apis/api.kagent.dev/v1alpha3/namespaces/kagent/agents/builder-coding',
+    '/api/v1/namespaces/kagent/configmaps/builder-coding-prompts',
+  ]);
 });
 
-test('publishProfile creates on 404 and refuses to apply an invalid spec', async () => {
-  const put404 = async (method) => (method === 'PUT' ? { status: 404, body: null, text: '' } : { status: 201, body: {}, text: '' });
-  const { client, calls } = stubClient(put404);
+test('publishProfile applies the ConfigMap before the Agent it references', async () => {
+  const absent = async (method) => (method === 'GET' ? { status: 404, body: null, text: '' } : { status: 201, body: {}, text: '' });
+  const { client, calls } = stubClient(absent);
+  const out = await client.publishProfile(LONG_COMPOSITION_PROFILE);
+  assert.equal(out.ok, true);
+  assert.equal(calls[0].method, 'GET');
+  assert.match(calls[0].url, /^\/api\/v1\/namespaces\/kagent\/configmaps\/builder-coding-prompts$/);
+  assert.deepEqual(calls.map((call) => call.method), ['GET', 'POST', 'GET', 'POST']);
+  assert.match(calls[1].url, /^\/api\/v1\/namespaces\/kagent\/configmaps$/);
+  assert.match(calls[2].url, /^\/apis\/api\.kagent\.dev\/v1alpha3\/namespaces\/kagent\/agents\/builder-coding$/);
+  assert.match(calls[3].url, /^\/apis\/api\.kagent\.dev\/v1alpha3\/namespaces\/kagent\/agents$/);
+});
+
+test('publishProfile creates on a missing object and refuses to apply an invalid spec', async () => {
+  const absent = async (method) => (method === 'GET' ? { status: 404, body: null, text: '' } : { status: 201, body: {}, text: '' });
+  const { client, calls } = stubClient(absent);
   const out = await client.publishProfile(FULL_PROFILE);
   assert.deepEqual({ ok: out.ok, created: out.created, name: out.name }, { ok: true, created: true, name: 'builder-coding' });
-  assert.deepEqual(calls.map((call) => call.method), ['PUT', 'POST']);
+  assert.deepEqual(calls.map((call) => call.method), ['GET', 'POST']);
 
   const invalid = await client.publishProfile({ id: 'nope', systemPrompt: '' });
   assert.deepEqual({ ok: invalid.ok, error: invalid.error }, { ok: false, error: 'kagent_spec_invalid' });
   assert.equal(calls.length, 2, 'an invalid spec must not reach the API server');
+});
+
+test('a re-publish sends the stored resourceVersion, without which a replace is a 422', async () => {
+  const { client, calls } = stubClient(async (method) => (method === 'GET'
+    ? { status: 200, body: { metadata: { name: 'builder-coding', resourceVersion: '4172' } }, text: '' }
+    : { status: 200, body: {}, text: '' }));
+  const out = await client.publishProfile(FULL_PROFILE);
+  assert.equal(out.created, false);
+  const put = calls.find((call) => call.method === 'PUT');
+  assert.ok(put, 'an existing object must be replaced, not created again');
+  assert.equal(put.body.metadata.resourceVersion, '4172');
+});
+
+test('a conflict re-reads the newer copy instead of forcing the same write through', async () => {
+  let reads = 0;
+  const { client, calls } = stubClient(async (method) => {
+    if (method === 'GET') {
+      reads += 1;
+      return { status: 200, body: { metadata: { resourceVersion: reads === 1 ? '1' : '2' } }, text: '' };
+    }
+    const alreadyPut = calls.filter((call) => call.method === 'PUT').length;
+    return alreadyPut === 1 ? { status: 409, body: null, text: 'conflict' } : { status: 200, body: {}, text: '' };
+  });
+  const out = await client.publishProfile(FULL_PROFILE);
+  assert.equal(out.ok, true);
+  assert.deepEqual(calls.filter((call) => call.method === 'PUT').map((call) => call.body.metadata.resourceVersion), ['1', '2']);
+});
+
+test('apply gives up rather than looping when the object keeps moving', async () => {
+  const { client } = stubClient(async (method) => (method === 'PUT'
+    ? { status: 409, body: null, text: 'conflict' }
+    : { status: 200, body: { metadata: { resourceVersion: '7' } }, text: '' }));
+  await assert.rejects(() => client.publishProfile(FULL_PROFILE), /changed on every attempt/);
 });
 
 test('capabilities lists live cluster objects for the palette', async () => {
