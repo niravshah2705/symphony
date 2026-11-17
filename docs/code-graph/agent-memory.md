@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 143 nodes
+Community of 246 nodes
 
-- **Size**: 143 nodes
-- **Cohesion**: 0.2276
+- **Size**: 246 nodes
+- **Cohesion**: 0.2418
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 143 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 93 more members.*
+*... and 196 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 143 nodes
 
 ### Outgoing
 
-- `equal` (166 edge(s))
-- `match` (42 edge(s))
-- `ok` (33 edge(s))
-- `map` (33 edge(s))
+- `equal` (349 edge(s))
+- `match` (62 edge(s))
+- `ok` (46 edge(s))
+- `map` (46 edge(s))
+- `deepEqual` (41 edge(s))
+- `join` (41 edge(s))
+- `includes` (39 edge(s))
+- `String` (37 edge(s))
+- `isArray` (34 edge(s))
+- `filter` (31 edge(s))
 - `expect` (29 edge(s))
-- `filter` (28 edge(s))
-- `isArray` (28 edge(s))
-- `String` (27 edge(s))
-- `slice` (22 edge(s))
-- `deepEqual` (21 edge(s))
-- `trim` (18 edge(s))
-- `includes` (18 edge(s))
-- `throws` (13 edge(s))
-- `join` (12 edge(s))
-- `require` (11 edge(s))
+- `slice` (24 edge(s))
+- `trim` (24 edge(s))
+- `throws` (19 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
 
 ### Incoming
 
-- `equal` (166 edge(s))
-- `match` (39 edge(s))
-- `ok` (33 edge(s))
+- `equal` (349 edge(s))
+- `match` (59 edge(s))
+- `ok` (46 edge(s))
+- `deepEqual` (41 edge(s))
 - `expect` (29 edge(s))
-- `./packages/shared/src/agent/memory-middleware.js` (24 edge(s))
-- `deepEqual` (21 edge(s))
+- `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
+- `join` (24 edge(s))
+- `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
+- `./packages/shared/src/agent/runtimes.test.js` (22 edge(s))
 - `./packages/shared/src/agent/global-questions.js` (21 edge(s))
+- `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
-- `./packages/shared/src/agent/coverage-service.test.js` (16 edge(s))
-- `filter` (14 edge(s))
-- `./packages/shared/src/agent/memory.js` (14 edge(s))
-- `./packages/shared/src/agent/coverage-service.js` (13 edge(s))
-- `throws` (13 edge(s))
-- `./packages/shared/src/agent/memory-middleware.test.js` (12 edge(s))
-- `trim` (11 edge(s))
+- `throws` (19 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))

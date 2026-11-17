@@ -530,6 +530,33 @@ const SUBSTRATE = Object.freeze({
 });
 
 /**
+ * Kagent — the in-cluster Kubernetes agent runtime (CRDs in group
+ * api.kagent.dev, storage v1alpha3). Like SUBSTRATE this is a control-plane
+ * surface only: the client runs in the planner/provisioner, never in an agent
+ * container, and authenticates with a mounted service-account token (never a
+ * provider credential). `apiUrl` is empty by default so the backend is inert
+ * until an operator provisions kagent and points the adapter at the cluster:
+ * saves then still accept backend:'kagent', but publish/run report 503
+ * kagent_not_configured rather than guessing at a cluster.
+ */
+const KAGENT = Object.freeze({
+  enabled: /^(1|true|yes|on)$/i.test(process.env.KAGENT_ENABLED || ''),
+  apiUrl: process.env.KAGENT_API_URL || '',
+  namespace: process.env.KAGENT_NAMESPACE || 'kagent',
+  // Service-account token + CA, mounted by Kubernetes at the default in-cluster
+  // paths. Left unset when apiUrl points at an out-of-cluster API server that
+  // uses kubeconfig instead.
+  tokenFile: process.env.KAGENT_TOKEN_FILE || '',
+  caFile: process.env.KAGENT_CA_FILE || '',
+  // Out-of-cluster local development only: a kubeconfig path. Never mounted into
+  // an agent container.
+  kubeconfig: process.env.KAGENT_KUBECONFIG || '',
+  group: 'api.kagent.dev',
+  version: 'v1alpha3',
+  timeoutMs: Number(process.env.KAGENT_TIMEOUT_MS || 15000),
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -1029,6 +1056,7 @@ const CONFIG = Object.freeze({
   QODER,
   OPENROUTER,
   SUBSTRATE,
+  KAGENT,
   CODER,
   MCP,
   TOOLS,

@@ -4,16 +4,55 @@
 
 ## Overview
 
-Community of 176 nodes
+Community of 215 nodes
 
-- **Size**: 176 nodes
-- **Cohesion**: 0.2595
+- **Size**: 215 nodes
+- **Cohesion**: 0.2713
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| dnsLabel | Function | ./packages/shared-core/src/agent/kagent.js | 36-42 |
+| kagentConfig | Function | ./packages/shared-core/src/agent/kagent.js | 44-60 |
+| defaultRequest | Function | ./packages/shared-core/src/agent/kagent.js | 62-93 |
+| renderAgentCrd | Function | ./packages/shared-core/src/agent/kagent.js | 107-172 |
+| createKagentClient | Function | ./packages/shared-core/src/agent/kagent.js | 176-278 |
+| enabled | Function | ./packages/shared-core/src/agent/kagent.js | 180-182 |
+| collectionPath | Function | ./packages/shared-core/src/agent/kagent.js | 184-194 |
+| list | Function | ./packages/shared-core/src/agent/kagent.js | 196-200 |
+| get | Function | ./packages/shared-core/src/agent/kagent.js | 202-207 |
+| apply | Function | ./packages/shared-core/src/agent/kagent.js | 210-222 |
+| remove | Function | ./packages/shared-core/src/agent/kagent.js | 224-229 |
+| capabilities | Function | ./packages/shared-core/src/agent/kagent.js | 231-242 |
+| publishProfile | Function | ./packages/shared-core/src/agent/kagent.js | 245-260 |
+| unpublishProfile | Function | ./packages/shared-core/src/agent/kagent.js | 262-265 |
+| status | Function | ./packages/shared-core/src/agent/kagent.js | 267-275 |
+| PIN | Function | ./packages/shared-core/src/agent/kagent.test.js | 11-11 |
+| fakeConfig | Function | ./packages/shared-core/src/agent/kagent.test.js | 13-26 |
+| stubClient | Function | ./packages/shared-core/src/agent/kagent.test.js | 29-37 |
+| ok | Function | ./packages/shared-core/src/agent/kagent.test.js | 39-39 |
+| test:dnsLabel produces Kubernetes-safe names and never an empty label@L43 | Test | ./packages/shared-core/src/agent/kagent.test.js | 43-51 |
+| test:kagentConfig is inert unless enabled with an API server@L55 | Test | ./packages/shared-core/src/agent/kagent.test.js | 55-58 |
+| test:kagentConfig accepts a token file or a kubeconfig, and fails closed on unreadable auth@L60 | Test | ./packages/shared-core/src/agent/kagent.test.js | 60-71 |
+| test:renderAgentCrd emits a v1alpha3 Agent with an inline template@L109 | Test | ./packages/shared-core/src/agent/kagent.test.js | 109-120 |
+| test:renderAgentCrd composes promptAppend into the system prompt, in declaration order@L122 | Test | ./packages/shared-core/src/agent/kagent.test.js | 122-133 |
+| test:renderAgentCrd maps skills/plugins/tools onto the CRD shapes without leaking promptAppend@L135 | Test | ./packages/shared-core/src/agent/kagent.test.js | 135-144 |
+| test:renderAgentCrd uses systemPromptFrom + ConfigMap only for an over-long prompt@L146 | Test | ./packages/shared-core/src/agent/kagent.test.js | 146-158 |
+| test:renderAgentCrd reports Harness env instead of writing it into the shared Harness@L160 | Test | ./packages/shared-core/src/agent/kagent.test.js | 160-165 |
+| test:renderAgentCrd rejects a profile with no prompt to compose@L167 | Test | ./packages/shared-core/src/agent/kagent.test.js | 167-171 |
+| test:renderAgentCrd drops credential-shaped env rows and unpinned sources@L173 | Test | ./packages/shared-core/src/agent/kagent.test.js | 173-184 |
+| test:renderAgentCrd warns about git/bucket sources that never become Ready on the actor@L186 | Test | ./packages/shared-core/src/agent/kagent.test.js | 186-195 |
+| test:client reports kagent_not_configured when disabled, for every verb@L199 | Test | ./packages/shared-core/src/agent/kagent.test.js | 199-207 |
+| test:publishProfile applies the ConfigMap before the Agent it references@L209 | Test | ./packages/shared-core/src/agent/kagent.test.js | 209-216 |
+| test:publishProfile creates on 404 and refuses to apply an invalid spec@L218 | Test | ./packages/shared-core/src/agent/kagent.test.js | 218-228 |
+| test:capabilities lists live cluster objects for the palette@L230 | Test | ./packages/shared-core/src/agent/kagent.test.js | 230-243 |
+| test:get returns null on 404 and list throws with the server message on anything else@L245 | Test | ./packages/shared-core/src/agent/kagent.test.js | 245-251 |
+| test:remove distinguishes deleted from already-missing@L253 | Test | ./packages/shared-core/src/agent/kagent.test.js | 253-258 |
+| test:status surfaces an unreachable API server without throwing@L260 | Test | ./packages/shared-core/src/agent/kagent.test.js | 260-268 |
+| test:unknown kinds and cluster-scoped CRs are refused before touching the API server@L270 | Test | ./packages/shared-core/src/agent/kagent.test.js | 270-276 |
+| test:the rendered CR never carries a bearer token, kubeconfig path or secret value@L278 | Test | ./packages/shared-core/src/agent/kagent.test.js | 278-284 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 25-25 |
 | isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 46-46 |
 | assert | Function | ./packages/shared-core/src/agent/model-presets.js | 65-67 |
@@ -25,47 +64,8 @@ Community of 176 nodes
 | clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 232-236 |
 | clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 238-242 |
 | clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 244-249 |
-| cleanModel | Function | ./packages/shared-core/src/agent/model-presets.js | 251-256 |
-| normalizedModel | Function | ./packages/shared-core/src/agent/model-presets.js | 258-260 |
-| modelMatchesPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 263-275 |
-| normalizeParameters | Function | ./packages/shared-core/src/agent/model-presets.js | 277-337 |
-| settingsPatchForPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 340-434 |
-| settingsPatchForTier | Function | ./packages/shared-core/src/agent/model-presets.js | 443-457 |
-| sanitizeModelId | Function | ./packages/shared-core/src/agent/model-presets.js | 460-462 |
-| effortValuesFromProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 464-470 |
-| runtimePresetForProfile | Function | ./packages/shared-core/src/agent/model-presets.js | 477-543 |
-| neutralLocalPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 550-583 |
-| settingsPatchForReasoning | Function | ./packages/shared-core/src/agent/model-presets.js | 586-597 |
-| customPresetForSettings | Function | ./packages/shared-core/src/agent/model-presets.js | 600-808 |
-| refreshKey | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 22-24 |
-| coalesce | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 26-32 |
-| ensureFreshCodexTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 39-54 |
-| ensureFreshClaudeTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 61-76 |
-| namespaceCollection | Function | ./packages/shared-core/src/config.js | 1084-1086 |
-| createPipelineRepository | Function | ./packages/shared-core/src/pipeline/repository.js | 673-696 |
-| recommendedPreset | Function | ./packages/shared-core/src/store.js | 28-31 |
-| configuredModel | Function | ./packages/shared-core/src/store.js | 33-39 |
-| applyLegacyHostedReasoningDefaults | Function | ./packages/shared-core/src/store.js | 41-55 |
-| settingsForConfiguredModel | Function | ./packages/shared-core/src/store.js | 58-85 |
-| cloneDefault | Function | ./packages/shared-core/src/store.js | 356-358 |
-| migrateBusinessRepositories | Function | ./packages/shared-core/src/store.js | 365-370 |
-| normalizeStore | Function | ./packages/shared-core/src/store.js | 377-475 |
-| normalizeUserProfiles | Function | ./packages/shared-core/src/store.js | 478-489 |
-| normalizeBilling | Function | ./packages/shared-core/src/store.js | 492-495 |
-| normalizeEula | Function | ./packages/shared-core/src/store.js | 498-502 |
-| asMap | Function | ./packages/shared-core/src/store.js | 500-500 |
-| seedStore | Function | ./packages/shared-core/src/store.js | 504-506 |
-| createBackendEntry | Function | ./packages/shared-core/src/store.js | 532-556 |
-| backendEntryForKey | Function | ./packages/shared-core/src/store.js | 578-585 |
-| activeBackendEntry | Function | ./packages/shared-core/src/store.js | 587-589 |
-| assertInitialized | Function | ./packages/shared-core/src/store.js | 591-597 |
-| initializeBackendEntry | Function | ./packages/shared-core/src/store.js | 599-615 |
-| readStore | Function | ./packages/shared-core/src/store.js | 618-622 |
-| writeStore | Function | ./packages/shared-core/src/store.js | 625-629 |
-| initStore | Function | ./packages/shared-core/src/store.js | 647-653 |
-| migrateAgentConfig | Function | ./packages/shared-core/src/store.js | 656-672 |
 
-*... and 126 more members.*
+*... and 165 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 176 nodes
 
 ### Outgoing
 
-- `equal` (88 edge(s))
-- `isArray` (60 edge(s))
-- `includes` (49 edge(s))
-- `filter` (35 edge(s))
-- `push` (35 edge(s))
-- `map` (32 edge(s))
-- `slice` (31 edge(s))
-- `deepEqual` (26 edge(s))
-- `String` (23 edge(s))
+- `equal` (121 edge(s))
+- `isArray` (61 edge(s))
+- `includes` (52 edge(s))
+- `deepEqual` (46 edge(s))
+- `map` (42 edge(s))
+- `push` (37 edge(s))
+- `slice` (36 edge(s))
+- `filter` (36 edge(s))
+- `String` (30 edge(s))
 - `has` (23 edge(s))
-- `find` (19 edge(s))
+- `find` (20 edge(s))
+- `test` (18 edge(s))
 - `ok` (18 edge(s))
-- `test` (17 edge(s))
 - `toISOString` (16 edge(s))
-- `call` (15 edge(s))
+- `trim` (15 edge(s))
 
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (147 edge(s))
-- `equal` (88 edge(s))
+- `equal` (121 edge(s))
+- `deepEqual` (46 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/store.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/model.js` (37 edge(s))
-- `deepEqual` (26 edge(s))
+- `./packages/shared-core/src/agent/kagent.test.js` (26 edge(s))
+- `./packages/shared-core/src/agent/kagent.js` (25 edge(s))
 - `ok` (18 edge(s))
 - `./packages/shared-core/src/workflow/model.test.js` (12 edge(s))
+- `match` (10 edge(s))
+- `includes` (10 edge(s))
+- `join` (9 edge(s))
+- `stringify` (8 edge(s))
 - `./packages/shared-core/src/agent/oauth-tokens.js` (7 edge(s))
-- `includes` (7 edge(s))
-- `publicCatalog` (6 edge(s))
-- `filter` (6 edge(s))
-- `some` (5 edge(s))
-- `find` (5 edge(s))
-- `normalizeStore` (5 edge(s))
