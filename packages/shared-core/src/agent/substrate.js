@@ -241,13 +241,24 @@ function withCredentialHint(res) {
 }
 
 /**
+ * The project token an ephemeral actor name embeds. Exported because the status
+ * route filters an atespace's actor list by it: names are the only project signal
+ * an Actor carries (metadata is atespace/name/uid/version — there is no project
+ * field), so the filter has to be computed from the same expression that writes the
+ * name or the two drift apart and the UI silently shows nobody.
+ */
+function actorProjectToken(projectId) {
+  return String(projectId || 'default').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 12);
+}
+
+/**
  * Normalize a per-run ephemeral actor name. Actors are scoped to an atespace, so
  * the name need not carry the tenant prefix; we still cap and sanitize it.
  */
 function normalizeActorName(explicitName, projectId, runId) {
   const base =
     (explicitName && String(explicitName).trim()) ||
-    `plan-${String(projectId || 'default').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 12)}-${String(runId || crypto.randomBytes(4).toString('hex'))}`;
+    `plan-${actorProjectToken(projectId)}-${String(runId || crypto.randomBytes(4).toString('hex'))}`;
   const cleaned = base
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
@@ -795,6 +806,7 @@ module.exports = {
   resolveSubstrateWorkerPool,
   resolveSubstrateApiToken,
   authorizationHeader,
+  actorProjectToken,
   normalizeActorName,
   grpcCall,
   getControlPlaneStatus,

@@ -696,30 +696,64 @@ function substrateContext(req) {
   return { settings, organizationId, projectId, context };
 }
 
+/**
+ * Resolve everything a substrate control-plane call needs, in one place: the
+ * tenant, the atespace that tenant owns, the URL and the per-request credential.
+ *
+ * `?atespace=` used to be handed to the resolver unconditionally on the status
+ * route. On a shared stack the operator allowlist names every tenant space — that
+ * is what makes one process serve many orgs — so a caller who was already admitted
+ * to one organization could point a read, or any verb built on this function, at
+ * another organization's namespace by naming it, while its own tenant sat in the
+ * same headers. A named atespace is therefore only honored when nothing is pinned:
+ * the local / auth-disabled profile, where one process serves one workspace and the
+ * query string is the only signal there is.
+ */
+async function substrateAccess(req) {
+  const { settings, organizationId, projectId, context } = substrateContext(req);
+  const resolve = (atespace) => substrate.resolveSubstrateAtespace({
+    atespace, organizationId, projectId,
+  });
+  const home = resolve(settings.substrateAtespace);
+  const claimed = typeof req.query?.atespace === 'string' ? req.query.atespace.trim() : '';
+  const pinned = Boolean(context.organizationId);
+  if (claimed && pinned && claimed !== home) {
+    const err = new Error('context_not_found');
+    err.status = 404;
+    throw err;
+  }
+  const atespace = claimed && !pinned ? resolve(claimed) : home;
+  const url = settings.substrateUrl || CONFIG.SUBSTRATE?.url || '';
+  // Resolved per request: the ateapi bearer is a projected service-account token
+  // that rotates hourly, so a stale one must not outlive this call.
+  const token = await substrate.resolveSubstrateApiToken({
+    token: settings.substrateApiToken,
+    organizationId,
+    projectId,
+  });
+  return { settings, organizationId, projectId, atespace, url, token };
+}
+
 // GET /api/agent/substrate/status — Control-plane health + atespace + live actors.
+// `?projectId=` narrows the list to one project's actors. It is a *display* filter,
+// not a scope: the atespace already fixed the tenant, and an Actor carries no
+// project field (metadata is atespace/name/uid/version), so the only project signal
+// is the token `plan-<project>-<run>` that createEphemeralActor embeds in the name —
+// computed here by the same expression that writes it. Two projects sharing the
+// first 12 sanitized characters therefore share a prefix, which is why the response
+// echoes the prefix it matched on instead of implying an exact filter.
 router.get(
   '/substrate/status',
   asyncHandler(async (req, res) => {
-    const { settings, organizationId, projectId } = substrateContext(req);
-    const atespace = substrate.resolveSubstrateAtespace({
-      atespace: typeof req.query.atespace === 'string' ? req.query.atespace : settings.substrateAtespace,
-      organizationId,
-      projectId,
-    });
-    const url = settings.substrateUrl || CONFIG.SUBSTRATE?.url || '';
-    // Resolved per request: the ateapi bearer is a projected service-account
-    // token that rotates hourly, so a stale one must not outlive this call.
-    const token = await substrate.resolveSubstrateApiToken({
-      token: settings.substrateApiToken,
-      organizationId,
-      projectId,
-    });
+    const { settings, atespace, url, token, projectId } = await substrateAccess(req);
     // Sequential: the actor list is only fetched once the control plane answers,
     // so it cannot share a Promise.all with the status call it depends on.
     const status = await substrate.getControlPlaneStatus({ url, atespace, token });
-    const actors = url && token && status && status.connected
+    const listed = url && token && status && status.connected
       ? await substrate.listActors({ url, atespace, token }).catch(() => [])
       : [];
+    const wantProject = typeof req.query.projectId === 'string' ? req.query.projectId.trim() : '';
+    const namePrefix = wantProject ? `plan-${substrate.actorProjectToken(wantProject)}-` : '';
     res.json({
       agentPattern: settings.agentPattern || 'substrate',
       atespace,
@@ -732,14 +766,76 @@ router.get(
       configured: Boolean(url) && Boolean(token),
       credentialConfigured: Boolean(token),
       status,
-      actors: actors.map((a) => ({
-        name: a.metadata?.name,
-        state: a.status?.state,
-        workerPod: a.status?.workerPod,
-        nodeName: a.status?.nodeName,
-      })),
+      actors: listed
+        .filter((a) => !namePrefix || String(a.metadata?.name || '').startsWith(namePrefix))
+        .map((a) => ({
+          name: a.metadata?.name,
+          state: a.status?.state,
+          workerPod: a.status?.workerPod,
+          nodeName: a.status?.nodeName,
+        })),
+      projectFilter: wantProject ? { projectId: wantProject, namePrefix } : null,
+      contextProjectId: projectId || '',
     });
   })
+);
+
+// Actor lifecycle for the browser: the cards on the agent view suspend, resume and
+// delete the run they came from. There is no raw control-plane path here — the
+// atespace in every ObjectRef comes from substrateAccess, never from the request, so
+// an actor name from another tenant resolves as absent rather than reachable, and a
+// name that contradicts the pinned workspace is answered 404 like any other.
+const ACTOR_NAME_PATTERN = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
+
+// Looked up by action name rather than branched inline, so the three verbs share
+// every check above: the pinned atespace, the name pattern, and the existence probe.
+const actorActions = {
+  suspend: (input) => substrate.suspendActor(input),
+  resume: (input) => substrate.resumeActor(input),
+  delete: (input) => substrate.deleteActor(input),
+};
+
+async function actorLifecycle(req, res, action) {
+  const { atespace, url, token } = await substrateAccess(req);
+  const name = String(req.params.name || '');
+  if (!ACTOR_NAME_PATTERN.test(name)) {
+    return res.status(400).json({ error: 'actor_name_invalid' });
+  }
+  if (!url || !token) {
+    return res.status(409).json({ error: 'substrate_not_configured' });
+  }
+  // Existence first: the control plane reports a bad ObjectRef as one thrown string,
+  // so "not found" and "not permitted" would otherwise look alike — and only the
+  // first of them is a 404 the caller can act on.
+  if (!await substrate.getActorStatus({ url, atespace, token, name })) {
+    return res.status(404).json({ error: 'context_not_found' });
+  }
+  const result = await actorActions[action]({ url, atespace, token, name });
+  // ResumeActor answers with { actor, resumed }, SuspendActor with the actor itself.
+  const actor = action === 'resume' ? result && result.actor : result;
+  res.json({
+    ok: true,
+    atespace,
+    name,
+    action,
+    state: (actor && actor.status && actor.status.state) || null,
+    deleted: action === 'delete' ? Boolean(result && result.deleted) : undefined,
+  });
+}
+
+router.post(
+  '/substrate/actors/:name/suspend',
+  asyncHandler((req, res) => actorLifecycle(req, res, 'suspend'))
+);
+
+router.post(
+  '/substrate/actors/:name/resume',
+  asyncHandler((req, res) => actorLifecycle(req, res, 'resume'))
+);
+
+router.delete(
+  '/substrate/actors/:name',
+  asyncHandler((req, res) => actorLifecycle(req, res, 'delete'))
 );
 
 // POST /api/agent/substrate/run — run the planning prompt on a per-run ephemeral actor.
