@@ -7,6 +7,8 @@ import {
 import { api } from '../api.js';
 import { createWorkflowSync } from '../workflow-sync.mjs';
 import * as workflowCaps from '../workflow-capabilities.mjs';
+import { gateConfigFrom, gateSummaryText, gateVerdict } from '../workflow-gate.mjs';
+import { openGateReview } from './workflow-gate-modal.mjs';
 import * as designerModel from '../workflow-designer-model.mjs';
 import {
   addEdge,
@@ -40,6 +42,8 @@ import {
 const kagentCapabilities = workflowCaps.createCapabilitiesReader({
   read: () => api.kagentCapabilities(),
 });
+
+let activeGateReview = null;
 
 function describePublishFailure(error) {
   const payload = (error && error.payload) || {};
@@ -201,19 +205,32 @@ function nodeDescription(node, state) {
     return profile?.description || profile?.purpose || 'Organization agent';
   }
   if (node.kind === 'environment') return findContextProfile(node.refId, state)?.description || 'Execution context';
+  if (node.kind === 'gate') return gateSummaryText(node.gateConfig?.cards);
   return Array.isArray(node.reviewCriteria) && node.reviewCriteria.length
     ? node.reviewCriteria.join(' · ')
     : 'Review evidence before downstream work continues.';
 }
 
+/** The card footer: how close this gate is to letting the lane continue. */
+function gateBadge(node) {
+  const verdict = gateVerdict(node.gateConfig?.cards);
+  if (!verdict.total) return 'No assessment cards';
+  if (verdict.unassessed) return `${verdict.total} cards · ${verdict.unassessed} not assessed`;
+  return verdict.passed
+    ? `${verdict.total} cards met · ${verdict.overall}% overall`
+    : `${verdict.met}/${verdict.total} cards met`;
+}
+
 function nodeKindLabel(node, state) {
   if (node.kind === 'approval') return 'Human gate';
+  if (node.kind === 'gate') return 'Decision gate';
   if (node.kind === 'environment') return 'Environment';
   return findAgentProfile(node.refId, state)?.category || 'Agent';
 }
 
 function nodeIconName(node) {
   if (node.kind === 'approval') return 'check';
+  if (node.kind === 'gate') return 'board';
   if (node.kind === 'environment') return 'sliders';
   return 'spark';
 }
@@ -229,6 +246,9 @@ function workflowById(state, id) {
  * starts an agent run.
  */
 export async function renderWorkflows(view) {
+  // A dialog is not part of the next view: navigating away closes it, and an
+  // un-answered review must not linger over a different page.
+  activeGateReview?.close();
   flushPendingDesignerSave?.();
   flushPendingDesignerSave = null;
   onDesignerReconnect = null;
@@ -257,6 +277,9 @@ export async function renderWorkflows(view) {
   // persona may not make, so nothing here is a security boundary.
   const persona = loaded.context.persona;
   const grants = loaded.context.grants;
+  // The tenant's assessment-card template: what a new gate node is seeded with,
+  // so the org's review criteria are the starting point rather than a blank form.
+  const gateTemplate = loaded.context.gateTemplate;
   let syncedWithServer = loaded.source === 'server' || loaded.source === 'imported';
   let selected = { kind: 'workflow', id: state.activeWorkflowId };
   let connectSource = '';
@@ -420,8 +443,10 @@ export async function renderWorkflows(view) {
     const workflow = currentWorkflow();
     const summary = graphSummary(workflow);
     const agents = workflow.nodes.filter((node) => node.kind === 'agent').length;
-    const gates = workflow.nodes.filter((node) => node.kind === 'approval').length;
-    summaryHost.textContent = `${agents} agents · ${gates} approvals · ${summary.componentCount} ${summary.componentCount === 1 ? 'lane' : 'independent lanes'}`;
+    const approvals = workflow.nodes.filter((node) => node.kind === 'approval').length;
+    const gates = workflow.nodes.filter((node) => node.kind === 'gate').length;
+    summaryHost.textContent = `${agents} agents · ${approvals} approvals · ${gates} gates · `
+      + `${summary.componentCount} ${summary.componentCount === 1 ? 'lane' : 'independent lanes'}`;
   }
 
   function acceptState(nextState, {
@@ -465,6 +490,11 @@ export async function renderWorkflows(view) {
   }
 
   function selectItem(kind, id) {
+    // Re-selecting the node under the cursor must not rebuild the canvas: the
+    // replacement element is a different node in the DOM, and Chrome dispatches
+    // dblclick on the common ancestor when a click pair lands on two different
+    // elements — so a click-then-redraw eats the gate review's double-click.
+    if (kind === 'node' && selected.kind === 'node' && selected.id === id) return;
     selected = { kind, id };
     renderCanvas();
     renderInspector();
@@ -484,6 +514,27 @@ export async function renderWorkflows(view) {
     });
   }
 
+  function openGateReviewFor(node) {
+    activeGateReview?.close();
+    activeGateReview = openGateReview({
+      node,
+      gateTemplate,
+      canEdit,
+      onApply: (config) => {
+        const result = updateNode(currentWorkflow(), node.id, { gateConfig: config });
+        if (!result.ok) return toast(result.error || 'The gate cards could not be saved.', 'err');
+        acceptWorkflow(result.workflow, { inspector: false, controls: false });
+        schedulePersist();
+        return undefined;
+      },
+      onClose: () => {
+        activeGateReview = null;
+        renderInspector();
+        renderCanvas();
+      },
+    });
+  }
+
   function addNodeFromPalette(kind, refId, position = null) {
     if (!canEdit) return;
     const viewport = canvasHost?.querySelector('.workflow-canvas-viewport');
@@ -500,6 +551,12 @@ export async function renderWorkflows(view) {
     } else if (kind === 'environment') {
       const context = findContextProfile(refId, state);
       input = { kind, refId, x: suggested.x, y: suggested.y, name: context?.name, description: context?.description };
+    } else if (kind === 'gate') {
+      input = {
+        kind: 'gate', x: suggested.x, y: suggested.y, name: 'Decision gate',
+        description: 'Advance this lane only when every assessment card reaches its threshold.',
+        gateConfig: gateConfigFrom(gateTemplate), gateRef: gateTemplate?.id || '',
+      };
     } else {
       input = {
         kind: 'approval', x: suggested.x, y: suggested.y, name: 'Human approval',
@@ -560,7 +617,7 @@ export async function renderWorkflows(view) {
       class: 'workflow-palette-item', draggable: canEdit ? 'true' : 'false',
       dataset: { paletteKind: kind, paletteId: id },
     }, [
-      el('span', { class: `workflow-palette-icon workflow-palette-icon--${kind}` }, icon(kind === 'environment' ? 'sliders' : 'spark', { size: 16 })),
+      el('span', { class: `workflow-palette-icon workflow-palette-icon--${kind}` }, icon(kind === 'environment' ? 'sliders' : kind === 'gate' ? 'board' : 'spark', { size: 16 })),
       el('div', { class: 'workflow-palette-copy' }, [
         el('strong', {}, name),
         el('small', {}, description || 'Available organization resource'),
@@ -633,10 +690,16 @@ export async function renderWorkflows(view) {
         withheld ? el('p', { class: 'muted workflow-palette-note' }, `${withheld} agent${withheld === 1 ? '' : 's'} outside the ${persona || 'default'} persona ${withheld === 1 ? 'is' : 'are'} hidden; the organization can grant them.`) : null,
         paletteSection('Agents', agents.map((profile) => paletteItem({ kind: 'agent', ...profile, custom: profile.source === 'custom' || state.customAgents.some((item) => item.id === profile.id) }))),
         paletteSection('Execution contexts', contexts.map((context) => paletteItem({ kind: 'environment', ...context, category: 'Context', custom: context.source === 'custom' || state.customContexts.some((item) => item.id === context.id) }))),
-        paletteSection('Control', query && !'human approval role gate review'.includes(query) ? [] : [paletteItem({
-          kind: 'approval', id: '', name: 'Human approval', category: 'Control',
-          description: 'Pause a designed lane for a role-based approve or reject decision.',
-        })]),
+        paletteSection('Control', query && !'human approval role gate review decision criteria threshold card pass rate'.includes(query) ? [] : [
+          paletteItem({
+            kind: 'approval', id: '', name: 'Human approval', category: 'Control',
+            description: 'Pause a designed lane for a role-based approve or reject decision.',
+          }),
+          paletteItem({
+            kind: 'gate', id: '', name: 'Decision gate', category: 'Control',
+            description: 'Assessment cards with thresholds: a lane continues when every card passes.',
+          }),
+        ]),
       ]),
     );
   }
@@ -753,6 +816,7 @@ export async function renderWorkflows(view) {
     const article = el('article', {
       class: `workflow-node workflow-node--${node.kind}${active ? ' is-selected' : ''}${standalone ? ' is-standalone' : ''}${canEdit ? '' : ' is-readonly'}`,
       style: `left:${node.x}px;top:${node.y}px`, tabindex: '0', role: 'group',
+      title: node.kind === 'gate' ? 'Double-click to review the assessment cards' : undefined,
       'aria-label': `${nodeLabel(node, state)}, ${nodeKindLabel(node, state)}${standalone ? ', standalone' : ''}`,
       dataset: {
         nodeId: node.id,
@@ -774,6 +838,7 @@ export async function renderWorkflows(view) {
       el('p', { class: 'workflow-node-body' }, nodeDescription(node, state)),
       el('footer', { class: 'workflow-node-footer' }, [
         node.kind === 'approval' ? el('span', {}, node.requiredRole || 'Human reviewer') : null,
+        node.kind === 'gate' ? el('span', {}, gateBadge(node)) : null,
         node.kind === 'environment' ? el('span', {}, 'Execution context') : null,
         node.kind === 'agent' ? el('span', {}, agentRuntimeSummary(node)) : null,
       ]),
@@ -783,6 +848,15 @@ export async function renderWorkflows(view) {
       if (event.target.closest('button')) return;
       selectItem('node', node.id);
     });
+    if (node.kind === 'gate') {
+      // A single click selects, like every other node; the review is a
+      // deliberate second act, so it is double-click or the inspector button.
+      article.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openGateReviewFor(node);
+      });
+    }
     article.addEventListener('keydown', (event) => {
       if (event.target !== article) return;
       const directions = { ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0], ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE] };
@@ -1232,6 +1306,24 @@ export async function renderWorkflows(view) {
     return sections;
   }
 
+  /**
+   * A gate is configured in its own dialog, not in the inspector: six cards of
+   * criteria do not fit a side panel, and the verdict is what the approver
+   * reads. The inspector therefore reports the state and opens the review.
+   */
+  function gateInspectorSection(node) {
+    const open = el('button', { type: 'button', class: 'btn primary', disabled: !canEdit }, 'Open gate review');
+    open.addEventListener('click', () => openGateReviewFor(node));
+    return [el('section', { class: 'workflow-inspector-section' }, [
+      el('h3', {}, 'Assessment cards'),
+      el('p', { class: 'workflow-gate-verdict', role: 'status' }, gateSummaryText(node.gateConfig?.cards)),
+      el('small', { class: 'muted' }, node.gateRef
+        ? `Seeded from the platform template ${node.gateRef}; edits here apply to this gate only.`
+        : 'Cards and thresholds belong to this gate, so editing them changes no other workflow.'),
+      open,
+    ])];
+  }
+
   function nodeInspector(node) {
     const workflow = currentWorkflow();
     const name = textInput(node.name || nodeLabel(node, state), { maxlength: '100', disabled: !canEdit });
@@ -1250,6 +1342,8 @@ export async function renderWorkflows(view) {
       const rejection = textArea(node.rejectionHandling, { maxlength: '1000', rows: '3', disabled: !canEdit });
       rejection.addEventListener('input', () => updateSelectedNode({ rejectionHandling: rejection.value }));
       body.push(field('Approver role', role), field('Review criteria', criteria), field('Approval instructions', instructions), field('On rejection', rejection));
+    } else if (node.kind === 'gate') {
+      body.push(...gateInspectorSection(node));
     } else {
       const profile = node.kind === 'agent' ? findAgentProfile(node.refId, state) : findContextProfile(node.refId, state);
       body.push(el('section', { class: 'workflow-inspector-section' }, [

@@ -2,6 +2,10 @@
 
 const { test, expect } = require('@playwright/test');
 
+// The same template the gateway hands the browser: a spec that seeds a gate
+// node should be proving the shipping cards, not a stand-in of my own writing.
+const { DEFAULT_GATE_TEMPLATE } = require('../packages/shared-core/src/workflow-defaults.js');
+
 const USER_ID = 'firebase|workflow-operator';
 const PRIMARY_ORG = Object.freeze({
   id: 'org-acme',
@@ -90,7 +94,7 @@ function createWorkflowStore(defaults, initial = {}) {
         displayName: 'Workflow Operator',
         grants: null,
         personas: ['builder'],
-        gateTemplate: null,
+        gateTemplate: DEFAULT_GATE_TEMPLATE,
         canAdminDefaults: false,
       };
     },
@@ -755,6 +759,161 @@ test('a kagent publish answers 503 when the cluster is not configured, and says 
   await inspector.getByRole('button', { name: 'Publish this node to kagent' }).click();
   await expect(inspector.locator('.workflow-publish-result'))
     .toContainText('no runtime configured', 'the refusal is explained, not just echoed as an error code');
+});
+
+test('a decision gate seeds the platform cards and locks approve until every threshold is met', async ({ page }) => {
+  const recording = await installDesignerStubs(page);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'New blank', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Decision gate to workflow' }).click();
+
+  const gateNode = page.locator('.workflow-node[data-node-kind="gate"]');
+  await expect(gateNode).toHaveCount(1);
+  await expect(gateNode.locator('.workflow-node-kind')).toHaveText('Decision gate');
+  // The shipping template carries pass rates from its own review; a gate added
+  // to a new workflow has not been reviewed, so it must not arrive approved.
+  await expect(gateNode.locator('.workflow-node-footer')).toContainText('6 cards \u00b7 6 not assessed');
+
+  await gateNode.dblclick();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.workflow-gate-heading')).toHaveText('Specs Gate');
+  await expect(dialog.locator('.workflow-gate-card')).toHaveCount(6);
+  await expect(dialog.getByRole('button', { name: 'Add assessment card' })).toBeHidden();
+  const approve = dialog.getByRole('button', { name: 'Allow to move further' });
+  await expect(approve).toBeDisabled();
+  await expect(dialog.locator('.workflow-gate-summary')).toContainText('0 of 6 cards met \u00b7 6 not assessed yet.');
+
+  // Each card has its own bar (85 / 100 / 80 / 75 / 80 / 100), so the gate is
+  // met when all six clear theirs — one good average does not approve a lane.
+  const cards = dialog.locator('.workflow-gate-card');
+  for (let index = 0; index < 6; index += 1) {
+    const card = cards.nth(index);
+    await expect(card.locator('.workflow-gate-card-status')).toHaveText('Not assessed');
+    const threshold = card.locator('input[aria-label="Required threshold percent"]');
+    await card.locator('input[aria-label="Current pass rate percent"]').fill(await threshold.inputValue());
+  }
+  await expect(dialog.locator('.workflow-gate-summary')).toContainText('All 6 cards met their thresholds');
+  await expect(cards.first().locator('.workflow-gate-card-status')).toHaveAttribute('data-met', 'true');
+  await expect(approve).toBeEnabled();
+
+  const savedGate = () => {
+    for (const graph of recording.store.graphs(PRIMARY_ORG.id)) {
+      const node = (graph.nodes || []).find((item) => item.kind === 'gate');
+      if (node) {
+        return {
+          template: node.gateRef,
+          titles: (node.gateConfig?.cards || []).map((card) => card.title),
+          bars: (node.gateConfig?.cards || []).map((card) => card.threshold),
+          assessed: (node.gateConfig?.cards || []).filter((card) => card.passRate != null).length,
+        };
+      }
+    }
+    return null;
+  };
+  // Nothing has been reviewed yet, so the graph that saved holds the template's
+  // criteria with no pass rate on any card.
+  await expect.poll(savedGate).toMatchObject({
+    template: 'gate-template-v1',
+    titles: ['Business Analysis', 'Cloud Selection', 'Cost Analysis', 'Business Metrics', 'Revenue Model', 'Timeline Defined'],
+    bars: [85, 100, 80, 75, 80, 100],
+    assessed: 0,
+  });
+
+  await approve.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(gateNode.locator('.workflow-node-footer')).toContainText('6 cards met');
+  await expect.poll(savedGate).toMatchObject({ assessed: 6 });
+
+  // Cancel and Escape both discard the draft: the dialog edits a copy, and the
+  // only writer of the graph is the path that already does revision checks.
+  await gateNode.dblclick();
+  await dialog.locator('input[aria-label="Assessment card title"]').first().fill('Renamed, then cancelled');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(savedGate().titles[0]).toBe('Business Analysis');
+
+  await gateNode.dblclick();
+  await dialog.locator('input[aria-label="Current pass rate percent"]').first().fill('0');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(savedGate().assessed).toBe(6);
+});
+
+test('an untitled card is refused by the gate review instead of deleting the gate', async ({ page }) => {
+  const recording = await installDesignerStubs(page);
+  await openDesigner(page);
+
+  await page.getByRole('button', { name: 'New blank', exact: true }).click();
+  await page.getByRole('button', { name: 'Add Decision gate to workflow' }).click();
+  const gateNode = page.locator('.workflow-node[data-node-kind="gate"]');
+
+  await gateNode.dblclick();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('.workflow-gate-card').first()
+    .locator('.workflow-gate-card-remove').click();
+  await expect(dialog.locator('.workflow-gate-card')).toHaveCount(5);
+
+  // Strip every title: the model would drop all five cards, then the node.
+  const titles = dialog.locator('input[aria-label="Assessment card title"]');
+  for (let index = 0; index < 5; index += 1) await titles.nth(index).fill('');
+  await expect(dialog.locator('.workflow-gate-blocked')).toHaveCount(2);
+  await expect(dialog.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Allow to move further' })).toBeDisabled();
+
+  const savedTitles = () => {
+    for (const graph of recording.store.graphs(PRIMARY_ORG.id)) {
+      const node = (graph.nodes || []).find((item) => item.kind === 'gate');
+      if (node) return (node.gateConfig?.cards || []).map((card) => card.title);
+    }
+    return null;
+  };
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(gateNode).toHaveCount(1);
+  // What the graph holds is still the six titled cards: the untitled draft was
+  // refused in the dialog, so nothing reached the server that would have deleted
+  // the gate it belongs to.
+  await expect.poll(savedTitles).toEqual([
+    'Business Analysis', 'Cloud Selection', 'Cost Analysis', 'Business Metrics', 'Revenue Model', 'Timeline Defined',
+  ]);
+});
+
+test('a member can read a gate review, and opening it writes nothing', async ({ page }) => {
+  const memberOrg = { ...PRIMARY_ORG, role: 'MEMBER' };
+  const { createInitialState } = await import('../public/js/workflow-designer-model.mjs');
+  const graph = createInitialState().workflows[0];
+  graph.nodes.push({
+    id: 'gate-read', kind: 'gate', name: 'Specs gate', x: 120, y: 560,
+    description: 'Reviewed before this lane continues.',
+    gateConfig: DEFAULT_GATE_TEMPLATE,
+  });
+  const recording = await installDesignerStubs(page, {
+    organizations: [memberOrg],
+    workflows: { [memberOrg.id]: [graph] },
+  });
+  await openDesigner(page);
+
+  const gateNode = page.locator('.workflow-node[data-node-kind="gate"]');
+  await expect(gateNode).toHaveCount(1);
+  await selectCanvasNode(page, 'Specs gate');
+  const inspector = page.getByRole('complementary', { name: 'Workflow inspector' });
+  await expect(inspector.locator('.workflow-gate-verdict')).toContainText('All 6 cards met their thresholds');
+  await expect(inspector.getByRole('button', { name: 'Open gate review' })).toBeDisabled();
+
+  // Reading the gate is allowed; changing it is not, so no control in the
+  // dialog is live and no save is offered at all.
+  await gateNode.dblclick();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.workflow-gate-card')).toHaveCount(6);
+  await expect(dialog.locator('input[aria-label="Current pass rate percent"]').first()).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Remove card' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: 'Add assessment card' })).toBeHidden();
+  await expect(dialog.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Allow to move further' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  expectWorkflowReadsOnly(recording);
 });
 
 test('an authenticated user without an organization is routed to organization onboarding', async ({ page }) => {

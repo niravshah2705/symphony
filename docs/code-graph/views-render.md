@@ -4,18 +4,17 @@
 
 ## Overview
 
-Community of 838 nodes
+Community of 827 nodes
 
-- **Size**: 838 nodes
-- **Cohesion**: 0.4685
+- **Size**: 827 nodes
+- **Cohesion**: 0.4651
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13 | Test | ./e2e/workspace-stream-failure.spec.js | 13-69 |
-| test:a blank minted token never opens the workspace SSE stream@L71 | Test | ./e2e/workspace-stream-failure.spec.js | 71-111 |
+| test:a member can read a gate review, and opening it writes nothing@L881 | Test | ./e2e/workflow-designer.spec.js | 881-917 |
 | pauseCode | Function | ./public/js/agent-pause.js | 36-42 |
 | pauseCandidate | Function | ./public/js/agent-pause.js | 44-70 |
 | agentPauseInfo | Function | ./public/js/agent-pause.js | 76-87 |
@@ -23,10 +22,6 @@ Community of 838 nodes
 | agentPauseCopy | Function | ./public/js/agent-pause.js | 96-98 |
 | localized | Function | ./public/js/agent-pause.js | 100-105 |
 | agentPauseNotice | Function | ./public/js/agent-pause.js | 108-124 |
-| setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
-| contextId | Function | ./public/js/api.js | 20-23 |
-| setRequestContext | Function | ./public/js/api.js | 26-31 |
-| setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
 | openStream | Function | ./public/js/api.js | 257-336 |
 | mintFailureCanRetry | Function | ./public/js/api.js | 264-268 |
@@ -56,65 +51,70 @@ Community of 838 nodes
 | beginSignIn | Function | ./public/js/app.js | 498-506 |
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 508-516 |
 | authProviderButtons | Function | ./public/js/app.js | 523-541 |
-| beginSignOut | Function | ./public/js/app.js | 543-551 |
 | renderAuthControl | Function | ./public/js/app.js | 553-713 |
 | renderAuthenticationGate | Function | ./public/js/app.js | 715-774 |
 | renderSignInRequired | Function | ./public/js/app.js | 779-801 |
 | renderAccessDenied | Function | ./public/js/app.js | 803-815 |
 | render | Function | ./public/js/app.js | 817-899 |
 | capitalize | Function | ./public/js/app.js | 901-904 |
-| start | Function | ./public/js/app.js | 908-916 |
+| getAuthenticationState | Function | ./public/js/auth.js | 261-263 |
+| ensureFreshToken | Function | ./public/js/auth.js | 271-282 |
+| getAuthProviders | Function | ./public/js/auth.js | 287-293 |
+| el | Function | ./public/js/dom.js | 4-21 |
+| esc | Function | ./public/js/dom.js | 24-30 |
+| clear | Function | ./public/js/dom.js | 32-35 |
+| fmtDate | Function | ./public/js/dom.js | 37-42 |
 
-*... and 788 more members.*
+*... and 777 more members.*
 
 ## Execution Flows
 
-- **envRow** (criticality: 0.82, depth: 11)
-- **commit** (criticality: 0.82, depth: 11)
-- **onMove** (criticality: 0.81, depth: 9)
-- **start** (criticality: 0.81, depth: 6)
-- **onUp** (criticality: 0.79, depth: 7)
-- **renderWorkflows** (criticality: 0.79, depth: 7)
-- **initializeAuthentication** (criticality: 0.78, depth: 4)
+- **envRow** (criticality: 0.81, depth: 11)
+- **commit** (criticality: 0.81, depth: 11)
+- **onMove** (criticality: 0.80, depth: 9)
+- **onUp** (criticality: 0.78, depth: 7)
+- **renderWorkflows** (criticality: 0.78, depth: 7)
 - **beginSignIn** (criticality: 0.76, depth: 6)
 - **beginMicrosoftSignIn** (criticality: 0.76, depth: 6)
 - **maybeRefreshConnection** (criticality: 0.76, depth: 3)
-- *... and 16 more flows.*
+- **beginSignOut** (criticality: 0.76, depth: 6)
+- **hostedConnection** (criticality: 0.75, depth: 8)
+- *... and 14 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `addEventListener` (239 edge(s))
-- `append` (226 edge(s))
-- `map` (201 edge(s))
-- `equal` (166 edge(s))
-- `push` (144 edge(s))
-- `String` (127 edge(s))
-- `trim` (101 edge(s))
-- `filter` (99 edge(s))
-- `isArray` (95 edge(s))
+- `addEventListener` (251 edge(s))
+- `append` (238 edge(s))
+- `map` (209 edge(s))
+- `equal` (199 edge(s))
+- `push` (157 edge(s))
+- `String` (136 edge(s))
+- `trim` (113 edge(s))
+- `filter` (103 edge(s))
+- `isArray` (85 edge(s))
 - `has` (77 edge(s))
-- `Boolean` (72 edge(s))
-- `get` (64 edge(s))
-- `catch` (62 edge(s))
-- `setAttribute` (61 edge(s))
-- `Number` (55 edge(s))
+- `Boolean` (67 edge(s))
+- `setAttribute` (65 edge(s))
+- `get` (63 edge(s))
+- `catch` (60 edge(s))
+- `slice` (58 edge(s))
 
 ### Incoming
 
-- `equal` (166 edge(s))
+- `equal` (199 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `./public/js/app.js` (86 edge(s))
-- `./public/js/views/workflows.js` (83 edge(s))
+- `./public/js/views/workflows.js` (86 edge(s))
+- `./public/js/app.js` (81 edge(s))
 - `./public/js/workflow-designer-model.mjs` (65 edge(s))
-- `deepEqual` (51 edge(s))
+- `deepEqual` (55 edge(s))
 - `./services/org/tests/helpers.py::auth` (45 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
+- `match` (39 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `match` (33 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
-- `./public/js/auth.js` (23 edge(s))
-- `map` (23 edge(s))
+- `map` (26 edge(s))
+- `./public/js/workflow-sync.test.mjs` (23 edge(s))

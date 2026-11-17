@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 466 nodes
+Community of 458 nodes
 
-- **Size**: 466 nodes
-- **Cohesion**: 0.2920
+- **Size**: 458 nodes
+- **Cohesion**: 0.2835
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,7 +17,7 @@ Community of 466 nodes
 | test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
 | test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
 | test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
-| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L398 | Test | ./e2e/workflow-designer.spec.js | 398-533 |
+| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L402 | Test | ./e2e/workflow-designer.spec.js | 402-537 |
 | startActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 10-18 |
 | heartbeatActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 20-25 |
 | finishActorSession | Function | ./packages/shared-core/src/billing/actor-sessions.js | 27-39 |
@@ -65,51 +65,56 @@ Community of 466 nodes
 | test:a failing row stays retryable, and only gives up after the ceiling@L168 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 168-178 |
 | test:enqueue never throws at a run that already happened@L180 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 180-190 |
 
-*... and 416 more members.*
+*... and 408 more members.*
 
 ## Execution Flows
 
 - **childMain** (criticality: 0.73, depth: 9)
-- **isBillingBlocked** (criticality: 0.69, depth: 7)
-- **main** (criticality: 0.68, depth: 4)
-- **main** (criticality: 0.67, depth: 4)
-- **main** (criticality: 0.67, depth: 4)
-- **recordActorUsage** (criticality: 0.61, depth: 3)
+- **duplicateWorkflow** (criticality: 0.72, depth: 7)
+- **setUserPersona** (criticality: 0.71, depth: 6)
+- **listActors** (criticality: 0.71, depth: 8)
+- **graphPersonaViolations** (criticality: 0.71, depth: 7)
+- **upsertAgentProfile** (criticality: 0.70, depth: 6)
+- **seedTenantFromDefaults** (criticality: 0.70, depth: 6)
+- **resetTenantToDefaults** (criticality: 0.70, depth: 6)
+- **getActorTemplate** (criticality: 0.70, depth: 8)
+- **importV1Workflows** (criticality: 0.70, depth: 6)
+- *... and 14 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (623 edge(s))
-- `deepEqual` (82 edge(s))
+- `equal` (619 edge(s))
 - `String` (74 edge(s))
-- `Number` (54 edge(s))
-- `throws` (53 edge(s))
-- `map` (50 edge(s))
+- `deepEqual` (66 edge(s))
+- `Number` (55 edge(s))
+- `throws` (48 edge(s))
+- `filter` (45 edge(s))
 - `expect` (44 edge(s))
-- `filter` (41 edge(s))
-- `ok` (41 edge(s))
+- `map` (44 edge(s))
 - `stringify` (41 edge(s))
-- `push` (41 edge(s))
-- `now` (38 edge(s))
+- `ok` (39 edge(s))
+- `push` (37 edge(s))
 - `toISOString` (36 edge(s))
+- `now` (35 edge(s))
 - `find` (32 edge(s))
 - `getByRole` (30 edge(s))
 
 ### Incoming
 
-- `equal` (623 edge(s))
-- `deepEqual` (82 edge(s))
-- `./packages/shared-core/src/store.js` (63 edge(s))
-- `throws` (53 edge(s))
+- `equal` (619 edge(s))
+- `deepEqual` (66 edge(s))
+- `./packages/shared-core/src/store.js` (64 edge(s))
+- `throws` (48 edge(s))
 - `expect` (44 edge(s))
-- `ok` (41 edge(s))
+- `ok` (39 edge(s))
 - `./scripts/flexprice-phase1-probes.js` (34 edge(s))
 - `getByRole` (30 edge(s))
 - `locator` (28 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.js` (26 edge(s))
 - `./packages/shared-core/src/billing/gate.js` (26 edge(s))
-- `map` (23 edge(s))
+- `match` (23 edge(s))
 - `./packages/shared-core/src/billing/money-wire.js` (22 edge(s))
+- `./services/billing/src/auto-recharge-job.test.js` (22 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.test.js` (21 edge(s))
-- `./packages/shared-core/src/billing/money-wire.test.js` (21 edge(s))

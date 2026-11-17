@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 301 nodes
+Community of 300 nodes
 
-- **Size**: 301 nodes
-- **Cohesion**: 0.2363
+- **Size**: 300 nodes
+- **Cohesion**: 0.2410
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 301 nodes
 | test:the rendered CR never carries a bearer token, kubeconfig path or secret value@L289 | Test | ./packages/shared-core/src/agent/kagent.test.js | 289-295 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 25-25 |
 
-*... and 251 more members.*
+*... and 250 more members.*
 
 ## Execution Flows
 
@@ -85,11 +85,11 @@ Community of 301 nodes
 
 ### Outgoing
 
-- `equal` (154 edge(s))
+- `equal` (149 edge(s))
 - `isArray` (63 edge(s))
-- `deepEqual` (61 edge(s))
-- `includes` (53 edge(s))
+- `deepEqual` (60 edge(s))
 - `push` (52 edge(s))
+- `includes` (52 edge(s))
 - `map` (45 edge(s))
 - `slice` (42 edge(s))
 - `String` (39 edge(s))
@@ -103,9 +103,9 @@ Community of 301 nodes
 
 ### Incoming
 
-- `equal` (154 edge(s))
+- `equal` (149 edge(s))
 - `./packages/shared-core/src/store.js` (148 edge(s))
-- `deepEqual` (61 edge(s))
+- `deepEqual` (60 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/store.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/model.js` (37 edge(s))

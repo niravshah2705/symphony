@@ -1239,3 +1239,83 @@ body.workflow-dragging * { cursor: grabbing !important; }
   .workflow-edge-group.is-selected .workflow-edge { stroke: Highlight; }
   .workflow-edge-arrow.is-selected { fill: Highlight; }
 }
+
+/* Decision gate: the diamond on the card, and the review dialog behind it. */
+.workflow-node--gate .workflow-node-icon {
+  transform: rotate(45deg);
+  border: 2px solid var(--accent, #2563eb);
+  border-radius: 4px;
+  background: var(--surface-inset);
+}
+.workflow-node--gate .workflow-node-icon > svg { transform: rotate(-45deg); }
+.workflow-gate-verdict { margin: 0; font-size: 12px; line-height: 1.45; }
+.workflow-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.55);
+  overflow-y: auto;
+}
+.workflow-gate-panel {
+  display: grid;
+  gap: 14px;
+  width: min(980px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.35);
+}
+.workflow-gate-head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
+.workflow-gate-head-copy { min-width: 0; display: grid; gap: 4px; }
+.workflow-gate-heading { margin: 0; font-size: 16px; font-weight: 700; }
+.workflow-gate-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  transform: rotate(45deg);
+  border: 2px solid var(--accent, #2563eb);
+  border-radius: 6px;
+  background: var(--surface-inset);
+}
+.workflow-gate-mark > svg { transform: rotate(-45deg); }
+.workflow-gate-overall { font-size: 11px; font-weight: 650; color: var(--accent, #2563eb); white-space: nowrap; }
+.workflow-gate-body { display: grid; gap: 10px; }
+.workflow-gate-field { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.workflow-gate-summary { margin: 0; font-size: 12px; font-weight: 600; }
+.workflow-gate-blocked { margin: 0; font-size: 11px; color: var(--muted); }
+.workflow-gate-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.workflow-gate-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-inset);
+}
+.workflow-gate-card-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.workflow-gate-card-title { flex: 1; min-width: 0; font-weight: 650; }
+.workflow-gate-card-status { font-size: 10px; font-weight: 650; white-space: nowrap; color: var(--muted); }
+.workflow-gate-card-status[data-met='true'] { color: var(--green); }
+.workflow-gate-card-status[data-met='false'] { color: var(--red); }
+.workflow-gate-items { display: grid; gap: 6px; }
+.workflow-gate-item { width: 100%; font-size: 11px; }
+.workflow-gate-card-foot { display: flex; gap: 10px; align-items: end; justify-content: space-between; flex-wrap: wrap; }
+.workflow-gate-metric { display: grid; gap: 3px; font-size: 9px; color: var(--muted); }
+.workflow-gate-number { width: 76px; }
+.workflow-gate-card-remove,
+.workflow-gate-add-card { font-size: 10px; }
+.workflow-gate-add-card { grid-column: 1/-1; justify-self: start; }
+.workflow-gate-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .workflow-gate-head { grid-template-columns: 1fr; }
+  .workflow-gate-cards { grid-template-columns: 1fr; }
+}

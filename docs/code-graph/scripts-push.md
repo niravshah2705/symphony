@@ -25,7 +25,7 @@ Community of 34 nodes
 | test:Cookie Preferences reports a storage failure without changing consent or reloading@L463 | Test | ./e2e/persistent-footer.spec.js | 463-505 |
 | test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
-| test:lazy Workflows route renders the selected organization and five realistic examples@L340 | Test | ./e2e/workflow-designer.spec.js | 340-396 |
+| test:lazy Workflows route renders the selected organization and five realistic examples@L344 | Test | ./e2e/workflow-designer.spec.js | 344-400 |
 | test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163 | Test | ./e2e/workspace-stream-failure.spec.js | 163-174 |
 | test:a connection that stays open past the 60s health threshold resets the failure budget@L176 | Test | ./e2e/workspace-stream-failure.spec.js | 176-203 |
 | test:DirectStageCommandBus dispatches the contract to an injected local handler@L46 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 46-57 |
