@@ -1528,7 +1528,7 @@ variable "substrate_actor_member" {
 
 variable "substrate_actor_jwt_audience" {
   type        = string
-  description = "audience a substrate actor JWT must carry to be accepted by the orchestrator's /internal/plan/run. It is whatever the control plane stamps, not a value invented here; the default matches substrate-runner's own default."
+  description = "audience a substrate actor JWT must carry to be accepted by the orchestrator's /internal/plan/run. It is whatever the control plane stamps, not a value invented here. One name serves both halves: packages/shared-core/src/agent/substrate-runner.js mints the data-plane token for this audience and packages/shared/src/agent/substrate-actor.js verifies against it, so changing it is a coordinated redeploy, not a per-service edit. Actor mode does not start without it - there is no longer a code-side default to fall back on."
   default     = "substrate-router"
 }
 

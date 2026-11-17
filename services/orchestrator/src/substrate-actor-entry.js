@@ -17,7 +17,19 @@
 
 const express = require('express');
 const log = require('@ai-fleet/shared-core/logger');
-const { createSubstrateActorRouter } = require('@ai-fleet/shared/agent/substrate-actor');
+const {
+  createSubstrateActorRouter,
+  actorModeFault,
+} = require('@ai-fleet/shared/agent/substrate-actor');
+
+// Half-configured actor mode refuses to start rather than serving a route that
+// cannot say what a token must be for: the container comes up dead and looks like a
+// broken cluster instead of a bad deploy.
+const fault = actorModeFault();
+if (fault) {
+  log.error(`substrate actor mode: ${fault}; refusing to start this process`);
+  throw new Error(`substrate actor mode misconfigured: ${fault}`);
+}
 
 const app = express();
 app.get('/healthz', (req, res) => res.json({ status: 'ok' }));

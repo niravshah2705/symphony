@@ -660,15 +660,39 @@ router.delete(
 
 // ── Agent Substrate (execution substrate = 'substrate') ───────────────────────
 
+/**
+ * The tenant a substrate call operates on.
+ *
+ * The gateway-validated workspace context is the only authoritative source. Query
+ * and body used to WIN over it, so any caller with a valid session could point the
+ * control plane — atespace resolution, actor creation, credential sync — at another
+ * organization's namespace simply by naming it. A caller that names a tenant the
+ * gateway did not admit is refused as though it did not exist: 404, not 403, so the
+ * endpoint cannot be used to enumerate which orgs a deployment serves
+ * (services/org/CLAUDE.md invariant 1).
+ */
 function substrateContext(req) {
   const context = requestWorkspaceContext(req);
   const settings = getSettings();
-  const organizationId =
-    (typeof req.query.organizationId === 'string' && req.query.organizationId.trim()) ||
-    (req.body && req.body.organizationId) || context.organizationId || 'default';
-  const projectId =
-    (typeof req.query.projectId === 'string' && req.query.projectId.trim()) ||
-    (req.body && req.body.projectId) || context.projectId || 'default';
+  const claimed = (name) => (
+    (typeof req.query?.[name] === 'string' && req.query[name].trim())
+    || (typeof req.body?.[name] === 'string' && req.body[name].trim())
+    || ''
+  );
+  const claimedOrganizationId = claimed('organizationId');
+  const claimedProjectId = claimed('projectId');
+  for (const [validated, requested] of [
+    [context.organizationId, claimedOrganizationId],
+    [context.projectId, claimedProjectId],
+  ]) {
+    if (validated && requested && requested !== validated) {
+      const err = new Error('context_not_found');
+      err.status = 404;
+      throw err;
+    }
+  }
+  const organizationId = context.organizationId || claimedOrganizationId || 'default';
+  const projectId = context.projectId || claimedProjectId || 'default';
   return { settings, organizationId, projectId, context };
 }
 

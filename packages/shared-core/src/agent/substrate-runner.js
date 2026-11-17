@@ -23,6 +23,9 @@ const { createActorMetrics } = require('../otel/actor-metrics');
 const log = require('../logger');
 
 const REDACTED = '***REDACTED***';
+// Actor JWTs live ~120s, so the drift allowance is a fraction of that: enough for
+// pod/idp clock skew, small enough that it never stands in for a missing exp.
+const CLOCK_SKEW_S = 30;
 const fp = (v) => (v ? crypto.createHash('sha256').update(String(v)).digest('hex').slice(0, 12) : '');
 
 function fingerprintOnly(secrets = {}) {
@@ -237,9 +240,10 @@ async function dispatchActorPrompt({
 /**
  * Verify a Substrate-issued actor JWT against the ate-idp-server JWKS. `getJwks`
  * is injected (cached by the caller) so this stays testable and offline-capable.
- * Returns { valid, claims, reason }.
+ * Every rejection path is fail-closed: a token is accepted ONLY after a signature
+ * has actually been checked against a key. Returns { valid, claims, reason }.
  */
-async function verifyActorJwt(token, { audience, trustDomain = 'cluster.local', service = 'ate-idp-server', getJwks } = {}) {
+async function verifyActorJwt(token, { audience, issuer, trustDomain = 'cluster.local', service = 'ate-idp-server', getJwks } = {}) {
   if (!token || typeof token !== 'string' || token.split('.').length !== 3) {
     return { valid: false, reason: 'malformed_jwt' };
   }
@@ -249,37 +253,67 @@ async function verifyActorJwt(token, { audience, trustDomain = 'cluster.local', 
   try { header = decodeSeg(h); claims = decodeSeg(p); } catch { return { valid: false, reason: 'malformed_jwt' }; }
 
   const now = Math.floor(Date.now() / 1000);
-  if (claims.exp && claims.exp < now) return { valid: false, claims, reason: 'expired' };
-  if (audience && Array.isArray(claims.aud) ? !claims.aud.includes(audience) : claims.aud !== audience) {
-    if (audience) return { valid: false, claims, reason: 'audience_mismatch' };
+  // exp is required, not merely checked-when-present: ate-idp mints these short-lived,
+  // so a token with no expiry did not come from it. Without this, "no signature
+  // requirement" and "no expiry requirement" are the same forged-token shape.
+  if (typeof claims.exp !== 'number') return { valid: false, claims, reason: 'exp_required' };
+  if (claims.exp < now) return { valid: false, claims, reason: 'expired' };
+  // Small tolerance for clock drift between the cluster and this pod — but only
+  // drift, so a token minted an hour from now is still a rejection.
+  if (typeof claims.nbf === 'number' && claims.nbf > now + CLOCK_SKEW_S) return { valid: false, claims, reason: 'not_yet_valid' };
+  if (typeof claims.iat === 'number' && claims.iat > now + CLOCK_SKEW_S) return { valid: false, claims, reason: 'issued_in_future' };
+  if (audience) {
+    const aud = claims.aud == null ? [] : (Array.isArray(claims.aud) ? claims.aud : [claims.aud]);
+    if (!aud.includes(audience)) return { valid: false, claims, reason: 'audience_mismatch' };
   }
+  if (issuer && claims.iss !== issuer) return { valid: false, claims, reason: 'issuer_mismatch' };
+  // sub is the only thing naming WHO is calling, and the caller logs it as the audit
+  // identity. A present-but-hollow sub must not be treated as "nothing to check".
+  if (typeof claims.sub !== 'string' || !claims.sub) return { valid: false, claims, reason: 'sub_required' };
   const expectedPrefix = `spiffe://${trustDomain}/`;
-  if (claims.sub && !String(claims.sub).startsWith(expectedPrefix)) {
+  if (!claims.sub.startsWith(expectedPrefix)) {
     return { valid: false, claims, reason: 'trust_domain_mismatch' };
   }
-  if (typeof getJwks === 'function') {
-    const jwks = await getJwks({ service, trustDomain });
-    const keys = (jwks && jwks.keys) || [];
-    const jwk = keys.find((k) => !header.kid || k.kid === header.kid) || keys[0];
-    if (jwk) {
-      try {
-        const { createPublicKey } = require('node:crypto');
-        const pub = createPublicKey({ key: jwk, format: 'jwk' });
-        const alg = String(header.alg || 'RS256');
-        // Node's OpenSSL names differ from JWS: RS256 -> RSA-SHA256.
-        // ES*/PS* are unsupported here and fail closed via signature_check_failed.
-        const rsMatch = /^RS(256|384|512)$/.exec(alg);
-        if (!rsMatch) return { valid: false, claims, reason: `unsupported_alg:${alg}` };
-        const verifier = crypto.createVerify(`RSA-SHA${rsMatch[1]}`);
-        verifier.update(`${h}.${p}`);
-        const ok = verifier.verify(pub, Buffer.from(sig.replace(/-/g, '+').replace(/_/g, '/'), 'base64'));
-        if (!ok) return { valid: false, claims, reason: 'signature_invalid' };
-      } catch (err) {
-        return { valid: false, claims, reason: `signature_check_failed:${err?.message || err}` };
-      }
+
+  if (typeof getJwks !== 'function') return { valid: false, claims, reason: 'jwks_unavailable' };
+  // A getJwks failure propagates rather than becoming a `valid: false`: the route
+  // turns it into 503, which says "our config is broken" instead of blaming the
+  // caller for a fault they cannot fix.
+  const jwks = await getJwks({ service, trustDomain });
+  const keys = (jwks && Array.isArray(jwks.keys)) ? jwks.keys : [];
+  // This is the fail-open this function used to have: an empty key set — which the
+  // JWKS cache produced for any 200-without-`keys` response until substrate-jwks.js
+  // started refusing one — skipped verification entirely and returned valid:true.
+  if (!keys.length) return { valid: false, claims, reason: 'no_jwks_keys' };
+  const candidates = header.kid ? keys.filter((k) => k && k.kid === header.kid) : keys;
+  // No `|| keys[0]` fallback: verifying an unknown kid against an arbitrary key
+  // turns a rotated-key incident into "some key happened to match".
+  if (!candidates.length) return { valid: false, claims, reason: 'unknown_kid' };
+
+  const alg = String(header.alg || '');
+  // Node's OpenSSL names differ from JWS: RS256 -> RSA-SHA256. Pinning the RS* set
+  // is also what makes alg:none and an HMAC-signed confusion token unreachable —
+  // a missing alg is a rejection, not a default.
+  const rsMatch = /^RS(256|384|512)$/.exec(alg);
+  if (!rsMatch) return { valid: false, claims, reason: `unsupported_alg:${alg || 'missing'}` };
+  let signature;
+  try { signature = Buffer.from(sig.replace(/-/g, '+').replace(/_/g, '/'), 'base64'); }
+  catch { return { valid: false, claims, reason: 'malformed_signature' }; }
+
+  const { createPublicKey } = require('node:crypto');
+  for (const jwk of candidates) {
+    let ok = false;
+    try {
+      const pub = createPublicKey({ key: jwk, format: 'jwk' });
+      const verifier = crypto.createVerify(`RSA-SHA${rsMatch[1]}`);
+      verifier.update(`${h}.${p}`);
+      ok = verifier.verify(pub, signature);
+    } catch {
+      ok = false; // an unloadable key (e.g. non-RSA) never trusts the token; try the next kid match
     }
+    if (ok) return { valid: true, claims };
   }
-  return { valid: true, claims };
+  return { valid: false, claims, reason: 'signature_invalid' };
 }
 
 /**
@@ -371,7 +405,9 @@ async function runPlanningOnSubstrate({
     }
 
     onStep('Substrate: minting actor identity JWT…');
-    const { tokenPresent } = await substrate.mintActorJwt({ ...opts, atespace, name: actorName, audiences: ['substrate-router'] });
+    const { tokenPresent } = await substrate.mintActorJwt({
+      ...opts, atespace, name: actorName, audiences: [actorJwtAudience()],
+    });
     // The minted JWT is returned to the router-side gateway for injection; here we
     // pass the actual token to the dispatcher. Re-mint to obtain the raw token in a
     // real deployment; for the data plane we only need it present + valid.
@@ -437,11 +473,23 @@ async function runPlanningOnSubstrate({
   }
 }
 
+/**
+ * The audience an actor JWT is minted for, and the one the actor's run route verifies.
+ * It is a deployment declaration (SUBSTRATE_ACTOR_JWT_AUDIENCE) rather than a literal
+ * repeated on both sides: two independent defaults spelled 'substrate-router' is what
+ * let one minted token authenticate at every consumer that happened to know the word.
+ * The fallback is the router's own name, for a deployment that has no actor callback
+ * at all - substrate-actor.js refuses to mount in actor mode without the declaration.
+ */
+function actorJwtAudience() {
+  return CONFIG?.SUBSTRATE?.actorJwtAudience || 'substrate-router';
+}
+
 // Mint the raw actor JWT for the data plane (separated so tests can stub).
 async function mintRawActorJwt({ opts, atespace, name }) {
   const reqBuf = Buffer.concat([
     require('./grpc-wire').pbMessage(1, substrate.encodeObjectRef({ atespace, name })),
-    require('./grpc-wire').pbString(2, 'substrate-router'),
+    require('./grpc-wire').pbString(2, actorJwtAudience()),
     require('./grpc-wire').pbVarint(3, 120),
   ]);
   const res = await substrate.grpcCall('MintActorJwt', reqBuf, opts);

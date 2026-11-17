@@ -251,12 +251,47 @@ test('the actor callback opens only with an identity allowed to call it', () => 
     ['SUBSTRATE_ACTOR_JWT_AUDIENCE', 'SUBSTRATE_ACTOR_MODE', 'SUBSTRATE_JWKS_URL', 'SUBSTRATE_TRUST_DOMAIN'],
     'the actor verification config travels as one unit',
   );
-  // Match the endpoint's own predicate, which requires both (a half-pair reads as
-  // "enabled" in Terraform and stays shut in the orchestrator).
+  // Match the endpoint's own predicate: the router mounts only on all three names.
+  // The audience joined deliberately — a verifier with no declared audience silently
+  // accepts whatever token the router forwards, which is the shared-audience defect.
+  const actorRoute = read('packages', 'shared', 'src', 'agent', 'substrate-actor.js');
   assert.match(
-    read('packages', 'shared', 'src', 'agent', 'substrate-actor.js'),
-    /process\.env\.SUBSTRATE_ACTOR_MODE === 'true' && !!process\.env\.SUBSTRATE_JWKS_URL/,
-    'the orchestrator no longer opens the endpoint on both names — update the gate here',
+    actorRoute,
+    /process\.env\.SUBSTRATE_ACTOR_MODE === 'true'\s*&&\s*!!process\.env\.SUBSTRATE_JWKS_URL\s*&&\s*!!process\.env\.SUBSTRATE_ACTOR_JWT_AUDIENCE/,
+    'the orchestrator no longer opens the endpoint on those names — update the gate here',
+  );
+  // ...and actor mode with an incomplete pair is a startup failure, not a quiet 404.
+  assert.match(
+    actorRoute,
+    /function actorModeFault\(\)[\s\S]{0,600}SUBSTRATE_JWKS_URL', 'SUBSTRATE_ACTOR_JWT_AUDIENCE'/,
+    'actorModeFault must name both required declarations',
+  );
+  // The control-plane image boots through agent-server.js; the actor image through
+  // substrate-actor-entry.js, which mounts unconditionally. Both must refuse to start
+  // on half-configured actor mode — one of them staying quiet is how a misdeployed
+  // actor image came up serving a route that verifies nothing.
+  assert.match(
+    read('services', 'orchestrator', 'src', 'agent-server.js'),
+    /actorModeMisconfigured\(\)[\s\S]{0,300}throw new Error\(/,
+    'the agent service must refuse to start on half-configured actor mode, not mount nothing',
+  );
+  assert.match(
+    read('services', 'orchestrator', 'src', 'substrate-actor-entry.js'),
+    /actorModeFault\(\)[\s\S]{0,400}throw new Error\(/,
+    'the actor image entry mounts unconditionally, so its own startup refusal is the only gate',
+  );
+  // The dispatcher mints for the SAME declared audience the verifier checks. Two
+  // literals spelled alike on either side of the wire is how one token authenticated
+  // at every consumer.
+  assert.match(
+    read('packages', 'shared-core', 'src', 'agent', 'substrate-runner.js'),
+    /CONFIG\?\.SUBSTRATE\?\.actorJwtAudience/,
+    'substrate-runner must mint from the configured audience',
+  );
+  assert.match(
+    read('packages', 'shared-core', 'src', 'config.js'),
+    /actorJwtAudience: process\.env\.SUBSTRATE_ACTOR_JWT_AUDIENCE/,
+    'the audience has to be read from the name substrate.tf emits',
   );
 
   // The receiving half: Cloud Run answers 403 before that route's JWT check ever

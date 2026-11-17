@@ -532,6 +532,12 @@ const SUBSTRATE = Object.freeze({
   atespaceByOrg: Object.freeze(parseOrgAtespaces(process.env.SUBSTRATE_ATESPACE_BY_ORG || '')),
   timeoutMs: Number(process.env.SUBSTRATE_TIMEOUT_MS || 60000),
   actorTtlMs: Number(process.env.SUBSTRATE_ACTOR_TTL_MS || 120000),
+  // The audience an actor JWT must carry. The dispatcher mints for this and the
+  // actor's run route verifies against it, so there is exactly one place that
+  // decides what "accepted here" means. Empty falls back to the router's own name
+  // (see agent/substrate-runner.js); a deployment running actor mode must set it —
+  // packages/shared/src/agent/substrate-actor.js refuses to start without it.
+  actorJwtAudience: process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE || '',
 });
 
 /**

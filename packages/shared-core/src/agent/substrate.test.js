@@ -53,55 +53,122 @@ test('upsertActorTemplate requires a digest-pinned planner image', async () => {
   );
 });
 
-// The ActorTemplate is the actor container's ONLY env: the image cannot
-// self-bootstrap SUBSTRATE_JWKS_URL (empty env by design) and without it the
-// actor answers 503 jwks_unconfigured for every prompt. So the control plane
-// must forward the JWT-verification names Terraform rendered onto it.
-test('upsertActorTemplate forwards the actor-JWT verification env into the container', async () => {
-  let captured;
-  const transport = (method, payload) => {
-    captured = { method, payload };
-    return Promise.resolve({ status: 0, message: '' });
+// Two independent facts have to reach the actor container through this one map, and
+// the ActorTemplate is the only way either can:
+//   * verification — the image cannot self-bootstrap SUBSTRATE_JWKS_URL (empty env by
+//     design), so the control plane must forward the JWT-verification names Terraform
+//     rendered onto it, or the actor answers 503 jwks_unconfigured for every prompt;
+//   * tenancy — a signature only says WHICH WORKLOAD called, while
+//     `body.organizationId` is caller-written, so the template hands the actor its own
+//     atespace, pinned to exactly one space, and the one org binding that resolves to
+//     it.
+// Nothing credential-shaped may join the map: an actor runs model-generated code, and
+// its env is readable by that code.
+// Not a pullable reference - upsertActorTemplate only requires the @sha256: digest
+// form, and the transport below is stubbed.
+const PINNED_IMAGE = `planner@sha256:${'0'.repeat(64)}`;
+
+const JWT_ENV_NAMES = [
+  'SUBSTRATE_JWKS_URL', 'SUBSTRATE_ACTOR_JWT_AUDIENCE', 'SUBSTRATE_TRUST_DOMAIN',
+];
+
+function capturingTransport(box) {
+  return async (method, payload) => {
+    box.method = method;
+    box.payload = payload;
+    return { status: 0, frames: [Buffer.alloc(0)], firstFrame: Buffer.alloc(0) };
   };
-  const saved = {
-    jwks: process.env.SUBSTRATE_JWKS_URL,
-    audience: process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE,
-    trust: process.env.SUBSTRATE_TRUST_DOMAIN,
-  };
-  process.env.SUBSTRATE_JWKS_URL = 'https://idp.example.com/discovery/keys';
-  process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE = 'substrate-router';
-  delete process.env.SUBSTRATE_TRUST_DOMAIN;
+}
+
+/** The actor container's env, as it went on the wire. */
+function templateEnv(request) {
+  // grpcCall's payload is CreateActorTemplateRequest{ template = 1 }.
+  const template = decodeFields(decodeFields(request).get(1)[0].value);
+  const containers = (template.get(3) || []).map((entry) => entry.value);
+  assert.equal(containers.length, 1, 'one planner container');
+  const env = {};
+  for (const entry of decodeFields(containers[0]).get(5) || []) {
+    const fields = decodeFields(entry.value);
+    env[getString(fields, 1)] = getString(fields, 2);
+  }
+  return env;
+}
+
+/** Run `fn` with the actor-JWT env names set to `values`; an undefined value unset. */
+async function withJwtEnv(values, fn) {
+  const saved = Object.fromEntries(JWT_ENV_NAMES.map((name) => [name, process.env[name]]));
+  for (const name of JWT_ENV_NAMES) {
+    if (values[name] === undefined) delete process.env[name];
+    else process.env[name] = values[name];
+  }
   try {
-    await s.upsertActorTemplate({
-      url: 'http://substrate:8443',
-      atespace: 'tenant-a',
-      image: 'registry/substrate-actor@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      transport,
-    });
+    return await fn();
   } finally {
-    for (const [key, value] of Object.entries({
-      SUBSTRATE_JWKS_URL: saved.jwks,
-      SUBSTRATE_ACTOR_JWT_AUDIENCE: saved.audience,
-      SUBSTRATE_TRUST_DOMAIN: saved.trust,
-    })) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
-  assert.equal(captured.method, 'CreateActorTemplate');
-  const template = decodeFields(captured.payload).get(1)[0].value;
-  const container = decodeFields(template).get(3)[0].value;
-  const envFields = decodeFields(container).get(5) || [];
-  const env = Object.fromEntries(envFields.map((e) => {
-    const varFields = decodeFields(e.value);
-    return [getString(varFields, 1), getString(varFields, 2)];
-  }));
-  assert.equal(env.SUBSTRATE_ACTOR_MODE, 'true');
-  assert.equal(env.SUBSTRATE_JWKS_URL, 'https://idp.example.com/discovery/keys');
-  assert.equal(env.SUBSTRATE_ACTOR_JWT_AUDIENCE, 'substrate-router');
-  assert.equal(env.SUBSTRATE_TRUST_DOMAIN, undefined);
+}
+
+// 'tenant-a' because that is the space this (tenancy-free) test deployment resolves
+// to; resolution itself is substrate-atespace.test.js's job. What is asserted here is
+// that the template hands the actor exactly the space it was created in.
+test('upsertActorTemplate pins the actor to its own atespace and org', async () => {
+  await withJwtEnv({}, async () => {
+    const box = {};
+    await s.upsertActorTemplate({
+      url: 'http://x',
+      transport: capturingTransport(box),
+      atespace: 'tenant-a',
+      image: PINNED_IMAGE,
+      organizationId: 'org-acme',
+    });
+    assert.equal(box.method, 'CreateActorTemplate');
+    const env = templateEnv(box.payload);
+    assert.equal(env.SUBSTRATE_ATESPACE, 'tenant-a');
+    assert.equal(env.SUBSTRATE_ALLOWED_ATESPACES, 'tenant-a',
+      'exactly one nameable space: a wider allowlist would let the actor route work into another tenant');
+    assert.equal(env.SUBSTRATE_ATESPACE_BY_ORG, 'org-acme=tenant-a');
+    assert.deepEqual(Object.keys(env).sort(), [
+      'SUBSTRATE_ACTOR_MODE', 'SUBSTRATE_ALLOWED_ATESPACES', 'SUBSTRATE_ATESPACE', 'SUBSTRATE_ATESPACE_BY_ORG',
+    ], 'the actor template carries identity and a mount flag, never a credential');
+  });
 });
 
+test('upsertActorTemplate omits the org binding when the caller has no organization', async () => {
+  await withJwtEnv({}, async () => {
+    const box = {};
+    await s.upsertActorTemplate({
+      url: 'http://x', transport: capturingTransport(box), atespace: 'tenant-a', image: PINNED_IMAGE,
+    });
+    const env = templateEnv(box.payload);
+    assert.equal(env.SUBSTRATE_ATESPACE, 'tenant-a');
+    assert.equal(env.SUBSTRATE_ATESPACE_BY_ORG, undefined,
+      'an unbound org must not be encoded as a binding to some other org');
+  });
+});
+
+test('upsertActorTemplate forwards the actor-JWT verification env into the container', async () => {
+  await withJwtEnv({
+    SUBSTRATE_JWKS_URL: 'https://idp.example.com/discovery/keys',
+    SUBSTRATE_ACTOR_JWT_AUDIENCE: 'substrate-router',
+  }, async () => {
+    const box = {};
+    await s.upsertActorTemplate({
+      url: 'http://substrate:8443',
+      transport: capturingTransport(box),
+      atespace: 'tenant-a',
+      image: PINNED_IMAGE,
+    });
+    const env = templateEnv(box.payload);
+    assert.equal(env.SUBSTRATE_ACTOR_MODE, 'true');
+    assert.equal(env.SUBSTRATE_JWKS_URL, 'https://idp.example.com/discovery/keys');
+    assert.equal(env.SUBSTRATE_ACTOR_JWT_AUDIENCE, 'substrate-router');
+    assert.equal(env.SUBSTRATE_TRUST_DOMAIN, undefined, 'a name the operator never declared stays absent');
+    assert.equal(env.SUBSTRATE_ATESPACE, 'tenant-a', 'forwarding verification must not drop the tenant pin');
+  });
+});
 test('CreateActor round-trips through encodeActor -> decodeActor', async () => {
   const reqs = [];
   const transport = (method, payload) => {

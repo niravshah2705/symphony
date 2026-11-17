@@ -7,6 +7,10 @@ const express = require('express');
 
 const { createSubstrateActorRouter } = require('./substrate-actor');
 
+// The audience is a declared deployment fact now — verifyActorJwt has no default to
+// fall back to — so every router built here states the name substrate.tf emits.
+process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE = 'substrate-router';
+
 /** Build a base64url-signed RS256 JWT the way ate-idp-server would. */
 function signJwt({ claims, keypair, kid = 'test-key' }) {
   const b64 = (buf) => Buffer.from(buf).toString('base64').replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -27,6 +31,16 @@ function makeKeypair() {
   return { privateKey, jwk };
 }
 
+/** A token whose claims the caller chose and nobody signed - the shape the old
+// empty-JWKS path used to accept. */
+function forgedActorToken() {
+  const b64 = (x) => Buffer.from(x).toString('base64').replace(/=+$/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const now = Math.floor(Date.now() / 1000);
+  const h = b64(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+  const p = b64(JSON.stringify({ sub: 'spiffe://cluster.local/ns/tenant-a/sa/actor-1', aud: 'substrate-router', exp: now + 60 }));
+  return `${h}.${p}.`;
+}
+
 function startApp(router) {
   const app = express();
   app.use(router);
@@ -38,11 +52,19 @@ function startApp(router) {
   });
 }
 
+/**
+ * Every test below stubs `verify`, so the router must never dial the JWKS seam.
+ * An empty key set used to be passed around here as if it were a supported state
+ * — it is precisely the shape that made verifyActorJwt accept an unsigned token,
+ * so reaching it is now a failure rather than a fixture.
+ */
+const jwksUnused = async () => { throw new Error('getJwks reached with verify stubbed'); };
+
 test('substrate-actor: rejects missing Bearer token', async () => {
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: false, reason: 'missing' }),
     runner: async () => ({ finalText: 'unused' }),
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -61,7 +83,7 @@ test('substrate-actor: rejects invalid JWT reason from verify', async () => {
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: false, reason: 'audience_mismatch' }),
     runner: async () => ({ finalText: 'unused' }),
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -98,7 +120,7 @@ test('substrate-actor: 400 when prompt is missing', async () => {
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/x' } }),
     runner: async () => ({ finalText: 'unused' }),
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -117,7 +139,7 @@ test('substrate-actor: runs planning in-process and returns the result shape', a
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate-demo/sa/actor-1' } }),
     runner: async (opts) => { seen = opts; return { finalText: 'PLAN TEXT', messages: [{ role: 'assistant', content: 'PLAN TEXT' }] }; },
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -151,6 +173,149 @@ test('substrate-actor: runs planning in-process and returns the result shape', a
   } finally { server.close(); }
 });
 
+/**
+ * A two-tenant deployment: the actor's own space comes from the ActorTemplate env,
+ * the claimed organization comes from the request body. Mirrors
+ * resolveSubstrateAtespace's contract, including throwing for an org the operator
+ * never bound — which must read as "not yours, not here", not as "does not exist".
+ */
+function atespaceResolverFor(home) {
+  const bindings = { 'org-a': 'tenant-a', 'org-b': 'tenant-b' };
+  return ({ organizationId } = {}) => {
+    if (!organizationId) return home;
+    const bound = bindings[String(organizationId)];
+    if (!bound) throw new Error(`substrate: organization ${organizationId} is not bound to any atespace`);
+    return bound;
+  };
+}
+
+const authorizedOrgBody = (organizationId) => JSON.stringify({
+  prompt: 'plan', organizationId, projectId: 'proj-1', settings: { openrouterApiKey: 'sk-of-the-other-tenant' },
+});
+
+test('substrate-actor: a verified token cannot run another tenant organization', async () => {
+  // This is the whole of defect (b): check.valid proves WHICH WORKLOAD called, never
+  // WHICH TENANT it may serve. Before the bind, body.organizationId went straight to
+  // the harness with that tenant's settings attached.
+  let ran = false;
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/tenant-a/sa/actor-1' } }),
+    runner: async () => { ran = true; return { finalText: 'never', messages: [] }; },
+    jwks: jwksUnused,
+    resolveAtespace: atespaceResolverFor('tenant-a'),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: authorizedOrgBody('org-b'),
+    });
+    assert.equal(res.status, 404, 'a cross-tenant claim is refused as absent, not as forbidden');
+    assert.equal((await res.json()).error, 'context_not_found');
+    assert.equal(ran, false, 'the harness must never see a refused tenant');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: an organization the operator never bound is refused too', async () => {
+  let ran = false;
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/tenant-a/sa/actor-1' } }),
+    runner: async () => { ran = true; return { finalText: 'never', messages: [] }; },
+    jwks: jwksUnused,
+    resolveAtespace: atespaceResolverFor('tenant-a'),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: authorizedOrgBody('org-unbound'),
+    });
+    assert.equal(res.status, 404);
+    assert.equal(ran, false);
+  } finally { server.close(); }
+});
+
+test('substrate-actor: the actor serves its own organization', async () => {
+  let seen = null;
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/tenant-a/sa/actor-1' } }),
+    runner: async (opts) => { seen = opts; return { finalText: 'P', messages: [] }; },
+    jwks: jwksUnused,
+    resolveAtespace: atespaceResolverFor('tenant-a'),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: authorizedOrgBody('org-a'),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(seen.organizationId, 'org-a');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: an actor that cannot name its own atespace serves nothing', async () => {
+  // Fail closed on the missing deployment fact rather than falling back to
+  // "accept whatever org the body says".
+  const router = createSubstrateActorRouter({
+    verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/tenant-a/sa/actor-1' } }),
+    runner: async () => ({ finalText: 'never', messages: [] }),
+    jwks: jwksUnused,
+    resolveAtespace: () => { throw new Error('no atespace configured for this deployment'); },
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer a.b.c', 'content-type': 'application/json' },
+      body: authorizedOrgBody('org-a'),
+    });
+    assert.equal(res.status, 503);
+    assert.equal((await res.json()).error, 'actor_atespace_unresolved');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: an unsigned token is refused when the JWKS endpoint answers with no keys', async () => {
+  // Phase 0 end to end: the real verifier + the real cache-shaped seam. keys: [] used
+  // to reach verifyActorJwt as "nothing to check against" and the run was accepted.
+  const router = createSubstrateActorRouter({
+    verify: require('@ai-fleet/shared/agent/substrate-runner').verifyActorJwt,
+    runner: async () => ({ finalText: 'never', messages: [] }),
+    jwks: async () => ({ keys: [] }),
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${forgedActorToken()}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'plan', organizationId: 'org-a' }),
+    });
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).error, 'no_jwks_keys');
+  } finally { server.close(); }
+});
+
+test('substrate-actor: a JWKS that yields nothing is a 503, not a pass and not a caller 401', async () => {
+  const router = createSubstrateActorRouter({
+    verify: require('@ai-fleet/shared/agent/substrate-runner').verifyActorJwt,
+    runner: async () => ({ finalText: 'never', messages: [] }),
+    jwks: async () => { const e = new Error('no usable signing keys'); e.code = 'jwks_empty'; throw e; },
+  });
+  const { server, url } = await startApp(router);
+  try {
+    const res = await fetch(`${url}/internal/plan/run`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${forgedActorToken()}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'plan' }),
+    });
+    assert.equal(res.status, 503);
+    assert.equal((await res.json()).error, 'jwks_empty');
+  } finally { server.close(); }
+});
+
 test('substrate-actor: binds the caller trace so actor logs and spans join the run', async () => {
   // The actor is a separate process created by a template that sets no env, so
   // the inbound traceparent is the ONLY thing that connects its log lines and
@@ -161,7 +326,7 @@ test('substrate-actor: binds the caller trace so actor logs and spans join the r
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
     runner: async () => { seen = log.currentContext(); return { finalText: 'ok', messages: [] }; },
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -184,7 +349,7 @@ test('substrate-actor: an unusable traceparent is dropped, not carried into the 
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
     runner: async () => { seen = log.currentContext(); return { finalText: 'ok', messages: [] }; },
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -217,7 +382,7 @@ test('substrate-actor: reports usage to the caller and never meters locally', as
         traceId: 'trace-abc',
       };
     },
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {
@@ -238,7 +403,7 @@ test('substrate-actor: reports usage to the caller and never meters locally', as
 test('substrate-actor: a run without usage reports null rather than fabricating a row', async () => {  const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
     runner: async () => ({ finalText: 'P', messages: [] }),
-    jwks: async () => ({ keys: [] }),
+    jwks: jwksUnused,
   });
   const { server, url } = await startApp(router);
   try {

@@ -15,25 +15,42 @@
  * by the egress gateway on the actor's outbound calls; nothing sensitive
  * crosses this request boundary.
  *
- * The router is only mounted when the process is running as an actor
- * (SUBSTRATE_ACTOR_MODE=true and SUBSTRATE_JWKS_URL set), so a normal
- * planner pod returns 404 for this path.
+ * The router is only mounted when the process is running as an actor and can say
+ * what a token must be for (SUBSTRATE_ACTOR_MODE=true + SUBSTRATE_JWKS_URL +
+ * SUBSTRATE_ACTOR_JWT_AUDIENCE), so a normal planner pod returns 404 for this path
+ * and a half-configured actor pod does not start at all.
  */
 
 const express = require('express');
 const { executeAgentRuntime } = require('./runtimes');
 const { verifyActorJwt } = require('./substrate-runner');
+const { resolveSubstrateAtespace } = require('./substrate');
 const { runWithRemoteTraceparent } = require('./langfuse');
 const { cleanTraceparent } = require('@ai-fleet/shared-core/traceparent');
 const { getJwks } = require('./substrate-jwks');
 const log = require('../logger');
 
-function createSubstrateActorRouter({ verify = verifyActorJwt, runner = executeAgentRuntime, jwks = getJwks } = {}) {
+// getJwks error codes that mean "this pod cannot check signatures", as opposed to
+// "this token is bad". The first is a 503 an operator must see; the second is a 401.
+const JWKS_FAULT = new Set(['jwks_unconfigured', 'jwks_empty']);
+
+function createSubstrateActorRouter({
+  verify = verifyActorJwt,
+  runner = executeAgentRuntime,
+  jwks = getJwks,
+  resolveAtespace = resolveSubstrateAtespace,
+} = {}) {
   const router = express.Router();
-  const audience = process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE || 'substrate-router';
+  // No default. 'substrate-router' is the audience the ROUTER is minted for, and
+  // spelling it here as a fallback meant any consumer that guessed the same string
+  // accepted the same token — one mint authenticating at every hop. The audience is
+  // now a declared deployment fact (SUBSTRATE_ACTOR_JWT_AUDIENCE), and the dispatcher
+  // mints for that same declared value.
+  const audience = process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE || '';
   const trustDomain = process.env.SUBSTRATE_TRUST_DOMAIN || 'cluster.local';
 
   router.post('/internal/plan/run', express.json({ limit: '2mb' }), async (req, res) => {
+    if (!audience) return res.status(503).json({ error: 'actor_audience_unconfigured' });
     const header = req.headers.authorization || '';
     const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null;
     if (!token) return res.status(401).json({ error: 'missing_actor_jwt' });
@@ -42,9 +59,13 @@ function createSubstrateActorRouter({ verify = verifyActorJwt, runner = executeA
     try {
       check = await verify(token, { audience, trustDomain, getJwks: jwks });
     } catch (err) {
-      if (err && err.code === 'jwks_unconfigured') {
-        log.error('substrate actor: JWKS not configured; refusing run');
-        return res.status(503).json({ error: 'jwks_unconfigured' });
+      // Anything the JWKS seam itself got wrong is OUR fault, not the caller's:
+      // 503 says "this pod cannot verify anything right now", where 401/500 would
+      // send an operator chasing a token that was fine.
+      const code = err && err.code;
+      if (JWKS_FAULT.has(code)) {
+        log.error(`substrate actor: JWKS unavailable (${code}); refusing run`);
+        return res.status(503).json({ error: code });
       }
       return res.status(500).json({ error: 'jwt_check_failed', message: String(err && err.message || err).slice(0, 200) });
     }
@@ -53,6 +74,34 @@ function createSubstrateActorRouter({ verify = verifyActorJwt, runner = executeA
     const body = req.body || {};
     if (!body.prompt || !String(body.prompt).trim()) {
       return res.status(400).json({ error: 'prompt_required' });
+    }
+
+    // A verified JWT says WHICH WORKLOAD is calling; it does not say which tenant it
+    // may serve. `body.organizationId` used to reach the harness on the strength of
+    // `check.valid` alone, so one legitimately minted actor token could run a plan
+    // with another organization's settings. The actor's own atespace is the
+    // server-side fact — it comes from the ActorTemplate env the control plane wrote,
+    // never from this request — so any organization named by the caller has to resolve
+    // to exactly that space. Both a mismatch and an unresolvable name are 404: this
+    // route must not confirm that another tenant exists while refusing it.
+    let homeAtespace;
+    try {
+      homeAtespace = resolveAtespace({});
+    } catch {
+      homeAtespace = null;
+    }
+    if (!homeAtespace) return res.status(503).json({ error: 'actor_atespace_unresolved' });
+    if (body.organizationId) {
+      let claimedAtespace = null;
+      try {
+        claimedAtespace = resolveAtespace({ organizationId: String(body.organizationId) });
+      } catch {
+        claimedAtespace = null;
+      }
+      if (claimedAtespace !== homeAtespace) {
+        log.warn(`substrate actor: refused a run claiming org ${String(body.organizationId)} outside this actor's atespace`);
+        return res.status(404).json({ error: 'context_not_found' });
+      }
     }
 
     // The caller's trace continues into this process: the header is the only
@@ -116,7 +165,22 @@ function createSubstrateActorRouter({ verify = verifyActorJwt, runner = executeA
 }
 
 function shouldMount() {
-  return process.env.SUBSTRATE_ACTOR_MODE === 'true' && !!process.env.SUBSTRATE_JWKS_URL;
+  return process.env.SUBSTRATE_ACTOR_MODE === 'true'
+    && !!process.env.SUBSTRATE_JWKS_URL
+    && !!process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE;
 }
 
-module.exports = { createSubstrateActorRouter, shouldMount };
+/**
+ * Actor mode asked for a verifier but did not say what the token must be for. The
+ * mount gate above answers by staying shut, which is safe but silent — the run fails
+ * as a 404 from the router and reads like a dead cluster. The startup check turns it
+ * into a container that will not come up.
+ */
+function actorModeFault() {
+  if (process.env.SUBSTRATE_ACTOR_MODE !== 'true') return '';
+  const missing = ['SUBSTRATE_JWKS_URL', 'SUBSTRATE_ACTOR_JWT_AUDIENCE'].filter((name) => !process.env[name]);
+  if (!missing.length) return '';
+  return `SUBSTRATE_ACTOR_MODE is true but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not set`;
+}
+
+module.exports = { createSubstrateActorRouter, shouldMount, actorModeFault };
