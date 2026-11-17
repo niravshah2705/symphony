@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 3 nodes
 
-- **Size**: 4 nodes
+- **Size**: 3 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -14,7 +14,6 @@ Community of 4 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:the rendered kagent map is the shape the JS side parses@L285 | Test | ./deploy/gcp/kagent-env.test.js | 285-318 |
 | test:the rendered substrate map is the shape the JS side parses@L389 | Test | ./deploy/gcp/substrate-env.test.js | 389-425 |
 | test:the actor callback renders as four names or none, never a half-pair@L427 | Test | ./deploy/gcp/substrate-env.test.js | 427-445 |
 | skip | Function | ./scripts/flexprice-helm.js | 66-66 |
@@ -27,13 +26,12 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (11 edge(s))
-- `./deploy/gcp/kagent-env.test.js::tfMap` (6 edge(s))
-- `deepEqual` (5 edge(s))
+- `equal` (7 edge(s))
 - `./deploy/gcp/substrate-env.test.js::tfMap` (5 edge(s))
-- `match` (4 edge(s))
-- `skip` (3 edge(s))
-- `ok` (3 edge(s))
+- `skip` (2 edge(s))
+- `deepEqual` (2 edge(s))
+- `ok` (2 edge(s))
+- `match` (2 edge(s))
 - `sort` (1 edge(s))
 - `filter` (1 edge(s))
 - `keys` (1 edge(s))
@@ -43,16 +41,14 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (11 edge(s))
 - `./scripts/flexprice-helm.js` (11 edge(s))
-- `./deploy/gcp/kagent-env.test.js::tfMap` (6 edge(s))
-- `deepEqual` (5 edge(s))
+- `equal` (7 edge(s))
 - `./deploy/gcp/substrate-env.test.js::tfMap` (5 edge(s))
-- `match` (4 edge(s))
-- `skip` (3 edge(s))
-- `ok` (3 edge(s))
 - `./deploy/gcp/substrate-env.test.js` (2 edge(s))
-- `./deploy/gcp/kagent-env.test.js` (1 edge(s))
+- `skip` (2 edge(s))
+- `deepEqual` (2 edge(s))
+- `ok` (2 edge(s))
+- `match` (2 edge(s))
 - `sort` (1 edge(s))
 - `filter` (1 edge(s))
 - `keys` (1 edge(s))

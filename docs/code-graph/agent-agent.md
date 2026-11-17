@@ -4,23 +4,28 @@
 
 ## Overview
 
-Community of 533 nodes
+Community of 666 nodes
 
-- **Size**: 533 nodes
-- **Cohesion**: 0.2569
+- **Size**: 666 nodes
+- **Cohesion**: 0.2591
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
+| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
+| test:the power workflow waits only on namespaces the module still creates@L139 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 139-161 |
+| test@L147 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 147-147 |
+| test:the static-IP grant lists the addresses the module owns@L163 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 163-178 |
 | test:OpenSWE fails closed for a GitLab repository selection@L72 | Test | ./packages/shared/src/agent/coder-flow.test.js | 72-75 |
 | test:coder results report the broker branch after an automatic retry rotation@L77 | Test | ./packages/shared/src/agent/coder-flow.test.js | 77-81 |
 | test:planned coder results export the broker-authoritative artifact receipt@L83 | Test | ./packages/shared/src/agent/coder-flow.test.js | 83-94 |
 | test:proxied coding isolates DeepAgent shell and developer-tool contexts@L440 | Test | ./packages/shared/src/agent/coder-flow.test.js | 440-486 |
 | test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
 | test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| resolveRole | Function | ./packages/shared/src/agent/coder-orchestrator.js | 362-371 |
 | recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 690-710 |
 | buildTicketPrompt | Function | ./packages/shared/src/agent/coder.js | 42-76 |
 | isCoderLlmUsable | Function | ./packages/shared/src/agent/coder.js | 79-84 |
@@ -33,84 +38,73 @@ Community of 533 nodes
 | runCoder | Function | ./packages/shared/src/agent/coder.js | 348-355 |
 | runPlannedCoderLocal | Function | ./packages/shared/src/agent/coder.js | 363-471 |
 | runPlannedCoder | Function | ./packages/shared/src/agent/coder.js | 474-492 |
-| installSkills | Function | ./packages/shared/src/agent/framework.js | 53-87 |
-| validateSkillName | Function | ./packages/shared/src/agent/framework.js | 89-101 |
-| trackedSkillPaths | Function | ./packages/shared/src/agent/framework.js | 103-114 |
-| claimSkillsDirectory | Function | ./packages/shared/src/agent/framework.js | 116-146 |
-| assertContained | Function | ./packages/shared/src/agent/framework.js | 148-153 |
-| assertNoSymlinks | Function | ./packages/shared/src/agent/framework.js | 155-165 |
-| lstatOrNull | Function | ./packages/shared/src/agent/framework.js | 167-174 |
-| isDir | Function | ./packages/shared/src/agent/framework.js | 176-182 |
-| loadWorkflow | Function | ./packages/shared/src/agent/framework.js | 190-196 |
-| prepareScratch | Function | ./packages/shared/src/agent/framework.js | 203-209 |
-| cleanup | Function | ./packages/shared/src/agent/framework.js | 207-207 |
-| buildAgent | Function | ./packages/shared/src/agent/framework.js | 212-214 |
-| configuredResourceNames | Function | ./packages/shared/src/agent/framework.js | 224-233 |
-| runWorkflow | Function | ./packages/shared/src/agent/framework.js | 241-372 |
-| contentToText | Function | ./packages/shared/src/agent/framework.js | 375-379 |
-| messageText | Function | ./packages/shared/src/agent/framework.js | 388-394 |
-| lastText | Function | ./packages/shared/src/agent/framework.js | 396-399 |
-| withSkillsEnv | Function | ./packages/shared/src/agent/framework.test.js | 26-38 |
-| test:installSkills refuses a symbolic-link destination without writing outside the root@L40 | Test | ./packages/shared/src/agent/framework.test.js | 40-56 |
-| test:installSkills refuses tracked project-owned .agent-skills files@L58 | Test | ./packages/shared/src/agent/framework.test.js | 58-73 |
-| test:installSkills refuses an unclaimed project-owned destination@L75 | Test | ./packages/shared/src/agent/framework.test.js | 75-87 |
-| test:installSkills can refresh a framework-owned skill directory@L89 | Test | ./packages/shared/src/agent/framework.test.js | 89-100 |
-| test:installSkills reads the vendored default skills when SKILLS_ROOT is unset (backward-compat)@L102 | Test | ./packages/shared/src/agent/framework.test.js | 102-116 |
-| test:installSkills honors SKILLS_ROOT + SKILLS_VERSION and installs from the pinned bundle@L118 | Test | ./packages/shared/src/agent/framework.test.js | 118-144 |
-| test:configuredResourceNames prefers a deepagent build’s resolved set@L183 | Test | ./packages/shared/src/agent/framework.test.js | 183-196 |
-| test:configuredResourceNames falls back to the workflow declaration when no build@L198 | Test | ./packages/shared/src/agent/framework.test.js | 198-206 |
-| test:configuredResourceNames reports only policy-permitted MCP plugins@L208 | Test | ./packages/shared/src/agent/framework.test.js | 208-218 |
-| test:runWorkflow filters denied plugins before the MCP loader is called@L220 | Test | ./packages/shared/src/agent/framework.test.js | 220-250 |
-| normalizeFsToolArgs | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 41-49 |
-| createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
-| test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
+| memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
+| memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
+| resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
+| embedQuestions | Function | ./packages/shared/src/agent/coverage-service.js | 83-96 |
+| rankScopesWithLaya | Function | ./packages/shared/src/agent/coverage-service.js | 103-144 |
+| candidates | Function | ./packages/shared/src/agent/coverage-service.js | 116-116 |
+| mapWithConcurrency | Function | ./packages/shared/src/agent/coverage-service.js | 146-159 |
+| cacheKey | Function | ./packages/shared/src/agent/coverage-service.js | 161-166 |
+| computeCoverage | Function | ./packages/shared/src/agent/coverage-service.js | 178-301 |
+| invalidateCoverageCache | Function | ./packages/shared/src/agent/coverage-service.js | 309-323 |
+| makeStore | Function | ./packages/shared/src/agent/coverage-service.test.js | 37-51 |
+| baseDeps | Function | ./packages/shared/src/agent/coverage-service.test.js | 53-55 |
+| beforeEach@L57 | Test | ./packages/shared/src/agent/coverage-service.test.js | 57-57 |
+| test:with memory disabled nothing is assessed and no recall is attempted@L59 | Test | ./packages/shared/src/agent/coverage-service.test.js | 59-76 |
+| test:one store load serves the whole bank — questions never re-read the pool@L78 | Test | ./packages/shared/src/agent/coverage-service.test.js | 78-97 |
+| test:an unreadable store reads as unconfigured, not as 0% coverage@L99 | Test | ./packages/shared/src/agent/coverage-service.test.js | 99-108 |
+| test:a genuinely empty memory is real 0% coverage, distinct from not_assessed@L110 | Test | ./packages/shared/src/agent/coverage-service.test.js | 110-120 |
+| test:embeddings are one batched call, and an embedder failure degrades to lexical@L122 | Test | ./packages/shared/src/agent/coverage-service.test.js | 122-148 |
+| test:laya is reported as not_configured when no URL is deployed, and cannot change a score@L150 | Test | ./packages/shared/src/agent/coverage-service.test.js | 150-178 |
+| test:an unreachable laya fails open without failing the coverage request@L180 | Test | ./packages/shared/src/agent/coverage-service.test.js | 180-194 |
+| test:laya reorders matched scopes without inventing ones@L196 | Test | ./packages/shared/src/agent/coverage-service.test.js | 196-214 |
+| test:reports are cached per org and bank, bypassed by refresh and by invalidation@L216 | Test | ./packages/shared/src/agent/coverage-service.test.js | 216-227 |
+| test:inactive questions are dropped and an oversized bank is capped@L229 | Test | ./packages/shared/src/agent/coverage-service.test.js | 229-240 |
+| test:questionIds narrows a pass so one category refresh never scans the whole bank@L242 | Test | ./packages/shared/src/agent/coverage-service.test.js | 242-253 |
+| test:a bank edit clears only the editing organisation\'s cached report@L255 | Test | ./packages/shared/src/agent/coverage-service.test.js | 255-266 |
+| test:a run that outlives its budget returns 200-shaped partial results, not fake gaps@L268 | Test | ./packages/shared/src/agent/coverage-service.test.js | 268-295 |
 
-*... and 483 more members.*
+*... and 616 more members.*
 
 ## Execution Flows
 
-- **resume** (criticality: 0.67, depth: 8)
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
-- **createMemoryMiddleware** (criticality: 0.67, depth: 6)
-- **runCoder** (criticality: 0.67, depth: 7)
-- **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **startScheduler** (criticality: 0.65, depth: 5)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (473 edge(s))
-- `join` (211 edge(s))
-- `String` (98 edge(s))
-- `includes` (90 edge(s))
-- `deepEqual` (79 edge(s))
-- `isArray` (63 edge(s))
-- `trim` (53 edge(s))
+- `equal` (618 edge(s))
+- `join` (221 edge(s))
+- `String` (123 edge(s))
+- `includes` (105 edge(s))
+- `deepEqual` (97 edge(s))
+- `isArray` (88 edge(s))
+- `match` (87 edge(s))
+- `map` (81 edge(s))
+- `ok` (78 edge(s))
+- `trim` (69 edge(s))
+- `slice` (61 edge(s))
+- `filter` (57 edge(s))
+- `require` (56 edge(s))
 - `strictEqual` (50 edge(s))
-- `map` (50 edge(s))
-- `ok` (46 edge(s))
-- `require` (45 edge(s))
-- `match` (45 edge(s))
-- `slice` (41 edge(s))
-- `push` (39 edge(s))
-- `endsWith` (39 edge(s))
+- `throws` (43 edge(s))
 
 ### Incoming
 
-- `equal` (472 edge(s))
-- `join` (125 edge(s))
+- `equal` (617 edge(s))
+- `join` (127 edge(s))
+- `deepEqual` (95 edge(s))
 - `./packages/shared/src/agent/repository-broker.js` (87 edge(s))
-- `deepEqual` (77 edge(s))
+- `ok` (78 edge(s))
+- `match` (74 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
 - `./packages/shared/src/agent/repository-broker.test.js` (55 edge(s))
 - `strictEqual` (50 edge(s))
-- `ok` (46 edge(s))
+- `throws` (43 edge(s))
 - `deepStrictEqual` (37 edge(s))
-- `match` (35 edge(s))
-- `throws` (34 edge(s))
-- `writeFileSync` (32 edge(s))
-- `tmpdir` (30 edge(s))
-- `mkdtempSync` (29 edge(s))
-- `after` (28 edge(s))
+- `writeFileSync` (33 edge(s))
+- `tmpdir` (31 edge(s))
+- `mkdtempSync` (30 edge(s))
+- `includes` (29 edge(s))

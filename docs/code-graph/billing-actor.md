@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 567 nodes
+Community of 763 nodes
 
-- **Size**: 567 nodes
-- **Cohesion**: 0.3003
+- **Size**: 763 nodes
+- **Cohesion**: 0.2980
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,7 +17,15 @@ Community of 567 nodes
 | test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
 | test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
 | test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
-| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L406 | Test | ./e2e/workflow-designer.spec.js | 406-541 |
+| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 34-38 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 41-51 |
+| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 57-68 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 71-79 |
+| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 82-85 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 108-120 |
+| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 122-147 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 150-160 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 163-175 |
 | encodeVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 13-25 |
 | encodeTag | Function | ./packages/shared-core/src/agent/grpc-wire.js | 27-29 |
 | pbVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 31-37 |
@@ -41,80 +49,64 @@ Community of 567 nodes
 | test:pbVarint + getVarint preserve numeric field values@L21 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 21-27 |
 | test:grpc frame + unframe is lossless@L29 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 29-37 |
 | test:empty pbString/pbMessage are elided@L39 | Test | ./packages/shared-core/src/agent/grpc-wire.test.js | 39-43 |
-| normalizeRegistryHost | Function | ./packages/shared-core/src/agent/registry-auth.js | 12-16 |
-| buildDockerConfigJson | Function | ./packages/shared-core/src/agent/registry-auth.js | 22-35 |
-| loadWith | Function | ./packages/shared-core/src/agent/substrate-atespace.test.js | 19-25 |
-| test:a per-tenant stack resolves to the atespace pinned at provision time@L35 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 35-41 |
-| test:a shared deployment routes each organization to its bound space@L43 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 43-47 |
-| test:an organization that is not bound refuses instead of taking the default@L52 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 52-58 |
-| test:a deployment that declared tenancy but bound no organization refuses@L60 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 60-63 |
-| test:a settings atespace outside the declared set is ignored@L67 | Test | ./packages/shared-core/src/agent/substrate-atespace.test.js | 67-75 |
-| fp | Function | ./packages/shared-core/src/agent/substrate-runner.js | 26-26 |
-| fingerprintOnly | Function | ./packages/shared-core/src/agent/substrate-runner.js | 28-36 |
-| syncSubstrateSecrets | Function | ./packages/shared-core/src/agent/substrate-runner.js | 52-148 |
-| scopeHas | Function | ./packages/shared-core/src/agent/substrate-runner.js | 62-62 |
-| dispatchActorPrompt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 156-235 |
-| runPlanningOnSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.js | 290-428 |
-| mintRawActorJwt | Function | ./packages/shared-core/src/agent/substrate-runner.js | 431-441 |
-| stubSubstrate | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 14-56 |
-| restore | Function | ./packages/shared-core/src/agent/substrate-runner.test.js | 52-54 |
-| test:START follows actor creation and STOP precedes teardown, even when dispatch fails@L69 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 69-94 |
-| test:a substrate run meters exactly one usage record for the dispatching org@L96 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 96-139 |
-| test:the runner hands the admitted credential decision to metering@L144 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 144-164 |
-| test:a run with no admitted decision reaches metering with none either@L166 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 166-183 |
-| test:metering happens on the control plane, not in the actor request body@L185 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 185-204 |
-| test:an actor that reports no usage still records exactly one (skipped) attempt@L206 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 206-221 |
+| refreshKey | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 22-24 |
+| coalesce | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 26-32 |
+| ensureFreshCodexTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 39-54 |
+| ensureFreshClaudeTokens | Function | ./packages/shared-core/src/agent/oauth-tokens.js | 61-76 |
+| prunePending | Function | ./packages/shared-core/src/agent/oauth.js | 34-38 |
+| createLogin | Function | ./packages/shared-core/src/agent/oauth.js | 44-57 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/oauth.js | 60-68 |
+| pendingCount | Function | ./packages/shared-core/src/agent/oauth.js | 71-74 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/oauth.js | 77-87 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/oauth.js | 90-103 |
+| postToken | Function | ./packages/shared-core/src/agent/oauth.js | 105-130 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/oauth.js | 133-142 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/oauth.js | 145-158 |
+| base64url | Function | ./packages/shared-core/src/agent/pkce.js | 12-14 |
+| generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
 
-*... and 517 more members.*
+*... and 713 more members.*
 
 ## Execution Flows
 
 - **childMain** (criticality: 0.73, depth: 9)
-- **listActors** (criticality: 0.70, depth: 8)
-- **getActorTemplate** (criticality: 0.70, depth: 8)
+- **getActorTemplate** (criticality: 0.71, depth: 8)
 - **isBillingBlocked** (criticality: 0.69, depth: 7)
-- **main** (criticality: 0.68, depth: 4)
-- **main** (criticality: 0.67, depth: 4)
-- **main** (criticality: 0.67, depth: 4)
-- **recordActorUsage** (criticality: 0.61, depth: 3)
-- **getGithubToken** (criticality: 0.61, depth: 8)
-- **getApiKey** (criticality: 0.58, depth: 7)
-- *... and 1 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (701 edge(s))
-- `String` (116 edge(s))
-- `deepEqual` (93 edge(s))
-- `map` (76 edge(s))
-- `Number` (66 edge(s))
-- `push` (64 edge(s))
-- `filter` (49 edge(s))
-- `throws` (45 edge(s))
-- `expect` (44 edge(s))
-- `ok` (41 edge(s))
-- `stringify` (41 edge(s))
-- `now` (39 edge(s))
-- `toISOString` (36 edge(s))
-- `find` (32 edge(s))
-- `trim` (32 edge(s))
+- `equal` (752 edge(s))
+- `String` (142 edge(s))
+- `deepEqual` (124 edge(s))
+- `map` (94 edge(s))
+- `push` (93 edge(s))
+- `Number` (70 edge(s))
+- `filter` (62 edge(s))
+- `throws` (56 edge(s))
+- `ok` (54 edge(s))
+- `trim` (53 edge(s))
+- `toISOString` (52 edge(s))
+- `stringify` (50 edge(s))
+- `now` (47 edge(s))
+- `slice` (46 edge(s))
+- `require` (41 edge(s))
 
 ### Incoming
 
-- `equal` (701 edge(s))
-- `deepEqual` (93 edge(s))
-- `./packages/shared-core/src/store.js` (76 edge(s))
-- `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
-- `throws` (45 edge(s))
-- `expect` (44 edge(s))
-- `ok` (41 edge(s))
+- `equal` (752 edge(s))
+- `./packages/shared-core/src/store.js` (180 edge(s))
+- `deepEqual` (124 edge(s))
+- `./packages/shared-core/src/agent/substrate.js` (77 edge(s))
+- `throws` (56 edge(s))
+- `ok` (54 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
 - `./scripts/flexprice-phase1-probes.js` (34 edge(s))
-- `getByRole` (30 edge(s))
-- `locator` (28 edge(s))
+- `push` (32 edge(s))
+- `map` (30 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.js` (26 edge(s))
 - `./packages/shared-core/src/billing/gate.js` (26 edge(s))
-- `map` (23 edge(s))
-- `./packages/shared-core/src/billing/money-wire.js` (22 edge(s))
+- `./packages/shared-core/src/messaging/events.js` (24 edge(s))
+- `match` (22 edge(s))
+- `includes` (22 edge(s))

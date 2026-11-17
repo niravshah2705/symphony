@@ -4,17 +4,45 @@
 
 ## Overview
 
-Community of 847 nodes
+Community of 813 nodes
 
-- **Size**: 847 nodes
-- **Cohesion**: 0.4705
+- **Size**: 813 nodes
+- **Cohesion**: 0.4368
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:a member can read a gate review, and opening it writes nothing@L926 | Test | ./e2e/workflow-designer.spec.js | 926-962 |
+| json | Function | ./e2e/agent-workspace.spec.js | 7-13 |
+| defaultPreparedBusiness | Function | ./e2e/agent-workspace.spec.js | 15-48 |
+| mockAgentWorkspace | Function | ./e2e/agent-workspace.spec.js | 50-277 |
+| test@L124 | Test | ./e2e/agent-workspace.spec.js | 124-124 |
+| openAgent | Function | ./e2e/agent-workspace.spec.js | 279-284 |
+| routeRequest | Function | ./e2e/agent-workspace.spec.js | 286-290 |
+| test:greetings and unsafe scam requests stay on non-mutating routes@L292 | Test | ./e2e/agent-workspace.spec.js | 292-312 |
+| test:business requests evaluate first, then prepare on demand, rendering the staged decision rail and metric tones@L322 | Test | ./e2e/agent-workspace.spec.js | 322-363 |
+| test:knowledge requests report typed memory, documents, and workspace matches@L365 | Test | ./e2e/agent-workspace.spec.js | 365-386 |
+| test:build requests run a guided project -> planner flow with human-in-the-loop steps@L388 | Test | ./e2e/agent-workspace.spec.js | 388-411 |
+| test:conversation history: sending lazily creates a thread that survives reload, plus new chat and delete@L413 | Test | ./e2e/agent-workspace.spec.js | 413-445 |
+| test:a send that outlives a navigate still lands in the thread rail once persistence completes@L447 | Test | ./e2e/agent-workspace.spec.js | 447-482 |
+| test:a persistence failure surfaces a visible error and a working retry@L484 | Test | ./e2e/agent-workspace.spec.js | 484-512 |
+| test:clicking "+ New chat" while already on the unsent new thread resets compose state@L514 | Test | ./e2e/agent-workspace.spec.js | 514-536 |
+| test:rapid re-entry into "+ New chat" never leaves the composer stuck disabled@L538 | Test | ./e2e/agent-workspace.spec.js | 538-568 |
+| test:remember phrasing surfaces a confirm-before-save memory draft@L570 | Test | ./e2e/agent-workspace.spec.js | 570-586 |
+| test:troubleshooting requests combine diagnostic checks with retained log signals@L588 | Test | ./e2e/agent-workspace.spec.js | 588-627 |
+| test:implementation drafts require project selection and explicit approval before task creation@L629 | Test | ./e2e/agent-workspace.spec.js | 629-676 |
+| installFakeSpeechRecognition | Function | ./e2e/agent-workspace.spec.js | 680-703 |
+| test:mic dictation button has a distinct accessible name from Send@L705 | Test | ./e2e/agent-workspace.spec.js | 705-712 |
+| test:dictation button degrades gracefully when the browser has no SpeechRecognition@L714 | Test | ./e2e/agent-workspace.spec.js | 714-729 |
+| test:a successful dictation appends the transcript to the composer@L731 | Test | ./e2e/agent-workspace.spec.js | 731-744 |
+| test:a denied microphone permission surfaces a toast and leaves the composer usable@L746 | Test | ./e2e/agent-workspace.spec.js | 746-758 |
+| test:attaching a file before any conversation exists shows a helpful toast and never calls the service@L760 | Test | ./e2e/agent-workspace.spec.js | 760-771 |
+| test:attaching a file after sending a message uploads it and shows a ready chip@L773 | Test | ./e2e/agent-workspace.spec.js | 773-787 |
+| test:removing an attachment deletes it server-side and the chip disappears@L789 | Test | ./e2e/agent-workspace.spec.js | 789-803 |
+| test:dropping a file directly onto the composer uploads it@L805 | Test | ./e2e/agent-workspace.spec.js | 805-822 |
+| test:a rejected file oversize check surfaces a toast and never calls the service@L824 | Test | ./e2e/agent-workspace.spec.js | 824-836 |
+| test:the "Ask about files" affordance stays hidden until an attachment is ready, then answers with citations@L838 | Test | ./e2e/agent-workspace.spec.js | 838-859 |
 | test:a terminal workspace stream-token rejection never opens or retries the SSE stream@L13 | Test | ./e2e/workspace-stream-failure.spec.js | 13-69 |
 | test:a blank minted token never opens the workspace SSE stream@L71 | Test | ./e2e/workspace-stream-failure.spec.js | 71-111 |
 | pauseCode | Function | ./public/js/agent-pause.js | 36-42 |
@@ -27,94 +55,66 @@ Community of 847 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
+| llmGatewayFlag | Function | ./public/js/api.js | 50-57 |
+| refreshAccessToken | Function | ./public/js/api.js | 72-75 |
+| readJson | Function | ./public/js/api.js | 77-83 |
+| errorCode | Function | ./public/js/api.js | 87-90 |
+| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
-| openStream | Function | ./public/js/api.js | 257-336 |
-| mintFailureCanRetry | Function | ./public/js/api.js | 264-268 |
-| scheduleReconnect | Function | ./public/js/api.js | 270-283 |
-| connect | Function | ./public/js/api.js | 285-318 |
-| close | Function | ./public/js/api.js | 330-334 |
-| ensureStylesheet | Function | ./public/js/app.js | 45-67 |
-| load | Function | ./public/js/app.js | 74-86 |
-| currentRoute | Function | ./public/js/app.js | 138-145 |
-| applyMenuPermissions | Function | ./public/js/app.js | 149-160 |
-| organizationContextRequired | Function | ./public/js/app.js | 164-170 |
-| maybeRefreshConnection | Function | ./public/js/app.js | 172-179 |
-| maybeRefreshRole | Function | ./public/js/app.js | 180-189 |
-| syncShell | Function | ./public/js/app.js | 191-244 |
-| syncSidebar | Function | ./public/js/app.js | 246-284 |
-| syncSidebarCollapsed | Function | ./public/js/app.js | 286-296 |
-| copyWithLegacyFallback | Function | ./public/js/app.js | 298-313 |
-| copyAdlcPrompt | Function | ./public/js/app.js | 315-326 |
-| initShellInteractions | Function | ./public/js/app.js | 328-402 |
-| syncFooterHeight | Function | ./public/js/app.js | 341-345 |
-| prepareNavigationTarget | Function | ./public/js/app.js | 361-364 |
-| closeAtBreakpoint | Function | ./public/js/app.js | 397-400 |
-| refreshConnection | Function | ./public/js/app.js | 404-453 |
-| refreshRole | Function | ./public/js/app.js | 456-474 |
-| freshView | Function | ./public/js/app.js | 478-487 |
-| setAuthenticationLocked | Function | ./public/js/app.js | 489-496 |
-| beginSignIn | Function | ./public/js/app.js | 498-506 |
-| beginMicrosoftSignIn | Function | ./public/js/app.js | 508-516 |
-| authProviderButtons | Function | ./public/js/app.js | 523-541 |
-| beginSignOut | Function | ./public/js/app.js | 543-551 |
-| renderAuthControl | Function | ./public/js/app.js | 553-713 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 715-774 |
-| renderSignInRequired | Function | ./public/js/app.js | 779-801 |
-| renderAccessDenied | Function | ./public/js/app.js | 803-815 |
-| render | Function | ./public/js/app.js | 817-899 |
-| capitalize | Function | ./public/js/app.js | 901-904 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
+| request | Function | ./public/js/api.js | 148-226 |
 
-*... and 797 more members.*
+*... and 763 more members.*
 
 ## Execution Flows
 
-- **envRow** (criticality: 0.81, depth: 11)
-- **commit** (criticality: 0.81, depth: 11)
 - **start** (criticality: 0.81, depth: 6)
-- **onMove** (criticality: 0.80, depth: 9)
+- **renderWorkflows** (criticality: 0.79, depth: 5)
 - **initializeAuthentication** (criticality: 0.78, depth: 4)
-- **onUp** (criticality: 0.78, depth: 7)
-- **renderWorkflows** (criticality: 0.78, depth: 7)
 - **beginSignIn** (criticality: 0.76, depth: 6)
 - **beginMicrosoftSignIn** (criticality: 0.76, depth: 6)
 - **maybeRefreshConnection** (criticality: 0.76, depth: 3)
-- *... and 16 more flows.*
+- **onMove** (criticality: 0.76, depth: 9)
+- **beginSignOut** (criticality: 0.76, depth: 6)
+- **hostedConnection** (criticality: 0.75, depth: 8)
+- **render** (criticality: 0.73, depth: 6)
+- *... and 4 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `addEventListener` (253 edge(s))
-- `append` (228 edge(s))
-- `map` (204 edge(s))
-- `equal` (185 edge(s))
-- `push` (141 edge(s))
-- `String` (129 edge(s))
-- `trim` (101 edge(s))
-- `filter` (98 edge(s))
-- `isArray` (92 edge(s))
-- `has` (74 edge(s))
+- `append` (231 edge(s))
+- `addEventListener` (227 edge(s))
+- `map` (171 edge(s))
+- `expect` (151 edge(s))
+- `push` (124 edge(s))
+- `String` (118 edge(s))
+- `equal` (117 edge(s))
+- `trim` (109 edge(s))
+- `locator` (95 edge(s))
+- `filter` (90 edge(s))
 - `Boolean` (73 edge(s))
-- `get` (64 edge(s))
-- `setAttribute` (61 edge(s))
-- `deepEqual` (60 edge(s))
-- `Number` (55 edge(s))
+- `isArray` (72 edge(s))
+- `setAttribute` (65 edge(s))
+- `has` (62 edge(s))
+- `catch` (62 edge(s))
 
 ### Incoming
 
-- `equal` (185 edge(s))
+- `./public/js/api.js` (197 edge(s))
+- `expect` (148 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
-- `./public/js/views/agent.js` (112 edge(s))
+- `equal` (117 edge(s))
+- `./public/js/views/agent.js` (117 edge(s))
+- `locator` (93 edge(s))
 - `./public/js/app.js` (86 edge(s))
-- `./public/js/views/workflows.js` (86 edge(s))
-- `./public/js/workflow-designer-model.mjs` (65 edge(s))
-- `deepEqual` (60 edge(s))
-- `./services/org/tests/helpers.py::auth` (45 edge(s))
+- `./public/js/views/workflows.js` (61 edge(s))
+- `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
-- `match` (37 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `./public/js/views/organization.js` (28 edge(s))
-- `./public/js/workflow-sync.test.mjs` (24 edge(s))
-- `./public/js/auth.js` (23 edge(s))
+- `getByRole` (31 edge(s))
+- `match` (31 edge(s))
+- `toBeVisible` (29 edge(s))

@@ -4,19 +4,20 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 4 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.0000
+- **Size**: 4 nodes
+- **Cohesion**: 0.0222
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| stubSubstrate | Function | ./services/planner/src/routes/agent.substrate.test.js | 15-45 |
-| handlerFor | Function | ./services/planner/src/routes/agent.substrate.test.js | 47-51 |
-| invoke | Function | ./services/planner/src/routes/agent.substrate.test.js | 53-57 |
+| stubSubstrate | Function | ./services/planner/src/routes/agent.substrate.test.js | 16-74 |
+| handlerFor | Function | ./services/planner/src/routes/agent.substrate.test.js | 76-80 |
+| fakeReq | Function | ./services/planner/src/routes/agent.substrate.test.js | 84-97 |
+| invoke | Function | ./services/planner/src/routes/agent.substrate.test.js | 99-103 |
 
 ## Execution Flows
 
@@ -26,16 +27,23 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L59` (3 edge(s))
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L69` (3 edge(s))
-- `require` (2 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:POST /substrate/run resolves substrateApiToken over S2S and hands it to the runner@L145` (4 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L105` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L115` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status resolves the credential per request and threads it to both RPCs@L124` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status reports configured:false when no credential resolves@L136` (3 edge(s))
+- `require` (3 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
 - `toUpperCase` (1 edge(s))
 - `handler` (1 edge(s))
+- `runCapture` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.substrate.test.js` (3 edge(s))
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L59` (3 edge(s))
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L69` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js` (4 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:POST /substrate/run resolves substrateApiToken over S2S and hands it to the runner@L145` (4 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L105` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L115` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status resolves the credential per request and threads it to both RPCs@L124` (3 edge(s))
+- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status reports configured:false when no credential resolves@L136` (3 edge(s))

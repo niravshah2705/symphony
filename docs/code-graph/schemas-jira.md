@@ -22,7 +22,7 @@ Community of 5 nodes
 
 ## Execution Flows
 
-- **_jira_origin** (criticality: 0.61, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 

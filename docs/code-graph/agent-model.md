@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 560 nodes
+Community of 569 nodes
 
-- **Size**: 560 nodes
-- **Cohesion**: 0.3315
+- **Size**: 569 nodes
+- **Cohesion**: 0.3304
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,40 +65,37 @@ Community of 560 nodes
 | selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
 | normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
 
-*... and 510 more members.*
+*... and 519 more members.*
 
 ## Execution Flows
 
-- **resume** (criticality: 0.67, depth: 8)
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
-- **startScheduler** (criticality: 0.65, depth: 5)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (419 edge(s))
-- `deepEqual` (91 edge(s))
-- `String` (81 edge(s))
+- `equal` (425 edge(s))
+- `deepEqual` (93 edge(s))
+- `String` (83 edge(s))
 - `strictEqual` (68 edge(s))
 - `push` (62 edge(s))
-- `map` (45 edge(s))
+- `map` (46 edge(s))
 - `Number` (42 edge(s))
 - `replace` (42 edge(s))
-- `ok` (37 edge(s))
+- `ok` (38 edge(s))
+- `trim` (38 edge(s))
 - `step` (37 edge(s))
-- `trim` (37 edge(s))
-- `slice` (34 edge(s))
+- `slice` (36 edge(s))
+- `filter` (34 edge(s))
 - `match` (33 edge(s))
-- `filter` (33 edge(s))
 - `Boolean` (33 edge(s))
 
 ### Incoming
 
-- `equal` (419 edge(s))
-- `deepEqual` (91 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (77 edge(s))
+- `equal` (425 edge(s))
+- `deepEqual` (93 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (78 edge(s))
 - `./packages/shared/src/linear.js` (72 edge(s))
 - `strictEqual` (68 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
@@ -106,7 +103,7 @@ Community of 560 nodes
 - `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `./packages/shared/src/agent/llm.js` (40 edge(s))
-- `ok` (37 edge(s))
+- `ok` (38 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (32 edge(s))
 - `rejects` (29 edge(s))
 - `match` (28 edge(s))

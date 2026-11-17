@@ -47,7 +47,7 @@ Community of 30 nodes
 
 ## Execution Flows
 
-- **main** (criticality: 0.57, depth: 3)
+No execution flows pass through this community.
 
 ## Dependencies
 

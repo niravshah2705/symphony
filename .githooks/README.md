@@ -6,35 +6,26 @@ Version-controlled hooks for this repo. Enable them once per clone:
 npm run hooks:install     # git config core.hooksPath .githooks
 ```
 
-## `pre-commit` — code-docs drift gate
+## `pre-commit` — none
 
-Regenerates the code-graph documentation (`docs/code-graph/`) and **blocks the
-commit** if the result differs from what you staged. This keeps the docs in
-sync with the code that produced them.
-
-- Runs only when the commit touches source in a language code-review-graph
-  supports (`.py`, `.ts`, `.go`, `.rs`, `.java`, `.tf`, … — the full `CODE_RE`
-  list in `pre-commit`) or the generated docs — other commits are instant.
-  (`.yml/.yaml` is excluded on purpose: this repo's YAML is CI/config, not Ansible.)
-- On drift, it regenerates `docs/code-graph/` for you; just `git add -A docs/code-graph`
-  and commit again.
-- Requires the `code-review-graph` CLI, pinned to the version that generated the
-  committed map (see `CRG_VERSION` in `scripts/gen-code-docs.sh`; a different
-  build reshuffles community clustering and the drift gate will fight you):
-  ```bash
-  pipx install --with igraph code-review-graph==2.3.9
-  ```
-  or via uv:
-  ```bash
-  uv tool install --with igraph code-review-graph==2.3.9
-  ```
-- Emergency bypass: `SKIP_DOCS_HOOK=1 git commit …`
-
-Regenerate the docs manually any time with:
+There is deliberately **no** commit gate on `code-review-graph`. `docs/code-graph/`
+is a generated, gitignored local artifact (like `.code-review-graph/` and
+`graphify-out/`), so a commit is never blocked for doc drift and no CRG version
+pin has to match across machines. Regenerate the map whenever it looks stale:
 
 ```bash
 npm run docs:code
 ```
+
+- Requires the `code-review-graph` CLI (any recent release works, since nothing
+  diffs the output against a committed copy):
+  ```bash
+  pipx install --with igraph code-review-graph
+  ```
+  or via uv:
+  ```bash
+  uv tool install --with igraph code-review-graph
+  ```
 
 ## `post-commit` — background graph refresh
 
@@ -44,7 +35,7 @@ workflow (see `CLAUDE.md` → "Querying the code") stays fresh. Runs **detached*
 so `git commit` returns immediately, and is PID-locked so concurrent commits
 don't pile up rebuilds. Logs to `.code-review-graph/post-commit.log`.
 
-- This does **not** touch committed docs — that's the `pre-commit` gate above.
+- This only refreshes the local indexes; it never stages or commits anything.
 - Rebuild on demand any time: `npm run graph:build`.
 - Bypass: `SKIP_GRAPH_REFRESH=1 git commit …`
 - Requires the `graphify` CLI (v0.9+, **with the `terraform` extra** for this
@@ -59,6 +50,6 @@ don't pile up rebuilds. Logs to `.code-review-graph/post-commit.log`.
   touches changed files) — force one full rebuild with
   `npm run graph:build -- --clean`.
 
-> Enforcement is **local only** — a git hook cannot be enforced server-side and
-> can be bypassed. To also block *merges*, add `npm run docs:code` as a job in
-> `.github/workflows/checks.yml` and mark it a required status check.
+> Hooks are a convenience, not a contract: they run **local only**, are absent
+> on a clone that hasn't run `npm run hooks:install`, and can be bypassed. CI
+> does not depend on any of them.

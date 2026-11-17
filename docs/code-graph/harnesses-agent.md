@@ -4,23 +4,17 @@
 
 ## Overview
 
-Community of 300 nodes
+Community of 294 nodes
 
-- **Size**: 300 nodes
-- **Cohesion**: 0.2369
+- **Size**: 294 nodes
+- **Cohesion**: 0.2625
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
 | test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
-| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
-| test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
-| test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
-| test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
-| test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357 | Test | ./e2e/persistent-footer.spec.js | 357-461 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -64,8 +58,14 @@ Community of 300 nodes
 | test:mergeBank keeps untouched defaults as origin=default and layers overrides@L56 | Test | ./packages/shared/src/agent/global-questions.test.js | 56-66 |
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
+| test:normalizeQuestion rejects malformed input rather than storing it@L83 | Test | ./packages/shared/src/agent/global-questions.test.js | 83-92 |
+| test:normalizeQuestion coerces unknown answer types to free_text and clamps order@L94 | Test | ./packages/shared/src/agent/global-questions.test.js | 94-98 |
+| test:validateQuestionPatch allows a cross-field edit but not an inconsistent one@L100 | Test | ./packages/shared/src/agent/global-questions.test.js | 100-108 |
+| test:scoreQuestion: zero hits is 0/unanswered and no best score can be papered over@L117 | Test | ./packages/shared/src/agent/global-questions.test.js | 117-136 |
+| test:scoreQuestion discounts off-scope recall and prose-only answers to choice questions@L138 | Test | ./packages/shared/src/agent/global-questions.test.js | 138-151 |
+| test:scoreCoverage excludes rows that were never looked at from the denominator instead of counting them as zero@L153 | Test | ./packages/shared/src/agent/global-questions.test.js | 153-170 |
 
-*... and 250 more members.*
+*... and 244 more members.*
 
 ## Execution Flows
 
@@ -80,31 +80,30 @@ Community of 300 nodes
 
 ### Outgoing
 
-- `equal` (364 edge(s))
+- `equal` (383 edge(s))
 - `join` (73 edge(s))
-- `match` (63 edge(s))
-- `ok` (55 edge(s))
 - `String` (54 edge(s))
-- `isArray` (49 edge(s))
-- `map` (48 edge(s))
-- `deepEqual` (41 edge(s))
+- `isArray` (48 edge(s))
+- `map` (45 edge(s))
+- `ok` (44 edge(s))
+- `deepEqual` (42 edge(s))
 - `includes` (41 edge(s))
-- `filter` (32 edge(s))
-- `expect` (29 edge(s))
-- `slice` (27 edge(s))
-- `trim` (25 edge(s))
+- `match` (39 edge(s))
+- `filter` (26 edge(s))
+- `slice` (24 edge(s))
 - `require` (22 edge(s))
-- `push` (19 edge(s))
+- `push` (20 edge(s))
+- `throws` (19 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))
 
 ### Incoming
 
-- `equal` (364 edge(s))
-- `match` (59 edge(s))
-- `ok` (55 edge(s))
+- `equal` (383 edge(s))
 - `./packages/shared/src/agent/harnesses/contract.js` (55 edge(s))
 - `join` (46 edge(s))
-- `deepEqual` (41 edge(s))
-- `expect` (29 edge(s))
+- `ok` (44 edge(s))
+- `deepEqual` (42 edge(s))
+- `match` (35 edge(s))
 - `./packages/shared/src/agent/memory-middleware.js` (25 edge(s))
 - `./packages/shared/src/agent/harnesses/registry.js` (24 edge(s))
 - `./packages/shared/src/agent/rubric-middleware.js` (24 edge(s))
@@ -113,3 +112,4 @@ Community of 300 nodes
 - `./packages/shared/src/agent/rubric-middleware.test.js` (21 edge(s))
 - `./packages/shared/src/agent/memory-store/postgres-backend.js` (20 edge(s))
 - `throws` (19 edge(s))
+- `./packages/shared/src/agent/runtimes.js::executeAgentRuntime` (19 edge(s))

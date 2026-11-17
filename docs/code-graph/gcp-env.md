@@ -4,23 +4,18 @@
 
 ## Overview
 
-Community of 7 nodes
+Community of 2 nodes
 
-- **Size**: 7 nodes
-- **Cohesion**: 0.2203
+- **Size**: 2 nodes
+- **Cohesion**: 0.2069
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| read | Function | ./deploy/gcp/kagent-env.test.js | 32-32 |
-| envNamesRead | Function | ./deploy/gcp/kagent-env.test.js | 129-149 |
-| walk | Function | ./deploy/gcp/kagent-env.test.js | 137-146 |
-| envNamesEmitted | Function | ./deploy/gcp/kagent-env.test.js | 152-155 |
-| test:Terraform emits only KAGENT_* names that shipped code reads@L188 | Test | ./deploy/gcp/kagent-env.test.js | 188-195 |
-| test:every kagent setting the code can honor is reachable from Terraform@L197 | Test | ./deploy/gcp/kagent-env.test.js | 197-213 |
-| test:no credential-shaped key is ever emitted into the kagent env map@L215 | Test | ./deploy/gcp/kagent-env.test.js | 215-227 |
+| envLocal | Function | ./deploy/gcp/substrate-env.test.js | 153-160 |
+| test:substrate env reaches the dispatchers and never the worker@L213 | Test | ./deploy/gcp/substrate-env.test.js | 213-237 |
 
 ## Execution Flows
 
@@ -30,28 +25,18 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `join` (6 edge(s))
-- `matchAll` (2 edge(s))
+- `match` (4 edge(s))
+- `indexOf` (2 edge(s))
 - `ok` (2 edge(s))
-- `has` (2 edge(s))
-- `replace` (1 edge(s))
-- `map` (1 edge(s))
-- `existsSync` (1 edge(s))
-- `readFileSync` (1 edge(s))
+- `doesNotMatch` (2 edge(s))
+- `notEqual` (1 edge(s))
 - `filter` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `match` (1 edge(s))
-- `doesNotMatch` (1 edge(s))
-- `readdirSync` (1 edge(s))
-- `isDirectory` (1 edge(s))
-- `endsWith` (1 edge(s))
+- `slice` (1 edge(s))
+- `min` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/kagent-env.test.js` (12 edge(s))
-- `ok` (2 edge(s))
-- `has` (2 edge(s))
-- `filter` (1 edge(s))
-- `deepEqual` (1 edge(s))
-- `match` (1 edge(s))
-- `doesNotMatch` (1 edge(s))
+- `match` (4 edge(s))
+- `./deploy/gcp/substrate-env.test.js` (2 edge(s))
+- `doesNotMatch` (2 edge(s))
+- `ok` (1 edge(s))

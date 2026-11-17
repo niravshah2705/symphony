@@ -1,0 +1,40 @@
+package client
+
+import (
+	"context"
+
+	apiv1 "github.com/niravshah2705/symphony/go/api/gen/kagent/api/v1"
+)
+
+// Version defines the version-related operations
+type Version interface {
+	GetVersion(ctx context.Context) (*apiv1.GetVersionResponse, error)
+}
+
+// versionClient handles version-related requests
+type versionClient struct {
+	client *baseClient
+}
+
+func newVersionClient(client *baseClient) Version {
+	return &versionClient{client: client}
+}
+
+// GetVersion retrieves version information
+func (c *versionClient) GetVersion(ctx context.Context) (*apiv1.GetVersionResponse, error) {
+	client, err := c.client.systemServiceClient()
+	if err != nil {
+		return nil, err
+	}
+	callContext, cancel := c.client.grpcCallContext(ctx)
+	defer cancel()
+	return client.GetVersion(callContext, &apiv1.GetVersionRequest{})
+}
+
+func (c *baseClient) systemServiceClient() (apiv1.SystemServiceClient, error) {
+	connection, err := c.grpcConnection()
+	if err != nil {
+		return nil, err
+	}
+	return apiv1.NewSystemServiceClient(connection), nil
+}

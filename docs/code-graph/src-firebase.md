@@ -19,7 +19,7 @@ Community of 2 nodes
 
 ## Execution Flows
 
-- **defaultVerify** (criticality: 0.61, depth: 1)
+No execution flows pass through this community.
 
 ## Dependencies
 
