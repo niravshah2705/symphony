@@ -1,0 +1,350 @@
+package database
+
+import (
+	"crypto/sha256"
+	"strings"
+	"testing"
+
+	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2aevent"
+	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"github.com/a2aproject/a2a-go/v2/a2apb/v1/pbconv"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+
+	apiv1 "github.com/niravshah2705/symphony/go/api/gen/kagent/api/v1"
+)
+
+func addUnknown(message proto.Message) {
+	message.ProtoReflect().SetUnknown(protowire.AppendString(protowire.AppendTag(nil, 1000, protowire.BytesType), "future field"))
+}
+
+func TestMalformedProtobufPayloads(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		decode func([]byte) error
+	}{
+		{"session", func(data []byte) error { _, err := toSession(sessionRow{Data: data}); return err }},
+		{"sandbox", func(data []byte) error { _, err := (sandboxRow{Data: data}).sandbox(); return err }},
+		{"checkpoint", func(data []byte) error {
+			_, err := toSessionCheckpoint(sessionCheckpointRow{Data: data})
+			return err
+		}},
+		{"share", func(data []byte) error {
+			_, err := toSessionShare(sessionShareRow{Data: data})
+			return err
+		}},
+		{"card", func(data []byte) error {
+			_, err := toRuntimeRevision(runtimeRevisionRow{AgentCard: data})
+			return err
+		}},
+		{"task", func(data []byte) error { _, err := unmarshalSessionTask(data); return err }},
+		{"event", func(data []byte) error { _, err := unmarshalSessionTaskEvent(data); return err }},
+	} {
+		t.Run(test.name, func(t *testing.T) { require.Error(t, test.decode([]byte{0xff})) })
+	}
+}
+
+func TestA2AProtobufTaskEventScope(t *testing.T) {
+	contextID := uuid.NewString()
+	original := &a2apb.Task{Id: "task", ContextId: contextID, Status: &a2apb.TaskStatus{State: a2apb.TaskState_TASK_STATE_WORKING},
+		Artifacts: []*a2apb.Artifact{{ArtifactId: "one", Parts: []*a2apb.Part{{Content: &a2apb.Part_Text{Text: "first"}}, {Content: &a2apb.Part_Text{Text: "second"}}}}, {ArtifactId: "two"}},
+	}
+	addUnknown(original)
+	addUnknown(original.Status)
+	addUnknown(original.Artifacts[0])
+	addUnknown(original.Artifacts[0].Parts[0])
+	reordered, err := pbconv.FromProtoTask(original)
+	require.NoError(t, err)
+	reordered.Artifacts[0], reordered.Artifacts[1] = reordered.Artifacts[1], reordered.Artifacts[0]
+	for _, test := range []struct {
+		name  string
+		event a2a.Event
+	}{
+		{"reorder artifacts", reordered},
+		{"status", &a2a.TaskStatusUpdateEvent{TaskID: "task", ContextID: contextID, Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}, Metadata: map[string]any{"status": "done"}}},
+		{"append", &a2a.TaskArtifactUpdateEvent{TaskID: "task", ContextID: contextID, Append: true, Artifact: &a2a.Artifact{ID: "one", Parts: a2a.ContentParts{a2a.NewTextPart("third")}, Metadata: map[string]any{"chunk": "last"}}}},
+		{"replace parts", &a2a.TaskArtifactUpdateEvent{TaskID: "task", ContextID: contextID, Artifact: &a2a.Artifact{ID: "one", Parts: a2a.ContentParts{a2a.NewTextPart("second"), a2a.NewTextPart("first")}}}},
+		{"snapshot", &a2a.Task{ID: "task", ContextID: contextID, Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}, Artifacts: []*a2a.Artifact{{ID: "one", Parts: a2a.ContentParts{a2a.NewTextPart("replacement")}}}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			task, err := pbconv.FromProtoTask(original)
+			require.NoError(t, err)
+			next, err := a2aevent.ApplyUpdate(task, test.event)
+			require.NoError(t, err)
+			got, _, err := taskTransition(original, next, test.event)
+			require.NoError(t, err)
+			require.Equal(t, original.ProtoReflect().GetUnknown(), got.ProtoReflect().GetUnknown())
+			require.Equal(t, original.Status.ProtoReflect().GetUnknown(), got.Status.ProtoReflect().GetUnknown())
+			switch test.name {
+			case "reorder artifacts":
+				require.True(t, proto.Equal(original.Artifacts[0], got.Artifacts[1]))
+			case "status", "append":
+				require.Equal(t, original.Artifacts[0].ProtoReflect().GetUnknown(), got.Artifacts[0].ProtoReflect().GetUnknown())
+				require.True(t, proto.Equal(original.Artifacts[0].Parts[0], got.Artifacts[0].Parts[0]))
+			default:
+				// Replacing content must not transplant fields from the previous parts.
+				require.Empty(t, got.Artifacts[0].ProtoReflect().GetUnknown())
+				for _, part := range got.Artifacts[0].Parts {
+					require.Empty(t, part.ProtoReflect().GetUnknown())
+				}
+			}
+		})
+	}
+	task, err := pbconv.FromProtoTask(original)
+	require.NoError(t, err)
+	event := &a2a.TaskStatusUpdateEvent{TaskID: task.ID, ContextID: task.ContextID, Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}}
+	_, _, err = taskTransition(proto.Clone(original).(*a2apb.Task), task, event)
+	// The supplied projection still says working.
+	require.ErrorContains(t, err, "task status does not match event")
+	_, _, err = taskTransition(proto.Clone(original).(*a2apb.Task), task, &a2a.TaskArtifactUpdateEvent{TaskID: task.ID, ContextID: task.ContextID, Append: true, Artifact: &a2a.Artifact{ID: "one", Parts: a2a.ContentParts{a2a.NewTextPart("new")}}})
+	require.ErrorContains(t, err, "projection does not match event")
+}
+
+func TestProtobufPersistenceLifecycle(t *testing.T) {
+	pool := setupTestDB(t)
+	client := NewClient(pool, "public")
+	q := pool
+	ctx := t.Context()
+	sessionFixture(t, client, ctx, "team-a", "revision", "assistant", "kagent")
+	request := newSessionRequest(uuid.NewString(), "assistant", "kagent", "original")
+	addUnknown(request)
+	addUnknown(request.GetAgent())
+	session, _, err := client.CreateSession(ctx, request, "create")
+	require.NoError(t, err)
+	_, err = client.UpdateSessionName(ctx, session.Id, "alice", "renamed while creating")
+	require.NoError(t, err)
+	session, err = markSessionReady(ctx, client, session.Id, "runtime:80")
+	require.NoError(t, err)
+	require.Equal(t, "renamed while creating", session.Name)
+	suspend, err := client.BeginSessionOperation(ctx, session.Id, apiv1.RuntimeOperation_RUNTIME_OPERATION_SUSPEND, false)
+	require.NoError(t, err)
+	_, err = client.UpdateSessionName(ctx, session.Id, "alice", "renamed again")
+	require.NoError(t, err)
+	executor := uuid.New()
+	claimed, err := client.ClaimSessionOperation(ctx, session.Id, suspend.ID, executor)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	session, err = client.FinishSessionOperation(ctx, session.Id, suspend.ID, executor, "", "", "")
+	require.NoError(t, err)
+	require.Equal(t, "renamed again", session.Name)
+	require.Equal(t, "alice", session.Creator)
+	require.Equal(t, "revision", session.PreparedRevision)
+	row, err := readSession(ctx, q, session.Id)
+	require.NoError(t, err)
+	stored := &apiv1.Session{}
+	require.NoError(t, proto.Unmarshal(row.Data, stored))
+	reconstructed, err := toSession(row)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(session, reconstructed))
+	require.True(t, proto.Equal(session, stored), "persist the full Session protobuf")
+	require.Equal(t, request.ProtoReflect().GetUnknown(), stored.ProtoReflect().GetUnknown())
+	require.Equal(t, request.GetAgent().ProtoReflect().GetUnknown(), stored.GetAgent().ProtoReflect().GetUnknown())
+	session, err = finishSessionOperation(ctx, client, session.Id, apiv1.RuntimeOperation_RUNTIME_OPERATION_RESUME, "")
+	require.NoError(t, err)
+
+	task := &a2a.Task{ID: "task", ContextID: session.GetContextId(), Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted},
+		History: []*a2a.Message{{ID: "message", Role: a2a.MessageRoleUser, Parts: a2a.ContentParts{a2a.NewTextPart("hello")}}},
+	}
+	_, err = client.CreateRuntimeTask(ctx, session.Id, taskMutationHash("request hash"), task, "")
+	require.NoError(t, err)
+	// Simulate a newer writer using the same binary SQL boundary.
+	taskRow, err := readSessionTask(ctx, q, row.HistoryID, string(task.ID))
+	require.NoError(t, err)
+	futureTask := &a2apb.Task{}
+	require.NoError(t, proto.Unmarshal(taskRow.Data, futureTask))
+	addUnknown(futureTask)
+	addUnknown(futureTask.Status)
+	futureTask.Status.Message = &a2apb.Message{MessageId: "question", Role: a2apb.Role_ROLE_AGENT, TaskId: string(task.ID), ContextId: session.GetContextId(),
+		Parts: []*a2apb.Part{{Content: &a2apb.Part_Text{Text: "question"}}}}
+	addUnknown(futureTask.Status.Message)
+	addUnknown(futureTask.Status.Message.Parts[0])
+	futureData, err := proto.Marshal(futureTask)
+	require.NoError(t, err)
+	_, err = saveTaskProjection(ctx, q, taskRow.HistoryID, taskRow.ID, taskRow.State, taskRow.StatusTimestamp, futureData)
+	require.NoError(t, err)
+	futureEvent, err := proto.Marshal(&a2apb.StreamResponse{Payload: &a2apb.StreamResponse_Task{Task: futureTask}})
+	require.NoError(t, err)
+	_, err = insertTaskEvent(ctx, q, taskEventWrite{
+		HistoryID: taskRow.HistoryID,
+		TaskID:    taskRow.ID,
+		Data:      futureEvent,
+	})
+	require.NoError(t, err)
+	task.Status.State = a2a.TaskStateCompleted
+	require.NoError(t, saveRuntimeTask(t, client, session.Id, task, &a2a.TaskStatusUpdateEvent{TaskID: task.ID, ContextID: task.ContextID, Status: task.Status}, &SessionTaskSnapshot{Atespace: "team-a", URI: "s3://snapshots/snapshot", Fidelity: "SNAPSHOT_FIDELITY_VOLUMES"}))
+	checkpointRequest := &apiv1.Checkpoint{Id: uuid.NewString(), SessionId: session.Id, HeadTaskId: string(task.ID)}
+	addUnknown(checkpointRequest)
+	checkpoint, _, err := client.ReserveSessionCheckpoint(ctx, checkpointRequest, "alice", "checkpoint")
+	require.NoError(t, err)
+	checkpoint, err = client.FinalizeSessionCheckpoint(ctx, checkpoint.Id, "tag-uid", "s3://tags/checkpoint", "")
+	require.NoError(t, err)
+	checkpointRow, err := readCheckpoint(ctx, q, checkpoint.Id, "alice", new("READY"))
+	require.NoError(t, err)
+	storedCheckpoint := &apiv1.Checkpoint{}
+	require.NoError(t, proto.Unmarshal(checkpointRow.Data, storedCheckpoint))
+	require.True(t, proto.Equal(checkpoint, storedCheckpoint))
+	require.Equal(t, checkpointRequest.ProtoReflect().GetUnknown(), checkpoint.ProtoReflect().GetUnknown())
+	_, err = client.GetSessionCheckpoint(ctx, checkpoint.Id, "mallory")
+	require.ErrorIs(t, err, ErrNotFound)
+	fork, created, err := client.ForkSession(ctx, checkpoint.Id, "alice", "fork", uuid.NewString())
+	require.NoError(t, err)
+	require.True(t, created)
+	tasks, total, err := client.ListSessionTasks(ctx, fork.Id, "", a2a.TaskStateUnspecified, nil, 10, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, total)
+	require.Len(t, tasks[0].History, 2)
+	forkRow, err := readSession(ctx, q, fork.Id)
+	require.NoError(t, err)
+	forkHistory, err := readTaskMessages(ctx, q, forkRow.HistoryID, []string{string(tasks[0].ID)}, nil, false)
+	require.NoError(t, err)
+	question := &a2apb.StreamResponse{}
+	require.NoError(t, proto.Unmarshal(forkHistory[1].Data, question))
+	require.Equal(t, futureTask.Status.Message.ProtoReflect().GetUnknown(), question.GetMessage().ProtoReflect().GetUnknown())
+	require.Equal(t, futureTask.Status.Message.Parts[0].ProtoReflect().GetUnknown(), question.GetMessage().Parts[0].ProtoReflect().GetUnknown())
+	require.NotEqual(t, task.ID, tasks[0].ID)
+	require.Equal(t, fork.Id, tasks[0].ContextID)
+	forkTaskRow, err := readSessionTask(ctx, q, forkRow.HistoryID, string(tasks[0].ID))
+	require.NoError(t, err)
+	forkTask := &a2apb.Task{}
+	require.NoError(t, proto.Unmarshal(forkTaskRow.Data, forkTask))
+	require.Equal(t, futureTask.ProtoReflect().GetUnknown(), forkTask.ProtoReflect().GetUnknown())
+	require.Equal(t, futureTask.Status.ProtoReflect().GetUnknown(), forkTask.Status.ProtoReflect().GetUnknown())
+	require.Equal(t, a2apb.TaskState_TASK_STATE_COMPLETED, forkTask.Status.State)
+	require.NoError(t, deleteSession(ctx, client, fork.Id))
+	_, _, err = client.BeginDeleteSessionCheckpoint(ctx, checkpoint.Id, "alice")
+	require.NoError(t, err)
+	checkpointRow, err = readCheckpoint(ctx, q, checkpoint.Id, "alice", nil)
+	require.NoError(t, err)
+	deleting := &apiv1.Checkpoint{}
+	require.NoError(t, proto.Unmarshal(checkpointRow.Data, deleting))
+	require.Equal(t, checkpointRequest.ProtoReflect().GetUnknown(), deleting.ProtoReflect().GetUnknown())
+	require.Equal(t, apiv1.CheckpointState_CHECKPOINT_STATE_DELETING, deleting.State)
+	require.NoError(t, client.DeleteSessionCheckpoint(ctx, checkpoint.Id, "alice"))
+	_, err = client.GetSessionCheckpoint(ctx, checkpoint.Id, "alice")
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestSandboxProtobufPersistenceLifecycle(t *testing.T) {
+	pool := setupTestDB(t)
+	client := NewClient(pool, "public")
+	ctx := t.Context()
+	input, options := sandboxFixture(t, client, "revision")
+	addUnknown(input)
+	addUnknown(input.SandboxTemplate)
+	created, _, err := client.CreateSandbox(ctx, input, "create", options)
+	require.NoError(t, err)
+	require.Equal(t, input.ProtoReflect().GetUnknown(), created.ProtoReflect().GetUnknown())
+
+	for _, kind := range []apiv1.RuntimeOperation{
+		apiv1.RuntimeOperation_RUNTIME_OPERATION_CREATE,
+		apiv1.RuntimeOperation_RUNTIME_OPERATION_SUSPEND,
+		apiv1.RuntimeOperation_RUNTIME_OPERATION_RESUME,
+		apiv1.RuntimeOperation_RUNTIME_OPERATION_DELETE,
+	} {
+		finished := finishSandbox(t, client, created.Id, kind)
+		observed, err := client.GetSandbox(ctx, created.Id, input.Creator)
+		require.NoError(t, err)
+		require.True(t, proto.Equal(finished, observed))
+		require.Equal(t, created.Name, observed.Name)
+		require.True(t, proto.Equal(created.CreatedAt, observed.CreatedAt))
+		require.True(t, proto.Equal(created.ExpiresAt, observed.ExpiresAt))
+		require.True(t, proto.Equal(created.SandboxTemplate, observed.SandboxTemplate))
+		require.Equal(t, created.ProtoReflect().GetUnknown(), observed.ProtoReflect().GetUnknown())
+		row, err := readSandbox(ctx, pool, created.Id)
+		require.NoError(t, err)
+		stored := &apiv1.Sandbox{}
+		require.NoError(t, proto.Unmarshal(row.Data, stored))
+		require.True(t, proto.Equal(observed, stored), "persist the full Sandbox protobuf")
+	}
+}
+
+func TestSandboxCorruptPayloadRollsBackOperation(t *testing.T) {
+	pool := setupTestDB(t)
+	client := NewClient(pool, "public")
+	ctx := t.Context()
+	input, options := sandboxFixture(t, client, "revision")
+	created, _, err := client.CreateSandbox(ctx, input, "create", options)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE sandbox SET data = $2 WHERE id = $1`, created.Id, []byte{0xff})
+	require.NoError(t, err)
+	_, err = client.BeginSandboxOperation(ctx, created.Id, apiv1.RuntimeOperation_RUNTIME_OPERATION_CREATE)
+	require.Error(t, err)
+	row, err := readSandbox(ctx, pool, created.Id)
+	require.NoError(t, err)
+	require.Nil(t, row.OperationID, "a failed payload write must not leave an admitted operation")
+	require.Equal(t, created.State.String(), row.State)
+	require.Equal(t, created.Operation.String(), row.Operation)
+}
+
+func TestShareAndAgentCardProtobufPersistence(t *testing.T) {
+	pool := setupTestDB(t)
+	client := NewClient(pool, "public")
+	ctx := t.Context()
+	card, err := pbconv.ToProtoAgentCard(&a2a.AgentCard{Name: "assistant", Description: "assistant", Version: "v1", SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface("http://runtime", a2a.TransportProtocolGRPC)}, DefaultInputModes: []string{"text"}, DefaultOutputModes: []string{"text"}, Skills: []a2a.AgentSkill{{ID: "skill", Name: "skill", Description: "skill", Tags: []string{"tag"}}}, Capabilities: a2a.AgentCapabilities{Streaming: true}})
+	require.NoError(t, err)
+	addUnknown(card)
+	revision := RuntimeRevision{Revision: "revision", Namespace: "team-a", AgentName: "assistant", AgentUID: "template", SourceSnapshot: []byte(`{}`), AgentCard: card, EgressDestinations: []string{}, ActorTemplateAtespace: "team-a", ActorTemplateName: "template"}
+	require.NoError(t, recordErr(client.RecordRuntimeRevision(ctx, revision, RecordRevisionOptions{})))
+	// Reconciliation can update runtime identity, but the pinned card is immutable.
+	revision.AgentCard = &a2apb.AgentCard{Name: "replacement"}
+	revision.ActorTemplateUID = "new-uid"
+	require.NoError(t, recordErr(client.RecordRuntimeRevision(ctx, revision, RecordRevisionOptions{})))
+	stored, err := client.GetRuntimeRevision(ctx, "revision")
+	require.NoError(t, err)
+	require.True(t, proto.Equal(card, stored.AgentCard))
+	require.Equal(t, "new-uid", stored.ActorTemplateUID)
+	cards, err := client.ListUnreferencedRuntimeRevisions(ctx)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	require.Equal(t, stored.Revision, cards[0].Revision)
+	rendered, err := pbconv.FromProtoAgentCard(stored.AgentCard)
+	require.NoError(t, err)
+	require.Equal(t, "assistant", rendered.Name)
+	require.True(t, rendered.Capabilities.Streaming)
+	sessionFixture(t, client, ctx, "team-a", "session-revision", "assistant", "kagent")
+	session, _, err := client.CreateSession(ctx, newSessionRequest(uuid.NewString(), "assistant", "kagent", ""), "create")
+	require.NoError(t, err)
+	digest := sha256.Sum256([]byte("share-token"))
+	canonicalShareID := uuid.NewString()
+	value := &apiv1.SessionShare{Id: strings.ToUpper(canonicalShareID), SessionId: strings.ToUpper(session.Id)}
+	addUnknown(value)
+	share, err := client.CreateSessionShare(ctx, value, digest[:], "alice")
+	require.NoError(t, err)
+	require.Equal(t, canonicalShareID, share.Id)
+	require.Equal(t, session.Id, share.SessionId)
+	require.Equal(t, strings.ToUpper(canonicalShareID), value.Id, "the caller's input must not be mutated")
+	require.Equal(t, strings.ToUpper(session.Id), value.SessionId)
+	require.Equal(t, value.ProtoReflect().GetUnknown(), share.ProtoReflect().GetUnknown())
+	resolved, ownerUserID, err := client.GetSessionShareByTokenHash(ctx, digest[:])
+	require.NoError(t, err)
+	require.True(t, proto.Equal(share, resolved))
+	require.Equal(t, "alice", ownerUserID)
+	listed, err := client.ListSessionShares(ctx, session.Id, "alice", "", 10)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.True(t, proto.Equal(share, listed[0]))
+	listed, err = client.ListSessionShares(ctx, session.Id, "mallory", "", 10)
+	require.NoError(t, err)
+	require.Empty(t, listed)
+	require.ErrorIs(t, client.DeleteSessionShare(ctx, share.Id, "mallory"), ErrNotFound)
+	require.NoError(t, client.DeleteSessionShare(ctx, share.Id, "alice"))
+	_, _, err = client.GetSessionShareByTokenHash(ctx, digest[:])
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestProtobufRowsRejectInconsistentIndexes(t *testing.T) {
+	id := uuid.New()
+	checkpoint := &apiv1.Checkpoint{Id: id.String(), SessionId: id.String(), State: apiv1.CheckpointState_CHECKPOINT_STATE_READY}
+	data, err := proto.Marshal(checkpoint)
+	require.NoError(t, err)
+	_, err = toSessionCheckpoint(sessionCheckpointRow{ID: id, SourceSessionID: id, State: "CREATING", Data: data})
+	require.ErrorContains(t, err, "disagrees with indexed columns")
+	share := &apiv1.SessionShare{Id: id.String(), SessionId: id.String()}
+	data, err = proto.Marshal(share)
+	require.NoError(t, err)
+	_, err = toSessionShare(sessionShareRow{ID: id, SessionID: uuid.New(), Data: data})
+	require.ErrorContains(t, err, "disagrees with indexed columns")
+}

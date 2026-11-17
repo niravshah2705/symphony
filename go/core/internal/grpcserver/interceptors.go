@@ -1,0 +1,257 @@
+package grpcserver
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"runtime/debug"
+	"strings"
+	"time"
+
+	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+
+	apiv1 "github.com/niravshah2705/symphony/go/api/gen/kagent/api/v1"
+	runtimev1 "github.com/niravshah2705/symphony/go/api/gen/kagent/runtime/v1"
+	"github.com/niravshah2705/symphony/go/core/internal/database"
+	"github.com/niravshah2705/symphony/go/core/internal/service/agentidentity"
+	"github.com/niravshah2705/symphony/go/core/internal/service/bootstrap"
+	"github.com/niravshah2705/symphony/go/core/internal/service/serviceerrors"
+	sessionsvc "github.com/niravshah2705/symphony/go/core/internal/service/session"
+	"github.com/niravshah2705/symphony/go/core/pkg/auth"
+	"github.com/niravshah2705/symphony/go/pkg/logging"
+)
+
+var forwardedMetadataKeys = map[string]string{
+	"authorization": "Authorization",
+	"x-user-id":     "X-User-Id",
+	"x-agent-name":  "X-Agent-Name",
+	"x-share-token": "X-Share-Token",
+}
+
+func authenticationUnaryInterceptor(authenticator auth.AuthProvider, shareStore sessionsvc.ShareStore, policies MethodPolicies, identity *agentidentity.Service, bootstrapService *bootstrap.Service) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		authenticatedContext, err := authenticate(ctx, info.FullMethod, authenticator, shareStore, policies, identity, bootstrapService)
+		if err != nil {
+			return nil, err
+		}
+		return handler(authenticatedContext, req)
+	}
+}
+
+func authenticationStreamInterceptor(authenticator auth.AuthProvider, shareStore sessionsvc.ShareStore, policies MethodPolicies, identity *agentidentity.Service, bootstrapService *bootstrap.Service) grpc.StreamServerInterceptor {
+	return func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		authenticatedContext, err := authenticate(stream.Context(), info.FullMethod, authenticator, shareStore, policies, identity, bootstrapService)
+		if err != nil {
+			return err
+		}
+		return handler(srv, &contextServerStream{ServerStream: stream, ctx: authenticatedContext})
+	}
+}
+
+func authenticate(ctx context.Context, fullMethod string, authenticator auth.AuthProvider, shareStore sessionsvc.ShareStore, policies MethodPolicies, identity *agentidentity.Service, bootstrapService *bootstrap.Service) (context.Context, error) {
+	access, ok := policies[fullMethod]
+	if !ok {
+		return ctx, status.Error(codes.PermissionDenied, "RPC authorization policy is not configured")
+	}
+	headers := incomingHTTPHeaders(ctx)
+	if fullMethod == runtimev1.BootstrapService_GetBootstrapConfig_FullMethodName {
+		if bootstrapService == nil {
+			return ctx, status.Error(codes.Unauthenticated, "Bootstrap authentication is not configured")
+		}
+		authenticated, err := bootstrapService.Authenticate(ctx, headers)
+		return authenticated, mapError(err)
+	}
+
+	// Metadata credentials use a distinct audience and must never fall back to
+	// user authentication or gain authority through a Session share.
+	if fullMethod == apiv1.AgentIdentityService_ResolveAgentIdentity_FullMethodName {
+		if identity == nil {
+			return ctx, status.Error(codes.Unauthenticated, "Agent identity authentication is not configured")
+		}
+		authenticatedContext, err := identity.Authenticate(ctx, headers)
+		return authenticatedContext, mapAndLogError(ctx, err)
+	}
+	if access == auth.AccessPublic && len(headers.Values("Authorization")) == 0 {
+		return ctx, nil
+	}
+	if authenticator == nil {
+		return ctx, status.Error(codes.Unauthenticated, "authentication is not configured")
+	}
+	session, err := authenticator.Authenticate(ctx, headers, url.Values{})
+	if database.IsLoginFailure(err) {
+		return ctx, mapAndLogError(ctx, err)
+	}
+	if err != nil || session == nil {
+		return ctx, status.Error(codes.Unauthenticated, "invalid credentials")
+	}
+	if access == auth.AccessRuntime && session.Principal().RuntimeBinding == nil {
+		return ctx, status.Error(codes.PermissionDenied, "runtime actor identity is required")
+	}
+	authenticatedContext := auth.AuthSessionTo(ctx, session)
+	share, err := sessionsvc.ResolveShare(authenticatedContext, shareStore, headers.Get("X-Share-Token"))
+	if err != nil {
+		return ctx, mapAndLogError(ctx, err)
+	}
+	if share == nil {
+		return authenticatedContext, nil
+	}
+	// A2A delegates Session share authorization to the Session service. Retain
+	// the coarse read-only gate for other RPCs, including non-Session services.
+	a2aMethod := strings.HasPrefix(fullMethod, "/"+a2apb.A2AService_ServiceDesc.ServiceName+"/")
+	if !a2aMethod && access != auth.AccessRead {
+		return ctx, status.Error(codes.PermissionDenied, "this share link is read-only")
+	}
+	return auth.ShareContextTo(authenticatedContext, share), nil
+}
+
+func incomingHTTPHeaders(ctx context.Context) http.Header {
+	headers := make(http.Header)
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return headers
+	}
+	for metadataKey, headerName := range forwardedMetadataKeys {
+		for _, value := range md.Get(metadataKey) {
+			headers.Add(headerName, value)
+		}
+	}
+	return headers
+}
+
+func recoverUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (response any, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			logging.FromContext(ctx).ErrorContext(ctx, "recovered panic in gRPC request", "error", fmt.Errorf("panic: %v", recovered), "grpc_method", info.FullMethod, "stack", string(debug.Stack()))
+			err = status.Error(codes.Internal, "internal server error")
+		}
+	}()
+	return handler(ctx, req)
+}
+
+func recoverStreamInterceptor(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			ctx := stream.Context()
+			logging.FromContext(ctx).ErrorContext(ctx, "recovered panic in gRPC stream", "error", fmt.Errorf("panic: %v", recovered), "grpc_method", info.FullMethod, "stack", string(debug.Stack()))
+			err = status.Error(codes.Internal, "internal server error")
+		}
+	}()
+	return handler(srv, stream)
+}
+
+func loggingUnaryInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	start := time.Now()
+	logger := requestLogger(ctx, info.FullMethod, "unary")
+	ctx = logging.IntoContext(ctx, logger)
+	response, err := handler(ctx, req)
+	logger.InfoContext(ctx, "rpc completed", "grpc_code", status.Code(err).String(), "duration_ms", time.Since(start).Milliseconds())
+	return response, err
+}
+
+func loggingStreamInterceptor(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	start := time.Now()
+	logger := requestLogger(stream.Context(), info.FullMethod, "stream")
+	wrapped := &contextServerStream{ServerStream: stream, ctx: logging.IntoContext(stream.Context(), logger)}
+	err := handler(srv, wrapped)
+	logger.InfoContext(wrapped.Context(), "rpc completed", "grpc_code", status.Code(err).String(), "duration_ms", time.Since(start).Milliseconds())
+	return err
+}
+
+func requestLogger(ctx context.Context, method, rpcType string) *slog.Logger {
+	values := []any{"component", "grpc", "grpc_method", method, "rpc_type", rpcType}
+	if remotePeer, ok := peer.FromContext(ctx); ok {
+		values = append(values, "peer", remotePeer.Addr.String())
+	}
+	return logging.FromContext(ctx).With(values...)
+}
+
+func errorMappingUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	response, err := handler(ctx, req)
+	return response, mapAndLogError(ctx, err)
+}
+
+func errorMappingStreamInterceptor(srv any, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return mapAndLogError(stream.Context(), handler(srv, stream))
+}
+
+// mapAndLogError logs the cause of server-side failures, because mapError
+// redacts it from the client response.
+func mapAndLogError(ctx context.Context, err error) error {
+	mapped := mapError(err)
+	switch code := status.Code(mapped); code {
+	case codes.Internal:
+		logging.FromContext(ctx).ErrorContext(ctx, "rpc failed", "grpc_code", code.String(), "error", err)
+	case codes.Unavailable:
+		logging.FromContext(ctx).WarnContext(ctx, "rpc failed", "grpc_code", code.String(), "error", err)
+	}
+	return mapped
+}
+
+func mapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return status.Error(codes.Canceled, "request canceled")
+	}
+	// A connect timeout wraps DeadlineExceeded, but it reports an unreachable
+	// database rather than an expired caller deadline.
+	if database.IsUnavailable(err) {
+		return status.Error(codes.Unavailable, "database unavailable")
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return status.Error(codes.DeadlineExceeded, "request deadline exceeded")
+	}
+	if code := serviceerrors.CodeOf(err); code != "" {
+		if code == serviceerrors.CodeInternal {
+			return status.Error(codes.Internal, "internal server error")
+		}
+		return status.Error(serviceErrorCode(code), serviceerrors.MessageOf(err))
+	}
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
+	return status.Error(codes.Internal, "internal server error")
+}
+
+func serviceErrorCode(code serviceerrors.Code) codes.Code {
+	switch code {
+	case serviceerrors.CodeInvalidArgument:
+		return codes.InvalidArgument
+	case serviceerrors.CodeUnauthenticated:
+		return codes.Unauthenticated
+	case serviceerrors.CodePermissionDenied:
+		return codes.PermissionDenied
+	case serviceerrors.CodeNotFound:
+		return codes.NotFound
+	case serviceerrors.CodeAlreadyExists:
+		return codes.AlreadyExists
+	case serviceerrors.CodeFailedPrecondition:
+		return codes.FailedPrecondition
+	case serviceerrors.CodeResourceExhausted:
+		return codes.ResourceExhausted
+	case serviceerrors.CodeAborted:
+		return codes.Aborted
+	case serviceerrors.CodeUnavailable:
+		return codes.Unavailable
+	default:
+		return codes.Internal
+	}
+}
+
+type contextServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *contextServerStream) Context() context.Context {
+	return s.ctx
+}

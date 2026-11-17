@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 24 nodes
+Community of 21 nodes
 
-- **Size**: 24 nodes
-- **Cohesion**: 0.1753
+- **Size**: 21 nodes
+- **Cohesion**: 0.2014
 - **Dominant Language**: javascript
 
 ## Members
@@ -24,19 +24,16 @@ Community of 24 nodes
 | test:sitemap covers home, pricing, company pages, and the adlc hub@L55 | Test | ./scripts/seo-archagentix.test.js | 55-64 |
 | test:robots.txt advertises the canonical sitemap and keeps AI crawlers allowed@L66 | Test | ./scripts/seo-archagentix.test.js | 66-73 |
 | test:legacy adlc-9e72f.web.app references are gone from all public pages@L75 | Test | ./scripts/seo-archagentix.test.js | 75-85 |
-| test:Organization JSON-LD is present and exact on marketing surfaces@L87 | Test | ./scripts/seo-archagentix.test.js | 87-114 |
 | test:every JSON-LD block under public parses as valid JSON@L116 | Test | ./scripts/seo-archagentix.test.js | 116-131 |
 | walk | Function | ./scripts/seo-archagentix.test.js | 267-272 |
 | test:Try now links resolve to platform.archagentix.com everywhere@L133 | Test | ./scripts/seo-archagentix.test.js | 133-155 |
 | test:pricing is linked on top navigation of every marketing page@L157 | Test | ./scripts/seo-archagentix.test.js | 157-167 |
-| test:pricing page exposes plans, FAQ, and product schema for AEO@L169 | Test | ./scripts/seo-archagentix.test.js | 169-183 |
 | test:each marketing page is self-canonical, described, and indexable@L185 | Test | ./scripts/seo-archagentix.test.js | 185-194 |
 | test:footer mirrors the platform footer and carries the company sections@L239 | Test | ./scripts/seo-archagentix.test.js | 239-263 |
 | test:the brand query has a landing page: every public title names Archagentix@L265 | Test | ./scripts/seo-archagentix.test.js | 265-285 |
 | test:platform owns its sitemap, and www never publishes it@L287 | Test | ./scripts/seo-archagentix.test.js | 287-305 |
 | test:robots.txt advertises a sitemap for each host@L307 | Test | ./scripts/seo-archagentix.test.js | 307-312 |
 | test:both hosts describe one organization, and only www declares it@L314 | Test | ./scripts/seo-archagentix.test.js | 314-327 |
-| test:the benchmarks panel is an indexed, self-canonical Archagentix page@L329 | Test | ./scripts/seo-archagentix.test.js | 329-341 |
 | test:answer engines are told which host does what@L343 | Test | ./scripts/seo-archagentix.test.js | 343-351 |
 
 ## Execution Flows
@@ -47,36 +44,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (36 edge(s))
-- `ok` (18 edge(s))
-- `map` (11 edge(s))
+- `match` (29 edge(s))
+- `ok` (13 edge(s))
 - `join` (9 edge(s))
-- `matchAll` (7 edge(s))
-- `equal` (7 edge(s))
+- `map` (7 edge(s))
 - `doesNotMatch` (7 edge(s))
 - `slice` (6 edge(s))
-- `includes` (6 edge(s))
-- `parse` (4 edge(s))
+- `matchAll` (4 edge(s))
 - `replace` (4 edge(s))
 - `startsWith` (4 edge(s))
 - `endsWith` (3 edge(s))
 - `existsSync` (3 edge(s))
 - `readFileSync` (3 edge(s))
+- `indexOf` (3 edge(s))
+- `includes` (3 edge(s))
+- `equal` (3 edge(s))
 
 ### Incoming
 
-- `match` (36 edge(s))
-- `./scripts/seo-archagentix.test.js` (25 edge(s))
-- `ok` (18 edge(s))
-- `map` (10 edge(s))
-- `equal` (7 edge(s))
+- `match` (29 edge(s))
+- `./scripts/seo-archagentix.test.js` (22 edge(s))
+- `ok` (13 edge(s))
 - `doesNotMatch` (7 edge(s))
-- `includes` (6 edge(s))
-- `matchAll` (5 edge(s))
+- `map` (6 edge(s))
 - `replace` (4 edge(s))
 - `slice` (4 edge(s))
 - `startsWith` (4 edge(s))
-- `filter` (3 edge(s))
-- `parse` (3 edge(s))
 - `indexOf` (3 edge(s))
+- `includes` (3 edge(s))
+- `equal` (3 edge(s))
 - `join` (3 edge(s))
+- `matchAll` (2 edge(s))
+- `existsSync` (2 edge(s))
+- `./scripts/seo-archagentix.test.js::test:Organization JSON-LD is present and exact on marketing surfaces@L87` (1 edge(s))

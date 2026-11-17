@@ -1,0 +1,116 @@
+package session
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"sync"
+	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	"github.com/niravshah2705/symphony/go/core/internal/database"
+	"github.com/niravshah2705/symphony/go/pkg/logging"
+	"github.com/niravshah2705/symphony/go/pkg/telemetry/conv"
+)
+
+var _ manager.Runnable = (*ActorWorkflow)(nil)
+var _ manager.LeaderElectionRunnable = (*ActorWorkflow)(nil)
+
+// Every API replica can process idle work; PostgreSQL grants each claim once.
+func (*ActorWorkflow) NeedLeaderElection() bool { return false }
+
+// Start suspends idle sessions to VOLUMES independently of task publication.
+// Startup and periodic recovery scans discover work missed by local signals.
+// Workers drain claims with bounded concurrency; task reads never wait for them.
+func (w *ActorWorkflow) Start(ctx context.Context) error {
+	counter, err := newWorkClaimCounter(ctx, w.meterProvider,
+		conv.KagentSessionQuiescenceClaimed, conv.KagentSessionQuiescenceClaimedUnit, conv.KagentSessionQuiescenceClaimedDescription)
+	if err != nil {
+		return err
+	}
+	// Keep worker handoffs distinct from settlement hints for attribution.
+	handoff := make(chan struct{}, 1)
+	var workers sync.WaitGroup
+	for range 4 {
+		workers.Go(func() {
+			timer := time.NewTimer(w.recoveryInterval)
+			defer timer.Stop()
+			trigger := workStartup
+			for ctx.Err() == nil {
+				work, err := w.store.ClaimSessionQuiescence(ctx)
+				if err == nil {
+					// Hand off a hint before runtime I/O so a single settlement
+					// burst can enlist all workers, even if this actor is slow.
+					select {
+					case handoff <- struct{}{}:
+					default:
+					}
+					recordWorkClaim(ctx, counter, trigger)
+					trigger.logRecoveryClaim(ctx, operationSessionQuiescence, w.recoveryInterval, slog.String("session_id", work.Session.GetId()))
+					trigger = workBacklog
+					w.quiesceIdleSession(ctx, work)
+					continue
+				}
+				delay := min(time.Second, w.recoveryInterval)
+				nextTrigger := workRetry
+				if errors.Is(err, database.ErrNotFound) {
+					pending, pendingErr := w.store.HasPendingSessionQuiescence(ctx)
+					if pendingErr != nil {
+						err = pendingErr
+					} else if !pending {
+						delay = w.recoveryInterval
+						nextTrigger = workRecovery
+					}
+				}
+				if !errors.Is(err, database.ErrNotFound) && ctx.Err() == nil {
+					logging.FromContext(ctx).ErrorContext(ctx, "claim runtime boundary", "error", err)
+				}
+				timer.Reset(delay)
+				select {
+				case <-ctx.Done():
+					return
+				case <-timer.C:
+					trigger = nextTrigger
+				case <-w.quiescenceWake:
+					trigger = workSignal
+				case <-handoff:
+					trigger = workBacklog
+				}
+			}
+		})
+	}
+	workers.Wait()
+	return nil
+}
+
+func (w *ActorWorkflow) quiesceIdleSession(ctx context.Context, work *database.SessionQuiescence) {
+	runtimeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	snapshot, err := w.Quiesce(runtimeCtx, work.Session)
+	cancel()
+	if err != nil {
+		// No timeout-based takeover: the Substrate request may still complete.
+		// Keep admission closed until its outcome can be safely reconciled.
+		logging.FromContext(ctx).ErrorContext(ctx, "runtime boundary outcome unknown", "session_id", work.Session.Id, "version", work.Version, "error", err)
+		return
+	}
+	// Keep a known snapshot until its reference is stored. Retry database failures
+	// without repeating runtime work; give shutdown one bounded completion attempt.
+	for delay := 100 * time.Millisecond; ; delay = min(2*delay, 5*time.Second) {
+		finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		err = w.store.FinishSessionQuiescence(finishCtx, work, snapshot)
+		finishCancel()
+		if err == nil {
+			return
+		}
+		logging.FromContext(ctx).ErrorContext(ctx, "record idle runtime outcome", "session_id", work.Session.Id, "version", work.Version, "error", err)
+		if errors.Is(err, database.ErrNotFound) || errors.Is(err, database.ErrConflict) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+}
