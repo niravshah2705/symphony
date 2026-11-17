@@ -529,10 +529,14 @@ test('atespace names Terraform accepts are names the app will not silently drop'
   // mirror asserts the same shape; a name that only one of them accepts is a
   // binding that refuses at run time with no trace of the typo.
   const slugLiteral = '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$';
-  // substrate_atespace, substrate_worker_pool, the list entries and the map values.
+  // substrate_atespace, substrate_worker_pool, the list entries, the map values,
+  // and kagent_namespace — the same DNS-label shape, validated identically, so it
+  // belongs in this count. A new slug-shaped variable that lands here without a
+  // validation fails on the number, which is the tripwire working: the name above
+  // the loop is where you decide whether it is atespace-shaped or not.
   assert.equal(
     variablesTf.split(slugLiteral).length - 1,
-    4,
+    5,
     'every atespace-shaped variable needs the slug validation',
   );
   const js = read('packages', 'shared-core', 'src', 'config.js');

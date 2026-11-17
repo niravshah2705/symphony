@@ -22,6 +22,7 @@ const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared-core/bil
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared-core/store');
+const kagent = require('@ai-fleet/shared-core/agent/kagent');
 const events = require('@ai-fleet/shared-core/messaging/events');
 const { createCompatibilityHandlers } = require('./publish');
 const sse = require('./sse');
@@ -259,7 +260,15 @@ app.use('/api/pipeline', requireAuthenticated(), requirePermission('workspace'),
 // Workflow designer (schema v2): Firestore-backed graphs, agent profiles,
 // persona grants, and the kagent/substrate publish surface. Persona gating is
 // enforced inside the router; tenant scope comes from the store context.
-app.use('/api/workflows', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createWorkflowsRouter());
+// The kagent adapter is the module-level client, which resolves to `enabled:
+// false` unless KAGENT_ENABLED + KAGENT_API_URL are set, so an unconfigured
+// cluster keeps answering 503 kagent_not_configured rather than guessing at a
+// cluster. The substrate adapter is deliberately NOT passed: nothing implements
+// publishProfile over substrate.js yet, and the router's 503
+// substrate_not_configured is the honest answer until that half exists.
+app.use('/api/workflows', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createWorkflowsRouter({
+  kagentAdapter: kagent,
+}));
 
 // Compatibility starts retain their legacy publishers until the orchestrator
 // rollout switch is enabled, then use fixed plan-only/code-only admission.

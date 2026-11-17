@@ -7,7 +7,7 @@
 Community of 216 nodes
 
 - **Size**: 216 nodes
-- **Cohesion**: 0.2641
+- **Cohesion**: 0.2651
 - **Dominant Language**: javascript
 
 ## Members
@@ -85,14 +85,14 @@ Community of 216 nodes
 
 ### Outgoing
 
-- `equal` (129 edge(s))
-- `isArray` (59 edge(s))
+- `equal` (128 edge(s))
+- `isArray` (61 edge(s))
 - `includes` (52 edge(s))
 - `deepEqual` (47 edge(s))
-- `map` (43 edge(s))
+- `map` (44 edge(s))
 - `push` (37 edge(s))
 - `slice` (36 edge(s))
-- `filter` (35 edge(s))
+- `filter` (36 edge(s))
 - `String` (30 edge(s))
 - `has` (23 edge(s))
 - `find` (20 edge(s))
@@ -104,11 +104,11 @@ Community of 216 nodes
 ### Incoming
 
 - `./packages/shared-core/src/store.js` (147 edge(s))
-- `equal` (129 edge(s))
+- `equal` (128 edge(s))
 - `deepEqual` (47 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
+- `./packages/shared-core/src/workflow/store.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/model.js` (37 edge(s))
-- `./packages/shared-core/src/workflow/store.js` (36 edge(s))
 - `./packages/shared-core/src/agent/kagent.test.js` (26 edge(s))
 - `./packages/shared-core/src/agent/kagent.js` (25 edge(s))
 - `ok` (18 edge(s))

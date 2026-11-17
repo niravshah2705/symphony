@@ -455,6 +455,63 @@ installing the binary is the easy half; the missing piece is the backend.
 What the structural assertions cannot see is a future local that quietly unions
 existence with privilege, and that is what the `grep` above checks.
 
+## Kagent runtime backend (`kagent.tf`)
+
+OFF by default, and inert by default in the same way substrate is: the gateway
+answers `GET /api/workflows/kagent/capabilities` with `enabled: false` and every
+`POST /api/workflows/agents/:id/publish` on a `backend: 'kagent'` profile with
+`503 kagent_not_configured`. Nothing errors — which is precisely why this needs
+writing down: a root that renders no `KAGENT_*` env is indistinguishable from a
+deployment that does not use kagent.
+
+| Variable | Env name | Default |
+|---|---|---|
+| `kagent_enabled` | `KAGENT_ENABLED` | `false` |
+| `kagent_api_url` | `KAGENT_API_URL` | `""` |
+| `kagent_namespace` | `KAGENT_NAMESPACE` | `"kagent"` |
+| `kagent_token_file` | `KAGENT_TOKEN_FILE` | `""` |
+| `kagent_ca_file` | `KAGENT_CA_FILE` | `""` |
+| `kagent_timeout_ms` | `KAGENT_TIMEOUT_MS` | `15000` |
+
+Three things to know before turning it on:
+
+- **The switch and the address are one gate.** `agent/kagent.js` returns no
+  client unless `KAGENT_ENABLED` is truthy *and* an API URL resolves, so
+  `kagent.tf` emits the pair together or not at all, and `KAGENT_ENABLED` is
+  written as the literal `"true"` the parsing regex accepts.
+- **Only paths cross into the env map.** The bearer is read from the file named
+  by `kagent_token_file` (mounted as a Secret version, the way
+  `MEMORY_DATABASE_URL_FILE` mounts `/secrets/memory-db/url`), and
+  `KAGENT_KUBECONFIG` is deliberately not wired at all — a kubeconfig is a bundle
+  of credentials and exists only for out-of-cluster development. Unset optional
+  paths stay **absent** rather than `""`, because an empty path would beat the
+  in-cluster mount that kagent.js falls back to and land in the same silent
+  dark state as never opting in.
+- **The gateway is the only recipient.** It hosts the publish endpoint and runs
+  no model-generated code. The substrate map does reach planner and
+  coder-control; kagent must not follow it there until something in those
+  services imports the adapter, and it never reaches `coder_worker_env`. On the
+  cluster side that means a namespaced Role granting the gateway's identity
+  create/get/list/patch/delete on `*.api.kagent.dev` in `kagent_namespace` and
+  on the ConfigMaps it composes there — a wider binding than that and one
+  tenant's publish reaches another tenant's agents.
+
+`terraform output kagent` reports `configured`, `switch`, `api_url`, `namespace`,
+`env_keys` and `services`; `switch: true` with an empty `api_url` is the
+half-configured shape, and `configured: false` there means nothing was emitted.
+The CI contract is
+[`deploy/gcp/kagent-env.test.js`](../deploy/gcp/kagent-env.test.js), which checks
+name agreement in both directions, the credential-shape rule, placement, the
+two-part gate, and — the link no env-map check can see — that
+`services/gateway/src/index.js` actually hands the adapter to the router.
+
+Its `local.kagent_env` renders run on every CI machine, unlike the substrate
+renders above: `kagent.tf`'s locals reference nothing but `var.kagent_*`, so the
+test assembles those variable blocks plus the locals file into a scratch root with
+no backend and no providers. Same HCL, same values, no credentials needed — and it
+proves the thing the renders were ever for, that the string crossing into
+`KAGENT_ENABLED` is one `config.js` reads as true.
+
 ## Observability and alerting (`observability.tf`)
 
 OFF by default. `observability_enabled = true` creates one GCS log bucket

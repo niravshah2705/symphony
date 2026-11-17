@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 175 nodes
+Community of 133 nodes
 
-- **Size**: 175 nodes
-- **Cohesion**: 0.3708
+- **Size**: 133 nodes
+- **Cohesion**: 0.3274
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,14 +65,13 @@ Community of 175 nodes
 | test:a granted scope with no applier refuses before any cluster write@L267 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 267-287 |
 | test:a scope the spec never grants is withheld by name, not an error@L289 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 289-318 |
 
-*... and 125 more members.*
+*... and 83 more members.*
 
 ## Execution Flows
 
 - **childMain** (criticality: 0.73, depth: 9)
 - **listActors** (criticality: 0.71, depth: 8)
 - **getActorTemplate** (criticality: 0.70, depth: 8)
-- **main** (criticality: 0.67, depth: 4)
 - **getGithubToken** (criticality: 0.62, depth: 8)
 - **getApiKey** (criticality: 0.58, depth: 7)
 - **getPlanningConfig** (criticality: 0.58, depth: 7)
@@ -81,36 +80,36 @@ Community of 175 nodes
 
 ### Outgoing
 
-- `equal` (135 edge(s))
-- `String` (53 edge(s))
-- `map` (39 edge(s))
-- `push` (36 edge(s))
-- `deepEqual` (35 edge(s))
+- `equal` (90 edge(s))
+- `String` (47 edge(s))
+- `push` (30 edge(s))
 - `alloc` (30 edge(s))
 - `concat` (29 edge(s))
-- `trim` (19 edge(s))
-- `Number` (17 edge(s))
-- `require` (15 edge(s))
+- `map` (28 edge(s))
+- `trim` (17 edge(s))
+- `deepEqual` (16 edge(s))
+- `Number` (14 edge(s))
+- `require` (14 edge(s))
 - `includes` (14 edge(s))
 - `isBuffer` (12 edge(s))
-- `get` (10 edge(s))
 - `filter` (10 edge(s))
 - `replace` (10 edge(s))
+- `onStep` (9 edge(s))
 
 ### Incoming
 
-- `equal` (135 edge(s))
+- `equal` (90 edge(s))
 - `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
-- `deepEqual` (35 edge(s))
-- `./packages/shared-core/src/otel/actor-metrics.test.js` (18 edge(s))
+- `deepEqual` (16 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.test.js` (12 edge(s))
-- `./packages/shared-core/src/billing/substrate-session.js` (12 edge(s))
-- `./packages/shared-core/src/billing/substrate-session.test.js` (12 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate.test.js` (11 edge(s))
-- `ok` (9 edge(s))
-- `push` (9 edge(s))
-- `throws` (8 edge(s))
 - `includes` (8 edge(s))
+- `./packages/shared-core/src/guardrails/consumers.js` (8 edge(s))
+- `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
+- `ok` (7 edge(s))
+- `./packages/shared-core/src/agent/substrate-atespace.test.js` (6 edge(s))
+- `push` (6 edge(s))
+- `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))

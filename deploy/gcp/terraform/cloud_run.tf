@@ -76,6 +76,15 @@ locals {
     # GOOGLE_ONE_TAP_CLIENT_ID is NOT here — it is delivered from Secret Manager
     # (google_secret_manager_secret.google_one_tap_client_id) as a secret env on
     # the gateway container below, only when a value is configured.
+    #
+    # The kagent control-plane address (kagent.tf) rides on the gateway because
+    # that is the service hosting /api/workflows/kagent/capabilities and the
+    # agent publish endpoint — and the gateway runs no model-generated code, so
+    # it is the one workload a cluster identity can sit behind safely. It is NOT
+    # merged into planner_env / coder_control_env / coder_worker_env the way
+    # substrate_env is: nothing there imports the adapter yet, and a container
+    # that executes model output must not learn where the agent CRDs live.
+    local.kagent_env,
   )
 
   # Egress-proxy sidecar: agent containers route every

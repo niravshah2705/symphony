@@ -4,21 +4,22 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 6 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.0930
+- **Size**: 6 nodes
+- **Cohesion**: 0.0877
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| tfEval | Function | ./deploy/gcp/substrate-env.test.js | 58-67 |
-| tfRender | Function | ./deploy/gcp/substrate-env.test.js | 70-74 |
-| tfProbe | Function | ./deploy/gcp/substrate-env.test.js | 76-85 |
-| tfMap | Function | ./deploy/gcp/substrate-env.test.js | 90-95 |
-| tfStr | Function | ./deploy/gcp/substrate-env.test.js | 98-102 |
+| kagentVariableBlocks | Function | ./deploy/gcp/kagent-env.test.js | 68-75 |
+| renderRoot | Function | ./deploy/gcp/kagent-env.test.js | 78-87 |
+| tfEval | Function | ./deploy/gcp/kagent-env.test.js | 89-98 |
+| tfRender | Function | ./deploy/gcp/kagent-env.test.js | 101-105 |
+| tfProbe | Function | ./deploy/gcp/kagent-env.test.js | 107-116 |
+| tfMap | Function | ./deploy/gcp/kagent-env.test.js | 121-126 |
 
 ## Execution Flows
 
@@ -28,24 +29,23 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L389` (4 edge(s))
-- `String` (2 edge(s))
+- `./deploy/gcp/kagent-env.test.js::test:the rendered kagent map is the shape the JS side parses@L285` (6 edge(s))
+- `join` (4 edge(s))
 - `match` (2 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L427` (2 edge(s))
+- `map` (2 edge(s))
+- `execFileSync` (2 edge(s))
+- `String` (2 edge(s))
 - `stringify` (2 edge(s))
-- `slice` (2 edge(s))
-- `entries` (1 edge(s))
-- `trim` (1 edge(s))
-- `replace` (1 edge(s))
-- `toString` (1 edge(s))
-- `execFileSync` (1 edge(s))
-- `matchAll` (1 edge(s))
-- `fromEntries` (1 edge(s))
-- `map` (1 edge(s))
-- `join` (1 edge(s))
+- `exec` (1 edge(s))
+- `ok` (1 edge(s))
+- `includes` (1 edge(s))
+- `mkdtempSync` (1 edge(s))
+- `tmpdir` (1 edge(s))
+- `writeFileSync` (1 edge(s))
+- `once` (1 edge(s))
+- `rmSync` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-env.test.js` (6 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the rendered substrate map is the shape the JS side parses@L389` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the actor callback renders as four names or none, never a half-pair@L427` (2 edge(s))
+- `./deploy/gcp/kagent-env.test.js` (7 edge(s))
+- `./deploy/gcp/kagent-env.test.js::test:the rendered kagent map is the shape the JS side parses@L285` (6 edge(s))
