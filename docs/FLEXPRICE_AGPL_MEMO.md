@@ -170,7 +170,6 @@ the evidence for §7, and stopping it gains nothing.
   unavoidable if the ambiguity resolves against us.
 
 ### 4.3 Any modification — a Go patch, a vendored fix, a template change
-
 The worst combination, and worth understanding even though "no Go fork" is a locked
 decision:
 - AGPL §13's source-offer duty engages (we serve customers over a network),
@@ -183,6 +182,21 @@ decision:
   choice *and* the main reason §4.1 stays low-risk. It should not be revisited
   casually. Note this also rules out the tempting small patch — e.g. changing a
   GST rounding or a currency validation in Go. If we need that, we need a license.
+- **"A template change" includes the Helm chart, and we now make one.** The
+  self-hosted staging root (`deploy/gcp/terraform-flexprice`) installs a chart
+  staged from `internal/ee/infrastructure/helm/flexprice` by
+  `scripts/flexprice-stage-chart.js`: the `dependencies:` block and `Chart.lock`
+  dropped, `templates/infra/{postgres,kafka,clickhouse,redis}.yaml` probe timings
+  widened, and placement keys injected into three of those four. Every byte is
+  from the directory F4 attaches to. The edits are config-shaped and they are all
+  reversible against the recorded tree digest
+  (`patched_chart_sha256` in `deploy/flexprice/VERSION`), and none of that answers
+  the question — whether a Kubernetes-manifest edit of an `internal/ee` file is a
+  "modification" in AGPL's sense is precisely what §7 puts to counsel, and "it is
+  only YAML" is not an answer, it is the same assumption about "only a comment"
+  that the §5 table refuses to make. Until §7 comes back, this staging root
+  inherits §4.3's status rather than §4.1's, which is another reason the cutover
+  gate below is a separate variable and stays closed.
 
 ### 4.4 What is *not* affected
 
@@ -212,6 +226,26 @@ decision:
 
 The plan already satisfies all six. They should stay satisfied deliberately, and
 this table is the thing to re-read before any future "just patch it in Go" idea.
+
+### Two rows of that table, re-read against what is actually deployed
+
+**"Run the published image unmodified, pinned by digest."** The published image is
+not reachable — `ghcr.io/flexprice/flexprice` is a private package (`deploy/flexprice/VERSION`
+records the probe), so both the local stack and the GKE stack *build* the image
+from the pinned commit. That was never a choice the licensing posture made; it is a
+registry permission. It still means the pin is a commit plus a built image id rather
+than a published digest, and counsel should know the image is ours-built before
+answering §7's question 2.
+
+**"Nothing of FlexPrice's is copied into this repo."** Still true, and the staged
+chart is the case that tests the wording rather than breaking it: the patch is a
+*transform* (`scripts/flexprice-stage-chart.js`, our file) applied to their tree at
+build time, and only the resulting tree's sha256 and version are committed, in
+`deploy/flexprice/VERSION`. No patched FlexPrice template is checked in, so the repo
+contains a recipe and a fingerprint. Whether that distinction survives AGPL is again
+§7's to answer; what it buys now is auditability — anyone can re-run the transform
+against the pinned commit and confirm the fingerprint, which is the property the
+table's other rows were meant to protect.
 
 ## 6. Options, with engineering cost
 
@@ -264,6 +298,16 @@ not be deployable would leave the product unable to bill at all.
    if the licensee's own seats matter, which would make the clause about our team,
    not our user base — that distinction changes the price of option 1 by orders of
    magnitude.
+4. **New, and now required before any cutover:** does editing a Kubernetes manifest
+   under `internal/ee/infrastructure/helm/` — dropping un-vendored subchart
+   `dependencies:`, widening a hardcoded liveness `timeoutSeconds` that has no
+   values key, injecting a `nodeSelector` a template does not expose — constitute a
+   "modification or patch" under that notice, and does it engage AGPL §13's
+   source-offer duty any differently than a Go patch would? We do this to run the
+   chart on GKE at all (§5 of `deploy/gcp/terraform-flexprice/README.md` states the
+   three edits and why each is unavoidable). If the answer is yes, option 1 or 2 is
+   not optional for the cloud deployment, only for the local one, and the
+   `flexprice_billing_cutover_enabled` gate stays closed until then.
 
 ## 8. Gate status
 
@@ -272,6 +316,18 @@ ITEM 18 (AGPL memo)          : DELIVERED — this document
                                Verdict: NOT CLEARED for production.
                                CLEARED for local Phase 0 dev/test.
 Phase 0 stack + spike        : may continue (dev/test use, unmodified image)
+Self-hosted staging on GKE   : may continue — deploy/gcp/terraform-flexprice,
+                               reconciled by the flexprice_reconcile job. Same
+                               verdict as Phase 0 (a platform we operate for
+                               ourselves, unmodified chart bar the three patches
+                               that file records), and it is kept off the money
+                               path by a SECOND variable:
+                               `flexprice_billing_cutover_enabled` (default false)
+                               in deploy/gcp/terraform/variables.tf, which is what
+                               `FLEXPRICE_ENABLED` is conjoined with. Building the
+                               stack is not conveying anything to a customer; the
+                               cutover would be, and §4.2 is the reason it is the
+                               item still blocked below.
 Phase 1 (Plan B, all of it)  : BLOCKED on §7 answers, per the plan's own exit criterion
 Phase 1 deletions            : EXPLICITLY BLOCKED — see §6 recommendation
 Re-plan triggers fired       : 3 of 3
