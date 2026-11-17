@@ -26,7 +26,7 @@ Community of 9 nodes
 
 ## Execution Flows
 
-- **recordForRequest** (criticality: 0.57, depth: 3)
+No execution flows pass through this community.
 
 ## Dependencies
 

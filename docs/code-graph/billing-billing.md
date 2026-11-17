@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 461 nodes
+Community of 469 nodes
 
-- **Size**: 461 nodes
-- **Cohesion**: 0.3034
+- **Size**: 469 nodes
+- **Cohesion**: 0.2912
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 461 nodes
 | test:a failing row stays retryable, and only gives up after the ceiling@L168 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 168-178 |
 | test:enqueue never throws at a run that already happened@L180 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 180-190 |
 
-*... and 411 more members.*
+*... and 419 more members.*
 
 ## Execution Flows
 
@@ -80,36 +80,36 @@ Community of 461 nodes
 
 ### Outgoing
 
-- `equal` (644 edge(s))
+- `equal` (628 edge(s))
 - `deepEqual` (82 edge(s))
-- `String` (74 edge(s))
+- `String` (76 edge(s))
 - `Number` (54 edge(s))
-- `map` (51 edge(s))
+- `throws` (53 edge(s))
+- `map` (49 edge(s))
 - `expect` (43 edge(s))
-- `stringify` (42 edge(s))
-- `throws` (42 edge(s))
-- `filter` (39 edge(s))
-- `now` (39 edge(s))
-- `push` (37 edge(s))
-- `ok` (36 edge(s))
+- `filter` (41 edge(s))
+- `ok` (41 edge(s))
+- `stringify` (41 edge(s))
+- `push` (41 edge(s))
+- `now` (38 edge(s))
 - `toISOString` (36 edge(s))
 - `find` (31 edge(s))
 - `getByRole` (30 edge(s))
 
 ### Incoming
 
-- `equal` (640 edge(s))
+- `equal` (628 edge(s))
 - `deepEqual` (82 edge(s))
 - `./packages/shared-core/src/store.js` (63 edge(s))
+- `throws` (53 edge(s))
 - `expect` (43 edge(s))
-- `throws` (42 edge(s))
-- `ok` (36 edge(s))
+- `ok` (41 edge(s))
 - `./scripts/flexprice-phase1-probes.js` (34 edge(s))
 - `getByRole` (30 edge(s))
 - `locator` (28 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.js` (26 edge(s))
 - `./packages/shared-core/src/billing/gate.js` (26 edge(s))
-- `map` (25 edge(s))
+- `map` (22 edge(s))
 - `./packages/shared-core/src/billing/money-wire.js` (22 edge(s))
 - `./packages/shared-core/src/billing/billing-outbox.test.js` (21 edge(s))
 - `./packages/shared-core/src/billing/money-wire.test.js` (21 edge(s))

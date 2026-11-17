@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 760 nodes
+Community of 755 nodes
 
-- **Size**: 760 nodes
-- **Cohesion**: 0.4883
+- **Size**: 755 nodes
+- **Cohesion**: 0.4896
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,6 +26,7 @@ Community of 760 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
+| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
 | openStream | Function | ./public/js/api.js | 253-332 |
@@ -63,16 +64,15 @@ Community of 760 nodes
 | renderAccessDenied | Function | ./public/js/app.js | 803-815 |
 | render | Function | ./public/js/app.js | 817-899 |
 | capitalize | Function | ./public/js/app.js | 901-904 |
-| start | Function | ./public/js/app.js | 908-916 |
 
-*... and 710 more members.*
+*... and 705 more members.*
 
 ## Execution Flows
 
 - **onMove** (criticality: 0.84, depth: 9)
-- **start** (criticality: 0.81, depth: 6)
 - **onUp** (criticality: 0.81, depth: 6)
-- **renderWorkflows** (criticality: 0.80, depth: 6)
+- **start** (criticality: 0.81, depth: 6)
+- **renderWorkflows** (criticality: 0.81, depth: 6)
 - **initializeAuthentication** (criticality: 0.78, depth: 4)
 - **beginSignIn** (criticality: 0.76, depth: 6)
 - **beginMicrosoftSignIn** (criticality: 0.76, depth: 6)
@@ -88,13 +88,13 @@ Community of 760 nodes
 - `addEventListener` (227 edge(s))
 - `append` (221 edge(s))
 - `map` (168 edge(s))
-- `push` (130 edge(s))
+- `push` (129 edge(s))
 - `String` (117 edge(s))
-- `equal` (100 edge(s))
 - `trim` (97 edge(s))
+- `equal` (94 edge(s))
 - `filter` (86 edge(s))
-- `isArray` (86 edge(s))
-- `Boolean` (69 edge(s))
+- `isArray` (85 edge(s))
+- `Boolean` (70 edge(s))
 - `has` (63 edge(s))
 - `catch` (62 edge(s))
 - `setAttribute` (61 edge(s))
@@ -105,16 +105,16 @@ Community of 760 nodes
 
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (100 edge(s))
+- `equal` (94 edge(s))
 - `./public/js/app.js` (86 edge(s))
-- `./public/js/workflow-designer-model.mjs` (68 edge(s))
+- `./public/js/workflow-designer-model.mjs` (65 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `deepEqual` (32 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
-- `./public/js/auth.js` (23 edge(s))
-- `./public/js/workflow-designer-model.test.mjs` (22 edge(s))
-- `./public/js/views/cost.js` (15 edge(s))
+- `./public/js/auth.js` (24 edge(s))
+- `deepEqual` (22 edge(s))
+- `./public/js/workflow-designer-model.test.mjs` (18 edge(s))
+- `./public/js/api.js` (15 edge(s))

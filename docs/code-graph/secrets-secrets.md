@@ -23,7 +23,7 @@ Community of 6 nodes
 
 ## Execution Flows
 
-- **resolveMissingSecrets** (criticality: 0.57, depth: 2)
+No execution flows pass through this community.
 
 ## Dependencies
 
