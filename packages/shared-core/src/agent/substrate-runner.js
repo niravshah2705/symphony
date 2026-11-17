@@ -12,7 +12,7 @@
  */
 
 const crypto = require('node:crypto');
-const CONFIG = require('../config');
+const { CONFIG } = require('../config');
 const { getSettings } = require('../store');
 const substrate = require('./substrate');
 const { buildCredentialProviderPolicy } = require('../guardrails/consumers');
@@ -296,6 +296,7 @@ async function runPlanningOnSubstrate({
   prompt,
   guardrailSpec,
   secrets = {},
+  substrateApiToken = '',
   llm,
   runtime,
   agentRuntime,
@@ -308,6 +309,7 @@ async function runPlanningOnSubstrate({
   transport,
   applyManifest,
   fetchImpl,
+  fetchSecrets,
   recordUsage = (...args) => require('../billing/usage').recordUsage(...args),
   actorSessionMonitor = monitorActorSession,
   actorMetrics,
@@ -315,8 +317,16 @@ async function runPlanningOnSubstrate({
   onStep = () => {},
 } = {}) {
   if (!prompt || !String(prompt).trim()) throw new Error('runPlanningOnSubstrate: prompt is required');
-  const opts = { transport };
   const atespace = substrate.resolveSubstrateAtespace({ organizationId, projectId });
+  // Resolved once per run and handed to every RPC through `opts`: the ateapi
+  // bearer is an hourly-rotating projected service-account token, so it must be
+  // fetched fresh for this run (never memoised at module load or across orgs).
+  const token = substrateApiToken || (await substrate.resolveSubstrateApiToken({
+    organizationId,
+    projectId,
+    fetchSecrets,
+  }));
+  const opts = { transport, token, url: substrate.resolveSubstrateUrl(settings && settings.substrateUrl) };
 
   onStep('Substrate: syncing managed credentials to the credential-provider (outside the actor)…');
   // Before any cluster write: a grant this workload cannot apply is a

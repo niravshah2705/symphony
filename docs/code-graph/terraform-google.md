@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 576 nodes
+Community of 579 nodes
 
-- **Size**: 576 nodes
+- **Size**: 579 nodes
 - **Cohesion**: 0.7416
 - **Dominant Language**: hcl
 
@@ -65,7 +65,7 @@ Community of 576 nodes
 | resource.google_cloud_run_v2_service.gateway | Class | ./deploy/gcp/terraform/cloud_run.tf | 270-363 |
 | resource.google_cloud_run_v2_service.planner | Class | ./deploy/gcp/terraform/cloud_run.tf | 376-547 |
 
-*... and 526 more members.*
+*... and 529 more members.*
 
 ## Execution Flows
 

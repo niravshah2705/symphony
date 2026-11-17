@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:every flag the workflow passes is one the script parses@L194 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 194-213 |
-| accepts | Function | ./deploy/gcp/substrate-workflow-config.test.js | 200-201 |
+| test:every flag the workflow passes is one the script parses@L195 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 195-214 |
+| accepts | Function | ./deploy/gcp/substrate-workflow-config.test.js | 201-202 |
 
 ## Execution Flows
 

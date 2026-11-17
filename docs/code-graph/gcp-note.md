@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 51 nodes
+Community of 54 nodes
 
-- **Size**: 51 nodes
-- **Cohesion**: 0.0047
+- **Size**: 54 nodes
+- **Cohesion**: 0.0045
 - **Dominant Language**: javascript
 
 ## Members
@@ -47,8 +47,11 @@ Community of 51 nodes
 | test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81 | Test | ./services/planner/src/pubsub.test.js | 81-104 |
 | test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106 | Test | ./services/planner/src/pubsub.test.js | 106-156 |
 | test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158 | Test | ./services/planner/src/pubsub.test.js | 158-186 |
-| test:GET /substrate/status answers instead of throwing when the control plane is up@L59 | Test | ./services/planner/src/routes/agent.substrate.test.js | 59-67 |
-| test:GET /substrate/status skips the actor list when the control plane is unreachable@L69 | Test | ./services/planner/src/routes/agent.substrate.test.js | 69-76 |
+| test:GET /substrate/status answers instead of throwing when the control plane is up@L105 | Test | ./services/planner/src/routes/agent.substrate.test.js | 105-113 |
+| test:GET /substrate/status skips the actor list when the control plane is unreachable@L115 | Test | ./services/planner/src/routes/agent.substrate.test.js | 115-122 |
+| test:GET /substrate/status resolves the credential per request and threads it to both RPCs@L124 | Test | ./services/planner/src/routes/agent.substrate.test.js | 124-134 |
+| test:GET /substrate/status reports configured:false when no credential resolves@L136 | Test | ./services/planner/src/routes/agent.substrate.test.js | 136-143 |
+| test:POST /substrate/run resolves substrateApiToken over S2S and hands it to the runner@L145 | Test | ./services/planner/src/routes/agent.substrate.test.js | 145-177 |
 | test:omnibox policy routes greetings and unsafe requests before local inference@L66 | Test | ./services/planner/src/routes/agent.test.js | 66-96 |
 | test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98 | Test | ./services/planner/src/routes/agent.test.js | 98-142 |
 | test:memory write, list, and delete round-trip with server-side validation@L144 | Test | ./services/planner/src/routes/agent.test.js | 144-173 |
@@ -61,11 +64,8 @@ Community of 51 nodes
 | test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374 | Test | ./services/planner/src/routes/agent.test.js | 374-398 |
 | test:enqueue is role-gated, validates projectId, and queues exactly one project@L400 | Test | ./services/planner/src/routes/agent.test.js | 400-464 |
 | test:planner job and status routes honor the exact selected organization and project@L466 | Test | ./services/planner/src/routes/agent.test.js | 466-584 |
-| test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586 | Test | ./services/planner/src/routes/agent.test.js | 586-651 |
-| test:confirmed project task creation derives the team and replays duplicate requests once@L28 | Test | ./services/planner/src/routes/issues.test.js | 28-61 |
-| test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38 | Test | ./services/planner/src/routes/settings.omlx.test.js | 38-101 |
 
-*... and 1 more members.*
+*... and 4 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (157 edge(s))
-- `after` (46 edge(s))
+- `equal` (168 edge(s))
+- `after` (50 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (35 edge(s))
 - `./services/planner/src/routes/agent.test.js::handlerFor` (35 edge(s))
 - `require` (32 edge(s))
 - `deepEqual` (30 edge(s))
 - `./services/orchestrator/src/app.test.js::jsonRequest` (29 edge(s))
 - `resolve` (24 edge(s))
-- `ok` (21 edge(s))
+- `ok` (22 edge(s))
 - `./services/orchestrator/src/app.test.js::listen` (15 edge(s))
 - `close` (15 edge(s))
-- `push` (12 edge(s))
+- `push` (13 edge(s))
+- `includes` (13 edge(s))
 - `./services/orchestrator/src/app.test.js::setup` (12 edge(s))
-- `includes` (12 edge(s))
 - `json` (11 edge(s))
 
 ### Incoming
 
-- `equal` (157 edge(s))
+- `equal` (168 edge(s))
 - `./deploy/gcp/substrate-cleanup.sh` (56 edge(s))
-- `after` (46 edge(s))
+- `after` (50 edge(s))
 - `./services/planner/src/routes/agent.test.js::call` (35 edge(s))
 - `./services/planner/src/routes/agent.test.js::handlerFor` (35 edge(s))
 - `require` (32 edge(s))
 - `deepEqual` (30 edge(s))
 - `./services/orchestrator/src/app.test.js::jsonRequest` (29 edge(s))
 - `resolve` (24 edge(s))
-- `ok` (21 edge(s))
+- `ok` (22 edge(s))
 - `./services/orchestrator/src/app.test.js` (15 edge(s))
 - `./services/orchestrator/src/app.test.js::listen` (15 edge(s))
 - `close` (15 edge(s))
-- `./services/planner/src/routes/agent.test.js` (13 edge(s))
-- `push` (12 edge(s))
+- `push` (13 edge(s))
+- `includes` (13 edge(s))

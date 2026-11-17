@@ -4,7 +4,7 @@
 
 Auto-generated documentation from the code knowledge graph community structure.
 
-**Total communities**: 286
+**Total communities**: 289
 
 ## Communities
 
@@ -18,9 +18,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-business-pipeline-error | 2 | [agent-business-pipeline-error.md](agent-business-pipeline-error.md) |
 | agent-checks | 15 | [agent-checks.md](agent-checks.md) |
 | agent-coder-error | 2 | [agent-coder-error.md](agent-coder-error.md) |
-| agent-context | 362 | [agent-context.md](agent-context.md) |
 | agent-derive | 2 | [agent-derive.md](agent-derive.md) |
-| agent-encode | 130 | [agent-encode.md](agent-encode.md) |
+| agent-encode | 144 | [agent-encode.md](agent-encode.md) |
 | agent-failing | 3 | [agent-failing.md](agent-failing.md) |
 | agent-fake | 4 | [agent-fake.md](agent-fake.md) |
 | agent-fake-codex | 3 | [agent-fake-codex.md](agent-fake-codex.md) |
@@ -31,10 +30,9 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-id | 3 | [agent-id.md](agent-id.md) |
 | agent-knowledge-search-error | 2 | [agent-knowledge-search-error.md](agent-knowledge-search-error.md) |
 | agent-local-intelligence-error | 2 | [agent-local-intelligence-error.md](agent-local-intelligence-error.md) |
-| agent-model | 255 | [agent-model.md](agent-model.md) |
+| agent-model | 474 | [agent-model.md](agent-model.md) |
 | agent-models | 41 | [agent-models.md](agent-models.md) |
-| agent-normalize | 428 | [agent-normalize.md](agent-normalize.md) |
-| agent-normalize-attachment | 19 | [agent-normalize-attachment.md](agent-normalize-attachment.md) |
+| agent-normalize | 19 | [agent-normalize.md](agent-normalize.md) |
 | agent-organization-context-mismatch | 2 | [agent-organization-context-mismatch.md](agent-organization-context-mismatch.md) |
 | agent-param | 10 | [agent-param.md](agent-param.md) |
 | agent-parse | 2 | [agent-parse.md](agent-parse.md) |
@@ -49,12 +47,14 @@ Auto-generated documentation from the code knowledge graph community structure.
 | agent-resolve | 249 | [agent-resolve.md](agent-resolve.md) |
 | agent-resolve-effective | 2 | [agent-resolve-effective.md](agent-resolve-effective.md) |
 | agent-resolve-proxied | 2 | [agent-resolve-proxied.md](agent-resolve-proxied.md) |
+| agent-review | 121 | [agent-review.md](agent-review.md) |
 | agent-scope | 22 | [agent-scope.md](agent-scope.md) |
 | agent-settings | 6 | [agent-settings.md](agent-settings.md) |
 | agent-stage | 170 | [agent-stage.md](agent-stage.md) |
 | agent-stage-execution-error | 2 | [agent-stage-execution-error.md](agent-stage-execution-error.md) |
 | agent-stage-execution-store-error | 2 | [agent-stage-execution-store-error.md](agent-stage-execution-store-error.md) |
 | agent-store | 3 | [agent-store.md](agent-store.md) |
+| agent-stream | 57 | [agent-stream.md](agent-stream.md) |
 | agent-stub | 4 | [agent-stub.md](agent-stub.md) |
 | agent-summarize | 2 | [agent-summarize.md](agent-summarize.md) |
 | agent-system | 4 | [agent-system.md](agent-system.md) |
@@ -80,7 +80,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | billing-subscription | 14 | [billing-subscription.md](billing-subscription.md) |
 | billing-verify | 2 | [billing-verify.md](billing-verify.md) |
 | commands-resolve | 112 | [commands-resolve.md](commands-resolve.md) |
-| core-org | 444 | [core-org.md](core-org.md) |
+| core-org | 463 | [core-org.md](core-org.md) |
 | e2e-agent | 19 | [e2e-agent.md](e2e-agent.md) |
 | e2e-fake | 3 | [e2e-fake.md](e2e-fake.md) |
 | e2e-footer | 17 | [e2e-footer.md](e2e-footer.md) |
@@ -99,13 +99,12 @@ Auto-generated documentation from the code knowledge graph community structure.
 | gateway-agent-endpoints-escape | 3 | [gateway-agent-endpoints-escape.md](gateway-agent-endpoints-escape.md) |
 | gcp-cloud | 26 | [gcp-cloud.md](gcp-cloud.md) |
 | gcp-decision | 4 | [gcp-decision.md](gcp-decision.md) |
-| gcp-default | 7 | [gcp-default.md](gcp-default.md) |
 | gcp-enabled | 2 | [gcp-enabled.md](gcp-enabled.md) |
 | gcp-ensure | 3 | [gcp-ensure.md](gcp-ensure.md) |
 | gcp-env | 2 | [gcp-env.md](gcp-env.md) |
 | gcp-job | 22 | [gcp-job.md](gcp-job.md) |
 | gcp-names | 22 | [gcp-names.md](gcp-names.md) |
-| gcp-note | 51 | [gcp-note.md](gcp-note.md) |
+| gcp-note | 54 | [gcp-note.md](gcp-note.md) |
 | gcp-pool | 3 | [gcp-pool.md](gcp-pool.md) |
 | gcp-py | 6 | [gcp-py.md](gcp-py.md) |
 | gcp-read | 2 | [gcp-read.md](gcp-read.md) |
@@ -113,7 +112,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | gcp-test:every | 2 | [gcp-test-every.md](gcp-test-every.md) |
 | gcp-test:every-test-every | 2 | [gcp-test-every-test-every.md](gcp-test-every-test-every.md) |
 | gcp-test:observability | 2 | [gcp-test-observability.md](gcp-test-observability.md) |
-| gcp-test:the | 2 | [gcp-test-the.md](gcp-test-the.md) |
+| gcp-test:the | 11 | [gcp-test-the.md](gcp-test-the.md) |
+| gcp-test:the-test-the | 2 | [gcp-test-the-test-the.md](gcp-test-the-test-the.md) |
 | gcp-tf | 5 | [gcp-tf.md](gcp-tf.md) |
 | gcp-tf-string | 2 | [gcp-tf-string.md](gcp-tf-string.md) |
 | gcp-workflow | 4 | [gcp-workflow.md](gcp-workflow.md) |
@@ -122,6 +122,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | harnesses-agent-runtime-error | 2 | [harnesses-agent-runtime-error.md](harnesses-agent-runtime-error.md) |
 | harnesses-fake | 3 | [harnesses-fake.md](harnesses-fake.md) |
 | harnesses-fake-google | 3 | [harnesses-fake-google.md](harnesses-fake-google.md) |
+| harnesses-memory | 307 | [harnesses-memory.md](harnesses-memory.md) |
 | hooks-touch | 7 | [hooks-touch.md](hooks-touch.md) |
 | js-analytics | 46 | [js-analytics.md](js-analytics.md) |
 | js-fake | 4 | [js-fake.md](js-fake.md) |
@@ -171,7 +172,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | routes-settings | 5 | [routes-settings.md](routes-settings.md) |
 | routes-settings-tier | 4 | [routes-settings-tier.md](routes-settings-tier.md) |
 | routes-state | 2 | [routes-state.md](routes-state.md) |
-| routes-stub | 3 | [routes-stub.md](routes-stub.md) |
+| routes-stub | 4 | [routes-stub.md](routes-stub.md) |
 | routes-substrate | 16 | [routes-substrate.md](routes-substrate.md) |
 | routes-workspace | 4 | [routes-workspace.md](routes-workspace.md) |
 | schemas-github | 6 | [schemas-github.md](schemas-github.md) |
@@ -201,6 +202,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | secrets-expired | 2 | [secrets-expired.md](secrets-expired.md) |
 | secrets-secrets | 6 | [secrets-secrets.md](secrets-secrets.md) |
 | secrets-share | 43 | [secrets-share.md](secrets-share.md) |
+| services-clear | 2 | [services-clear.md](services-clear.md) |
 | src | 5 | [src.md](src.md) |
 | src-agent | 2 | [src-agent.md](src-agent.md) |
 | src-checkpoint | 30 | [src-checkpoint.md](src-checkpoint.md) |
@@ -228,6 +230,7 @@ Auto-generated documentation from the code knowledge graph community structure.
 | src-javascript | 2 | [src-javascript.md](src-javascript.md) |
 | src-javascript-files | 2 | [src-javascript-files.md](src-javascript-files.md) |
 | src-javascript-static | 2 | [src-javascript-static.md](src-javascript-static.md) |
+| src-label | 86 | [src-label.md](src-label.md) |
 | src-linear-error | 2 | [src-linear-error.md](src-linear-error.md) |
 | src-match | 2 | [src-match.md](src-match.md) |
 | src-message | 3 | [src-message.md](src-message.md) |
@@ -281,8 +284,8 @@ Auto-generated documentation from the code knowledge graph community structure.
 | store-workspace-context-error | 2 | [store-workspace-context-error.md](store-workspace-context-error.md) |
 | store-workspace-organization | 2 | [store-workspace-organization.md](store-workspace-organization.md) |
 | support-parse | 107 | [support-parse.md](support-parse.md) |
-| terraform-google | 576 | [terraform-google.md](terraform-google.md) |
-| terraform-substrate-gke-resource | 145 | [terraform-substrate-gke-resource.md](terraform-substrate-gke-resource.md) |
+| terraform-google | 579 | [terraform-google.md](terraform-google.md) |
+| terraform-substrate-gke-resource | 150 | [terraform-substrate-gke-resource.md](terraform-substrate-gke-resource.md) |
 | terraform-substrate-gke-resource-kubectl-manifest | 2 | [terraform-substrate-gke-resource-kubectl-manifest.md](terraform-substrate-gke-resource-kubectl-manifest.md) |
 | tools-arg | 2 | [tools-arg.md](tools-arg.md) |
 | tools-fail | 3 | [tools-fail.md](tools-fail.md) |
