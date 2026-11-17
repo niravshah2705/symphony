@@ -1,0 +1,585 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"iter"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	adka2a "github.com/niravshah2705/symphony/go/adk/pkg/a2a"
+	apia2a "github.com/niravshah2705/symphony/go/api/a2a"
+	apiv1 "github.com/niravshah2705/symphony/go/api/gen/kagent/api/v1"
+	"github.com/niravshah2705/symphony/go/core/internal/database"
+	"github.com/niravshah2705/symphony/go/core/internal/service/checkpoint"
+	sessionsvc "github.com/niravshah2705/symphony/go/core/internal/service/session"
+	"github.com/niravshah2705/symphony/go/core/pkg/auth"
+)
+
+const (
+	testSessionID = "11111111-1111-4111-8111-111111111111"
+	testTaskID    = "22222222-2222-4222-8222-222222222222"
+)
+
+func TestTaskReferenceRoundTrip(t *testing.T) {
+	want := taskReference{
+		SessionID: testSessionID, TaskID: testTaskID,
+	}
+	encoded, err := encodeTaskReference(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodeTaskReference(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("decodeTaskReference() = %#v, want %#v", got, want)
+	}
+	for _, value := range []string{"", "v2.invalid", "v1.not-base64"} {
+		if _, err := decodeTaskReference(value); err == nil {
+			t.Fatalf("decodeTaskReference(%q) succeeded", value)
+		}
+	}
+}
+
+func TestTaskStateTranslation(t *testing.T) {
+	now := time.Now().UTC()
+	for _, test := range []struct {
+		state a2atype.TaskState
+		want  string
+	}{
+		{a2atype.TaskStateSubmitted, "working"},
+		{a2atype.TaskStateWorking, "working"},
+		{a2atype.TaskStateInputRequired, "input_required"},
+		{a2atype.TaskStateCompleted, "completed"},
+		{a2atype.TaskStateFailed, "completed"},
+		{a2atype.TaskStateCanceled, "cancelled"},
+	} {
+		t.Run(test.state.String(), func(t *testing.T) {
+			task := &a2atype.Task{ID: testTaskID, ContextID: testSessionID, Status: a2atype.TaskStatus{State: test.state, Timestamp: &now}}
+			if got := taskStatus(task); got != test.want {
+				t.Fatalf("taskStatus() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestTaskTimestampsUseDurableCreationTime(t *testing.T) {
+	created := time.Date(2026, time.August, 26, 10, 0, 0, 0, time.UTC)
+	updated := created.Add(time.Hour)
+	task := &a2atype.Task{
+		ID: testTaskID, ContextID: testSessionID,
+		Status:   a2atype.TaskStatus{State: a2atype.TaskStateWorking, Timestamp: &updated},
+		Metadata: map[string]any{apia2a.TaskCreatedAtMetadataKey: created.Format(time.RFC3339Nano)},
+	}
+	fields := taskToMCP("task-ref", task)
+	if fields.CreatedAt != created.Format(time.RFC3339Nano) || fields.LastUpdatedAt != updated.Format(time.RFC3339Nano) {
+		t.Fatalf("task timestamps = %q/%q", fields.CreatedAt, fields.LastUpdatedAt)
+	}
+}
+
+func TestDetailedTaskIncludesInvocationOutput(t *testing.T) {
+	now := time.Now().UTC()
+	task := &a2atype.Task{
+		ID: testTaskID, ContextID: testSessionID,
+		Status: a2atype.TaskStatus{State: a2atype.TaskStateCompleted, Timestamp: &now},
+	}
+	result := detailedTask("task-ref", task)
+	output, ok := result.Result.StructuredContent.(InvokeAgentOutput)
+	if !ok || output.TaskID != testTaskID || output.ContextID != testSessionID {
+		t.Fatalf("structured invocation output = %#v", result.Result.StructuredContent)
+	}
+}
+
+func TestTaskUpdateContinuesA2ATask(t *testing.T) {
+	message := a2atype.NewMessage(a2atype.MessageRoleAgent, a2atype.NewTextPart("Which database?"))
+	gateway := &fakeGateway{task: &a2atype.Task{
+		ID: testTaskID, ContextID: testSessionID,
+		Status: a2atype.TaskStatus{State: a2atype.TaskStateInputRequired, Message: message},
+	}}
+	h := &Handler{gateway: gateway, sessions: testSessionService()}
+	ref, err := encodeTaskReference(taskReference{
+		SessionID: testSessionID, TaskID: testTaskID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.updateTask(authContext(), nil, &updateTaskParams{
+		ParamsBase: taskParamsBase(),
+		TaskID:     ref,
+		InputResponses: mcp.InputResponseMap{message.ID: &mcp.ElicitResult{
+			Action: "accept", Content: map[string]any{"response": "PostgreSQL"},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway.mu.Lock()
+	if gateway.reply == nil || gateway.reply.TaskID != testTaskID || a2aText(gateway.reply) != "PostgreSQL" {
+		t.Fatalf("continued message = %#v", gateway.reply)
+	}
+	gateway.mu.Unlock()
+	if _, err := h.updateTask(authContext(), nil, &updateTaskParams{
+		ParamsBase: taskParamsBase(),
+		TaskID:     ref,
+		InputResponses: mcp.InputResponseMap{message.ID: &mcp.ElicitResult{
+			Action: "accept", Content: map[string]any{"response": "PostgreSQL"},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gateway.mu.Lock()
+	defer gateway.mu.Unlock()
+	if gateway.replies != 1 {
+		t.Fatalf("continuation dispatches = %d, want 1", gateway.replies)
+	}
+}
+
+func TestTaskUpdateRejectsMissingInputResponse(t *testing.T) {
+	ref, err := encodeTaskReference(taskReference{SessionID: testSessionID, TaskID: testTaskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, messageID := range []string{"request-id", ""} {
+		t.Run("messageID="+messageID, func(t *testing.T) {
+			key := messageID
+			if key == "" {
+				key = testTaskID
+			}
+			for _, tt := range []struct {
+				name      string
+				responses mcp.InputResponseMap
+			}{
+				{name: "nil map"},
+				{name: "empty map", responses: mcp.InputResponseMap{}},
+				{name: "unexpected key", responses: mcp.InputResponseMap{
+					"not-a-real-key": &mcp.ElicitResult{Action: "accept", Content: map[string]any{"response": "PostgreSQL"}},
+				}},
+				{name: "nil response", responses: mcp.InputResponseMap{key: nil}},
+			} {
+				t.Run(tt.name, func(t *testing.T) {
+					gateway := &fakeGateway{task: &a2atype.Task{
+						ID: testTaskID, ContextID: testSessionID,
+						Status: a2atype.TaskStatus{
+							State: a2atype.TaskStateInputRequired, Message: &a2atype.Message{ID: messageID},
+						},
+					}}
+					h := &Handler{gateway: gateway, sessions: testSessionService()}
+					result, err := h.updateTask(authContext(), nil, &updateTaskParams{
+						ParamsBase: taskParamsBase(), TaskID: ref, InputResponses: tt.responses,
+					})
+					rpcErr, ok := err.(*jsonrpc.Error)
+					if result != nil || !ok || rpcErr.Code != jsonrpc.CodeInvalidParams || !strings.Contains(rpcErr.Message, key) {
+						t.Fatalf("tasks/update = %#v, %v; want invalidParams naming %q", result, err, key)
+					}
+					gateway.mu.Lock()
+					defer gateway.mu.Unlock()
+					if gateway.replies != 0 || gateway.task.Status.State != a2atype.TaskStateInputRequired {
+						t.Fatalf("invalid response changed task: replies=%d, status=%s", gateway.replies, gateway.task.Status.State)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestTaskUpdateTranslatesAskUserResponse(t *testing.T) {
+	status := adka2a.AttachHitlExtension(
+		a2atype.NewMessage(a2atype.MessageRoleAgent, a2atype.NewTextPart("Which database?")),
+		&apia2a.AskUserRequest{
+			Type: adka2a.HITLTypeAskUserRequest, ID: "question-1",
+			Questions: []apia2a.HITLQuestion{{Question: "Which database?", Choices: []string{"PostgreSQL", "MySQL"}}},
+		},
+	)
+	gateway := &fakeGateway{task: &a2atype.Task{
+		ID: testTaskID, ContextID: testSessionID,
+		Status: a2atype.TaskStatus{State: a2atype.TaskStateInputRequired, Message: status},
+	}}
+	h := &Handler{gateway: gateway, sessions: testSessionService()}
+	ref, err := encodeTaskReference(taskReference{
+		SessionID: testSessionID, TaskID: testTaskID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.updateTask(authContext(), nil, &updateTaskParams{
+		ParamsBase: taskParamsBase(), TaskID: ref,
+		InputResponses: mcp.InputResponseMap{status.ID: &mcp.ElicitResult{
+			Action: "accept", Content: map[string]any{"response": "PostgreSQL"},
+		}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gateway.mu.Lock()
+	response := adka2a.GetAskUserResponse(gateway.reply)
+	text := a2aText(gateway.reply)
+	gateway.mu.Unlock()
+	if response == nil || response.ID != "question-1" || len(response.Answers) != 1 || response.Answers[0].Answer[0] != "PostgreSQL" || text != "PostgreSQL" {
+		t.Fatalf("ask_user response = %#v", response)
+	}
+}
+
+func TestTaskCapableToolCallReturnsDurableHandle(t *testing.T) {
+	gateway := &fakeGateway{}
+	h, err := New(Config{Agents: testAgentService(t), Sessions: testSessionService(), Checkpoints: testCheckpointService(), Gateway: &a2asrv.InterceptedHandler{Handler: gateway}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(authContext()))
+	}))
+	defer server.Close()
+
+	discover := rawMCPCall(t, server.URL, "server/discover", map[string]any{}, true)
+	capabilities := discover["result"].(map[string]any)["capabilities"].(map[string]any)
+	extensions := capabilities["extensions"].(map[string]any)
+	if extensions[tasksExtension] == nil {
+		t.Fatalf("server capabilities = %#v", capabilities)
+	}
+
+	call := rawMCPCall(t, server.URL, "tools/call", map[string]any{
+		"name": invokeToolName,
+		"arguments": map[string]any{
+			"session_id": testSessionID, "message": "hello",
+		},
+	}, true)
+	result := call["result"].(map[string]any)
+	if result["resultType"] != "task" || result["status"] != "working" {
+		t.Fatalf("tools/call result = %#v", result)
+	}
+	taskID, ok := result["taskId"].(string)
+	if !ok || taskID == "" {
+		t.Fatalf("taskId = %#v", result["taskId"])
+	}
+
+	get := rawMCPCall(t, server.URL, "tasks/get", map[string]any{"taskId": taskID}, true)
+	got := get["result"].(map[string]any)
+	if got["taskId"] != taskID || got["status"] != "working" {
+		t.Fatalf("tasks/get result = %#v", got)
+	}
+}
+
+func TestToolCallWithoutTasksWaitsForResult(t *testing.T) {
+	gateway := &fakeGateway{completeOnDrain: true}
+	h, err := New(Config{Agents: testAgentService(t), Sessions: testSessionService(), Checkpoints: testCheckpointService(), Gateway: &a2asrv.InterceptedHandler{Handler: gateway}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(authContext()))
+	}))
+	defer server.Close()
+
+	call := rawMCPCall(t, server.URL, "tools/call", map[string]any{
+		"name": invokeToolName,
+		"arguments": map[string]any{
+			"session_id": testSessionID, "message": "hello",
+		},
+	}, false)
+	result := call["result"].(map[string]any)
+	if result["resultType"] != "complete" || result["isError"] == true {
+		t.Fatalf("tools/call result = %#v", result)
+	}
+	content := result["content"].([]any)[0].(map[string]any)
+	if content["text"] != "done" {
+		t.Fatalf("tools/call content = %#v", content)
+	}
+}
+
+func TestCancelTaskUsesA2AGateway(t *testing.T) {
+	gateway := &fakeGateway{task: &a2atype.Task{
+		ID: testTaskID, ContextID: testSessionID,
+		Status: a2atype.TaskStatus{State: a2atype.TaskStateWorking},
+	}}
+	h := &Handler{gateway: gateway, sessions: testSessionService()}
+	ref, err := encodeTaskReference(taskReference{
+		SessionID: testSessionID, TaskID: testTaskID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.cancelTask(authContext(), nil, &cancelTaskParams{ParamsBase: taskParamsBase(), TaskID: ref}); err != nil {
+		t.Fatal(err)
+	}
+	if gateway.task.Status.State != a2atype.TaskStateCanceled {
+		t.Fatalf("task state = %s", gateway.task.Status.State)
+	}
+}
+
+func TestCancelTaskRejectsMismatchedSession(t *testing.T) {
+	gateway := &fakeGateway{task: &a2atype.Task{
+		ID: testTaskID, ContextID: "another-session",
+		Status: a2atype.TaskStatus{State: a2atype.TaskStateWorking},
+	}}
+	h := &Handler{gateway: gateway, sessions: testSessionService()}
+	ref, err := encodeTaskReference(taskReference{SessionID: testSessionID, TaskID: testTaskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.cancelTask(authContext(), nil, &cancelTaskParams{ParamsBase: taskParamsBase(), TaskID: ref}); err == nil {
+		t.Fatal("cancel accepted a task from another session")
+	}
+	if gateway.task.Status.State != a2atype.TaskStateWorking {
+		t.Fatalf("mismatched task state = %s", gateway.task.Status.State)
+	}
+}
+
+func TestTaskMethodsRequireCapability(t *testing.T) {
+	h := &Handler{}
+	_, err := h.getTask(authContext(), nil, &getTaskParams{TaskID: "ignored"})
+	rpcErr, ok := err.(*jsonrpc.Error)
+	if !ok || rpcErr.Code != mcp.CodeMissingRequiredClientCapabilities {
+		t.Fatalf("tasks/get error = %#v", err)
+	}
+}
+
+func taskParamsBase() mcp.ParamsBase {
+	return mcp.ParamsBase{Meta: mcp.Meta{
+		mcp.MetaKeyClientCapabilities: map[string]any{
+			"extensions": map[string]any{tasksExtension: map[string]any{}},
+		},
+	}}
+}
+
+func rawMCPCall(t *testing.T, endpoint, method string, params map[string]any, tasks bool, headers ...http.Header) map[string]any {
+	t.Helper()
+	extensions := map[string]any{}
+	if tasks {
+		extensions[tasksExtension] = map[string]any{}
+	}
+	params["_meta"] = map[string]any{
+		mcp.MetaKeyProtocolVersion: "2026-07-28",
+		mcp.MetaKeyClientInfo:      map[string]any{"name": "test", "version": "1"},
+		mcp.MetaKeyClientCapabilities: map[string]any{
+			"extensions": extensions,
+		},
+	}
+	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, header := range headers {
+		for key, values := range header {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
+		}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Mcp-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", method)
+	if method == "tools/call" {
+		req.Header.Set("Mcp-Name", params["name"].(string))
+	} else if method == "resources/read" {
+		req.Header.Set("Mcp-Name", params["uri"].(string))
+	} else if strings.HasPrefix(method, "tasks/") {
+		req.Header.Set("Mcp-Name", params["taskId"].(string))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasPrefix(string(body), "event:") {
+		_, data, ok := strings.Cut(string(body), "data: ")
+		if !ok {
+			t.Fatalf("invalid MCP event stream: %s", body)
+		}
+		body = []byte(strings.TrimSpace(data))
+	}
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode MCP response (status %d): %v; body = %s", resp.StatusCode, err, body)
+	}
+	if rpcErr := result["error"]; rpcErr != nil {
+		t.Fatalf("MCP error: %#v", rpcErr)
+	}
+	return result
+}
+
+type testSession struct{}
+
+func (testSession) Principal() auth.Principal {
+	return auth.Principal{ID: "user@example.com"}
+}
+
+func authContext() context.Context {
+	return auth.AuthSessionTo(context.Background(), testSession{})
+}
+
+type fakeGateway struct {
+	mu              sync.Mutex
+	task            *a2atype.Task
+	reply           *a2atype.Message
+	replies         int
+	completeOnDrain bool
+}
+
+var _ a2asrv.RequestHandler = (*fakeGateway)(nil)
+
+func (g *fakeGateway) GetTask(_ context.Context, request *a2atype.GetTaskRequest) (*a2atype.Task, error) {
+	if request.Tenant != "team-a/assistant" {
+		return nil, a2atype.ErrInvalidParams
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.task, nil
+}
+
+func (*fakeGateway) ListTasks(context.Context, *a2atype.ListTasksRequest) (*a2atype.ListTasksResponse, error) {
+	return nil, a2atype.ErrUnsupportedOperation
+}
+
+func (g *fakeGateway) CancelTask(_ context.Context, request *a2atype.CancelTaskRequest) (*a2atype.Task, error) {
+	if request.Tenant != "team-a/assistant" {
+		return nil, a2atype.ErrInvalidParams
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.task.Status.State = a2atype.TaskStateCanceled
+	return g.task, nil
+}
+
+func (*fakeGateway) SendMessage(context.Context, *a2atype.SendMessageRequest) (a2atype.SendMessageResult, error) {
+	return nil, a2atype.ErrUnsupportedOperation
+}
+
+func (*fakeGateway) SubscribeToTask(context.Context, *a2atype.SubscribeToTaskRequest) iter.Seq2[a2atype.Event, error] {
+	return func(func(a2atype.Event, error) bool) {}
+}
+
+func (g *fakeGateway) SendStreamingMessage(_ context.Context, request *a2atype.SendMessageRequest) iter.Seq2[a2atype.Event, error] {
+	if request.Tenant != "team-a/assistant" || request.Message.ContextID != testSessionID {
+		return func(yield func(a2atype.Event, error) bool) { yield(nil, a2atype.ErrInvalidParams) }
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if request.Message.TaskID != "" {
+		g.reply = request.Message
+		g.replies++
+		g.task.Status.State = a2atype.TaskStateWorking
+		return func(func(a2atype.Event, error) bool) {}
+	}
+	request.Message.TaskID = testTaskID
+	request.Message.ContextID = testSessionID
+	g.task = &a2atype.Task{
+		ID: testTaskID, ContextID: testSessionID,
+		Status:  a2atype.TaskStatus{State: a2atype.TaskStateWorking},
+		History: []*a2atype.Message{request.Message},
+	}
+	return func(yield func(a2atype.Event, error) bool) {
+		g.mu.Lock()
+		task, complete := g.task, g.completeOnDrain
+		g.mu.Unlock()
+		if !yield(task, nil) || !complete {
+			return
+		}
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		message := a2atype.NewMessageForTask(a2atype.MessageRoleAgent, g.task, a2atype.NewTextPart("done"))
+		g.task.Status = a2atype.TaskStatus{State: a2atype.TaskStateCompleted, Message: message}
+		yield(g.task, nil)
+	}
+}
+
+func (*fakeGateway) GetTaskPushConfig(context.Context, *a2atype.GetTaskPushConfigRequest) (*a2atype.PushConfig, error) {
+	return nil, a2atype.ErrPushNotificationNotSupported
+}
+
+func (*fakeGateway) ListTaskPushConfigs(context.Context, *a2atype.ListTaskPushConfigRequest) (*a2atype.ListTaskPushConfigResponse, error) {
+	return nil, a2atype.ErrPushNotificationNotSupported
+}
+
+func (*fakeGateway) CreateTaskPushConfig(context.Context, *a2atype.PushConfig) (*a2atype.PushConfig, error) {
+	return nil, a2atype.ErrPushNotificationNotSupported
+}
+
+func (*fakeGateway) DeleteTaskPushConfig(context.Context, *a2atype.DeleteTaskPushConfigRequest) error {
+	return a2atype.ErrPushNotificationNotSupported
+}
+
+func (*fakeGateway) GetExtendedAgentCard(context.Context, *a2atype.GetExtendedAgentCardRequest) (*a2atype.AgentCard, error) {
+	return nil, a2atype.ErrUnsupportedOperation
+}
+
+type fakeSessionStore struct{}
+
+func (*fakeSessionStore) CreateSession(context.Context, *apiv1.Session, string) (*apiv1.Session, bool, error) {
+	return nil, false, database.ErrNotFound
+}
+
+func (*fakeSessionStore) GetSession(_ context.Context, id, _ string) (*apiv1.Session, error) {
+	if id != testSessionID {
+		return nil, database.ErrNotFound
+	}
+	return &apiv1.Session{Id: id, ContextId: id, Agent: &apiv1.AgentProvenance{Ref: &apiv1.ResourceReference{Namespace: "team-a", Name: "assistant"}}}, nil
+}
+
+func (s *fakeSessionStore) GetSessionByID(ctx context.Context, id string) (*apiv1.Session, error) {
+	return s.GetSession(ctx, id, "")
+}
+
+func (*fakeSessionStore) ListSessions(context.Context, database.SessionQuery) ([]*apiv1.Session, error) {
+	return []*apiv1.Session{{
+		Id: testSessionID, State: apiv1.RuntimeState_RUNTIME_STATE_READY,
+		Agent: &apiv1.AgentProvenance{Ref: &apiv1.ResourceReference{Name: "assistant"}},
+	}}, nil
+}
+
+func (*fakeSessionStore) UpdateSessionName(context.Context, string, string, string) (*apiv1.Session, error) {
+	return nil, database.ErrNotFound
+}
+
+func (*fakeSessionStore) CreateSessionShare(context.Context, *apiv1.SessionShare, []byte, string) (*apiv1.SessionShare, error) {
+	return nil, database.ErrNotFound
+}
+
+func (*fakeSessionStore) ListSessionShares(context.Context, string, string, string, int) ([]*apiv1.SessionShare, error) {
+	return nil, nil
+}
+
+func (*fakeSessionStore) DeleteSessionShare(context.Context, string, string) error {
+	return nil
+}
+
+type fakeSessionWorkflow struct{}
+
+func (*fakeSessionWorkflow) Create(_ context.Context, session *apiv1.Session) (*apiv1.Session, error) {
+	return session, nil
+}
+
+func (*fakeSessionWorkflow) Revert(_ context.Context, session *apiv1.Session) (*apiv1.Session, error) {
+	return session, nil
+}
+
+func (*fakeSessionWorkflow) Delete(_ context.Context, session *apiv1.Session, _ bool) (*apiv1.Session, error) {
+	return session, nil
+}
+
+func testSessionService() *sessionsvc.Service {
+	return sessionsvc.NewService(&fakeSessionStore{}, &auth.NoopAuthorizer{}, &fakeSessionWorkflow{})
+}
+
+func testCheckpointService() *checkpoint.Service {
+	return checkpoint.NewService(nil, nil, nil, nil)
+}

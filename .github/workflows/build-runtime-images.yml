@@ -1,0 +1,108 @@
+name: Build runtime images
+
+# Rebuilds and publishes the native harness runtime images to ghcr.io whenever
+# the version manifest changes. Edit go/harness/runtime-images.csv (add/rotate a
+# version row, flip `current` to move the :latest tag) and open a PR; a merge to
+# the default branch runs this workflow automatically.
+
+on:
+  push:
+    paths:
+      - "go/harness/runtime-images.csv"
+      - "go/harness/**/Dockerfile"
+      - ".github/workflows/build-runtime-images.yml"
+    branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: "Only build this runtime (claude|codex|deepagent|deepseek). Leave empty for all."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: runtime-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight the version manifest
+        run: scripts/verify-runtime-images.sh
+
+      - name: Build matrix from CSV
+        id: build-matrix
+        env:
+          ONLY_RUNTIME: ${{ github.event.inputs.runtime }}
+        run: |
+          python3 - "$ONLY_RUNTIME" <<'PY'
+          import csv, json, sys
+          only = sys.argv[1].strip()
+          rows = []
+          with open("go/harness/runtime-images.csv", newline="") as fh:
+              for r in csv.DictReader(fh):
+                  if only and r["runtime"] != only:
+                      continue
+                  rows.append({
+                      "runtime": r["runtime"],
+                      "dockerfile": r["dockerfile"],
+                      "image": r["image"],
+                      "version": r["version"],
+                      "amd64": (r.get("amd64_sha256") or "").strip(),
+                      "arm64": (r.get("arm64_sha256") or "").strip(),
+                      "current": (r.get("current") or "").strip(),
+                  })
+          if not rows:
+              sys.exit("no rows selected from runtime-images.csv")
+          print("matrix=" + json.dumps(rows))
+          PY
+
+  build:
+    needs: plan
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.runtime }} ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.runtime }}:${{ matrix.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: go
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            RUNTIME_VERSION=${{ matrix.version }}
+            AMD64_SHA256=${{ matrix.amd64 }}
+            ARM64_SHA256=${{ matrix.arm64 }}
+          tags: >-
+            ${{ matrix.image }}:${{ matrix.version }}
+            ${{ matrix.current == 'true' && format(',{0}:latest', matrix.image) || '' }}
+          cache-from: type=gha,scope=runtime-${{ matrix.runtime }}-${{ matrix.version }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.runtime }}-${{ matrix.version }}

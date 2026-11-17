@@ -31,7 +31,7 @@ Community of 14 nodes
 
 ## Execution Flows
 
-- **provisionTenant** (criticality: 0.63, depth: 3)
+No execution flows pass through this community.
 
 ## Dependencies
 

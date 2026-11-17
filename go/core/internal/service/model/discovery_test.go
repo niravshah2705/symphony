@@ -1,0 +1,409 @@
+package model_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/niravshah2705/symphony/go/adk/pkg/models"
+	apiauthorization "github.com/niravshah2705/symphony/go/api/authorization"
+	"github.com/niravshah2705/symphony/go/api/v1alpha3"
+	authimpl "github.com/niravshah2705/symphony/go/core/internal/httpserver/auth"
+	"github.com/niravshah2705/symphony/go/core/internal/service/model"
+	"github.com/niravshah2705/symphony/go/core/internal/service/serviceerrors"
+	pkgauth "github.com/niravshah2705/symphony/go/core/pkg/auth"
+)
+
+type recordingProviderModelRefresher struct {
+	models    []string
+	err       error
+	calls     int
+	namespace string
+	name      string
+}
+
+func (r *recordingProviderModelRefresher) RefreshModelProviderConfigModels(_ context.Context, namespace, name string) ([]string, error) {
+	r.calls++
+	r.namespace = namespace
+	r.name = name
+	return r.models, r.err
+}
+
+type listErrorClient struct {
+	ctrlclient.Client
+	err error
+}
+
+func (c *listErrorClient) List(context.Context, ctrlclient.ObjectList, ...ctrlclient.ListOption) error {
+	return c.err
+}
+
+type getErrorClient struct {
+	ctrlclient.Client
+	err error
+}
+
+func (c *getErrorClient) Get(context.Context, ctrlclient.ObjectKey, ctrlclient.Object, ...ctrlclient.GetOption) error {
+	return c.err
+}
+
+func TestDiscoverySupportedProviderDefinitions(t *testing.T) {
+	service := model.NewService(nil, nil, "default")
+
+	modelProviders := service.ListSupportedModelProviders(context.Background())
+	require.Len(t, modelProviders, 11)
+	assert.Equal(t, []string{
+		"OpenAI",
+		"Anthropic",
+		"AzureOpenAI",
+		"Foundry",
+		"Ollama",
+		"Gemini",
+		"GeminiVertexAI",
+		"AnthropicVertexAI",
+		"Bedrock",
+		"SAPAICore",
+		"Mistral",
+	}, providerNames(modelProviders))
+	assert.Empty(t, modelProviders[0].RequiredParams)
+	assert.Equal(t, []string{
+		"baseUrl",
+		"organization",
+		"temperature",
+		"maxTokens",
+		"maxCompletionTokens",
+		"topP",
+		"frequencyPenalty",
+		"presencePenalty",
+		"seed",
+		"n",
+		"timeout",
+		"reasoningEffort",
+		"apiFormat",
+	}, modelProviders[0].OptionalParams)
+	assert.Equal(t, []string{"azureEndpoint"}, modelProviders[2].RequiredParams)
+	assert.Equal(t, []string{"apiVersion", "azureDeployment", "temperature", "maxTokens", "topP", "apiFormat"}, modelProviders[2].OptionalParams)
+	assert.Equal(t, []string{"deployment", "endpoint"}, modelProviders[3].RequiredParams)
+	assert.Equal(t, []string{"apiVersion", "apiFormat"}, modelProviders[3].OptionalParams)
+	assert.Equal(t, []string{"", "maxOutputTokens", "candidateCount", "responseMimeType"}, modelProviders[6].OptionalParams)
+}
+
+func TestDiscoveryStaticModelCatalog(t *testing.T) {
+	service := model.NewService(nil, nil, "default")
+	models := service.ListSupportedModels(context.Background())
+
+	require.Len(t, models, 11)
+	require.NotEmpty(t, models[v1alpha3.ModelProviderOpenAI])
+	assert.Equal(t, "gpt-5.6-terra", models[v1alpha3.ModelProviderOpenAI][0].Name)
+	assert.True(t, models[v1alpha3.ModelProviderOpenAI][0].FunctionCalling)
+	assert.Equal(t, model.ModelInfo{Name: "glm-5.3-flash", FunctionCalling: true}, models[v1alpha3.ModelProviderOllama][6])
+	assert.Equal(t, model.ModelInfo{Name: "us.amazon.nova-2-lite-v1:0", FunctionCalling: false}, models[v1alpha3.ModelProviderBedrock][10])
+
+	encoded, err := json.Marshal(models[v1alpha3.ModelProviderOpenAI][0])
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"name":"gpt-5.6-terra","function_calling":true}`, string(encoded))
+
+	foundry := map[string]bool{}
+	for _, info := range models[v1alpha3.ModelProviderFoundry] {
+		foundry[info.Name] = info.FunctionCalling
+	}
+	for _, name := range []string{
+		"grok-3",
+		"grok-4.7",
+		"grok-4.6",
+		"grok-4.3",
+		"grok-4-20-reasoning",
+		"grok-4-20-non-reasoning",
+		"grok-4.1-fast-reasoning",
+		"grok-4.1-fast-non-reasoning",
+		"grok-4",
+		"grok-code-fast-1",
+	} {
+		calling, ok := foundry[name]
+		require.Truef(t, ok, "Foundry catalog missing %s", name)
+		assert.True(t, calling, name)
+	}
+	_, hasGrok5 := foundry["grok-5"]
+	assert.False(t, hasGrok5, "grok-5 is not a published Foundry model ID")
+
+	bedrock := map[string]bool{}
+	for _, info := range models[v1alpha3.ModelProviderBedrock] {
+		bedrock[info.Name] = info.FunctionCalling
+	}
+	for _, name := range []string{
+		"us.xai.grok-4.7",
+		"global.xai.grok-4.7",
+		"us.xai.grok-4.6",
+		"global.xai.grok-4.6",
+	} {
+		calling, ok := bedrock[name]
+		require.Truef(t, ok, "Bedrock catalog missing %s", name)
+		assert.True(t, calling, name)
+	}
+	_, hasFoundryGrokName := bedrock["grok-4.7"]
+	assert.False(t, hasFoundryGrokName, "Bedrock IDs use the xai inference-profile prefix")
+
+	for _, provider := range []v1alpha3.ModelProvider{v1alpha3.ModelProviderGemini, v1alpha3.ModelProviderGeminiVertexAI} {
+		names := map[string]bool{}
+		for _, info := range models[provider] {
+			names[info.Name] = info.FunctionCalling
+		}
+		for _, name := range []string{"gemini-4-argon", "gemini-3.8-flash"} {
+			calling, ok := names[name]
+			require.Truef(t, ok, "%s catalog missing %s", provider, name)
+			assert.True(t, calling, name)
+		}
+	}
+}
+
+func TestDiscoveryConfiguredProviders(t *testing.T) {
+	scheme := discoveryScheme(t)
+	readyCondition := []metav1.Condition{{
+		Type:   v1alpha3.ModelProviderConfigConditionTypeReady,
+		Status: metav1.ConditionTrue,
+	}}
+	kubeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		&v1alpha3.ModelProviderConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "default-endpoint", Namespace: "service-ns"},
+			Spec:       v1alpha3.ModelProviderConfigSpec{Type: v1alpha3.ModelProviderOpenAI},
+			Status:     v1alpha3.ModelProviderConfigStatus{Conditions: readyCondition},
+		},
+		&v1alpha3.ModelProviderConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "custom-endpoint", Namespace: "service-ns"},
+			Spec: v1alpha3.ModelProviderConfigSpec{
+				Type:     v1alpha3.ModelProviderAnthropic,
+				Endpoint: "https://models.example.com",
+			},
+			Status: v1alpha3.ModelProviderConfigStatus{Conditions: readyCondition},
+		},
+		&v1alpha3.ModelProviderConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "not-ready", Namespace: "service-ns"},
+			Spec:       v1alpha3.ModelProviderConfigSpec{Type: v1alpha3.ModelProviderAnthropic},
+		},
+		&v1alpha3.ModelProviderConfig{
+			ObjectMeta: metav1.ObjectMeta{Name: "other-namespace", Namespace: "other"},
+			Spec:       v1alpha3.ModelProviderConfigSpec{Type: v1alpha3.ModelProviderOpenAI},
+			Status:     v1alpha3.ModelProviderConfigStatus{Conditions: readyCondition},
+		},
+	).Build()
+	service := model.NewService(kubeClient, pkgauth.NoopAuthorizer{}, "service-ns")
+
+	providers, err := service.ListConfiguredProviders(discoveryContext(t))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []model.ConfiguredProvider{
+		{
+			Name:     "default-endpoint",
+			Type:     "OpenAI",
+			Endpoint: "https://api.openai.com/v1",
+		},
+		{
+			Name:     "custom-endpoint",
+			Type:     "Anthropic",
+			Endpoint: "https://models.example.com",
+		},
+	}, providers)
+}
+
+func TestDiscoveryConfiguredProviderListError(t *testing.T) {
+	listErr := errors.New("list failed")
+	service := model.NewService(&listErrorClient{err: listErr}, pkgauth.NoopAuthorizer{}, "service-ns")
+
+	_, err := service.ListConfiguredProviders(discoveryContext(t))
+	require.Error(t, err)
+	assert.True(t, serviceerrors.IsCode(err, serviceerrors.CodeInternal))
+	assert.ErrorIs(t, err, listErr)
+}
+
+func TestDiscoveryProviderModels(t *testing.T) {
+	scheme := discoveryScheme(t)
+	kubeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1alpha3.ModelProviderConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "configured", Namespace: "service-ns"},
+		Status:     v1alpha3.ModelProviderConfigStatus{},
+	}).Build()
+	service := model.NewService(kubeClient, pkgauth.NoopAuthorizer{}, "service-ns")
+
+	_, err := service.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{Name: "configured"})
+	require.True(t, serviceerrors.IsCode(err, serviceerrors.CodeNotFound))
+}
+
+func TestDiscoveryProviderModelsRefresh(t *testing.T) {
+	refresher := &recordingProviderModelRefresher{models: []string{"fresh-model"}}
+	service := model.NewService(nil, pkgauth.NoopAuthorizer{}, "service-ns", model.WithProviderModelRefresher(refresher))
+
+	result, err := service.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{Name: "configured", Refresh: true})
+	require.NoError(t, err)
+	assert.Equal(t, model.ProviderModelsResult{Provider: "configured", Models: []string{"fresh-model"}}, result)
+	assert.Equal(t, 1, refresher.calls)
+	assert.Equal(t, "service-ns", refresher.namespace)
+	assert.Equal(t, "configured", refresher.name)
+}
+
+func TestDiscoveryProviderModelsErrors(t *testing.T) {
+	scheme := discoveryScheme(t)
+	kubeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&v1alpha3.ModelProviderConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "service-ns"},
+	}).Build()
+	service := model.NewService(kubeClient, pkgauth.NoopAuthorizer{}, "service-ns")
+
+	t.Run("empty provider name", func(t *testing.T) {
+		_, err := service.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{})
+		require.Error(t, err)
+		assert.True(t, serviceerrors.IsCode(err, serviceerrors.CodeInvalidArgument))
+	})
+
+	t.Run("missing provider config", func(t *testing.T) {
+		_, err := service.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{Name: "missing"})
+		require.Error(t, err)
+		assert.True(t, serviceerrors.IsCode(err, serviceerrors.CodeNotFound))
+	})
+
+	t.Run("empty discovered models", func(t *testing.T) {
+		_, err := service.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{Name: "empty"})
+		require.Error(t, err)
+		assert.True(t, serviceerrors.IsCode(err, serviceerrors.CodeNotFound))
+		assert.Equal(t, "No cached model inventory is available for model provider", serviceerrors.MessageOf(err))
+	})
+
+	t.Run("cached lookup error", func(t *testing.T) {
+		getErr := errors.New("get failed")
+		getService := model.NewService(&getErrorClient{err: getErr}, pkgauth.NoopAuthorizer{}, "service-ns")
+
+		_, err := getService.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{Name: "configured"})
+		require.Error(t, err)
+		assert.True(t, serviceerrors.IsCode(err, serviceerrors.CodeInternal))
+		assert.ErrorIs(t, err, getErr)
+	})
+
+	t.Run("refresh error", func(t *testing.T) {
+		refreshErr := errors.New("refresh failed")
+		refresher := &recordingProviderModelRefresher{err: refreshErr}
+		refreshService := model.NewService(nil, pkgauth.NoopAuthorizer{}, "service-ns", model.WithProviderModelRefresher(refresher))
+
+		_, err := refreshService.GetProviderModels(discoveryContext(t), model.GetProviderModelsRequest{Name: "configured", Refresh: true})
+		require.Error(t, err)
+		assert.True(t, serviceerrors.IsCode(err, serviceerrors.CodeInternal))
+		assert.ErrorIs(t, err, refreshErr)
+	})
+}
+
+func discoveryScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	require.NoError(t, v1alpha3.AddToScheme(scheme))
+	return scheme
+}
+
+func providerNames(providers []model.ProviderDefinition) []string {
+	names := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		names = append(names, provider.Name)
+	}
+	return names
+}
+
+// The Ollama catalog mixes two families served by different endpoints: cloud
+// models, reached at api.ollama.com with a key, and local models, pulled with
+// `ollama pull` and served by the operator's daemon. Both have to be listed, and
+// tool support has to be true for each — it is verified per model against
+// /api/show (cloud) or a local daemon, not inferred from the family.
+func TestOllamaCatalogCoversCloudAndLocal(t *testing.T) {
+	service := model.NewService(nil, nil, "default")
+	catalog := service.ListSupportedModels(context.Background())[v1alpha3.ModelProviderOllama]
+	require.NotEmpty(t, catalog)
+
+	byName := make(map[string]model.ModelInfo, len(catalog))
+	for _, m := range catalog {
+		byName[m.Name] = m
+	}
+
+	cloud := []string{"kimi-k3", "glm-5.3", "minimax-m3", "deepseek-v4.1-flash", "gpt-oss:120b", "qwen3.5:397b"}
+	local := []string{"qwen3.5", "deepseek-r1"}
+
+	for _, name := range append(append([]string{}, cloud...), local...) {
+		info, ok := byName[name]
+		require.True(t, ok, "model %q is missing from the Ollama catalog", name)
+		assert.True(t, info.FunctionCalling, "model %q should report tool support", name)
+	}
+
+	// A local family must be listed under its bare name: ":cloud" is not a valid
+	// tag for either, so a cloud-suffixed entry would route to an endpoint that
+	// cannot serve it.
+	for _, name := range local {
+		assert.False(t, models.OllamaReachesCloud(name, "", true),
+			"%q is a local model and must not be treated as a cloud tag", name)
+	}
+
+	// The cloud subset must be reachable through the cloud routing rule.
+	for _, name := range cloud {
+		assert.True(t, models.OllamaReachesCloud(name+":cloud", "", true),
+			"%q should route to the cloud when tagged", name)
+	}
+}
+
+func discoveryContext(t *testing.T) context.Context {
+	t.Helper()
+	return pkgauth.AuthSessionTo(t.Context(), &authimpl.SimpleSession{P: pkgauth.Principal{ID: "provider-user"}})
+}
+
+func TestConfiguredProviderAuthorization(t *testing.T) {
+	ctx := discoveryContext(t)
+	ready := v1alpha3.ModelProviderConfigStatus{Conditions: []metav1.Condition{{Type: v1alpha3.ModelProviderConfigConditionTypeReady, Status: metav1.ConditionTrue}}}
+	kube := fake.NewClientBuilder().WithScheme(discoveryScheme(t)).WithObjects(
+		&v1alpha3.ModelProviderConfig{ObjectMeta: metav1.ObjectMeta{Namespace: "service-ns", Name: "allowed"}, Status: ready},
+		&v1alpha3.ModelProviderConfig{ObjectMeta: metav1.ObjectMeta{Namespace: "service-ns", Name: "denied"}, Status: ready},
+		&v1alpha3.ModelProviderConfig{ObjectMeta: metav1.ObjectMeta{Namespace: "service-ns", Name: "unready"}},
+	).Build()
+	authorizer := &recordingAuthorizer{scope: apiauthorization.AuthorizationScope{Kind: apiauthorization.ScopeAnyOf, AnyOf: []apiauthorization.ScopeClause{{All: []apiauthorization.ScopePredicate{{Attribute: apiauthorization.AttributeName, Operator: apiauthorization.ScopeIn, Values: []string{"allowed", "unready"}}}}}}}
+	refresher := &recordingProviderModelRefresher{models: []string{"fresh"}}
+	service := model.NewService(kube, authorizer, "service-ns", model.WithProviderModelRefresher(refresher))
+	providers, err := service.ListConfiguredProviders(ctx)
+	require.NoError(t, err)
+	require.Len(t, providers, 1)
+	require.Equal(t, "allowed", providers[0].Name)
+	require.Equal(t, pkgauth.VerbList, authorizer.scopeVerb)
+	require.Equal(t, "ModelProviderConfig", authorizer.scopeType)
+	_, err = service.GetProviderModels(ctx, model.GetProviderModelsRequest{Name: "allowed"})
+	require.True(t, serviceerrors.IsCode(err, serviceerrors.CodeNotFound))
+	require.Equal(t, authorizationCall{verb: pkgauth.VerbGet, resource: pkgauth.Resource{Type: "ModelProviderConfig", Namespace: "service-ns", Name: "allowed"}}, authorizer.checkCalls[0])
+	_, err = service.GetProviderModels(ctx, model.GetProviderModelsRequest{Name: "allowed", Refresh: true})
+	require.NoError(t, err)
+	require.Equal(t, authorizationCall{verb: pkgauth.VerbUpdate, resource: pkgauth.Resource{Type: "ModelProviderConfig", Namespace: "service-ns", Name: "allowed"}}, authorizer.checkCalls[1])
+	require.Equal(t, 1, refresher.calls)
+
+	for _, refresh := range []bool{false, true} {
+		t.Run(fmt.Sprintf("denied refresh=%t", refresh), func(t *testing.T) {
+			denied := model.NewService(kube, denyAuthorizer{}, "service-ns", model.WithProviderModelRefresher(refresher))
+			_, err := denied.GetProviderModels(ctx, model.GetProviderModelsRequest{Name: "denied", Refresh: refresh})
+			require.True(t, serviceerrors.IsCode(err, serviceerrors.CodePermissionDenied))
+			require.Equal(t, 1, refresher.calls)
+			_, err = denied.GetProviderModels(t.Context(), model.GetProviderModelsRequest{Name: "allowed", Refresh: refresh})
+			require.True(t, serviceerrors.IsCode(err, serviceerrors.CodeUnauthenticated))
+		})
+	}
+	shared := pkgauth.ShareContextTo(ctx, &pkgauth.ShareContext{UserID: "owner", SessionID: "session"})
+	_, err = service.GetProviderModels(shared, model.GetProviderModelsRequest{Name: "allowed", Refresh: true})
+	require.True(t, serviceerrors.IsCode(err, serviceerrors.CodePermissionDenied))
+	require.Equal(t, 1, refresher.calls)
+
+	denied := model.NewService(kube, denyAuthorizer{}, "service-ns")
+	providers, err = denied.ListConfiguredProviders(ctx)
+	require.NoError(t, err)
+	require.Empty(t, providers)
+	require.NotEmpty(t, denied.ListSupportedModelProviders(ctx))
+	require.NotEmpty(t, denied.ListSupportedModels(ctx))
+	unavailable := model.NewService(kube, unavailableAuthorizer{}, "service-ns")
+	_, err = unavailable.ListConfiguredProviders(ctx)
+	require.True(t, serviceerrors.IsCode(err, serviceerrors.CodeUnavailable))
+	authorizer.scope = apiauthorization.AuthorizationScope{Kind: apiauthorization.ScopeAnyOf}
+	_, err = service.ListConfiguredProviders(ctx)
+	require.True(t, serviceerrors.IsCode(err, serviceerrors.CodeInternal))
+}

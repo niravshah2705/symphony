@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 7 nodes
+Community of 6 nodes
 
-- **Size**: 7 nodes
-- **Cohesion**: 0.2258
+- **Size**: 6 nodes
+- **Cohesion**: 0.1333
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,7 +17,6 @@ Community of 7 nodes
 | trustedContextInput | Function | ./services/gateway/src/store-context.js | 24-31 |
 | createStoreContextMiddleware | Function | ./services/gateway/src/store-context.js | 33-44 |
 | pause | Function | ./services/gateway/src/store-context.test.js | 8-8 |
-| test:gateway keeps concurrent validated workspaces isolated through async initialization@L27 | Test | ./services/gateway/src/store-context.test.js | 27-57 |
 | invoke | Function | ./services/gateway/src/store-context.test.js | 36-43 |
 | test:gateway missing context retains the legacy empty workspace@L59 | Test | ./services/gateway/src/store-context.test.js | 59-63 |
 | test:gateway binding fails closed if an authoritative context is malformed@L65 | Test | ./services/gateway/src/store-context.test.js | 65-76 |
@@ -30,10 +29,10 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `deepEqual` (4 edge(s))
+- `./services/gateway/src/store-context.test.js::test:gateway keeps concurrent validated workspaces isolated through async initialization@L27` (4 edge(s))
 - `middleware` (3 edge(s))
-- `currentWorkspaceContext` (3 edge(s))
 - `next` (2 edge(s))
+- `currentWorkspaceContext` (2 edge(s))
 - `equal` (2 edge(s))
 - `catch` (1 edge(s))
 - `resolve` (1 edge(s))
@@ -41,21 +40,15 @@ No execution flows pass through this community.
 - `initStore` (1 edge(s))
 - `isArray` (1 edge(s))
 - `setImmediate` (1 edge(s))
-- `push` (1 edge(s))
-- `all` (1 edge(s))
-- `sort` (1 edge(s))
-- `localeCompare` (1 edge(s))
+- `deepEqual` (1 edge(s))
 
 ### Incoming
 
-- `./services/gateway/src/store-context.test.js` (5 edge(s))
 - `./services/gateway/src/store-context.js` (4 edge(s))
-- `deepEqual` (4 edge(s))
+- `./services/gateway/src/store-context.test.js::test:gateway keeps concurrent validated workspaces isolated through async initialization@L27` (4 edge(s))
+- `./services/gateway/src/store-context.test.js` (4 edge(s))
 - `middleware` (2 edge(s))
 - `equal` (2 edge(s))
-- `currentWorkspaceContext` (2 edge(s))
 - `./services/gateway/src/index.js` (1 edge(s))
-- `push` (1 edge(s))
-- `all` (1 edge(s))
-- `sort` (1 edge(s))
-- `localeCompare` (1 edge(s))
+- `currentWorkspaceContext` (1 edge(s))
+- `deepEqual` (1 edge(s))

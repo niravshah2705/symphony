@@ -69,7 +69,7 @@ Community of 98 nodes
 
 ## Execution Flows
 
-- **start** (criticality: 0.62, depth: 4)
+No execution flows pass through this community.
 
 ## Dependencies
 

@@ -79,7 +79,7 @@ Community of 463 nodes
 - **resolve_org_secrets** (criticality: 0.92, depth: 7)
 - **import_codex_tokens** (criticality: 0.88, depth: 5)
 - **resolve_managed_secrets** (criticality: 0.88, depth: 5)
-- *... and 28 more flows.*
+- *... and 25 more flows.*
 
 ## Dependencies
 

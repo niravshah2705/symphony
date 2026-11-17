@@ -1,0 +1,297 @@
+package substrate
+
+import (
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"github.com/stretchr/testify/require"
+	ateapipb "go.ate.dev/substrate/api/ateapi/v1"
+	"google.golang.org/protobuf/proto"
+	corev1 "k8s.io/api/core/v1"
+
+	"github.com/niravshah2705/symphony/go/api/bootstrap"
+	"github.com/niravshah2705/symphony/go/core/internal/translator"
+)
+
+func TestActorTemplateSkillVolumeLimit(t *testing.T) {
+	for _, count := range []int{0, 29, 30} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			spec := &translator.Revision{ControlPlaneURL: testControlPlaneURL, CPU: "1", Memory: "1Gi", Namespace: "test", AgentName: "skills", ConfigJSON: []byte(`{}`), AgentCard: &a2apb.AgentCard{
+				Name: "skills", Version: "v1", Capabilities: &a2apb.AgentCapabilities{},
+				DefaultInputModes: []string{"text"}, DefaultOutputModes: []string{"text"},
+				SupportedInterfaces: []*a2apb.AgentInterface{{Url: "http://127.0.0.1:80", ProtocolBinding: "GRPC", ProtocolVersion: "1.0"}},
+			}}
+			for i := range count {
+				spec.SkillImages = append(spec.SkillImages, translator.SkillImage(fmt.Sprintf("example.com/skills-%d@sha256:%064x", i, i)))
+			}
+			id, err := spec.Digest()
+			require.NoError(t, err)
+			bundle, err := spec.BootstrapBundle(id)
+			require.NoError(t, err)
+			actor, err := ActorTemplateForRevision(spec, id, bundle)
+			if count > 29 {
+				require.ErrorContains(t, err, "33 volumes and 33 container mounts")
+				require.ErrorContains(t, err, "at most 32 volumes and 32 mounts per container")
+				require.Nil(t, actor)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, actor.Volumes, count+3)
+			require.Len(t, actor.Containers[0].VolumeMounts, count+3)
+		})
+	}
+}
+
+// The keys are literals because the Helm chart and externally managed pools
+// set them by name; changing a key constant must fail here.
+func testWorkerPoolSelection(t *testing.T, template *ateapipb.ActorTemplate, namespace, pool string) {
+	t.Helper()
+	require.Equal(t, map[string]string{
+		"kagent.dev/worker-pool-name":      pool,
+		"kagent.dev/worker-pool-namespace": namespace,
+	}, template.GetWorkerSelector().GetMatchLabels())
+}
+
+func TestActorTemplateForRevision(t *testing.T) {
+	spec := &translator.Revision{ControlPlaneURL: testControlPlaneURL, CPU: "1", Memory: "1Gi",
+		Namespace: "agents", AgentName: "helper",
+		Image:          "agent.example/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		Command:        []string{"/agent"},
+		Args:           []string{"serve"},
+		WorkerPoolName: "default", SnapshotLocation: "snapshots",
+		ConfigJSON: []byte(`{"instruction":"help"}`), AgentCard: &a2apb.AgentCard{Name: "helper", Version: "v1", Capabilities: &a2apb.AgentCapabilities{Streaming: new(true)},
+			SupportedInterfaces: []*a2apb.AgentInterface{{Url: "http://127.0.0.1:80", ProtocolBinding: "GRPC", ProtocolVersion: "1.0"}}, DefaultInputModes: []string{"text"}, DefaultOutputModes: []string{"text"}},
+		Environment: []corev1.EnvVar{{Name: "API_KEY", Value: translator.CredentialPlaceholder}},
+	}
+	revisionID, err := spec.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := spec.BootstrapBundle(revisionID)
+	require.NoError(t, err)
+	template, err := ActorTemplateForRevision(spec, revisionID, bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if template.GetMetadata().GetAtespace() != "agents" || template.GetMetadata().GetName() != "helper-"+revisionID.Short() {
+		t.Fatalf("ActorTemplate = %+v", template)
+	}
+	container := template.GetContainers()[0]
+	if !slices.Equal(container.Command, spec.Command) || !slices.Equal(container.Args, spec.Args) {
+		t.Fatalf("container command/args = %v %v", container.Command, container.Args)
+	}
+	if container.GetWakeupProbe().GetHttpGet().GetPath() != "/readyz" || container.GetWakeupProbe().GetHttpGet().GetPort() != 8081 || container.GetWakeupProbe().GetTimeoutSeconds() != 30 {
+		t.Fatalf("unexpected runtime contract: %+v", template)
+	}
+	require.Equal(t, ateapipb.SnapshotFidelity_SNAPSHOT_FIDELITY_VOLUMES, template.GetSnapshotConfig().GetPreferredFidelity())
+	require.Equal(t, ateapipb.GoldenSnapshotMode_GOLDEN_SNAPSHOT_MODE_ENABLED, template.GetSnapshotConfig().GetGoldenSnapshotConfig().GetMode())
+	environment := map[string]*ateapipb.EnvVar{}
+	for _, variable := range container.Env {
+		environment[variable.Name] = variable
+	}
+	for _, name := range []string{"SSL_CERT_FILE", "AWS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE"} {
+		if environment[name].Value != egressTrustMount+"/trust-bundle.pem" {
+			t.Fatalf("missing gateway trust for %s", name)
+		}
+	}
+	trust := template.Volumes[2].GetSystemInfo().GetDataSources()[0].GetTrustBundle()
+	if !slices.Equal(trust.GetNames(), []string{"egress-mitm.ate.dev"}) || trust.GetPath() != "trust-bundle.pem" || container.VolumeMounts[1].GetMountPath() != egressTrustMount {
+		t.Fatal("gateway trust bundle was not projected")
+	}
+	identity := template.Volumes[1].GetSystemInfo().GetDataSources()[0].GetActorMetadata().GetItems()
+	if len(identity) != 1 || identity[0].GetField() != ateapipb.ActorMetadataField_ACTOR_METADATA_FIELD_NAME || identity[0].GetPath() != "name" || container.VolumeMounts[2].GetMountPath() != actorIdentityMount {
+		t.Fatal("actor routing identity was not projected")
+	}
+	var descriptor bootstrap.Descriptor
+	require.NoError(t, json.Unmarshal([]byte(environment[bootstrap.Environment].Value), &descriptor))
+	require.NoError(t, descriptor.Verify(bundle))
+	require.NotContains(t, environment, "KAGENT_CONFIG_JSON")
+	require.NotContains(t, environment, "KAGENT_AGENT_CARD_JSON")
+	require.NotNil(t, template.GoldenEgressPolicy)
+}
+
+func TestActorTemplateStampsTheRevisionOnTheResource(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		environment []corev1.EnvVar
+		wantPrefix  string
+	}{
+		{name: "no resource environment"},
+		{name: "preserves attributes", environment: []corev1.EnvVar{{Name: "OTEL_RESOURCE_ATTRIBUTES", Value: "team=platform"}}, wantPrefix: "team=platform,"},
+		{name: "replaces forged version", environment: []corev1.EnvVar{{Name: "OTEL_RESOURCE_ATTRIBUTES", Value: "gen_ai.main_agent.name=helper-kagent,service.version=forged"}}, wantPrefix: "gen_ai.main_agent.name=helper-kagent,"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spec := &translator.Revision{ControlPlaneURL: testControlPlaneURL, CPU: "1", Memory: "1Gi",
+				Namespace: "agents", AgentName: "helper", WorkerPoolName: "default",
+				AgentCard: &a2apb.AgentCard{Name: "helper", Version: "v1", Capabilities: &a2apb.AgentCapabilities{},
+					SupportedInterfaces: []*a2apb.AgentInterface{{Url: "http://127.0.0.1:80", ProtocolBinding: "GRPC", ProtocolVersion: "1.0"}},
+					DefaultInputModes:   []string{"text"}, DefaultOutputModes: []string{"text"}},
+				ConfigJSON: []byte(`{}`), Environment: slices.Clone(test.environment),
+			}
+			revisionID, err := spec.Digest()
+			require.NoError(t, err)
+			bundle, err := spec.BootstrapBundle(revisionID)
+			require.NoError(t, err)
+			template, err := ActorTemplateForRevision(spec, revisionID, bundle)
+			require.NoError(t, err)
+			require.Equal(t, test.environment, spec.Environment, "stamping the revision must not change the compiled revision")
+			for _, variable := range template.GetContainers()[0].Env {
+				if variable.Name == "OTEL_RESOURCE_ATTRIBUTES" {
+					require.Equal(t, test.wantPrefix+"service.version="+revisionID.Short(), variable.Value)
+					return
+				}
+			}
+			t.Fatal("resource attributes missing from the actor")
+		})
+	}
+}
+
+func TestActorTemplateSpecEqualIgnoresServerFields(t *testing.T) {
+	left := &ateapipb.ActorTemplate{
+		Metadata:   &ateapipb.ResourceMetadata{Atespace: "team-a", Name: "template"},
+		Containers: []*ateapipb.Container{{Name: "agent", Image: "agent:v1"}},
+	}
+	right := proto.CloneOf(left)
+	right.Metadata.Uid = "uid"
+	right.Metadata.Version = 2
+	right.Status = &ateapipb.ActorTemplateStatus{GoldenSnapshotStatus: &ateapipb.GoldenSnapshotStatus{GoldenTag: &ateapipb.ObjectRef{Atespace: "ate-golden", Name: "golden"}}}
+	if !ActorTemplateSpecEqual(left, right) {
+		t.Fatal("server-owned fields changed the immutable spec comparison")
+	}
+	if mustSpecDigest(t, left) != mustSpecDigest(t, right) {
+		t.Fatal("server-owned fields changed the immutable spec digest")
+	}
+	right.Containers[0].Image = "agent:v2"
+	if ActorTemplateSpecEqual(left, right) {
+		t.Fatal("different container image was accepted")
+	}
+	if mustSpecDigest(t, left) == mustSpecDigest(t, right) {
+		t.Fatal("different container image kept the immutable spec digest")
+	}
+}
+
+func mustSpecDigest(t *testing.T, template *ateapipb.ActorTemplate) string {
+	t.Helper()
+	digest, err := ActorTemplateSpecDigest(template)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return digest
+}
+
+func TestActorTemplateEnvironmentValueSize(t *testing.T) {
+	const configOverhead = len(`{"instruction":""}`)
+	for _, test := range []struct {
+		name        string
+		instruction string
+		description string
+		environment []corev1.EnvVar
+		wantError   string
+	}{
+		{name: "ASCII boundary", instruction: strings.Repeat("a", 32768-configOverhead)},
+		{name: "ASCII overflow", instruction: strings.Repeat("a", 32769-configOverhead)},
+		{name: "Unicode boundary", instruction: strings.Repeat("日", 32768-configOverhead)},
+		{name: "Unicode overflow", instruction: strings.Repeat("日", 32769-configOverhead)},
+		{name: "JSON escaping", instruction: strings.Repeat("<>&", 2000)},
+		{name: "user environment", environment: []corev1.EnvVar{{Name: "EXTRA", Value: strings.Repeat("x", 32769)}}, wantError: `environment variable "EXTRA" is 32769 characters; Substrate supports at most 32768`},
+		{name: "reserved bootstrap", environment: []corev1.EnvVar{{Name: bootstrap.Environment}}, wantError: "conflicts with runtime bootstrap"},
+		{name: "reserved legacy config", environment: []corev1.EnvVar{{Name: "KAGENT_CONFIG_JSON"}}, wantError: "conflicts with runtime bootstrap"},
+		{name: "reserved legacy card", environment: []corev1.EnvVar{{Name: "KAGENT_AGENT_CARD_JSON"}}, wantError: "conflicts with runtime bootstrap"},
+		{name: "reserved trust", environment: []corev1.EnvVar{{Name: "SSL_CERT_FILE"}}, wantError: "conflicts with gateway trust"},
+		{name: "agent card", description: strings.Repeat("x", 32769)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, err := json.Marshal(struct {
+				Instruction string `json:"instruction"`
+			}{test.instruction})
+			require.NoError(t, err)
+			spec := &translator.Revision{ControlPlaneURL: testControlPlaneURL, CPU: "1", Memory: "1Gi",
+				Namespace: "agents", AgentName: "helper", WorkerPoolName: "default",
+				ConfigJSON: config, Environment: test.environment,
+				AgentCard: &a2apb.AgentCard{Name: "helper", Description: test.description, Version: "v1", Capabilities: &a2apb.AgentCapabilities{},
+					SupportedInterfaces: []*a2apb.AgentInterface{{Url: "http://127.0.0.1:80", ProtocolBinding: "GRPC", ProtocolVersion: "1.0"}},
+					DefaultInputModes:   []string{"text"}, DefaultOutputModes: []string{"text"}},
+			}
+			id, err := spec.Digest()
+			require.NoError(t, err)
+			bundle, err := spec.BootstrapBundle(id)
+			require.NoError(t, err)
+			template, err := ActorTemplateForRevision(spec, id, bundle)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				require.Nil(t, template)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, template)
+		})
+	}
+}
+
+func TestActorResources(t *testing.T) {
+	for _, test := range []struct {
+		cpu, memory string
+		millicores  int64
+		bytes       int64
+		wantError   string
+	}{
+		{cpu: "500m", memory: "2Gi", millicores: 500, bytes: 2 << 30},
+		{cpu: "1.5", memory: "1G", millicores: 1500, bytes: 1_000_000_000},
+		{cpu: "0.1m", memory: "1.1", millicores: 1, bytes: 2},
+		{cpu: "999999m", memory: "9223372036854775807", millicores: 999999, bytes: 9223372036854775807},
+		{cpu: "", memory: "1Gi", wantError: "cpu"},
+		{cpu: "0", memory: "1Gi", wantError: "cpu"},
+		{cpu: "-1", memory: "1Gi", wantError: "cpu"},
+		{cpu: "invalid", memory: "1Gi", wantError: "cpu"},
+		{cpu: "1000", memory: "1Gi", wantError: "cpu"},
+		{cpu: "999.9991", memory: "1Gi", wantError: "cpu"},
+		{cpu: "1", memory: "", wantError: "memory"},
+		{cpu: "1", memory: "0", wantError: "memory"},
+		{cpu: "1", memory: "-1Gi", wantError: "memory"},
+		{cpu: "1", memory: "invalid", wantError: "memory"},
+		{cpu: "1", memory: "9223372036854775808", wantError: "memory"},
+	} {
+		t.Run(test.cpu+"/"+test.memory, func(t *testing.T) {
+			resources, err := actorResources(test.cpu, test.memory)
+			if test.wantError != "" {
+				require.ErrorContains(t, err, test.wantError)
+				require.Nil(t, resources)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.millicores, resources.Limits.CpuMillicores)
+			require.Equal(t, test.bytes, resources.Limits.MemoryBytes)
+		})
+	}
+}
+
+func TestGoldenEgressPolicyIsPartOfTemplateIdentity(t *testing.T) {
+	policy, err := bootstrapEgressPolicy("team-a", "https://controller.example")
+	require.NoError(t, err)
+	original := &ateapipb.ActorTemplate{GoldenEgressPolicy: policy}
+	for _, scenario := range []struct {
+		name   string
+		change func(*ateapipb.ActorTemplate)
+	}{
+		{"missing policy", func(template *ateapipb.ActorTemplate) { template.GoldenEgressPolicy = nil }},
+		{"different destination", func(template *ateapipb.ActorTemplate) {
+			template.GoldenEgressPolicy.Rules[0].Https.Hostnames = []string{"other.example"}
+		}},
+		{"different audience", func(template *ateapipb.ActorTemplate) {
+			for _, header := range template.GoldenEgressPolicy.Rules[0].Https.Effects.ReplaceHeaders {
+				header.ActorJwt.Audiences = []string{"other-audience"}
+			}
+		}},
+	} {
+		t.Run("Given a bootstrap policy, when compared with "+scenario.name+", assert that template identity differs", func(t *testing.T) {
+			changed := proto.CloneOf(original)
+			scenario.change(changed)
+			require.False(t, ActorTemplateSpecEqual(original, changed))
+			require.NotEqual(t, mustSpecDigest(t, original), mustSpecDigest(t, changed))
+		})
+	}
+}
