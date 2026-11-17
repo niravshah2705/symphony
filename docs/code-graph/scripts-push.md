@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 31 nodes
+Community of 32 nodes
 
-- **Size**: 31 nodes
+- **Size**: 32 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -44,6 +44,7 @@ Community of 31 nodes
 | test:gateway source imports shared-core and no heavy AI workspace or agent package@L25 | Test | ./services/gateway/src/dependency-boundary.test.js | 25-44 |
 | test:settings preflight outage and non-ready decisions fail closed without orchestrator dispatch@L205 | Test | ./services/gateway/src/pipeline-admission.test.js | 205-243 |
 | test:the SDK-free billing gate uses authoritative tenant scope and blocks before external admission@L271 | Test | ./services/gateway/src/pipeline-admission.test.js | 271-287 |
+| test:a live kagent adapter receives publishes and surfaces capabilities@L195 | Test | ./services/gateway/src/routes/workflows.test.js | 195-214 |
 | test:identity verification source imports shared-core and no heavy AI workspace@L25 | Test | ./services/identity-verification/src/dependency-boundary.test.js | 25-44 |
 
 ## Execution Flows
@@ -56,17 +57,17 @@ No execution flows pass through this community.
 
 - `expect` (133 edge(s))
 - `locator` (69 edge(s))
-- `equal` (52 edge(s))
-- `push` (35 edge(s))
+- `equal` (53 edge(s))
+- `push` (36 edge(s))
 - `toBeVisible` (30 edge(s))
 - `route` (28 edge(s))
 - `toHaveCount` (26 edge(s))
 - `getByRole` (23 edge(s))
 - `toEqual` (18 edge(s))
 - `./e2e/page-loading.spec.js::json` (18 edge(s))
+- `deepEqual` (18 edge(s))
 - `url` (16 edge(s))
 - `toHaveAttribute` (16 edge(s))
-- `deepEqual` (16 edge(s))
 - `join` (16 edge(s))
 - `evaluate` (15 edge(s))
 
@@ -74,16 +75,16 @@ No execution flows pass through this community.
 
 - `expect` (133 edge(s))
 - `locator` (69 edge(s))
-- `equal` (52 edge(s))
-- `push` (35 edge(s))
+- `equal` (53 edge(s))
+- `push` (36 edge(s))
 - `toBeVisible` (30 edge(s))
 - `route` (28 edge(s))
 - `toHaveCount` (26 edge(s))
 - `getByRole` (23 edge(s))
 - `toEqual` (18 edge(s))
 - `./e2e/page-loading.spec.js::json` (18 edge(s))
+- `deepEqual` (18 edge(s))
 - `url` (16 edge(s))
 - `toHaveAttribute` (16 edge(s))
-- `deepEqual` (16 edge(s))
 - `join` (16 edge(s))
 - `evaluate` (15 edge(s))

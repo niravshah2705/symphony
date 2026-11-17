@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 230 nodes
+Community of 290 nodes
 
-- **Size**: 230 nodes
-- **Cohesion**: 0.3483
+- **Size**: 290 nodes
+- **Cohesion**: 0.3374
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 230 nodes
 | harnessesFace | Function | ./services/gateway/src/capability-view.js | 87-114 |
 | budgetFace | Function | ./services/gateway/src/capability-view.js | 116-142 |
 
-*... and 180 more members.*
+*... and 240 more members.*
 
 ## Execution Flows
 
@@ -75,36 +75,36 @@ Community of 230 nodes
 
 ### Outgoing
 
-- `equal` (269 edge(s))
-- `deepEqual` (74 edge(s))
-- `trim` (38 edge(s))
-- `String` (35 edge(s))
-- `map` (32 edge(s))
-- `json` (29 edge(s))
-- `includes` (26 edge(s))
-- `next` (20 edge(s))
-- `isArray` (20 edge(s))
+- `equal` (340 edge(s))
+- `deepEqual` (83 edge(s))
+- `json` (76 edge(s))
+- `String` (54 edge(s))
+- `trim` (52 edge(s))
+- `status` (46 edge(s))
+- `map` (33 edge(s))
+- `includes` (29 edge(s))
+- `asyncHandler` (24 edge(s))
+- `next` (21 edge(s))
+- `isArray` (21 edge(s))
+- `get` (20 edge(s))
 - `push` (19 edge(s))
+- `ok` (18 edge(s))
 - `handler` (18 edge(s))
-- `status` (16 edge(s))
-- `toLowerCase` (16 edge(s))
-- `throws` (14 edge(s))
-- `get` (13 edge(s))
 
 ### Incoming
 
-- `equal` (269 edge(s))
-- `./services/gateway/src/index.js` (102 edge(s))
-- `deepEqual` (74 edge(s))
+- `equal` (340 edge(s))
+- `./services/gateway/src/index.js` (114 edge(s))
+- `deepEqual` (83 edge(s))
 - `./services/gateway/src/pipeline-admission.js` (42 edge(s))
 - `./services/gateway/src/pipeline-admission.test.js` (27 edge(s))
 - `./services/gateway/src/auth.test.js` (26 edge(s))
 - `./services/gateway/src/request-context.js` (20 edge(s))
+- `ok` (18 edge(s))
 - `handler` (17 edge(s))
 - `./services/gateway/src/auth.js` (16 edge(s))
 - `./services/gateway/src/capability-view.test.js` (15 edge(s))
+- `throws` (15 edge(s))
 - `./services/gateway/src/eula.test.js` (15 edge(s))
-- `throws` (14 edge(s))
-- `./services/gateway/src/request-context.test.js` (14 edge(s))
-- `./services/gateway/src/capability-view.js` (13 edge(s))
-- `includes` (12 edge(s))
+- `./services/gateway/src/stream-token.js` (15 edge(s))
+- `includes` (14 edge(s))

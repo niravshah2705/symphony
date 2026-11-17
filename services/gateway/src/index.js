@@ -9,6 +9,7 @@ const log = require('@ai-fleet/shared-core/logger');
 const { requireBillingCaller, billingTrustedHeaders } = require('./billing-access');
 const eulaRoutes = require('./routes/eula');
 const { createPipelineRouter } = require('./routes/pipeline');
+const { createWorkflowsRouter } = require('./routes/workflows');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
 const { mountRemovedAgentRouteTombstones } = require('./removed-agent-routes');
@@ -254,6 +255,11 @@ app.use('/api/pipeline', requireAuthenticated(), requirePermission('workspace'),
   admission: pipelineAdmission,
   startMiddleware: requireEulaAccepted(),
 }));
+
+// Workflow designer (schema v2): Firestore-backed graphs, agent profiles,
+// persona grants, and the kagent/substrate publish surface. Persona gating is
+// enforced inside the router; tenant scope comes from the store context.
+app.use('/api/workflows', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createWorkflowsRouter());
 
 // Compatibility starts retain their legacy publishers until the orchestrator
 // rollout switch is enabled, then use fixed plan-only/code-only admission.
