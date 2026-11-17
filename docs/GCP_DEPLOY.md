@@ -15,17 +15,12 @@ variables. Nothing GCP-specific is required for local development.
   service that retains `stream-token-secret` after migration; the gateway
   service account receives only `roles/run.invoker` on this service. One broker
   instance stays warm by default so token RPCs do not depend on a cold start.
-- **orchestrator** → internal Cloud Run control plane. It imports only
-  `@ai-fleet/shared-core` + LangGraph, persists PipelineRun/StageRun state and a
-  Firestore checkpointer, and publishes dedicated per-stage commands.
-- **planner** / **coder-control** → internal Cloud Run services (scale-to-zero),
-  woken by Pub/Sub push + Cloud Scheduler ticks.
-- **tester** / **deployer** → internal, scale-to-zero stage services. Their
-  agent containers use egress-proxy sidecars and never receive raw provider,
-  tracker, repository, or CI credentials. The deployer can invoke only
-  repository-allowlisted CI/CD after server policy/approval gates.
-- **coder-worker** → a Cloud Run **Job** (one ticket per run, up to 24h) launched
-  by coder-control.
+- **orchestrator** → the single internal agent service. It hosts the
+  browser-facing agent surface (the retired planner/coder routes), the durable
+  pipeline control plane (PipelineRun/StageRun state,
+  a Firestore checkpointer, per-stage command publishing), and the substrate
+  control plane + actor callback. Agent runs themselves execute in substrate
+  actors, not in this service.
 - **Firestore** replaces `data/store.json` and relays SSE events. The settings
   service encrypts customer credentials per organization/project; egress
   sidecars resolve and inject them without exposing raw values to agent apps.
@@ -37,7 +32,7 @@ warm instance, so the deployed stack has a small steady-state Cloud Run cost.
 
 `npm start` uses `STORE_BACKEND=file`, `MESSAGING_MODE=direct`,
 `EVENTS_BACKEND=memory`, `AUTH_MODE=disabled`. The gateway serves the SPA
-same-origin; planner/coder run their in-process loops; requests are delivered
+same-origin; the orchestrator agent surface runs its in-process loops; requests are delivered
 in-process and worker events reach the gateway's SSE via the local collector
 (`start-all.js` wires `EVENTS_SINK_URL`). No emulator needed.
 
@@ -63,7 +58,7 @@ availability risk.
 
 ### Durable pipeline prerequisites
 
-Production planner, coder, tester, and deployer revisions must set
+Production orchestrator revisions must set
 `PIPELINE_STAGE_STORE_BACKEND=firestore`. Terraform does this when the pipeline
 rollout is enabled. A worker transactionally claims each `StageCommandV1`
 idempotency key and stores the final `StageResultV1` before publication. A
@@ -71,17 +66,18 @@ redelivery after restart therefore replays the stored result; an expired lease
 is recorded as a terminal unknown outcome instead of risking duplicate model,
 repository, or deployment side effects.
 
-The tester image compiles and installs `ai-fleet-network-sandbox`, a
+The substrate actor image (`deploy/gcp/Dockerfile.substrate-actor`) compiles and
+installs `ai-fleet-network-sandbox`, a
 capability-free seccomp launcher used for every repository-native command. It
 blocks network and metadata-server sockets while retaining local Unix-socket
 IPC. Do not remove the launcher, `libseccomp`, or the production
-`isolateNetwork` wiring: the tester app and credential sidecar necessarily share
-one Cloud Run service identity, so this fail-closed subprocess boundary prevents
-repository tests from minting workload credentials.
+`isolateNetwork` wiring: `packages/shared/src/agent/harnesses/deepagent.js` wraps
+every production shell command in it unconditionally, and the model-controlled
+tests must not mint workload credentials.
 
-The pipeline uses four command topics and four result topics. Each service
-account can publish only its own result topic (`planner → plan`, `coder → code`,
-`tester → test`, `deployer → deploy`), and each result subscription pushes to
+The pipeline uses three command topics and three result topics. Each stage
+publisher can publish only its own result topic (`orchestrator → plan/code/test`),
+and each result subscription pushes to
 the matching `/pubsub/pipeline-stage-results/{stage}` route. Do not collapse
 these into a shared result topic: the split is the capability boundary that
 prevents a compromised earlier-stage service from forging later-stage results.
@@ -231,10 +227,10 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
   toggle the whole feature with `var.skills_enabled`, default `true`). It has
   uniform bucket-level access, object versioning, and public-access-prevention
   **enforced** (no public access). Terraform mounts it **read-only** on the
-  **planner** and **coder** (control service + worker Job) via a gen2 **gcsfuse** GCS
-  volume at `/skills`. The planner/coder service accounts get `objectViewer`, and
+  **orchestrator** via a gen2 **gcsfuse** GCS
+  volume at `/skills`. The orchestrator service account gets `objectViewer`, and
   the CI deployer gets `objectAdmin` when `var.skills_publisher_member` is set.
-- **Version-pinned install** — those services run with `SKILLS_ROOT=/skills` and
+- **Version-pinned install** — the orchestrator runs with `SKILLS_ROOT=/skills` and
   `SKILLS_VERSION=<var.skills_version>`. `packages/shared/src/config.js`
   `resolveSkillsSrc()` resolves the install source to `/skills/<version>`, and
   `installSkills()` copies from there. **Backward-compat:** when `SKILLS_ROOT` is
@@ -249,7 +245,7 @@ skill edit ships without rebuilding/redeploying a service — and so multiple sk
    `gs://<bucket>/v2/` — `v1` stays intact, so every deployment still pinned
    to `v1` keeps working.
 3. Roll the deployment forward by bumping **`skills_version`** (Terraform var /
-   `gh variable set SKILLS_VERSION`) and applying. Only then do planner/coder read
+   `gh variable set SKILLS_VERSION`) and applying. Only then do the orchestrator and the actors it dispatches read
    `v2`. To roll back, set it to `v1` again — the objects are still there.
 
 Set-up (one-off): nothing to pre-create — **Terraform creates the bucket** (name
@@ -331,8 +327,8 @@ permission domains (`packages/shared/src/authz.js`):
 
 ### Security posture (see the tribal-knowledge checklists)
 
-- planner/coder are **IAM-gated (no `allUsers` invoker)** — only the gateway SA
-  and the Pub/Sub push SA may invoke them, via OIDC. Ingress defaults to
+- the orchestrator is **IAM-gated (no `allUsers` invoker)** — only the gateway SA
+  and the Pub/Sub push SA may invoke it, via OIDC. Ingress defaults to
   `ALL` (so the gateway's OIDC read-proxy works without a VPC); flip to
   `INTERNAL_ONLY` + Direct VPC egress for network-layer isolation.
 - In `firebase` mode the gateway **verifies the Firebase ID token** on every
@@ -340,8 +336,8 @@ permission domains (`packages/shared/src/authz.js`):
 - Pub/Sub push and Cloud Scheduler calls carry **OIDC tokens** verified on
   `/pubsub/*` (audience + expected SA).
 - The durable pipeline is fail-safe off until
-  `PIPELINE_ORCHESTRATOR_ENABLED=true`; deployment has the separate
-  `PIPELINE_DEPLOYMENT_ENABLED=false` default and production approval gate.
+  `PIPELINE_ORCHESTRATOR_ENABLED=true`; the deploy stage was retired with the
+  Cloud Run deployer (2026-11) and is rejected with `410 pipeline_deploy_retired`.
 - **CORS** reflects only the exact `SPA_ORIGIN` (never `*` with credentials).
 - Secrets live in **Secret Manager**, never in images or committed files
   (`data/` stays gitignored).
@@ -375,14 +371,14 @@ Where the address goes, and where it never goes:
 
 | Workload | Gets | Why |
 |---|---|---|
-| planner | control plane **+ actor callback pair** | it routes a run to an actor and is the only service with the endpoint that verifies an actor's JWT |
-| coder-control | control plane | a substrate-coded run is dispatched from here too (`packages/shared/src/agent/framework.js` → `pattern-router.js`) |
+| orchestrator | control plane **+ actor callback pair** | it routes every run to an actor and is the only service with the endpoint that verifies an actor's JWT (`packages/shared/src/agent/framework.js` → `pattern-router.js`) |
 | provisioner | control plane | `substrate.atespace` is a call to the control plane; without a URL the step answers SKIPPED forever |
-| coder-**worker** | nothing | this container executes model-generated code. Teaching it the control-plane address hands a workload the API that creates, assigns and deletes actors in **other tenants'** atespaces |
+| every other Cloud Run workload | nothing | stage executors inside the boundary. Teaching a workload the control-plane address hands whatever it runs the API that creates, assigns and deletes actors in **other tenants'** atespaces |
+| substrate actor | the actor-JWT verification names only (forwarded by `upsertActorTemplate`) | the actor answers its own dispatch; it never drives the pattern |
 
 `SUBSTRATE_TOKEN` (a bearer for the control plane, honoured at
 `agent/substrate.js:244`) is deliberately unwired: a credential in these maps
-would be printed by an agent `env` and reach coder-control. If the control plane
+would be printed by an agent `env` and reach every dispatcher. If the control plane
 ever requires one it comes in through Secret Manager as a secret env.
 
 **Environment init needs the provisioner, not the provisioning roles.**
@@ -410,10 +406,10 @@ records itself COMPLETED with the org's status unchanged — a documented no-op,
 a failure.
 
 **The actor callback is two halves of one decision.** `substrate_actor_mode =
-true` plus `substrate_jwks_url` mounts the planner's actor endpoint
-(`services/planner/src/routes/substrate-actor.js:118`), but Cloud Run answers 403
+true` plus `substrate_jwks_url` mounts the orchestrator's actor endpoint
+(`packages/shared/src/agent/substrate-actor.js`), but Cloud Run answers 403
 before that router runs unless the calling identity holds `roles/run.invoker` on
-the planner. `substrate_actor_member` names that identity and drives **both** —
+the orchestrator. `substrate_actor_member` names that identity and drives **both** —
 `substrate.tf` emits the four `SUBSTRATE_ACTOR_*` names only when it is non-empty,
 and `iam.tf` creates the binding from the same variable, with a precondition that
 accepts a `serviceAccount:` email or a `principal://` workload identity and
@@ -512,5 +508,5 @@ Monitoring custom metrics, and the sink bills GCS storage plus write requests.
 - `curl https://<gateway>/healthz` → `{"status":"ok"}`.
 - Open the GCS SPA URL, sign in via Google, submit a planner/coder request, and
   confirm SSE steps stream in.
-- Confirm a direct unauthenticated call to the planner/coder URL is rejected,
+- Confirm a direct unauthenticated call to the orchestrator URL is rejected,
   and that everything scales to zero when idle.

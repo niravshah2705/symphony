@@ -16,6 +16,7 @@
     "@ai-fleet/shared-core": "*",
     "@langchain/langgraph": "^1.4.8",
     "express": "^5.2.1",
-    "google-auth-library": "^11.0.1"
+    "google-auth-library": "^11.0.1",
+    "@ai-fleet/shared": "*"
   }
 }

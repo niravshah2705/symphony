@@ -11,18 +11,15 @@ test('PIPELINE_ORCHESTRATOR_ENABLED is an explicit rollback switch and defaults 
   assert.equal(loadConfig({ PIPELINE_ORCHESTRATOR_ENABLED: 'true' }).enabled, true);
 });
 
-test('production defaults deployment approval on while deployment itself stays off', () => {
+test('production defaults to the durable Firestore + Pub/Sub stack with no deploy stage', () => {
   const config = loadConfig({ NODE_ENV: 'production' });
   assert.equal(config.production, true);
   assert.equal(config.storeBackend, 'firestore');
   assert.equal(config.messagingMode, 'pubsub');
-  assert.equal(config.deploymentEnabled, false);
-  assert.equal(config.requireDeploymentApproval, true);
-});
-
-test('settings approval service URL is explicit and normalized', () => {
-  assert.equal(loadConfig({ SETTINGS_URL: 'https://settings.example.test/' }).settingsUrl,
-    'https://settings.example.test');
+  assert.equal('deploymentEnabled' in config, false);
+  assert.equal('requireDeploymentApproval' in config, false);
+  assert.equal('deploy' in config.stageEndpoints, false);
+  assert.equal('deploy' in config.stageTopics, false);
 });
 
 test('pipeline messaging uses dedicated StageCommand topics', () => {
@@ -31,12 +28,10 @@ test('pipeline messaging uses dedicated StageCommand topics', () => {
     plan: 'pipeline-plan-commands',
     code: 'pipeline-code-commands',
     test: 'pipeline-test-commands',
-    deploy: 'pipeline-deploy-commands',
   });
   assert.equal(config.resultsTopic, undefined);
   assert.notEqual(config.stageTopics.plan, CONFIG.GCP.plannerTopic);
-  assert.notEqual(config.stageTopics.code, CONFIG.GCP.coderTopic);
-  assert.equal(config.stageEndpoints.plan, `${CONFIG.SERVICES.plannerUrl}/internal/pipeline/stage`);
+  assert.equal(config.stageEndpoints.plan, `${CONFIG.SERVICES.agentUrl}/internal/pipeline/stage/plan`);
 });
 
 test('pipeline topic env names and push identity are configurable', () => {
@@ -44,14 +39,12 @@ test('pipeline topic env names and push identity are configurable', () => {
     PUBSUB_PIPELINE_PLAN_TOPIC: 'tenant-plan-commands',
     PUBSUB_PIPELINE_CODE_TOPIC: 'tenant-code-commands',
     PUBSUB_PIPELINE_TEST_TOPIC: 'tenant-test-commands',
-    PUBSUB_PIPELINE_DEPLOY_TOPIC: 'tenant-deploy-commands',
     PUBSUB_PUSH_SA: 'pubsub@example.iam.gserviceaccount.com',
   });
   assert.deepEqual(config.stageTopics, {
     plan: 'tenant-plan-commands',
     code: 'tenant-code-commands',
     test: 'tenant-test-commands',
-    deploy: 'tenant-deploy-commands',
   });
   assert.deepEqual(config.resultAllowedEmails, ['pubsub@example.iam.gserviceaccount.com']);
 });

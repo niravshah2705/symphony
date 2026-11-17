@@ -10,33 +10,22 @@ const { createPreflightSnapshot } = require('@ai-fleet/shared-core/pipeline/cont
 class SnapshotPreflight {
   constructor({
     clock = () => new Date().toISOString(),
-    deploymentEnabled = false,
   } = {}) {
     this.clock = clock;
-    this.deploymentEnabled = deploymentEnabled;
   }
 
   async capture(start) {
     if (start.requestedStages.includes('deploy')) {
-      if (!this.deploymentEnabled) {
-        const error = new Error('Deployment is disabled for this orchestrator.');
-        error.code = 'pipeline_deployment_disabled';
-        error.status = 403;
-        throw error;
-      }
+      const error = new Error(
+        'The pipeline deploy stage is retired; runs end after test.',
+      );
+      error.code = 'pipeline_deploy_retired';
+      error.status = 410;
+      throw error;
     }
     const request = start.request || {};
     const requestedStageConfiguration = request.stageConfiguration || {};
     const stageConfiguration = { ...requestedStageConfiguration };
-    if (start.requestedStages.includes('deploy')) {
-      // A caller-provided approval is untrusted input. Approval is checked only
-      // after the tester succeeds, then attached to the deploy StageCommand by
-      // the orchestrator. It is never accepted into this immutable snapshot.
-      stageConfiguration.deploy = {
-        ...(requestedStageConfiguration.deploy || {}),
-        approval: null,
-      };
-    }
     return createPreflightSnapshot({
       runId: start.runId,
       organizationId: start.organizationId,

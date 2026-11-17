@@ -240,8 +240,7 @@ function sdkChecks(settings, resolver) {
 
 async function serviceChecks(services, dependencies) {
   const definitions = [
-    ['planner-service', 'Planner service', endpoint(services.plannerUrl, '/api/agent/status')],
-    ['coder-service', 'Coder service', endpoint(services.coderUrl, '/api/coder')],
+    ['agent-surface', 'Agent surface', endpoint(services.agentUrl, '/api/agent/status')],
   ];
   return Promise.all(definitions.map(async ([id, label, url]) => {
     const result = await probe(url, dependencies);

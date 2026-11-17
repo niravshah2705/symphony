@@ -70,9 +70,9 @@ test('gateway image copies only its service and shared-core workspaces', () => {
   assert.doesNotMatch(dockerfile, /^COPY services\/ \.\/services\/$/m);
 });
 
-test('heavy public routes proxy to planner and tombstones mount before SPA fallback', () => {
+test('heavy public routes proxy to the agent surface and tombstones mount before SPA fallback', () => {
   const gatewayIndex = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
-  const plannerIndex = fs.readFileSync(path.join(REPO_ROOT, 'services/planner/src/index.js'), 'utf8');
+  const agentSurface = fs.readFileSync(path.join(REPO_ROOT, 'services/orchestrator/src/agent-surface.js'), 'utf8');
   for (const prefix of [
     '/api/settings', '/api/observability', '/api/projects',
     '/api/issues', '/api/businesses', '/api/roles',
@@ -85,7 +85,7 @@ test('heavy public routes proxy to planner and tombstones mount before SPA fallb
     '/api/observability', '/api/locale', '/api/projects', '/api/issues',
     '/api/businesses', '/api/roles',
   ]) {
-    assert.match(plannerIndex, new RegExp(`app\\.use\\('${prefix.replaceAll('/', '\\/')}'[^\\n]+Routes`));
+    assert.match(agentSurface, new RegExp(`app\\.use\\('${prefix.replaceAll('/', '\\/')}'[^\\n]+Routes`));
   }
   assert.ok(
     gatewayIndex.indexOf('mountRemovedAgentRouteTombstones(app)')

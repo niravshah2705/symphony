@@ -141,7 +141,6 @@ function admission(overrides = {}) {
       settingsUrl: 'http://settings.internal',
       orchestratorUrl: 'http://orchestrator.internal',
       orchestratorEnabled: overrides.orchestratorEnabled !== false,
-      deploymentEnabled: overrides.deploymentEnabled === true,
       pinnedOrganizationId: overrides.pinnedOrganizationId || '',
       getSettings: overrides.getSettings || (() => TEST_SETTINGS),
       resolveRepository: overrides.resolveRepository || (() => ({
@@ -168,25 +167,19 @@ test('requested stages are explicit, ordered, unique, and deploy requires the ex
   );
 });
 
-test('deploy is fail-fast disabled by default and injectable only for the exact full sequence', async () => {
+// The deploy stage was retired with the Cloud Run deployer (2026-11): any new
+// run asking for it is turned away at admission, before billing or dispatch.
+test('the retired deploy stage is rejected before any downstream call', async () => {
   let billingCalls = 0;
-  const disabled = admission({
+  const context = admission({
     getBillingStatus: () => { billingCalls += 1; return { blocked: false }; },
   });
   await assert.rejects(
-    () => disabled.value.submit(request({ requestedStages: ['plan', 'code', 'test', 'deploy'] })),
-    (error) => error.status === 403 && error.code === 'pipeline_deployment_disabled',
+    () => context.value.submit(request({ requestedStages: ['plan', 'code', 'test', 'deploy'] })),
+    (error) => error.status === 410 && error.code === 'pipeline_deploy_retired',
   );
   assert.equal(billingCalls, 0);
-  assert.equal(disabled.calls.length, 0);
-
-  const enabled = admission({ deploymentEnabled: true });
-  const accepted = await enabled.value.submit(request({
-    requestedStages: ['plan', 'code', 'test', 'deploy'],
-    request: { workItem: { id: 'ENG-42' }, deployment: { environment: 'production' } },
-  }));
-  assert.deepEqual(accepted.requestedStages, ['plan', 'code', 'test', 'deploy']);
-  assert.equal(enabled.calls.at(-1).path, ORCHESTRATOR_RUNS_PATH);
+  assert.equal(context.calls.length, 0);
 });
 
 test('canonical pipeline control is a typed 503 while the rollout switch is off', async () => {
@@ -408,30 +401,16 @@ test('admission forwards user auth and authoritative scope, then dispatches only
   });
 });
 
-test('deploy admission requires an explicit bounded environment and strips caller approval', async () => {
-  const context = admission({ deploymentEnabled: true });
+test('a valid deployment environment no longer unlocks the retired deploy stage', async () => {
+  const context = admission({});
   await assert.rejects(
     () => context.value.submit(request({
       requestedStages: ['plan', 'code', 'test', 'deploy'],
-      request: { deployment: {} },
+      request: { deployment: { environment: 'Production' } },
     })),
-    (error) => error.code === 'pipeline_deployment_environment_invalid',
+    (error) => error.status === 410 && error.code === 'pipeline_deploy_retired',
   );
-
-  await context.value.submit(request({
-    requestedStages: ['plan', 'code', 'test', 'deploy'],
-    request: {
-      deployment: {
-        environment: 'Production',
-        approval: { approved: true, source: 'caller' },
-      },
-    },
-  }));
-  const start = context.calls.at(-1).options.body;
-  assert.equal(start.request.stageConfiguration.deploy.enabled, true);
-  assert.equal(start.request.stageConfiguration.deploy.environment, 'production');
-  assert.equal(start.request.stageConfiguration.deploy.approval, undefined);
-  assert.deepEqual(start.request.deployment, { environment: 'production' });
+  assert.equal(context.calls.length, 0);
 });
 
 test('repository snapshot is server-derived, project-aware, and rejects unbrokered providers', () => {
@@ -737,7 +716,7 @@ test('legacy enqueue preserves plan-to-tested automation while coder starts stay
   assert.deepEqual(submitted[1].options.adaptRequest(submitted[1].body), { issueId: 'ENG-9' });
 });
 
-test('rollout-off compatibility routes retain legacy planner/coder publishing', async () => {
+test('rollout-off compatibility keeps the planner queue and refuses legacy coder dispatch', async () => {
   const published = [];
   const conversations = [];
   let unexpectedAdmission = 0;
@@ -751,13 +730,9 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
     },
     publish: async (topic, message) => { published.push({ topic, message }); },
     plannerTopic: 'planner-topic',
-    coderTopic: 'coder-topic',
   });
   const planner = await invoke(handlers.enqueue, request({ projectId: 'linear-project', projectName: 'Alpha' }));
-  const coder = await invoke(handlers.coderRun, request({ issueId: 'ENG-9' }));
   assert.deepEqual(planner.body, { accepted: true, conversationId: 'legacy-conversation-1' });
-  assert.deepEqual(coder.body, { accepted: true, conversationId: 'legacy-conversation-2' });
-  assert.equal(unexpectedAdmission, 0);
   assert.deepEqual(published, [
     {
       topic: 'planner-topic',
@@ -773,26 +748,18 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
         traceparent: null,
       },
     },
-    {
-      topic: 'coder-topic',
-      message: {
-        issueId: 'ENG-9',
-        conversationId: 'legacy-conversation-2',
-        orgId: 'org-1',
-        nativeProjectId: 'project-1',
-        llmGateway: null,
-        traceparent: null,
-      },
-    },
   ]);
+
+  // The coder service and its topic are retired: with the orchestrator off
+  // there is no coding dispatch path, and the route fails closed.
+  const coder = await invoke(handlers.coderRun, request({ issueId: 'ENG-9' }));
+  assert.equal(coder.status, 503);
+  assert.equal(coder.body.code, 'pipeline_orchestrator_unavailable');
+  assert.equal(unexpectedAdmission, 0);
 
   assert.deepEqual(
     await invoke(handlers.enqueue, request({ projectId: '' })),
     { status: 400, body: { error: 'projectId is required.' }, error: null },
-  );
-  assert.deepEqual(
-    await invoke(handlers.coderRun, request({ issueId: '' })),
-    { status: 400, body: { error: 'issueId is required.' }, error: null },
   );
 });
 

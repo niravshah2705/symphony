@@ -4,26 +4,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const router = require('./pattern-router');
 
-test('resolveAgentPattern prefers explicit, then settings, then cloudrun', () => {
-  assert.equal(router.resolveAgentPattern('substrate'), 'substrate');
-  assert.equal(router.resolveAgentPattern('', { agentPattern: 'Substrate' }), 'substrate');
-  assert.equal(router.resolveAgentPattern(undefined, {}), 'cloudrun');
-});
-
-test('isPlanningStage matches plan workflows and stages only', () => {
-  assert.equal(router.isPlanningStage({ stage: 'planning' }), true);
-  assert.equal(router.isPlanningStage({ workflow: 'business-plan' }), true);
-  assert.equal(router.isPlanningStage({ stage: 'coding', workflow: 'code-writer' }), false);
-});
-
-test('substrate + planning diverts to the substrate runner', async () => {
+test('dispatchPlanning always routes to the substrate runner', async () => {
   const calls = [];
   const runner = require('./substrate-runner');
   const orig = runner.runPlanningOnSubstrate;
   runner.runPlanningOnSubstrate = async (opts) => { calls.push(opts); return { finalText: 'plan-json', messages: [] }; };
   try {
     const res = await router.dispatchPlanning({
-      agentPattern: 'substrate', stage: 'planning', prompt: 'make a plan',
+      stage: 'planning', prompt: 'make a plan',
       organizationId: 'org-1', projectId: 'proj-1', settings: { guardrailSpec: { egress: { allowHosts: ['x'] } } },
     });
     assert.equal(res.finalText, 'plan-json');
@@ -34,21 +22,16 @@ test('substrate + planning diverts to the substrate runner', async () => {
   }
 });
 
-test('cloudrun falls through to executeAgentRuntime untouched', async () => {  const dispatch = require('./harnesses/dispatch');
-  // executeAgentRuntime is built via a factory; assert the router does NOT call the
-  // substrate path for cloudrun by ensuring runPlanningOnSubstrate is never reached.
+test('the retired cloudrun pattern is ignored and still dispatches to substrate', async () => {
   const runner = require('./substrate-runner');
-  let touched = false;
+  const calls = [];
   const orig = runner.runPlanningOnSubstrate;
-  runner.runPlanningOnSubstrate = async () => { touched = true; return {}; };
+  runner.runPlanningOnSubstrate = async (opts) => { calls.push(opts); return { finalText: 'p', messages: [] }; };
   try {
-    // With no registered runtime this will throw from the dispatcher, but only AFTER
-    // proving the substrate branch was skipped.
-    await router.dispatchPlanning({ agentPattern: 'cloudrun', stage: 'planning', runtime: 'deepagent', llm: {}, prompt: 'x' }).catch(() => {});
-    assert.equal(touched, false);
+    await router.dispatchPlanning({ agentPattern: 'cloudrun', stage: 'planning', prompt: 'x', organizationId: 'org-1' });
+    assert.equal(calls.length, 1);
   } finally {
     runner.runPlanningOnSubstrate = orig;
-    void dispatch;
   }
 });
 
@@ -56,7 +39,7 @@ const TP = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
 
 // The substrate actor is a separate process, so the trace id has to be handed to
 // it explicitly — and the caller knows it from a different place depending on how
-// the run started (an HTTP request, a stage command, or a Cloud Run job env).
+// the run started (an HTTP request, a stage command, or a job env).
 async function traceparentFor(options, env = {}) {
   const runner = require('./substrate-runner');
   const orig = runner.runPlanningOnSubstrate;
@@ -66,7 +49,6 @@ async function traceparentFor(options, env = {}) {
   runner.runPlanningOnSubstrate = async (opts) => { calls.push(opts); return { finalText: 'p', messages: [] }; };
   try {
     await router.dispatchPlanning({
-      agentPattern: 'substrate',
       stage: 'planning',
       prompt: 'x',
       organizationId: 'org-1',

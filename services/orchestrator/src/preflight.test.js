@@ -8,36 +8,27 @@ const { SnapshotPreflight } = require('./preflight');
 
 const clock = () => '2026-08-13T00:00:00.000Z';
 
-function fullRun(request = {}) {
+function start(requestedStages, request = {}) {
   return createPipelineStart({
     runId: 'run-1',
     organizationId: 'org-1',
     projectId: 'project-1',
-    requestedStages: ['plan', 'code', 'test', 'deploy'],
+    requestedStages,
     request,
   }, { clock });
 }
 
-test('deployment is disabled by default', async () => {
+test('the retired deploy stage is rejected at preflight', async () => {
   await assert.rejects(
-    () => new SnapshotPreflight({ clock }).capture(fullRun()),
-    (error) => error.code === 'pipeline_deployment_disabled',
+    () => new SnapshotPreflight({ clock }).capture(start(['plan', 'code', 'test', 'deploy'])),
+    (error) => error.code === 'pipeline_deploy_retired' && error.status === 410,
   );
 });
 
-test('enabled deployment preflight strips every caller approval before persistence', async () => {
-  const snapshot = await new SnapshotPreflight({
-    clock,
-    deploymentEnabled: true,
-  }).capture(fullRun({
-    stageConfiguration: {
-      deploy: {
-        enabled: true,
-        environment: 'production',
-        approval: { approved: true, by: 'attacker', at: clock(), source: 'caller' },
-      },
-    },
-  }));
-  assert.equal(snapshot.stageConfiguration.deploy.approval, null);
+test('runs that end after test capture a snapshot', async () => {
+  const snapshot = await new SnapshotPreflight({ clock }).capture(
+    start(['plan', 'code', 'test'], { stageConfiguration: {} }),
+  );
+  assert.deepEqual(snapshot.requestedStages, ['plan', 'code', 'test']);
   assert.equal(snapshot.metadata.deploymentApproval, undefined);
 });
