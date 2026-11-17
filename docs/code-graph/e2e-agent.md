@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 19 nodes
+Community of 18 nodes
 
-- **Size**: 19 nodes
-- **Cohesion**: 0.2451
+- **Size**: 18 nodes
+- **Cohesion**: 0.2634
 - **Dominant Language**: javascript
 
 ## Members
@@ -32,7 +32,6 @@ Community of 19 nodes
 | test:public implementation intent stays read-only and explains that sign-in is required@L219 | Test | ./e2e/anonymous-agent.spec.js | 219-235 |
 | test:direct Agent jobs navigation is hidden and gated for a public visitor@L237 | Test | ./e2e/anonymous-agent.spec.js | 237-246 |
 | installExpiringSessionHarness | Function | ./e2e/anonymous-agent.spec.js | 279-340 |
-| test:parallel application-auth failures expire an authenticated session once and stop private loading@L342 | Test | ./e2e/anonymous-agent.spec.js | 342-367 |
 
 ## Execution Flows
 
@@ -42,36 +41,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (27 edge(s))
-- `locator` (12 edge(s))
+- `expect` (20 edge(s))
+- `locator` (9 edge(s))
 - `startsWith` (8 edge(s))
-- `evaluate` (6 edge(s))
-- `toEqual` (6 edge(s))
-- `filter` (6 edge(s))
-- `toBeVisible` (5 edge(s))
-- `map` (5 edge(s))
-- `toBe` (5 edge(s))
+- `./e2e/anonymous-agent.spec.js::test:parallel application-auth failures expire an authenticated session once and stop private loading@L342` (5 edge(s))
+- `toEqual` (5 edge(s))
 - `setItem` (4 edge(s))
 - `route` (4 edge(s))
+- `toBeVisible` (4 edge(s))
+- `map` (4 edge(s))
+- `filter` (4 edge(s))
 - `fulfill` (3 edge(s))
-- `goto` (3 edge(s))
-- `toBeTruthy` (3 edge(s))
-- `ok` (3 edge(s))
+- `getByRole` (3 edge(s))
+- `addInitScript` (2 edge(s))
+- `addEventListener` (2 edge(s))
+- `request` (2 edge(s))
 
 ### Incoming
 
-- `expect` (22 edge(s))
-- `./e2e/anonymous-agent.spec.js` (15 edge(s))
-- `locator` (10 edge(s))
-- `toEqual` (6 edge(s))
-- `filter` (6 edge(s))
-- `map` (5 edge(s))
-- `toBe` (5 edge(s))
-- `evaluate` (5 edge(s))
-- `toBeVisible` (4 edge(s))
-- `goto` (2 edge(s))
-- `toBeTruthy` (2 edge(s))
-- `ok` (2 edge(s))
-- `toHaveCount` (2 edge(s))
-- `poll` (2 edge(s))
+- `expect` (15 edge(s))
+- `./e2e/anonymous-agent.spec.js` (14 edge(s))
+- `locator` (7 edge(s))
+- `./e2e/anonymous-agent.spec.js::test:parallel application-auth failures expire an authenticated session once and stop private loading@L342` (6 edge(s))
+- `toEqual` (5 edge(s))
+- `map` (4 edge(s))
+- `filter` (4 edge(s))
+- `toBeVisible` (3 edge(s))
+- `goto` (1 edge(s))
+- `toBeTruthy` (1 edge(s))
+- `ok` (1 edge(s))
 - `toHaveText` (1 edge(s))
+- `toBeHidden` (1 edge(s))
+- `toHaveCount` (1 edge(s))
+- `startsWith` (1 edge(s))

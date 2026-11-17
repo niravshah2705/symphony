@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 31 nodes
+Community of 26 nodes
 
-- **Size**: 31 nodes
+- **Size**: 26 nodes
 - **Cohesion**: 0.0000
 - **Dominant Language**: javascript
 
@@ -16,16 +16,11 @@ Community of 31 nodes
 |------|------|------|-------|
 | test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
 | test:fragment invitation requires an explicit accept and refreshes selectable context@L323 | Test | ./e2e/organization-flow.spec.js | 323-348 |
-| test:manages a project access mode, outside collaborators, and partner-org grants@L374 | Test | ./e2e/organization-flow.spec.js | 374-413 |
 | test:settings renders task-model controls without a view error@L39 | Test | ./e2e/page-loading.spec.js | 39-59 |
-| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
 | test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
 | test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
-| test:selected organization admins can open scoped policy without global settings write@L617 | Test | ./e2e/page-loading.spec.js | 617-658 |
 | test:Cookie Preferences reports a storage failure without changing consent or reloading@L463 | Test | ./e2e/persistent-footer.spec.js | 463-505 |
-| test:Agent scaffold survives auth restore and inactive route assets stay lazy@L13 | Test | ./e2e/route-loading.spec.js | 13-105 |
 | test:a non-Agent hash never exposes or preloads the Agent scaffold@L107 | Test | ./e2e/route-loading.spec.js | 107-137 |
-| test:lazy Workflows route renders the selected organization and five realistic examples@L177 | Test | ./e2e/workflow-designer.spec.js | 177-233 |
 | test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163 | Test | ./e2e/workspace-stream-failure.spec.js | 163-174 |
 | test:a connection that stays open past the 60s health threshold resets the failure budget@L176 | Test | ./e2e/workspace-stream-failure.spec.js | 176-203 |
 | test:DirectStageCommandBus dispatches the contract to an injected local handler@L46 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 46-57 |
@@ -54,36 +49,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (133 edge(s))
-- `locator` (69 edge(s))
+- `expect` (84 edge(s))
 - `equal` (52 edge(s))
-- `push` (35 edge(s))
-- `toBeVisible` (30 edge(s))
-- `route` (28 edge(s))
-- `toHaveCount` (26 edge(s))
-- `getByRole` (23 edge(s))
-- `toEqual` (18 edge(s))
-- `./e2e/page-loading.spec.js::json` (18 edge(s))
-- `url` (16 edge(s))
-- `toHaveAttribute` (16 edge(s))
+- `locator` (40 edge(s))
+- `push` (28 edge(s))
+- `toHaveCount` (19 edge(s))
+- `toBeVisible` (18 edge(s))
+- `getByRole` (17 edge(s))
 - `deepEqual` (16 edge(s))
 - `join` (16 edge(s))
-- `evaluate` (15 edge(s))
+- `route` (12 edge(s))
+- `toHaveAttribute` (10 edge(s))
+- `toEqual` (9 edge(s))
+- `evaluate` (9 edge(s))
+- `url` (8 edge(s))
+- `click` (8 edge(s))
 
 ### Incoming
 
-- `expect` (133 edge(s))
-- `locator` (69 edge(s))
+- `expect` (84 edge(s))
 - `equal` (52 edge(s))
-- `push` (35 edge(s))
-- `toBeVisible` (30 edge(s))
-- `route` (28 edge(s))
-- `toHaveCount` (26 edge(s))
-- `getByRole` (23 edge(s))
-- `toEqual` (18 edge(s))
-- `./e2e/page-loading.spec.js::json` (18 edge(s))
-- `url` (16 edge(s))
-- `toHaveAttribute` (16 edge(s))
+- `locator` (40 edge(s))
+- `push` (28 edge(s))
+- `toHaveCount` (19 edge(s))
+- `toBeVisible` (18 edge(s))
+- `getByRole` (17 edge(s))
 - `deepEqual` (16 edge(s))
 - `join` (16 edge(s))
-- `evaluate` (15 edge(s))
+- `route` (12 edge(s))
+- `toHaveAttribute` (10 edge(s))
+- `toEqual` (9 edge(s))
+- `evaluate` (9 edge(s))
+- `url` (8 edge(s))
+- `click` (8 edge(s))

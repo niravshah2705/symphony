@@ -1,0 +1,620 @@
+package server
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"iter"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
+	a2apb "github.com/a2aproject/a2a-go/v2/a2apb/v1"
+	"github.com/a2aproject/a2a-go/v2/a2apb/v1/pbconv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
+
+	"github.com/niravshah2705/symphony/go/pkg/telemetry"
+)
+
+// substrateExecutor stands in for an ADK turn: it opens the invoke_agent span
+// ADK emits beneath the request span. It does not flush; exporting everything,
+// including the otelhttp server span that stays open until the mux handler
+// returns, is the server's flushing handler's job.
+type substrateExecutor struct{ finalState a2atype.TaskState }
+
+func (e substrateExecutor) Execute(ctx context.Context, reqCtx *a2asrv.ExecutorContext) iter.Seq2[a2atype.Event, error] {
+	return func(yield func(a2atype.Event, error) bool) {
+		_, span := otel.Tracer("adk-test").Start(ctx, adkInvokeAgentSpan)
+		defer span.End()
+
+		if !yield(a2atype.NewSubmittedTask(reqCtx, reqCtx.Message), nil) {
+			return
+		}
+		if !yield(a2atype.NewStatusUpdateEvent(reqCtx, a2atype.TaskStateWorking, nil), nil) {
+			return
+		}
+
+		msg := a2atype.NewMessage(a2atype.MessageRoleAgent, a2atype.NewTextPart("done"))
+		msg.ContextID = reqCtx.ContextID
+		msg.TaskID = reqCtx.TaskID
+		state := e.finalState
+		if state == a2atype.TaskStateUnspecified {
+			state = a2atype.TaskStateCompleted
+		}
+		yield(a2atype.NewStatusUpdateEvent(reqCtx, state, msg), nil)
+	}
+}
+
+func (substrateExecutor) Cancel(context.Context, *a2asrv.ExecutorContext) iter.Seq2[a2atype.Event, error] {
+	return func(yield func(a2atype.Event, error) bool) {}
+}
+
+func startTestServer(t *testing.T) (*httptest.Server, *grpc.ClientConn) {
+	t.Helper()
+
+	srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{Port: "0"})
+	if err != nil {
+		t.Fatalf("NewA2AServer: %v", err)
+	}
+
+	testServer := httptest.NewUnstartedServer(srv.httpServer.Handler)
+	testServer.Config.Protocols = srv.httpServer.Protocols
+	testServer.Start()
+	conn, err := grpc.NewClient(testServer.Listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("create gRPC client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = conn.Close()
+		srv.grpcServer.Stop()
+		testServer.Close()
+	})
+	return testServer, conn
+}
+
+func TestStartFailsBeforeReadinessWhenA2APortIsUnavailable(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	server, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.httpServer.Addr = listener.Addr().String()
+	server.readyServer.Addr = "127.0.0.1:0"
+	if err := server.Start(); err == nil {
+		t.Fatal("Start succeeded with an unavailable A2A port")
+	}
+}
+
+func TestHTTPAndGRPCHealthSharePort(t *testing.T) {
+	testServer, conn := startTestServer(t)
+
+	resp, err := testServer.Client().Get(testServer.URL + "/healthz")
+	if err != nil {
+		t.Fatalf("GET /healthz: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("GET /healthz status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	health, err := grpc_health_v1.NewHealthClient(conn).Check(t.Context(), &grpc_health_v1.HealthCheckRequest{
+		Service: a2apb.A2AService_ServiceDesc.ServiceName,
+	})
+	if err != nil {
+		t.Fatalf("gRPC health check: %v", err)
+	}
+	if health.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
+		t.Errorf("gRPC health status = %s, want SERVING", health.GetStatus())
+	}
+}
+
+func a2aTestContext(ctx context.Context) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, a2atype.SvcParamVersion, string(a2atype.Version))
+}
+
+func TestGRPCAndJSONRPCShareRequestHandler(t *testing.T) {
+	testServer, conn := startTestServer(t)
+	client := a2apb.NewA2AServiceClient(conn)
+
+	pbReq, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{
+		Message: a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart("hi")),
+	})
+	if err != nil {
+		t.Fatalf("convert request: %v", err)
+	}
+	result, err := client.SendMessage(a2aTestContext(t.Context()), pbReq)
+	if err != nil {
+		t.Fatalf("gRPC SendMessage: %v", err)
+	}
+	task := result.GetTask()
+	if task == nil {
+		t.Fatal("gRPC SendMessage did not return a task")
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "1",
+		"method":  "GetTask",
+		"params":  &a2atype.GetTaskRequest{ID: a2atype.TaskID(task.GetId())},
+	})
+	if err != nil {
+		t.Fatalf("marshal GetTask: %v", err)
+	}
+	httpRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPost, testServer.URL, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	httpRequest.Header.Set(a2atype.SvcParamVersion, string(a2atype.Version))
+	httpResp, err := testServer.Client().Do(httpRequest)
+	if err != nil {
+		t.Fatalf("JSON-RPC GetTask: %v", err)
+	}
+	defer httpResp.Body.Close()
+	var getTaskResp struct {
+		Result a2atype.Task `json:"result"`
+	}
+	if err := json.NewDecoder(httpResp.Body).Decode(&getTaskResp); err != nil {
+		t.Fatalf("decode GetTask response: %v", err)
+	}
+	if getTaskResp.Result.ID != a2atype.TaskID(task.GetId()) {
+		t.Errorf("JSON-RPC task ID = %q, want %q", getTaskResp.Result.ID, task.GetId())
+	}
+
+	stream, err := client.SendStreamingMessage(a2aTestContext(t.Context()), pbReq)
+	if err != nil {
+		t.Fatalf("gRPC SendStreamingMessage: %v", err)
+	}
+	var sawTask, sawStatus bool
+	for {
+		event, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("receive streaming response: %v", err)
+		}
+		sawTask = sawTask || event.GetTask() != nil
+		sawStatus = sawStatus || event.GetStatusUpdate() != nil
+	}
+	if !sawTask || !sawStatus {
+		t.Errorf("stream responses missing task or status update: sawTask=%t sawStatus=%t", sawTask, sawStatus)
+	}
+}
+
+// runA2ARequest builds a server against an in-memory batch exporter and serves
+// one message/send.
+func runA2ARequest(t *testing.T, flush bool) tracetest.SpanStubs {
+	t.Helper()
+
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sdktrace.NewBatchSpanProcessor(exporter)))
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prev)
+		_ = tp.Shutdown(context.Background())
+	})
+
+	config := ServerConfig{Port: "0"}
+	if flush {
+		config.Flush = tp.ForceFlush
+	}
+	srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), config)
+	if err != nil {
+		t.Fatalf("NewA2AServer: %v", err)
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "1",
+		"method":  "SendMessage",
+		"params": &a2atype.SendMessageRequest{
+			Message: a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart("hi")),
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(a2atype.SvcParamVersion, string(a2atype.Version))
+	rec := httptest.NewRecorder()
+
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	return exporter.GetSpans()
+}
+
+const adkInvokeAgentSpan = "invoke_agent root"
+
+// The interceptor-owned request span and its ADK descendants are ended
+// and flushed at the quiescent event. The otelhttp span remains open until its
+// handler returns so it can retain response attributes.
+func TestSpansExportedBeforeResponseBodyCloses(t *testing.T) {
+	spans := runA2ARequest(t, true)
+	exported := map[string]tracetest.SpanStub{}
+	for _, span := range spans {
+		exported[span.Name] = span
+	}
+	if _, ok := exported[adkInvokeAgentSpan]; !ok {
+		t.Errorf("ADK invoke_agent span not exported before body close, got %v", exported)
+	}
+	if _, ok := exported["a2a.request"]; !ok {
+		t.Errorf("A2A request span not exported before body close, got %v", exported)
+	}
+	requestSpan := exported["a2a.request"]
+	httpSpan, ok := exported["POST /"]
+	if !ok {
+		t.Errorf("HTTP server span not exported after handler return, got %v", exported)
+		return
+	}
+	var statusCode int64
+	for _, attr := range httpSpan.Attributes {
+		if attr.Key == "http.response.status_code" {
+			statusCode = attr.Value.AsInt64()
+		}
+	}
+	if statusCode != http.StatusOK {
+		t.Errorf("HTTP server span response status = %d, want %d", statusCode, http.StatusOK)
+	}
+	if requestSpan.Parent.SpanID() != httpSpan.SpanContext.SpanID() {
+		t.Errorf("A2A request parent = %s, want HTTP span %s", requestSpan.Parent.SpanID(), httpSpan.SpanContext.SpanID())
+	}
+	if agent := exported[adkInvokeAgentSpan]; agent.Parent.SpanID() != requestSpan.SpanContext.SpanID() {
+		t.Errorf("ADK invoke_agent parent = %s, want A2A request span %s", agent.Parent.SpanID(), requestSpan.SpanContext.SpanID())
+	}
+}
+
+func TestNoPreResponseFlushWithoutFlusher(t *testing.T) {
+	spans := runA2ARequest(t, false)
+	if len(spans) != 0 {
+		t.Errorf("spans exported at handler return without a flusher, got %v", spans)
+	}
+}
+
+func TestA2ARequestSizeLimit(t *testing.T) {
+	tests := []struct {
+		name          string
+		contentLength int64
+		wantStatus    int
+		wantBody      string
+	}{
+		{
+			name:          "declared content length",
+			contentLength: 6,
+			wantStatus:    http.StatusRequestEntityTooLarge,
+			wantBody:      "Payload too large",
+		},
+		{
+			name:          "unknown content length",
+			contentLength: -1,
+			wantStatus:    http.StatusOK,
+			wantBody:      "request body too large",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{Port: "0", MaxContentLength: new(int64(5))})
+			if err != nil {
+				t.Fatalf("NewA2AServer: %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("123456"))
+			req.ContentLength = tt.contentLength
+			rec := httptest.NewRecorder()
+
+			srv.httpServer.Handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("unexpected status %d, want %d: %s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), tt.wantBody) {
+				t.Errorf("response body %q does not contain %q", rec.Body.String(), tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestA2ARequestSizeLimitDisabled(t *testing.T) {
+	srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{Port: "0", MaxContentLength: new(int64(0))})
+	if err != nil {
+		t.Fatalf("NewA2AServer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("123456"))
+	rec := httptest.NewRecorder()
+
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusRequestEntityTooLarge {
+		t.Errorf("request size limit was not disabled: %s", rec.Body.String())
+	}
+}
+
+func TestRequestSizeLimitPreservesFlusher(t *testing.T) {
+	flusherAvailable := false
+	handler := withRequestSizeLimit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, flusherAvailable = w.(http.Flusher)
+		w.WriteHeader(http.StatusNoContent)
+	}), 5)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !flusherAvailable {
+		t.Error("request size limit did not preserve http.Flusher")
+	}
+}
+
+func TestNegativeMaxContentLengthRejected(t *testing.T) {
+	_, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{MaxContentLength: new(int64(-1))})
+	if err == nil {
+		t.Fatal("negative request limit accepted")
+	}
+}
+
+type exportBoundaryObserver struct {
+	a2asrv.PassthroughCallInterceptor
+	exporter *tracetest.InMemoryExporter
+	observed chan bool
+}
+
+func (o *exportBoundaryObserver) After(_ context.Context, _ *a2asrv.CallContext, response *a2asrv.Response) error {
+	update, ok := response.Payload.(*a2atype.TaskStatusUpdateEvent)
+	if !ok {
+		return nil
+	}
+	if !update.Status.State.Terminal() && update.Status.State != a2atype.TaskStateInputRequired && update.Status.State != a2atype.TaskStateAuthRequired {
+		return nil
+	}
+	exported := false
+	for _, span := range o.exporter.GetSpans() {
+		if span.Name == "a2a.request" {
+			exported = true
+		}
+	}
+	o.observed <- exported
+	return nil
+}
+
+func TestRequestSpanExportedBeforeQuiescentEvent(t *testing.T) {
+	for _, state := range []a2atype.TaskState{a2atype.TaskStateCompleted, a2atype.TaskStateFailed, a2atype.TaskStateCanceled, a2atype.TaskStateInputRequired, a2atype.TaskStateAuthRequired} {
+		t.Run(string(state), func(t *testing.T) {
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter, sdktrace.WithBatchTimeout(time.Hour)))
+			previous := otel.GetTracerProvider()
+			otel.SetTracerProvider(provider)
+			t.Cleanup(func() {
+				otel.SetTracerProvider(previous)
+				_ = provider.Shutdown(context.Background())
+			})
+			observer := &exportBoundaryObserver{exporter: exporter, observed: make(chan bool, 1)}
+			srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{finalState: state}, slog.New(slog.DiscardHandler), ServerConfig{Port: "0", Flush: provider.ForceFlush}, a2asrv.WithCallInterceptors(observer))
+			if err != nil {
+				t.Fatal(err)
+			}
+			testServer := httptest.NewUnstartedServer(srv.httpServer.Handler)
+			testServer.Config.Protocols = srv.httpServer.Protocols
+			testServer.Start()
+			defer testServer.Close()
+			defer srv.grpcServer.Stop()
+			conn, err := grpc.NewClient(testServer.Listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			request, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{Message: a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart("hi"))})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			stream, err := a2apb.NewA2AServiceClient(conn).SendStreamingMessage(a2aTestContext(t.Context()), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for {
+				event, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				domainEvent, err := pbconv.FromProtoStreamResponse(event)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if update, ok := domainEvent.(*a2atype.TaskStatusUpdateEvent); ok && update.Status.State == state {
+					break
+				}
+			}
+			select {
+			case exported := <-observer.observed:
+				if !exported {
+					t.Fatal("A2A request span was not exported before the quiescent event was sent")
+				}
+			default:
+				t.Fatal("quiescent event was not observed")
+			}
+		})
+	}
+}
+
+func TestRejectsNonLiteralHealthPath(t *testing.T) {
+	for _, path := range []string{"ping", "/", "/ping/", "/ping/{id}", "/ping {x}"} {
+		if _, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{Port: "0", HealthPaths: []string{path}}); err == nil {
+			t.Errorf("NewA2AServer accepted health path %q", path)
+		}
+	}
+}
+
+func TestConfiguredHealthPaths(t *testing.T) {
+	srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler), ServerConfig{Port: "0", HealthPaths: []string{"/ping"}, HealthHandler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"Healthy"}`))
+	})})
+	if err != nil {
+		t.Fatalf("NewA2AServer: %v", err)
+	}
+	testServer := httptest.NewServer(srv.httpServer.Handler)
+	t.Cleanup(func() { srv.grpcServer.Stop(); testServer.Close() })
+	// The JSON-RPC handler owns "/", so an unregistered probe path never returns the probe body.
+	for path, want := range map[string]bool{"/ping": true, "/ping/child": false, "/healthz": false} {
+		resp, err := testServer.Client().Get(testServer.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if got := resp.StatusCode == http.StatusOK && string(body) == `{"status":"Healthy"}`; got != want {
+			t.Fatalf("GET %s = %d %q, want probe=%v", path, resp.StatusCode, body, want)
+		}
+	}
+}
+
+// A collector that accepts connections and never answers costs one flush
+// budget per request, not one per flush, so the gateway's drain stays short.
+func TestUnreachableCollectorCostsOneFlushBudgetPerRequest(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+		}
+	}()
+	previous := otel.GetTracerProvider()
+	providers, err := telemetry.Init(t.Context(), telemetry.Options{Config: telemetry.Config{Traces: &telemetry.OTLPConfig{Endpoint: "http://" + listener.Addr().String(), Protocol: "http/protobuf"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		_ = providers.Shutdown(ctx)
+	})
+	srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler),
+		ServerConfig{Port: "0", Flush: providers.ForceFlush})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": "1", "method": "SendMessage",
+		"params": &a2atype.SendMessageRequest{Message: a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart("hi"))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(a2atype.SvcParamVersion, string(a2atype.Version))
+	rec := httptest.NewRecorder()
+
+	start := time.Now()
+	srv.httpServer.Handler.ServeHTTP(rec, req)
+	elapsed := time.Since(start)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	if limit := telemetry.FlushTimeout + time.Second; elapsed > limit {
+		t.Fatalf("request took %s with an unreachable collector, want at most %s", elapsed, limit)
+	}
+}
+
+// grpc-go ends the SERVER span in stats.End, which can run after ServeHTTP
+// returns. Every streamed call must still have its SERVER span exported by the
+// time the client sees the end of the stream, since the gateway may suspend the
+// Actor then.
+func TestGRPCServerSpanExportedBeforeStreamEnds(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter, sdktrace.WithBatchTimeout(time.Hour)))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		_ = tp.Shutdown(context.Background())
+	})
+	srv, err := NewA2AServer(a2atype.AgentCard{}, substrateExecutor{}, slog.New(slog.DiscardHandler),
+		ServerConfig{Port: "0", Flush: tp.ForceFlush})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testServer := httptest.NewUnstartedServer(srv.httpServer.Handler)
+	testServer.Config.Protocols = srv.httpServer.Protocols
+	testServer.Start()
+	conn, err := grpc.NewClient(testServer.Listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = conn.Close()
+		srv.grpcServer.Stop()
+		testServer.Close()
+	})
+	client := a2apb.NewA2AServiceClient(conn)
+	request, err := pbconv.ToProtoSendMessageRequest(&a2atype.SendMessageRequest{
+		Message: a2atype.NewMessage(a2atype.MessageRoleUser, a2atype.NewTextPart("hi")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const calls = 300
+	missed := 0
+	for i := range calls {
+		stream, err := client.SendStreamingMessage(a2aTestContext(t.Context()), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for {
+			if _, err := stream.Recv(); err == io.EOF {
+				break
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		}
+		servers := 0
+		for _, span := range exporter.GetSpans() {
+			if span.SpanKind == trace.SpanKindServer {
+				servers++
+			}
+		}
+		if servers != i+1 {
+			missed++
+			// Let the late span land so later iterations count correctly.
+			_ = tp.ForceFlush(t.Context())
+		}
+	}
+	if missed != 0 {
+		t.Fatalf("%d of %d streams ended before their SERVER span was exported", missed, calls)
+	}
+}

@@ -1,0 +1,634 @@
+package e2e_test
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"net"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2apb/v1/pbconv"
+	"github.com/stretchr/testify/require"
+	ateapipb "go.ate.dev/substrate/api/ateapi/v1"
+	"go.opentelemetry.io/otel"
+	collectormetrics "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	metricspb "go.opentelemetry.io/proto/otlp/metrics/v1"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/niravshah2705/symphony/go/api/v1alpha3"
+	"github.com/niravshah2705/symphony/go/core/internal/substrate"
+	kagentenv "github.com/niravshah2705/symphony/go/core/pkg/env"
+	"github.com/niravshah2705/symphony/go/pkg/telemetry"
+	"github.com/niravshah2705/symphony/go/pkg/telemetry/conv"
+	"github.com/niravshah2705/symphony/go/pkg/tracing"
+)
+
+const (
+	claudeTracingE2EHarness = "claude-tracing-e2e"
+	codexTracingE2EHarness  = "codex-tracing-e2e"
+)
+
+type capturedSpan struct {
+	serviceName string
+	scopeName   string
+	schemaURL   string
+	resource    *resourcepb.Resource
+	span        *tracepb.Span
+}
+
+// otlpTraceReceiver is a test-only implementation of the OTLP TraceService,
+// not a general-purpose OpenTelemetry Collector. The tracing Harnesses export
+// directly to this gRPC server, which retains ResourceSpans in memory so the
+// test can inspect the exact data that crossed the runtime's OTLP boundary.
+//
+// Export records a request before returning its successful response. An SDK
+// ForceFlush waits for that response, so spans flushed at the completed-chat
+// boundary are observable synchronously; the assertions must not poll and
+// accidentally accept a later batch-timer or shutdown export.
+type otlpTraceReceiver struct {
+	collectortrace.UnimplementedTraceServiceServer
+	mu       sync.Mutex
+	exports  int
+	records  []*tracepb.ResourceSpans
+	requests []*collectortrace.ExportTraceServiceRequest
+	metrics  *otlpMetricsReceiver
+}
+
+// otlpMetricsReceiver keeps metric exports only for the live-check replay.
+type otlpMetricsReceiver struct {
+	collectormetrics.UnimplementedMetricsServiceServer
+	mu       sync.Mutex
+	requests []*collectormetrics.ExportMetricsServiceRequest
+}
+
+func (r *otlpMetricsReceiver) Export(_ context.Context, request *collectormetrics.ExportMetricsServiceRequest) (*collectormetrics.ExportMetricsServiceResponse, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.requests = append(r.requests, proto.Clone(request).(*collectormetrics.ExportMetricsServiceRequest))
+	return &collectormetrics.ExportMetricsServiceResponse{}, nil
+}
+
+// startOTLPTraceReceiver binds inside the go test process.
+func startOTLPTraceReceiver(t *testing.T) *otlpTraceReceiver {
+	t.Helper()
+	if suiteTraceReceiver != nil {
+		return suiteTraceReceiver
+	}
+	address := kagentenv.E2EOTLPListenAddress.Get()
+	if address == "" {
+		address = ":14317"
+	}
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("listen for OTLP traces on %s: %v", address, err)
+	}
+	receiver, stop := serveOTLPTraceReceiver(listener)
+	t.Cleanup(func() {
+		if err := stop(); err != nil {
+			t.Errorf("serve OTLP traces: %v", err)
+		}
+	})
+	return receiver
+}
+
+func serveOTLPTraceReceiver(listener net.Listener) (*otlpTraceReceiver, func() error) {
+	receiver := &otlpTraceReceiver{metrics: &otlpMetricsReceiver{}}
+	server := grpc.NewServer()
+	collectortrace.RegisterTraceServiceServer(server, receiver)
+	collectormetrics.RegisterMetricsServiceServer(server, receiver.metrics)
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- server.Serve(listener) }()
+	return receiver, func() error {
+		server.Stop()
+		if err := <-serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			return err
+		}
+		return nil
+	}
+}
+
+func TestOTLPTraceReceiverFlush(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	receiver, stop := serveOTLPTraceReceiver(listener)
+	t.Cleanup(func() { require.NoError(t, stop()) })
+	previous := otel.GetTracerProvider()
+	providers, err := telemetry.Init(t.Context(), telemetry.Options{Config: telemetry.Config{Traces: &telemetry.OTLPConfig{Endpoint: "http://" + listener.Addr().String(), Protocol: "grpc"}}})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		require.NoError(t, providers.Shutdown(ctx))
+	})
+	_, span := otel.Tracer("receiver-test").Start(t.Context(), "response")
+	span.End()
+	require.NoError(t, providers.ForceFlush(t.Context()))
+	traceID := span.SpanContext().TraceID()
+	require.Len(t, receiver.selectSpans(traceID[:], "", "receiver-test", "response", nil), 1)
+}
+
+func (r *otlpTraceReceiver) Export(_ context.Context, request *collectortrace.ExportTraceServiceRequest) (*collectortrace.ExportTraceServiceResponse, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.exports++
+	r.requests = append(r.requests, proto.Clone(request).(*collectortrace.ExportTraceServiceRequest))
+	for _, resourceSpans := range request.GetResourceSpans() {
+		// The receiver owns its retained data after this RPC returns. Clone the
+		// protobuf rather than depending on the gRPC request's lifetime.
+		r.records = append(r.records, proto.Clone(resourceSpans).(*tracepb.ResourceSpans))
+	}
+	return &collectortrace.ExportTraceServiceResponse{}, nil
+}
+
+func TestOTLPTraceReceiverReplaysClearedExports(t *testing.T) {
+	serve := func() (*otlpTraceReceiver, string) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		receiver, stop := serveOTLPTraceReceiver(listener)
+		t.Cleanup(func() { require.NoError(t, stop()) })
+		return receiver, listener.Addr().String()
+	}
+	source, _ := serve()
+	target, address := serve()
+	resourceSpans := func(service, name string) *tracepb.ResourceSpans {
+		return &tracepb.ResourceSpans{
+			Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
+				{Key: "service.name", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: service}}},
+				{Key: tracing.AttributeMainAgentName, Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "reporter"}}},
+			}},
+			ScopeSpans: []*tracepb.ScopeSpans{{Spans: []*tracepb.Span{{TraceId: make([]byte, 16), SpanId: make([]byte, 8), Name: name}}}},
+		}
+	}
+	request := &collectortrace.ExportTraceServiceRequest{ResourceSpans: []*tracepb.ResourceSpans{
+		resourceSpans("reporter", "replayed"), resourceSpans("claude-code", "native"),
+	}}
+	_, err := source.Export(t.Context(), request)
+	require.NoError(t, err)
+	_, err = source.metrics.Export(t.Context(), &collectormetrics.ExportMetricsServiceRequest{ResourceMetrics: []*metricspb.ResourceMetrics{{
+		Resource: request.ResourceSpans[0].Resource,
+	}}})
+	require.NoError(t, err)
+	source.clear()
+	require.NoError(t, source.replay(t.Context(), address))
+	require.Len(t, target.selectSpans(make([]byte, 16), "", "", "replayed", nil), 1)
+	require.Empty(t, target.selectSpans(make([]byte, 16), "", "", "native", nil))
+	require.Len(t, target.metrics.requests, 1)
+}
+
+// replay sends every export the receiver got, including cleared ones, to
+// target. It leaves out native child processes, which share the agent identity
+// but keep their own service.name, since kagent does not own their telemetry.
+func (r *otlpTraceReceiver) replay(ctx context.Context, target string) error {
+	r.mu.Lock()
+	traces := slices.Clone(r.requests)
+	r.mu.Unlock()
+	r.metrics.mu.Lock()
+	metrics := slices.Clone(r.metrics.requests)
+	r.metrics.mu.Unlock()
+	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	traceClient := collectortrace.NewTraceServiceClient(conn)
+	for _, request := range traces {
+		owned := slices.DeleteFunc(slices.Clone(request.GetResourceSpans()), func(resourceSpans *tracepb.ResourceSpans) bool {
+			return nativeChild(resourceSpans.GetResource())
+		})
+		if len(owned) == 0 {
+			continue
+		}
+		if _, err := traceClient.Export(ctx, &collectortrace.ExportTraceServiceRequest{ResourceSpans: owned}); err != nil {
+			return err
+		}
+	}
+	metricsClient := collectormetrics.NewMetricsServiceClient(conn)
+	for _, request := range metrics {
+		owned := slices.DeleteFunc(slices.Clone(request.GetResourceMetrics()), func(resourceMetrics *metricspb.ResourceMetrics) bool {
+			return nativeChild(resourceMetrics.GetResource())
+		})
+		if len(owned) == 0 {
+			continue
+		}
+		if _, err := metricsClient.Export(ctx, &collectormetrics.ExportMetricsServiceRequest{ResourceMetrics: owned}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func nativeChild(resource *resourcepb.Resource) bool {
+	agent := stringAttribute(resource.GetAttributes(), tracing.AttributeMainAgentName)
+	return agent != "" && agent != stringAttribute(resource.GetAttributes(), "service.name")
+}
+
+func (r *otlpTraceReceiver) clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.exports = 0
+	r.records = nil
+}
+
+// diagnostic summarizes only the spans useful for explaining a failed
+// assertion: A2A request spans and spans correlated by the injected trace ID.
+// Codex can emit hundreds of native spans, so cap the detail included in logs.
+func (r *otlpTraceReceiver) diagnostic(expectedTraceID []byte) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	const detailLimit = 12
+	totalSpans := 0
+	details := make([]string, 0, detailLimit)
+	for _, resourceSpans := range r.records {
+		serviceName := stringAttribute(resourceSpans.GetResource().GetAttributes(), "service.name")
+		for _, scopeSpans := range resourceSpans.GetScopeSpans() {
+			for _, span := range scopeSpans.GetSpans() {
+				totalSpans++
+				requestSpan := stringAttribute(span.GetAttributes(), tracing.AttributeMethod) != ""
+				if len(details) == detailLimit || !bytes.Equal(span.GetTraceId(), expectedTraceID) && !requestSpan {
+					continue
+				}
+				details = append(details, fmt.Sprintf(
+					"service=%q scope=%q name=%q trace_id=%x %s=%q %s=%q",
+					serviceName,
+					scopeSpans.GetScope().GetName(),
+					span.GetName(),
+					span.GetTraceId(),
+					tracing.AttributeMethod, stringAttribute(span.GetAttributes(), tracing.AttributeMethod),
+					tracing.AttributeTaskState, stringAttribute(span.GetAttributes(), tracing.AttributeTaskState),
+				))
+			}
+		}
+	}
+	return fmt.Sprintf("exports=%d resource_spans=%d total_spans=%d relevant_spans=%v", r.exports, len(r.records), totalSpans, details)
+}
+
+// selectSpans returns all spans that match the given trace ID, service name,
+// scope name, span name, and attributes.
+func (r *otlpTraceReceiver) selectSpans(traceID []byte, serviceName, scopeName, spanName string, attributes map[string]string) []capturedSpan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var selected []capturedSpan
+	for _, resourceSpans := range r.records {
+		resourceServiceName := stringAttribute(resourceSpans.GetResource().GetAttributes(), "service.name")
+		if serviceName != "" && resourceServiceName != serviceName {
+			continue
+		}
+		for _, scopeSpans := range resourceSpans.GetScopeSpans() {
+			currentScopeName := scopeSpans.GetScope().GetName()
+			if scopeName != "" && currentScopeName != scopeName {
+				continue
+			}
+			for _, span := range scopeSpans.GetSpans() {
+				if !bytes.Equal(span.GetTraceId(), traceID) || spanName != "" && span.GetName() != spanName {
+					continue
+				}
+				matches := true
+				for key, value := range attributes {
+					if stringAttribute(span.GetAttributes(), key) != value {
+						matches = false
+						break
+					}
+				}
+				if matches {
+					selected = append(selected, capturedSpan{
+						serviceName: resourceServiceName, scopeName: currentScopeName, schemaURL: scopeSpans.GetSchemaUrl(),
+						resource: resourceSpans.GetResource(), span: span,
+					})
+				}
+			}
+		}
+	}
+	return selected
+}
+
+func stringAttribute(attributes []*commonpb.KeyValue, key string) string {
+	for _, attribute := range attributes {
+		if attribute.GetKey() == key {
+			return attribute.GetValue().GetStringValue()
+		}
+	}
+	return ""
+}
+
+func intAttribute(attributes []*commonpb.KeyValue, key string) (int64, bool) {
+	for _, attribute := range attributes {
+		if attribute.GetKey() == key {
+			return attribute.GetValue().GetIntValue(), true
+		}
+	}
+	return 0, false
+}
+
+func TestE2ECompletedChatFlushesTraces(t *testing.T) {
+	t.Parallel()
+	target := interactionTarget(t)
+	requireTracingHarnesses(t)
+	receiver := startOTLPTraceReceiver(t)
+	// Clear before starting parallel cases; each assertion filters by trace ID.
+	receiver.clear()
+
+	for _, test := range []struct {
+		name          string
+		harness       string
+		runtime       tracing.Runtime
+		provider      string
+		templateLabel string
+		modelURL      func(*testing.T) string
+		createModel   func(*testing.T, string) *v1alpha3.ModelConfig
+		prompt        string
+		assertNative  func(*testing.T, *otlpTraceReceiver, []byte)
+	}{
+		{
+			name: "claude", harness: claudeTracingE2EHarness, templateLabel: "claude-tracing",
+			runtime: tracing.RuntimeClaude, provider: "anthropic",
+			modelURL: func(t *testing.T) string {
+				return reachableServerURL(t, startMockLLMServer(t, interactionMocks, "mocks/invoke_agent.json"), "")
+			},
+			createModel: func(t *testing.T, baseURL string) *v1alpha3.ModelConfig {
+				return createClaudeMockModel(t, interactionKubeClient(t), baseURL)
+			},
+			prompt: "What is 2+2?",
+			assertNative: func(t *testing.T, receiver *otlpTraceReceiver, traceID []byte) {
+				t.Helper()
+				for _, captured := range receiver.selectSpans(traceID, "", "", "", nil) {
+					if strings.HasPrefix(captured.span.GetName(), "claude_code.") {
+						return
+					}
+				}
+				t.Fatal("no claude_code.* span was exported before suspension")
+			},
+		},
+		{
+			name: "codex", harness: codexTracingE2EHarness, templateLabel: "codex-tracing",
+			runtime: tracing.RuntimeCodex, provider: "openai",
+			modelURL: func(t *testing.T) string {
+				return startInteractionMock(t)
+			},
+			createModel: func(t *testing.T, baseURL string) *v1alpha3.ModelConfig {
+				return createCodexMockModel(t, interactionKubeClient(t), baseURL)
+			},
+			prompt: "What is 2+2?",
+			assertNative: func(t *testing.T, receiver *otlpTraceReceiver, traceID []byte) {
+				t.Helper()
+				for _, captured := range receiver.selectSpans(traceID, "", "", "", nil) {
+					if captured.serviceName == "codex-app-server" || strings.Contains(strings.ToLower(captured.scopeName), "codex") {
+						return
+					}
+				}
+				t.Fatal("no native Codex span was exported before suspension")
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			model := test.createModel(t, test.modelURL(t))
+			template := createTracingTemplate(t, test.harness, test.templateLabel, model.Name)
+			fixture := newInteractionFixtureForHarnessTemplate(t, target, test.harness, template)
+			traceID, traceparent := sampledTraceparent(t)
+			fixture.ctx = metadata.AppendToOutgoingContext(fixture.ctx, "traceparent", traceparent)
+
+			streamed := sendTracingMessage(t, fixture, test.prompt)
+			if streamed.state != a2atype.TaskStateCompleted {
+				t.Fatalf("streamed task state = %s, want COMPLETED", streamed.state)
+			}
+			// Wait for the Actor to suspend then assert that the completed invocation span was exported.
+			assertActorSuspended(t, fixture)
+			// Invocations are selected by operation alone, the way a consumer
+			// counts them, so a second invoke_agent span in the trace or one
+			// missing an attribute fails the test rather than going unseen. The
+			// compiler owns this identity, so the assertion holds without any
+			// user-supplied resource marker on the Harness.
+			agentName := template
+			spans := receiver.selectSpans(traceID, "", "", "", map[string]string{tracing.AttributeOperationName: tracing.OperationInvokeAgent})
+			if len(spans) != 1 {
+				t.Fatalf("invoke_agent spans = %d, want exactly one before suspension: %s", len(spans), receiver.diagnostic(traceID))
+			}
+			invocation := spans[0]
+			if got, want := invocation.span.GetName(), "invoke_agent "+agentName; got != want {
+				t.Errorf("invocation span name = %q, want %q", got, want)
+			}
+			if invocation.schemaURL != tracing.SchemaURL {
+				t.Errorf("invocation schema URL = %q, want %q", invocation.schemaURL, tracing.SchemaURL)
+			}
+			for key, want := range map[string]string{
+				tracing.AttributeMethod:         "SendStreamingMessage",
+				tracing.AttributeTaskState:      string(a2atype.TaskStateCompleted),
+				tracing.AttributeAgentName:      agentName,
+				tracing.AttributeAgentID:        "kagent/" + agentName,
+				tracing.AttributeProviderName:   test.provider,
+				tracing.AttributeRequestModel:   model.Spec.Model,
+				tracing.AttributeConversationID: streamed.contextID,
+				tracing.AttributeTaskID:         string(streamed.taskID),
+				tracing.AttributeUserID:         "e2e",
+				tracing.AttributeSegment:        tracing.SegmentInitial,
+			} {
+				if got := stringAttribute(invocation.span.GetAttributes(), key); got != want {
+					t.Errorf("invocation %s = %q, want %q", key, got, want)
+				}
+			}
+			// Capture stays off unless a user enables it, so a turn must not
+			// export its prompt or response.
+			for _, key := range []string{tracing.AttributeInputMessages, tracing.AttributeOutputMessages} {
+				if value := stringAttribute(invocation.span.GetAttributes(), key); value != "" {
+					t.Errorf("%s = %q with capture disabled", key, value)
+				}
+			}
+			for _, key := range []string{"kagent.user_id", "gen_ai.task.id", "kagent.app_name", tracing.AttributeRuntime} {
+				if value := stringAttribute(invocation.span.GetAttributes(), key); value != "" {
+					t.Errorf("removed attribute %s = %q", key, value)
+				}
+			}
+			// The gateway drains the runtime stream before suspending the Actor,
+			// so the SERVER span the invocation runs under is exported too.
+			parentFound := false
+			for _, candidate := range receiver.selectSpans(traceID, agentName, "", "", nil) {
+				if bytes.Equal(candidate.span.GetSpanId(), invocation.span.GetParentSpanId()) {
+					parentFound = candidate.span.GetKind() == tracepb.Span_SPAN_KIND_SERVER
+				}
+			}
+			if !parentFound {
+				t.Errorf("invocation has no exported SERVER parent: %s", receiver.diagnostic(traceID))
+			}
+			for key, want := range map[string]string{
+				"service.name":                 agentName,
+				"service.namespace":            "kagent",
+				tracing.AttributeRuntime:       string(test.runtime),
+				tracing.AttributeMainAgentName: agentName,
+				tracing.AttributeMainAgentID:   "kagent/" + agentName,
+			} {
+				if got := stringAttribute(invocation.resource.GetAttributes(), key); got != want {
+					t.Errorf("resource %s = %q, want %q", key, got, want)
+				}
+			}
+			if version := stringAttribute(invocation.resource.GetAttributes(), "service.version"); len(version) != 12 {
+				t.Errorf("resource service.version = %q, want the short revision id", version)
+			}
+			// The mock answers in one model call, so the runtime writes exactly one chat span
+			// under the invocation, with the mock's token counts.
+			chats := receiver.selectSpans(traceID, "", "", "", map[string]string{tracing.AttributeOperationName: conv.GenAIOperationNameChat})
+			if len(chats) != 1 {
+				t.Fatalf("chat spans = %d, want exactly one before suspension: %s", len(chats), receiver.diagnostic(traceID))
+			}
+			chat := chats[0].span
+			if !bytes.Equal(chat.GetParentSpanId(), invocation.span.GetSpanId()) || chat.GetKind() != tracepb.Span_SPAN_KIND_CLIENT {
+				t.Errorf("chat span parent = %x, kind = %s, want a CLIENT child of the invocation", chat.GetParentSpanId(), chat.GetKind())
+			}
+			if got, want := chat.GetName(), "chat "+model.Spec.Model; got != want {
+				t.Errorf("chat span name = %q, want %q", got, want)
+			}
+			for key, want := range map[string]string{
+				tracing.AttributeProviderName:   test.provider,
+				tracing.AttributeRequestModel:   model.Spec.Model,
+				tracing.AttributeConversationID: streamed.contextID,
+			} {
+				if got := stringAttribute(chat.GetAttributes(), key); got != want {
+					t.Errorf("chat %s = %q, want %q", key, got, want)
+				}
+			}
+			for key, want := range map[string]int64{string(conv.GenAIUsageInputTokensKey): 10, string(conv.GenAIUsageOutputTokensKey): 4} {
+				if got, ok := intAttribute(chat.GetAttributes(), key); !ok || got != want {
+					t.Errorf("chat %s = %d (present %v), want %d", key, got, ok, want)
+				}
+			}
+			test.assertNative(t, receiver, traceID)
+		})
+	}
+}
+
+func requireTracingHarnesses(t *testing.T) {
+	t.Helper()
+	kube := interactionKubeClient(t)
+	for _, name := range []string{claudeTracingE2EHarness, codexTracingE2EHarness} {
+		var harness v1alpha3.Harness
+		if err := kube.Get(t.Context(), ctrlclient.ObjectKey{Namespace: "kagent", Name: name}, &harness); apierrors.IsNotFound(err) {
+			// A job dedicated to tracing must fail rather than silently skip both
+			// cases when its fixtures are missing.
+			if strings.EqualFold(strings.TrimSpace(kagentenv.E2ERequireTracing.Get()), "true") {
+				t.Fatalf("tracing Harness %s is not installed", name)
+			}
+			t.Skip("dedicated tracing Harnesses are not installed")
+		} else if err != nil {
+			t.Fatalf("get tracing Harness %s: %v", name, err)
+		}
+	}
+}
+
+func createTracingTemplate(t *testing.T, harnessName, runtimeLabel, modelName string) string {
+	t.Helper()
+	kube := interactionKubeClient(t)
+	template := &v1alpha3.AgentTemplate{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: harnessName + "-", Namespace: "kagent",
+			Labels: map[string]string{"kagent.dev/e2e-runtime": runtimeLabel},
+		},
+		Spec: v1alpha3.AgentTemplateSpec{
+			ModelConfig:  &v1alpha3.ModelConfigReference{Name: modelName},
+			Description:  "Completed-chat trace flush E2E fixture",
+			SystemPrompt: "Reply concisely and follow the requested output format exactly.",
+		},
+	}
+	createAndWaitInteractionTemplateForHarness(t, kube, template, harnessName)
+	return template.Name
+}
+
+// sampledTraceparent generates a trace ID and span ID, and returns a traceparent
+// string that can be used to correlate spans.
+func sampledTraceparent(t *testing.T) ([]byte, string) {
+	t.Helper()
+	traceID := make([]byte, 16)
+	spanID := make([]byte, 8)
+	if _, err := rand.Read(traceID); err != nil {
+		t.Fatalf("generate trace ID: %v", err)
+	}
+	if _, err := rand.Read(spanID); err != nil {
+		t.Fatalf("generate span ID: %v", err)
+	}
+	return traceID, fmt.Sprintf("00-%x-%x-01", traceID, spanID)
+}
+
+// tracedTurn is the identity the gateway assigned to one traced turn. The trace
+// assertions compare it with what the runtime reported.
+type tracedTurn struct {
+	state     a2atype.TaskState
+	taskID    a2atype.TaskID
+	contextID string
+}
+
+func sendTracingMessage(t *testing.T, fixture *interactionFixture, text string) tracedTurn {
+	t.Helper()
+	_, request := newMessageRequest(t, text)
+	request.Tenant, request.Message.ContextId = fixture.tenant, fixture.sessionID
+	var turn tracedTurn
+	terminalEvents := 0
+	for response, err := range sendStreamingMessageWithRetry(fixture.ctx, fixture.client, request) {
+		if err != nil {
+			t.Fatalf("receive traced A2A stream: %v", err)
+		}
+		if terminalEvents != 0 {
+			t.Fatalf("traced stream emitted an event after terminal state %s", turn.state)
+		}
+		event, err := pbconv.FromProtoStreamResponse(response)
+		if err != nil {
+			t.Fatalf("decode traced A2A stream: %v", err)
+		}
+		var state a2atype.TaskState
+		switch event := event.(type) {
+		case *a2atype.Task:
+			state, turn.taskID, turn.contextID = event.Status.State, event.ID, event.ContextID
+		case *a2atype.TaskStatusUpdateEvent:
+			state, turn.taskID, turn.contextID = event.Status.State, event.TaskID, event.ContextID
+		}
+		if state.Terminal() {
+			terminalEvents++
+			turn.state = state
+		}
+	}
+	if terminalEvents != 1 {
+		t.Fatalf("traced stream terminal event count = %d, want 1", terminalEvents)
+	}
+	if turn.taskID == "" || turn.contextID == "" {
+		t.Fatal("traced stream did not report a task and context ID")
+	}
+	return turn
+}
+
+func assertActorSuspended(t *testing.T, fixture *interactionFixture) {
+	t.Helper()
+	actorID := substrate.ActorName(fixture.sessionID)
+	ctx, cancel := context.WithTimeout(metadata.AppendToOutgoingContext(t.Context(), "x-user-id", "e2e"), 30*time.Second)
+	defer cancel()
+	err := wait.PollUntilContextTimeout(ctx, time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+		actor, err := findSubstrateActor(ctx, fixture.system, "", actorID)
+		if err != nil {
+			return false, err
+		}
+		if actor == nil || actor.GetStatus().GetState() != ateapipb.ActorState_ACTOR_STATE_SUSPENDED {
+			return false, nil
+		}
+		snapshot := substrate.LatestActorSnapshot(actor)
+		return substrate.SnapshotURI(snapshot) != "" && snapshot.GetFidelity() == ateapipb.SnapshotFidelity_SNAPSHOT_FIDELITY_VOLUMES, nil
+	})
+	if err != nil {
+		t.Fatalf("Actor %s did not reach Suspended with an durable VOLUMES snapshot: %v", actorID, err)
+	}
+}

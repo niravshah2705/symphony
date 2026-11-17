@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 112 nodes
+Community of 110 nodes
 
-- **Size**: 112 nodes
-- **Cohesion**: 0.2084
+- **Size**: 110 nodes
+- **Cohesion**: 0.2878
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,8 +16,6 @@ Community of 112 nodes
 |------|------|------|-------|
 | test:ADLC manifest is served as a static resource@L32 | Test | ./e2e/adlc.spec.js | 32-39 |
 | test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148 | Test | ./e2e/page-loading.spec.js | 148-182 |
-| test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221 | Test | ./e2e/page-loading.spec.js | 221-475 |
-| test:Settings Policy uses the active native project and selected-context roles@L553 | Test | ./e2e/page-loading.spec.js | 553-615 |
 | test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660 | Test | ./e2e/page-loading.spec.js | 660-709 |
 | test:SEO and AI discovery resources bypass the SPA fallback@L212 | Test | ./e2e/route-loading.spec.js | 212-228 |
 | topUsage | Function | ./packages/cli/bin/adlc.js | 23-45 |
@@ -64,49 +62,50 @@ Community of 112 nodes
 | test:deployment approval refuses a mismatched pending scope@L137 | Test | ./packages/cli/src/commands/admin.test.js | 137-166 |
 | promptSecret | Function | ./packages/cli/src/commands/auth.js | 32-47 |
 | write | Function | ./packages/cli/src/commands/auth.js | 35-37 |
+| resolveInputToken | Function | ./packages/cli/src/commands/auth.js | 50-65 |
+| login | Function | ./packages/cli/src/commands/auth.js | 67-102 |
 
-*... and 62 more members.*
+*... and 60 more members.*
 
 ## Execution Flows
 
 - **run** (criticality: 0.71, depth: 4)
 - **main** (criticality: 0.69, depth: 4)
-- **run** (criticality: 0.60, depth: 3)
 
 ## Dependencies
 
 ### Outgoing
 
 - `equal` (61 edge(s))
-- `expect` (56 edge(s))
-- `route` (34 edge(s))
-- `request` (27 edge(s))
 - `String` (26 edge(s))
+- `request` (25 edge(s))
 - `trim` (21 edge(s))
-- `locator` (16 edge(s))
-- `./e2e/page-loading.spec.js::json` (15 edge(s))
+- `expect` (20 edge(s))
 - `deepEqual` (14 edge(s))
-- `toContain` (13 edge(s))
-- `toBe` (13 edge(s))
 - `join` (11 edge(s))
 - `test` (11 edge(s))
-- `push` (10 edge(s))
-- `filter` (10 edge(s))
+- `parse` (9 edge(s))
+- `route` (8 edge(s))
+- `push` (8 edge(s))
+- `Number` (8 edge(s))
+- `slice` (7 edge(s))
+- `log` (7 edge(s))
+- `get` (6 edge(s))
 
 ### Incoming
 
 - `equal` (61 edge(s))
-- `expect` (56 edge(s))
-- `route` (34 edge(s))
-- `locator` (16 edge(s))
+- `expect` (20 edge(s))
 - `./packages/cli/src/output.js` (16 edge(s))
-- `./e2e/page-loading.spec.js::json` (15 edge(s))
 - `deepEqual` (14 edge(s))
 - `./packages/cli/src/credentials.js` (14 edge(s))
-- `toContain` (13 edge(s))
-- `toBe` (13 edge(s))
 - `./packages/cli/src/client.test.js` (13 edge(s))
 - `./packages/cli/src/commands/admin.js` (13 edge(s))
-- `./e2e/page-loading.spec.js::authorizedJson` (10 edge(s))
-- `get` (9 edge(s))
-- `fulfill` (9 edge(s))
+- `./packages/cli/src/stream.js` (9 edge(s))
+- `route` (8 edge(s))
+- `./packages/cli/src/args.test.js` (8 edge(s))
+- `./packages/cli/src/client.js` (8 edge(s))
+- `./packages/cli/src/commands/auth.js` (8 edge(s))
+- `./packages/cli/src/stream.test.js` (8 edge(s))
+- `get` (6 edge(s))
+- `toContain` (6 edge(s))

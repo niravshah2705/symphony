@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 391 nodes
+Community of 479 nodes
 
-- **Size**: 391 nodes
-- **Cohesion**: 0.3219
+- **Size**: 479 nodes
+- **Cohesion**: 0.3255
 - **Dominant Language**: javascript
 
 ## Members
@@ -20,6 +20,21 @@ Community of 391 nodes
 | test:createChatModel maps antigravity to a ChatOpenAI targeting the Gemini endpoint@L52 | Test | ./packages/shared/src/agent/antigravity.test.js | 52-58 |
 | test:availability probes the Gemini key against the OpenAI-compatible endpoint@L73 | Test | ./packages/shared/src/agent/antigravity.test.js | 73-86 |
 | test:availability fails fast when the Gemini key is missing@L88 | Test | ./packages/shared/src/agent/antigravity.test.js | 88-94 |
+| resolveTaskLabelId | Function | ./packages/shared/src/agent/apply.js | 13-21 |
+| withCriteria | Function | ./packages/shared/src/agent/apply.js | 24-28 |
+| modelLabelForSize | Function | ./packages/shared/src/agent/apply.js | 31-33 |
+| makeLabelResolver | Function | ./packages/shared/src/agent/apply.js | 40-55 |
+| makeModelLabelResolver | Function | ./packages/shared/src/agent/apply.js | 63-83 |
+| issueLabelIds | Function | ./packages/shared/src/agent/apply.js | 86-93 |
+| applyPlan | Function | ./packages/shared/src/agent/apply.js | 104-222 |
+| applyIssuesForMilestones | Function | ./packages/shared/src/agent/apply.js | 229-290 |
+| applyAidone | Function | ./packages/shared/src/agent/apply.js | 293-302 |
+| applyAiplanned | Function | ./packages/shared/src/agent/apply.js | 309-318 |
+| applyAifail | Function | ./packages/shared/src/agent/apply.js | 325-346 |
+| startIssue | Function | ./packages/shared/src/agent/apply.js | 355-370 |
+| finishIssue | Function | ./packages/shared/src/agent/apply.js | 378-410 |
+| safeAt | Function | ./packages/shared/src/agent/apply.js | 412-414 |
+| errMsg | Function | ./packages/shared/src/agent/apply.js | 416-418 |
 | resolveDeps | Function | ./packages/shared/src/agent/approval-gate.js | 32-48 |
 | bp | Function | ./packages/shared/src/agent/approval-gate.js | 34-34 |
 | defaultResolveBusiness | Function | ./packages/shared/src/agent/approval-gate.js | 50-64 |
@@ -49,65 +64,47 @@ Community of 391 nodes
 | selectedModelExists | Function | ./packages/shared/src/agent/availability.js | 122-127 |
 | normalize | Function | ./packages/shared/src/agent/availability.js | 125-125 |
 | probeModelAvailability | Function | ./packages/shared/src/agent/availability.js | 129-236 |
-| probeRepositoryAvailability | Function | ./packages/shared/src/agent/availability.js | 238-293 |
-| response | Function | ./packages/shared/src/agent/availability.test.js | 18-24 |
-| test:pause reasons expose a stable, nontechnical UI contract@L26 | Test | ./packages/shared/src/agent/availability.test.js | 26-42 |
-| test:repository preflight converts provider 403 into a sanitized availability error@L44 | Test | ./packages/shared/src/agent/availability.test.js | 44-67 |
-| test:repository preflight requires write permission before dispatch@L69 | Test | ./packages/shared/src/agent/availability.test.js | 69-77 |
-| test:local model preflight verifies that the selected model is loaded@L79 | Test | ./packages/shared/src/agent/availability.test.js | 79-93 |
-| test:model classifier recognizes hosted authorization and network availability failures@L95 | Test | ./packages/shared/src/agent/availability.test.js | 95-119 |
-| clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
-| fenced | Function | ./packages/shared/src/agent/business-pipeline.js | 67-69 |
-| messageText | Function | ./packages/shared/src/agent/business-pipeline.js | 71-77 |
-| parseJsonObject | Function | ./packages/shared/src/agent/business-pipeline.js | 79-85 |
-| realResolveModel | Function | ./packages/shared/src/agent/business-pipeline.js | 89-94 |
-| invokeModel | Function | ./packages/shared/src/agent/business-pipeline.js | 96-110 |
-| defaultCallJson | Function | ./packages/shared/src/agent/business-pipeline.js | 112-114 |
-| defaultCallText | Function | ./packages/shared/src/agent/business-pipeline.js | 116-118 |
 
-*... and 341 more members.*
+*... and 429 more members.*
 
 ## Execution Flows
 
-- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
-- **generatePlan** (criticality: 0.67, depth: 6)
-- **startScheduler** (criticality: 0.65, depth: 5)
-- **proposeSettings** (criticality: 0.58, depth: 4)
+No execution flows pass through this community.
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (344 edge(s))
-- `deepEqual` (65 edge(s))
-- `String` (56 edge(s))
-- `replace` (41 edge(s))
+- `equal` (352 edge(s))
+- `deepEqual` (75 edge(s))
+- `String` (73 edge(s))
+- `push` (53 edge(s))
+- `strictEqual` (48 edge(s))
+- `replace` (42 edge(s))
 - `Number` (39 edge(s))
-- `push` (36 edge(s))
-- `ok` (32 edge(s))
-- `slice` (30 edge(s))
+- `step` (37 edge(s))
+- `map` (37 edge(s))
+- `trim` (35 edge(s))
+- `slice` (35 edge(s))
+- `ok` (33 edge(s))
+- `includes` (30 edge(s))
+- `join` (29 edge(s))
 - `match` (28 edge(s))
-- `strictEqual` (28 edge(s))
-- `map` (27 edge(s))
-- `join` (27 edge(s))
-- `includes` (26 edge(s))
-- `Boolean` (26 edge(s))
-- `trim` (24 edge(s))
 
 ### Incoming
 
-- `equal` (344 edge(s))
-- `deepEqual` (65 edge(s))
+- `equal` (352 edge(s))
+- `deepEqual` (75 edge(s))
+- `./packages/shared/src/linear.js` (72 edge(s))
 - `./packages/shared/src/agent/scheduler.js` (55 edge(s))
+- `strictEqual` (48 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (46 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `./packages/shared/src/agent/llm.js` (42 edge(s))
-- `ok` (32 edge(s))
-- `strictEqual` (28 edge(s))
+- `ok` (33 edge(s))
 - `match` (25 edge(s))
 - `rejects` (22 edge(s))
+- `./packages/shared/src/agent/apply.js` (22 edge(s))
+- `throws` (21 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))
-- `throws` (17 edge(s))
-- `./packages/shared/src/agent/approval-gate.js` (15 edge(s))

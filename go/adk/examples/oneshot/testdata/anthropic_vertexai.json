@@ -1,0 +1,10 @@
+{
+  "agent": {
+    "model": {
+      "model": "claude-sonnet-4-20250514",
+      "gemini_anthropic": {}
+    },
+    "description": "Anthropic on Vertex AI test agent",
+    "instruction": "You are a helpful assistant. Answer concisely in one sentence."
+  }
+}

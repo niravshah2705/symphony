@@ -69,7 +69,7 @@ Community of 163 nodes
 
 ## Execution Flows
 
-- **trustedTestContext** (criticality: 0.57, depth: 5)
+No execution flows pass through this community.
 
 ## Dependencies
 

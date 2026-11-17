@@ -1,0 +1,17 @@
+runtime,dockerfile,image,version,amd64_sha256,arm64_sha256,current
+claude,go/harness/claude/Dockerfile,ghcr.io/niravshah2705/symphony/claude-runtime,2.1.326,,,true
+claude,go/harness/claude/Dockerfile,ghcr.io/niravshah2705/symphony/claude-runtime,2.1.325,,,false
+claude,go/harness/claude/Dockerfile,ghcr.io/niravshah2705/symphony/claude-runtime,2.1.324,,,false
+claude,go/harness/claude/Dockerfile,ghcr.io/niravshah2705/symphony/claude-runtime,2.1.323,,,false
+codex,go/harness/codex/Dockerfile,ghcr.io/niravshah2705/symphony/codex-runtime,0.169.0,,,true
+codex,go/harness/codex/Dockerfile,ghcr.io/niravshah2705/symphony/codex-runtime,0.168.0,,,false
+codex,go/harness/codex/Dockerfile,ghcr.io/niravshah2705/symphony/codex-runtime,0.167.2,,,false
+codex,go/harness/codex/Dockerfile,ghcr.io/niravshah2705/symphony/codex-runtime,0.167.1,,,false
+deepagent,go/harness/deepagent/Dockerfile,ghcr.io/niravshah2705/symphony/deepagent-runtime,0.2.9,,,true
+deepagent,go/harness/deepagent/Dockerfile,ghcr.io/niravshah2705/symphony/deepagent-runtime,0.2.8,,,false
+deepagent,go/harness/deepagent/Dockerfile,ghcr.io/niravshah2705/symphony/deepagent-runtime,0.2.7,,,false
+deepagent,go/harness/deepagent/Dockerfile,ghcr.io/niravshah2705/symphony/deepagent-runtime,0.2.6,,,false
+deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.4,,,true
+deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.3,,,false
+deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.2,,,false
+deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.1,,,false

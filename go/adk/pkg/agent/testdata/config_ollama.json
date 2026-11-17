@@ -1,0 +1,12 @@
+{
+  "agent": {
+    "model": {
+      "model": "llama3.2",
+      "openai": {
+        "base_url": "{{BASE_URL}}/v1"
+      }
+    },
+    "description": "test",
+    "instruction": "Answer concisely."
+  }
+}

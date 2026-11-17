@@ -1,0 +1,719 @@
+package session
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	a2atype "github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/google/uuid"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
+
+	apia2a "github.com/niravshah2705/symphony/go/api/a2a"
+	apiv1 "github.com/niravshah2705/symphony/go/api/gen/kagent/api/v1"
+	"github.com/niravshah2705/symphony/go/api/v1alpha3"
+	"github.com/niravshah2705/symphony/go/core/internal/database"
+	"github.com/niravshah2705/symphony/go/core/internal/scheduling"
+	"github.com/niravshah2705/symphony/go/core/internal/service/serviceerrors"
+	"github.com/niravshah2705/symphony/go/core/pkg/auth"
+	"github.com/niravshah2705/symphony/go/pkg/logging"
+)
+
+type interactionStore interface {
+	RegisterSessionPushNotification(context.Context, string, string, string, *a2atype.PushConfig) error
+	SaveTaskPushConfig(context.Context, string, string, *a2atype.PushConfig) error
+	GetTaskPushConfig(context.Context, string, string, string) (*database.TaskPushConfig, error)
+	ListTaskPushConfigs(context.Context, string, string, string, int) ([]database.TaskPushConfig, error)
+	DeleteTaskPushConfig(context.Context, string, string, string) error
+	ReserveSessionDispatch(context.Context, string, uuid.UUID, string) error
+	RevokeSessionDispatch(context.Context, string, uuid.UUID, string) (bool, error)
+	GetRuntimeRevision(context.Context, string) (*database.RuntimeRevision, error)
+	GetSessionTaskByMessage(context.Context, string, string, string) (*a2atype.Task, error)
+	GetSessionTask(context.Context, string, string, *int) (*a2atype.Task, error)
+	GetSettledSessionTask(context.Context, string, string, *int) (*a2atype.Task, error)
+	ListAgentTasks(context.Context, []string, string, a2atype.TaskState, *time.Time, int, *int) ([]*a2atype.Task, int, error)
+	SessionForTask(context.Context, string) (string, error)
+}
+
+type agentService interface {
+	Get(context.Context, types.NamespacedName) (*v1alpha3.Agent, error)
+}
+
+// InteractionService owns authorization, Session resolution, and persisted A2A
+// state. It never connects to actors: the gateway owns dispatch and observation.
+// These operations form the persistence boundary for a separate API service.
+type InteractionService struct {
+	store             interactionStore
+	agents            agentService
+	sessions          *Service
+	allowPushHTTP     bool
+	automaticRecovery bool
+	// recoveryWait bounds how long a send waits on the recovery it starts.
+	recoveryWait time.Duration
+	// dispatchWait bounds how long a send waits for a busy Session.
+	dispatchWait time.Duration
+}
+
+// sendRecoveryWait bounds a send's wait for crash recovery. A recovery still
+// running when it ends stays admitted: the attempt releases its claim, and the
+// client's retry continues it.
+const sendRecoveryWait = 10 * time.Second
+
+func NewInteractionService(store interactionStore, agents agentService, sessions *Service, allowPushHTTP, automaticRecovery bool) *InteractionService {
+	return &InteractionService{store: store, agents: agents, sessions: sessions, allowPushHTTP: allowPushHTTP, automaticRecovery: automaticRecovery,
+		recoveryWait: sendRecoveryWait, dispatchWait: 10 * time.Second}
+}
+
+// PreparedSend either grants a new dispatch or returns an already accepted task.
+// DispatchID is only set for a new attempt; the runtime must present it when saving
+// the input. No database lock is held while the gateway contacts the actor.
+type PreparedSend struct {
+	Session      *apiv1.Session
+	DispatchID   uuid.UUID
+	AcceptedTask *a2atype.Task
+}
+
+// storedSession keeps operation permissions and Agent membership checks private.
+// Callers request domain operations, never an arbitrary authorization verb.
+func (s *InteractionService) storedSession(ctx context.Context, verb auth.Verb, agent types.NamespacedName, contextID string) (*apiv1.Session, error) {
+	if err := validateInteractionAgent(agent); err != nil {
+		return nil, err
+	}
+	session, err := s.sessions.getAuthorized(ctx, contextID, verb)
+	if err != nil {
+		return nil, interactionError(ctx, err)
+	}
+	if session.GetAgent().GetRef().GetNamespace() != agent.Namespace || session.GetAgent().GetRef().GetName() != agent.Name {
+		return nil, a2atype.NewError(a2atype.ErrUnauthorized, "context does not belong to this Agent")
+	}
+	return session, nil
+}
+
+func (s *InteractionService) GetTask(ctx context.Context, agent types.NamespacedName, req *a2atype.GetTaskRequest) (*a2atype.Task, error) {
+	if req == nil {
+		return nil, a2atype.ErrInvalidParams
+	}
+	session, err := s.taskSession(ctx, agent, auth.VerbGet, req.ID)
+	if err != nil {
+		return nil, err
+	}
+	task, err := s.store.GetSessionTask(ctx, session.GetId(), string(req.ID), req.HistoryLength)
+	if errors.Is(err, database.ErrNotFound) {
+		return nil, a2atype.ErrTaskNotFound
+	}
+	if err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to load session task", "error", err, "task_id", req.ID)
+		return nil, a2atype.NewError(a2atype.ErrInternalError, "failed to load task")
+	}
+	return shapeTask(task, req.HistoryLength, true), nil
+}
+
+func (s *InteractionService) ListTasks(ctx context.Context, agent types.NamespacedName, req *a2atype.ListTasksRequest) (*a2atype.ListTasksResponse, error) {
+	if req == nil {
+		req = &a2atype.ListTasksRequest{}
+	}
+	sessionIDs, err := s.listSessions(ctx, agent, req.ContextID)
+	if err != nil {
+		return nil, err
+	}
+	pageSize := req.PageSize
+	if pageSize == 0 {
+		pageSize = 50
+	}
+	if pageSize < 1 || pageSize > 100 {
+		return nil, a2atype.NewError(a2atype.ErrInvalidRequest, "page size must be between 1 and 100")
+	}
+
+	afterID, err := decodeTaskPageToken(req.PageToken)
+	if err != nil {
+		return nil, a2atype.NewError(a2atype.ErrInvalidRequest, "invalid page token")
+	}
+	tasks, total, err := s.store.ListAgentTasks(ctx, sessionIDs, afterID, req.Status, req.StatusTimestampAfter, pageSize+1, req.HistoryLength)
+	if err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to list session tasks", "error", err)
+		return nil, a2atype.NewError(a2atype.ErrInternalError, "failed to list tasks")
+	}
+	response := &a2atype.ListTasksResponse{Tasks: tasks, TotalSize: total, PageSize: pageSize}
+	if len(tasks) > pageSize {
+		response.Tasks = tasks[:pageSize]
+		response.NextPageToken = encodeTaskPageToken(string(response.Tasks[pageSize-1].ID))
+	}
+	for i, task := range response.Tasks {
+		response.Tasks[i] = shapeTask(task, req.HistoryLength, req.IncludeArtifacts)
+	}
+	return response, nil
+}
+
+// PrepareSend authorizes and resolves the conversation, then reserves its input.
+// A retry of a message that opens a task, in a new or an existing
+// conversation, returns its saved task without granting another send.
+func (s *InteractionService) PrepareSend(ctx context.Context, agent types.NamespacedName, req *a2atype.SendMessageRequest) (*PreparedSend, error) {
+	initialID := openingMessageID(req)
+	pushConfig, err := initialPushConfig(agent, req, s.allowPushHTTP)
+	if err != nil {
+		return nil, err
+	}
+	session, err := s.resolveSend(ctx, agent, req)
+	if err != nil {
+		return nil, err
+	}
+	if pushConfig != nil {
+		if pushConfig.ID == "" {
+			pushConfig.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("a2a/push/"+session.Id+"/"+req.Message.ID)).String()
+		}
+		if err := s.store.RegisterSessionPushNotification(ctx, session.Id, req.Message.ID, string(req.Message.TaskID), pushConfig); err != nil {
+			return nil, interactionStoreError(ctx, err)
+		}
+		config := *req.Config
+		config.PushConfig = nil
+		req.Config = &config
+	}
+	id, err := s.reserveDispatch(ctx, session.Id, initialID, s.dispatchWait)
+	if s.automaticRecovery && errors.Is(err, errSuspensionUnsettled) {
+		// Why: a worker lost while the Actor suspends after a turn leaves the
+		// Actor CRASHED, the Session READY, and the suspension's claim held, since
+		// its outcome is unknown and nothing takes the claim over on a timeout.
+		// Every later send then waits out the busy period and is told to retry,
+		// so the conversation never recovers on its own. A crash recovery is the
+		// only thing that retires that claim. Reaching here means the claim
+		// outlasted the whole wait, which a healthy suspension does not, so the
+		// send tries the bounded recovery once. Revert leaves a still-running
+		// suspension alone, and one more reservation, without another wait,
+		// proceeds or answers retry as before.
+		switch recoverErr := s.recoverForSend(ctx, session.Id); {
+		case recoverErr == nil:
+			id, err = s.reserveDispatch(ctx, session.Id, initialID, 0)
+		case !errors.Is(recoverErr, errRecoveryUnavailable):
+			return nil, recoverErr
+		}
+	}
+	if s.automaticRecovery && errors.Is(err, database.ErrActiveTurn) {
+		// A crash during a turn leaves that turn open, and an open turn refuses
+		// every send, so no send would reach the crashed Actor to recover it.
+		// Revert restores a crashed Actor and leaves a busy one alone, so one more
+		// reservation either proceeds or is refused as before.
+		switch recoverErr := s.recoverForSend(ctx, session.Id); {
+		case recoverErr == nil:
+			id, err = s.reserveDispatch(ctx, session.Id, initialID, s.dispatchWait)
+		case !errors.Is(recoverErr, errRecoveryUnavailable):
+			return nil, recoverErr
+		}
+	}
+	if errors.Is(err, errSuspensionUnsettled) {
+		err = ErrSendNotAccepted
+	}
+	switch {
+	case errors.Is(err, database.ErrActiveTurn):
+		err = errTurnActive
+	case errors.Is(err, database.ErrConflict):
+		err = interactionStoreError(ctx, err)
+	}
+	if errors.Is(err, database.ErrMessageAccepted) {
+		var historyLength *int
+		if req.Config != nil {
+			historyLength = req.Config.HistoryLength
+		}
+		task, err := s.acceptedTask(ctx, session.Id, initialID, historyLength)
+		if err != nil {
+			return nil, err
+		}
+		return &PreparedSend{Session: session, AcceptedTask: task}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	apia2a.SetTimelinePosition(req.Message, time.Now().UTC())
+	return &PreparedSend{Session: session, DispatchID: id}, nil
+}
+
+// PrepareCancelTask authorizes cancellation and returns the actor target and
+// committed task. A terminal task needs no actor call.
+func (s *InteractionService) PrepareCancelTask(ctx context.Context, agent types.NamespacedName, req *a2atype.CancelTaskRequest) (*apiv1.Session, *a2atype.Task, error) {
+	if req == nil {
+		return nil, nil, a2atype.ErrInvalidParams
+	}
+	return s.prepareTask(ctx, agent, req.ID, auth.VerbUpdate)
+}
+
+// PrepareTaskSubscription resolves a read-authorized task. The gateway decides
+// whether to return this snapshot or subscribe to the actor's live stream.
+func (s *InteractionService) PrepareTaskSubscription(ctx context.Context, agent types.NamespacedName, req *a2atype.SubscribeToTaskRequest) (*apiv1.Session, *a2atype.Task, error) {
+	if req == nil {
+		return nil, nil, a2atype.ErrInvalidParams
+	}
+	return s.prepareTask(ctx, agent, req.ID, auth.VerbGet)
+}
+
+func (s *InteractionService) prepareTask(ctx context.Context, agent types.NamespacedName, id a2atype.TaskID, verb auth.Verb) (*apiv1.Session, *a2atype.Task, error) {
+	session, err := s.taskSession(ctx, agent, verb, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	task, err := s.store.GetSessionTask(ctx, session.Id, string(id), nil)
+	if err != nil {
+		return nil, nil, interactionStoreError(ctx, err)
+	}
+	return session, task, nil
+}
+
+// reserveDispatch waits only before forwarding input. No runtime send is retried
+// on an ambiguous transport error, and no SQL lock is held during dispatch.
+// It waits at most wait for a busy Session, answering ErrSendNotAccepted after
+// it, or errSuspensionUnsettled when a claimed suspension was still the cause.
+func (s *InteractionService) reserveDispatch(ctx context.Context, sessionID, initialID string, wait time.Duration) (uuid.UUID, error) {
+	id := uuid.New()
+	deadline := time.Now().Add(wait)
+	for {
+		err := s.store.ReserveSessionDispatch(ctx, sessionID, id, initialID)
+		if err == nil {
+			return id, nil
+		}
+		if errors.Is(err, database.ErrMessageAccepted) || errors.Is(err, database.ErrConflict) {
+			return uuid.Nil, err
+		}
+		if !errors.Is(err, database.ErrDispatchBusy) {
+			return uuid.Nil, interactionStoreError(ctx, err)
+		}
+		if !time.Now().Before(deadline) {
+			if errors.Is(err, database.ErrDispatchSuspending) {
+				return uuid.Nil, errSuspensionUnsettled
+			}
+			return uuid.Nil, ErrSendNotAccepted
+		}
+		timer := time.NewTimer(min(100*time.Millisecond, time.Until(deadline)))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return uuid.Nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+// errSuspensionUnsettled is reserveDispatch's answer when a claimed post-turn
+// suspension still held the Session at the end of the wait. PrepareSend recovers
+// it or answers ErrSendNotAccepted, so it never reaches a client.
+var errSuspensionUnsettled = errors.New("runtime suspension has not settled")
+
+// errTurnActive refuses a send while an earlier turn is still open. A runtime
+// that crashed mid-turn leaves its turn open, so unless the send recovers it,
+// this is how the crash reaches the client. The reason lets a client offer
+// RevertSession for this refusal and no other; the message is unchanged.
+var errTurnActive = a2atype.NewError(a2atype.ErrUnsupportedOperation, database.ErrConflict.Error()).
+	WithErrorInfoMeta(map[string]string{"reason": "KAGENT_TURN_ACTIVE"})
+
+// ErrRuntimeRecovering answers a send while a crash recovery is admitted but not
+// finished. It keeps ErrSendNotAccepted's reason, so existing clients retry it,
+// and adds state RECOVERING with a longer retry delay.
+var ErrRuntimeRecovering = a2atype.NewError(a2atype.ErrUnsupportedOperation, "input was not accepted; the runtime is recovering from a crash").
+	WithErrorInfoMeta(map[string]string{"reason": "KAGENT_SEND_NOT_ACCEPTED", "state": "RECOVERING", "retryAfterMs": "1000"})
+
+// ErrSendNotAccepted tells callers they may retry this input because no dispatch
+// occurred, or an unused dispatch was revoked before the runtime persisted it.
+var ErrSendNotAccepted = a2atype.NewError(a2atype.ErrUnsupportedOperation, "input was not accepted; retry after the session becomes available").
+	WithErrorInfoMeta(map[string]string{"reason": "KAGENT_SEND_NOT_ACCEPTED", "retryAfterMs": "100"})
+
+// RevokeSend releases an unused attempt. A true result proves that the input was
+// not accepted, allowing the gateway to distinguish rejection from uncertainty.
+func (s *InteractionService) RevokeSend(ctx context.Context, agent types.NamespacedName, message *a2atype.Message, id uuid.UUID) (bool, error) {
+	session, err := s.messageSession(ctx, agent, message)
+	if err != nil {
+		return false, err
+	}
+	revoked, err := s.store.RevokeSessionDispatch(ctx, session.Id, id, message.ID)
+	if err != nil {
+		return false, interactionStoreError(ctx, err)
+	}
+	return revoked, nil
+}
+
+// RecoverRejectedSend runs after the runtime refused a send it never accepted. A
+// crashed Actor cannot be resumed, so the refusal would repeat on every retry;
+// reverting it first lets the caller's retry reach the restored runtime.
+func (s *InteractionService) RecoverRejectedSend(ctx context.Context, agent types.NamespacedName, message *a2atype.Message) error {
+	if !s.automaticRecovery {
+		return ErrSendNotAccepted
+	}
+	session, err := s.messageSession(ctx, agent, message)
+	if err != nil {
+		return err
+	}
+	if err := s.recoverForSend(ctx, session.Id); err != nil && !errors.Is(err, errRecoveryUnavailable) {
+		return err
+	}
+	return ErrSendNotAccepted
+}
+
+// ErrRuntimeUnrecoverable answers a send to a Session whose recorded Actor is
+// missing or was replaced. Retrying cannot succeed.
+var ErrRuntimeUnrecoverable = a2atype.NewError(a2atype.ErrUnsupportedOperation, "Session runtime cannot be recovered; start another conversation")
+
+// errRecoveryUnavailable reports that a send's recovery did not run and none is
+// admitted, so the send keeps the answer it would give without recovery.
+var errRecoveryUnavailable = errors.New("crash recovery unavailable for this send")
+
+// recoverForSend reverts a crashed runtime for a send that found it, waiting at
+// most recoveryWait. It returns nil once the runtime is healthy or restored, and
+// ErrRuntimeUnrecoverable for a lost one. Otherwise the stored Session decides: an
+// admitted recovery answers ErrRuntimeRecovering, and anything else, including no
+// update access, contention, or an outage before admission, answers
+// errRecoveryUnavailable. Reverting needs RevertSession's update access, which
+// sending alone does not grant. The attempt ignores the caller's cancellation, so
+// a disconnect does not cut it short.
+func (s *InteractionService) recoverForSend(ctx context.Context, sessionID string) error {
+	attempt, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.recoveryWait)
+	defer cancel()
+	_, err := s.sessions.Revert(attempt, sessionID)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errRuntimeUnrecoverable) {
+		return ErrRuntimeUnrecoverable
+	}
+	logging.FromContext(ctx).WarnContext(ctx, "recover crashed runtime for a send", "session_id", sessionID, "error", err)
+	// The caller was already authorized for this Session; this read only chooses
+	// which refusal to return.
+	readCtx, cancelRead := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancelRead()
+	current, readErr := s.sessions.store.GetSessionByID(readCtx, sessionID)
+	if readErr == nil && database.CrashRecoveryAdmitted(current) {
+		return ErrRuntimeRecovering
+	}
+	return errRecoveryUnavailable
+}
+
+// GetTaskByMessage reads only the task that accepted this input. It uses the
+// send's permissions and Session scope, so recovery cannot expose another task.
+func (s *InteractionService) GetTaskByMessage(ctx context.Context, agent types.NamespacedName, message *a2atype.Message) (*a2atype.Task, error) {
+	session, err := s.messageSession(ctx, agent, message)
+	if err != nil {
+		return nil, err
+	}
+	task, err := s.store.GetSessionTaskByMessage(ctx, session.Id, string(message.TaskID), message.ID)
+	if err != nil {
+		return nil, interactionStoreError(ctx, err)
+	}
+	return task, nil
+}
+
+// GetSettledTask waits for an already staged save to be published after native
+// cleanup. It only reads persistence; it cannot wake or contact the actor.
+func (s *InteractionService) GetSettledTask(ctx context.Context, agent types.NamespacedName, sessionID string, taskID a2atype.TaskID, historyLength *int) (*a2atype.Task, error) {
+	session, err := s.storedSession(ctx, auth.VerbGet, agent, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return s.awaitBoundary(ctx, session.Id, taskID, historyLength)
+}
+
+// GetSendResult reads the committed response using the original send's permission.
+// A create-only caller does not need an additional read or update grant merely
+// because the gateway must recover its response from storage.
+func (s *InteractionService) GetSendResult(ctx context.Context, agent types.NamespacedName, message *a2atype.Message, taskID a2atype.TaskID, historyLength *int) (*a2atype.Task, error) {
+	session, err := s.messageSession(ctx, agent, message)
+	if err != nil {
+		return nil, err
+	}
+	if message.TaskID != "" && message.TaskID != taskID {
+		return nil, a2atype.ErrInvalidParams
+	}
+	return s.awaitBoundary(ctx, session.Id, taskID, historyLength)
+}
+
+// GetCancelResult reads a cancellation's committed result using cancel authority.
+func (s *InteractionService) GetCancelResult(ctx context.Context, agent types.NamespacedName, taskID a2atype.TaskID) (*a2atype.Task, error) {
+	session, err := s.taskSession(ctx, agent, auth.VerbUpdate, taskID)
+	if err != nil {
+		return nil, err
+	}
+	return s.awaitBoundary(ctx, session.Id, taskID, nil)
+}
+
+// messageSession rechecks send authority without creating a Session or requiring
+// runtime readiness. Cleanup and recovery must also work after lifecycle changes.
+func (s *InteractionService) messageSession(ctx context.Context, agent types.NamespacedName, message *a2atype.Message) (*apiv1.Session, error) {
+	if message == nil || message.ID == "" {
+		return nil, a2atype.ErrInvalidParams
+	}
+	if err := validateInteractionAgent(agent); err != nil {
+		return nil, err
+	}
+	var session *apiv1.Session
+	var err error
+	if message.TaskID != "" {
+		session, err = s.taskSession(ctx, agent, auth.VerbUpdate, message.TaskID)
+	} else {
+		session, err = s.storedSession(ctx, auth.VerbCreate, agent, message.ContextID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if message.ContextID != "" && message.ContextID != session.ContextId {
+		return nil, a2atype.NewError(a2atype.ErrInvalidRequest, "message context does not match task")
+	}
+	if err := checkReservedMessageID(ctx, message); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+// checkReservedMessageID rejects scheduler message IDs from every caller but the
+// in-process control plane. Scheduled-run recovery adopts the task holding that
+// ID, so a Session's creator must not be able to plant it.
+func checkReservedMessageID(ctx context.Context, message *a2atype.Message) error {
+	if !strings.HasPrefix(string(message.ID), scheduling.MessageIDPrefix) {
+		return nil
+	}
+	if caller, _ := auth.AuthSessionFrom(ctx); caller != nil {
+		if _, controlPlane := caller.(auth.ControlPlaneSession); controlPlane {
+			return nil
+		}
+	}
+	return a2atype.NewError(a2atype.ErrInvalidParams, "message ID prefix is reserved for scheduled runs")
+}
+
+func (s *InteractionService) awaitBoundary(ctx context.Context, sessionID string, taskID a2atype.TaskID, historyLength *int) (*a2atype.Task, error) {
+	timer := time.NewTicker(50 * time.Millisecond)
+	defer timer.Stop()
+	for {
+		task, err := s.store.GetSettledSessionTask(ctx, sessionID, string(taskID), historyLength)
+		if err == nil {
+			return task, nil
+		}
+		if !errors.Is(err, database.ErrConflict) {
+			return nil, interactionStoreError(ctx, err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (s *InteractionService) GetAgentCard(ctx context.Context, ref types.NamespacedName) (*a2atype.AgentCard, error) {
+	if err := validateInteractionAgent(ref); err != nil {
+		return nil, err
+	}
+	var revisionID string
+	if share, ok := auth.ShareContextFrom(ctx); ok {
+		session, err := s.storedSession(ctx, auth.VerbGet, ref, share.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		revisionID = session.PreparedRevision
+	} else {
+		agent, err := s.agents.Get(ctx, ref)
+		if err != nil {
+			return nil, interactionError(ctx, err)
+		}
+		revisionID = agent.Status.LatestSuccessfulRevision
+	}
+	if revisionID == "" {
+		return nil, a2atype.NewError(a2atype.ErrUnsupportedOperation, "Agent has no successful revision")
+	}
+	revision, err := s.store.GetRuntimeRevision(ctx, revisionID)
+	if err != nil {
+		return nil, a2atype.ErrInternalError
+	}
+	card, err := apia2a.FromProtoAgentCard(revision.AgentCard)
+	if err != nil {
+		logging.FromContext(ctx).ErrorContext(ctx, "failed to decode session agent card", "error", err, "revision", revision.Revision)
+		return nil, a2atype.NewError(a2atype.ErrInternalError, "failed to load Agent Card")
+	}
+
+	return card, nil
+}
+
+func (s *InteractionService) resolveSend(ctx context.Context, agent types.NamespacedName, req *a2atype.SendMessageRequest) (*apiv1.Session, error) {
+	if req == nil || req.Message == nil || req.Message.ID == "" {
+		return nil, a2atype.ErrInvalidParams
+	}
+	if err := validateInteractionAgent(agent); err != nil {
+		return nil, err
+	}
+	apia2a.SanitizeCallerRequest(req)
+	var session *apiv1.Session
+	var err error
+	switch {
+	case req.Message.TaskID != "" || req.Message.ContextID != "":
+		session, err = s.messageSession(ctx, agent, req.Message)
+	default:
+		if err = checkReservedMessageID(ctx, req.Message); err != nil {
+			return nil, err
+		}
+		if _, err = s.agents.Get(ctx, agent); err != nil {
+			return nil, interactionError(ctx, err)
+		}
+		// Session creation already deduplicates request IDs per authenticated creator.
+		requestID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("a2a/"+agent.Namespace+"/"+agent.Name+"/"+req.Message.ID)).String()
+		session, err = s.sessions.Create(ctx, &apiv1.ResourceReference{Namespace: agent.Namespace, Name: agent.Name}, requestID, "")
+		if err != nil {
+			return nil, interactionError(ctx, err)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if req.Message.ContextID != "" && req.Message.ContextID != session.ContextId {
+		return nil, a2atype.NewError(a2atype.ErrInvalidRequest, "message context does not match task")
+	}
+	req.Message.ContextID = session.ContextId
+	if database.RuntimeLost(session) {
+		return nil, ErrRuntimeUnrecoverable
+	}
+	if s.automaticRecovery && database.CrashRecoveryAdmitted(session) {
+		if err := s.recoverForSend(ctx, session.Id); err != nil && !errors.Is(err, errRecoveryUnavailable) {
+			return nil, err
+		}
+		return nil, ErrSendNotAccepted
+	}
+	if session.State != apiv1.RuntimeState_RUNTIME_STATE_READY || session.Operation != apiv1.RuntimeOperation_RUNTIME_OPERATION_NONE {
+		return nil, a2atype.NewError(a2atype.ErrUnsupportedOperation, "Session cannot accept work during a lifecycle operation")
+	}
+	return session, nil
+}
+
+func interactionStoreError(ctx context.Context, err error) error {
+	if errors.Is(err, database.ErrNotFound) {
+		return a2atype.ErrTaskNotFound
+	}
+	if errors.Is(err, database.ErrFailedPrecondition) {
+		return a2atype.NewError(a2atype.ErrInvalidRequest, err.Error())
+	}
+	if errors.Is(err, database.ErrIdempotencyConflict) {
+		return a2atype.NewError(a2atype.ErrInvalidRequest, "message ID was already used with a different request")
+	}
+	if errors.Is(err, database.ErrConflict) {
+		return a2atype.NewError(a2atype.ErrUnsupportedOperation, err.Error())
+	}
+	logging.FromContext(ctx).ErrorContext(ctx, "read session task", "error", err)
+	return a2atype.NewError(a2atype.ErrInternalError, "failed to read task")
+}
+
+// acceptedTask recovers an admitted first message without dispatching it again.
+func (s *InteractionService) acceptedTask(ctx context.Context, sessionID, messageID string, historyLength *int) (*a2atype.Task, error) {
+	task, err := s.store.GetSessionTaskByMessage(ctx, sessionID, "", messageID)
+	if err != nil {
+		return nil, interactionStoreError(ctx, err)
+	}
+	return shapeTask(task, historyLength, true), nil
+}
+
+func (s *InteractionService) taskSession(ctx context.Context, agent types.NamespacedName, verb auth.Verb, taskID a2atype.TaskID) (*apiv1.Session, error) {
+	if err := validateInteractionAgent(agent); err != nil {
+		return nil, err
+	}
+	if _, ok := auth.AuthSessionFrom(ctx); !ok {
+		return nil, a2atype.ErrUnauthenticated
+	}
+	if taskID == "" {
+		return nil, a2atype.ErrInvalidParams
+	}
+	id, err := s.store.SessionForTask(ctx, string(taskID))
+	if err != nil {
+		return nil, interactionStoreError(ctx, err)
+	}
+	return s.storedSession(ctx, verb, agent, id)
+}
+
+func (s *InteractionService) listSessions(ctx context.Context, agent types.NamespacedName, contextID string) ([]string, error) {
+	if err := validateInteractionAgent(agent); err != nil {
+		return nil, err
+	}
+	if contextID != "" {
+		session, err := s.storedSession(ctx, auth.VerbGet, agent, contextID)
+		if err != nil {
+			return nil, err
+		}
+		return []string{session.Id}, nil
+	}
+	ids := []string{}
+	request := ListRequest{Agent: &apiv1.ResourceReference{Namespace: agent.Namespace, Name: agent.Name}, PageSize: 100}
+	for {
+		page, err := s.sessions.List(ctx, request)
+		if err != nil {
+			return nil, interactionError(ctx, err)
+		}
+		for _, session := range page.Sessions {
+			ids = append(ids, session.Id)
+		}
+		if page.NextPageToken == "" {
+			return ids, nil
+		}
+		request.PageToken = page.NextPageToken
+	}
+}
+
+// openingMessageID is the ID of a message that opens a task, which the store
+// accepts once per conversation; "" for a message continuing a task.
+func openingMessageID(req *a2atype.SendMessageRequest) string {
+	if req != nil && req.Message != nil && req.Message.TaskID == "" {
+		return req.Message.ID
+	}
+	return ""
+}
+
+func shapeTask(task *a2atype.Task, historyLength *int, includeArtifacts bool) *a2atype.Task {
+	result := *task
+	if historyLength != nil {
+		switch {
+		case *historyLength == 0:
+			result.History = []*a2atype.Message{}
+		case *historyLength > 0 && *historyLength < len(result.History):
+			result.History = result.History[len(result.History)-*historyLength:]
+		}
+	}
+	if !includeArtifacts {
+		result.Artifacts = nil
+	}
+	return &result
+}
+
+func encodeTaskPageToken(taskID string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(taskID))
+}
+
+func decodeTaskPageToken(token string) (string, error) {
+	if token == "" {
+		return "", nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(decoded) == 0 || !utf8.Valid(decoded) {
+		return "", fmt.Errorf("invalid page token")
+	}
+	return string(decoded), nil
+}
+
+// A missing Agent must never turn a task list into an unfiltered Session query.
+// Direct service callers receive the same validation as transport callers.
+func validateInteractionAgent(agent types.NamespacedName) error {
+	if len(validation.IsDNS1123Label(agent.Namespace)) != 0 || len(validation.IsDNS1123Subdomain(agent.Name)) != 0 {
+		return a2atype.NewError(a2atype.ErrInvalidRequest, "Agent namespace and name are required and must be valid")
+	}
+	return nil
+}
+
+func interactionError(ctx context.Context, err error) error {
+	switch serviceerrors.CodeOf(err) {
+	case serviceerrors.CodeUnauthenticated:
+		return a2atype.ErrUnauthenticated
+	case serviceerrors.CodePermissionDenied:
+		return a2atype.ErrUnauthorized
+	case serviceerrors.CodeNotFound:
+		// A2A's standard not-found error covers missing Agents and conversations.
+		return a2atype.ErrTaskNotFound
+	case serviceerrors.CodeInvalidArgument, serviceerrors.CodeAlreadyExists:
+		return a2atype.NewError(a2atype.ErrInvalidRequest, serviceerrors.MessageOf(err))
+	case serviceerrors.CodeFailedPrecondition, serviceerrors.CodeAborted:
+		return a2atype.NewError(a2atype.ErrUnsupportedOperation, serviceerrors.MessageOf(err))
+	default:
+		logging.FromContext(ctx).ErrorContext(ctx, "agent conversation operation failed", "error", err)
+		return a2atype.ErrInternalError
+	}
+}

@@ -20,7 +20,7 @@ Community of 3 nodes
 
 ## Execution Flows
 
-- **makeCallback** (criticality: 0.62, depth: 2)
+No execution flows pass through this community.
 
 ## Dependencies
 

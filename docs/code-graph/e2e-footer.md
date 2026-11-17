@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 17 nodes
+Community of 15 nodes
 
-- **Size**: 17 nodes
-- **Cohesion**: 0.1100
+- **Size**: 15 nodes
+- **Cohesion**: 0.1644
 - **Dominant Language**: javascript
 
 ## Members
@@ -22,8 +22,6 @@ Community of 17 nodes
 | expectSingleVisibleFooter | Function | ./e2e/persistent-footer.spec.js | 169-176 |
 | expectToastOutsideFooter | Function | ./e2e/persistent-footer.spec.js | 178-194 |
 | settlePublishedWork | Function | ./e2e/persistent-footer.spec.js | 196-200 |
-| test:one stable footer survives view replacement across every application and legal route@L202 | Test | ./e2e/persistent-footer.spec.js | 202-249 |
-| test:the non-Agent launcher copies its prompt and remains aligned without narrow-screen overflow@L251 | Test | ./e2e/persistent-footer.spec.js | 251-355 |
 | test@L428 | Test | ./e2e/persistent-footer.spec.js | 428-428 |
 | test:the footer is visible while authentication configuration is loading@L507 | Test | ./e2e/persistent-footer.spec.js | 507-524 |
 | test:a stalled auth failure follows a privacy-to-application hash transition@L526 | Test | ./e2e/persistent-footer.spec.js | 526-550 |
@@ -40,36 +38,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (58 edge(s))
-- `locator` (31 edge(s))
-- `evaluate` (14 edge(s))
-- `toBeVisible` (14 edge(s))
-- `getBoundingClientRect` (13 edge(s))
-- `toHaveAttribute` (11 edge(s))
+- `expect` (23 edge(s))
+- `locator` (17 edge(s))
 - `route` (10 edge(s))
-- `getElementById` (9 edge(s))
-- `toBe` (8 edge(s))
-- `goto` (8 edge(s))
-- `getByRole` (7 edge(s))
-- `querySelector` (6 edge(s))
-- `toHaveCount` (5 edge(s))
+- `toBeVisible` (8 edge(s))
+- `goto` (6 edge(s))
+- `toHaveAttribute` (6 edge(s))
+- `evaluate` (5 edge(s))
+- `./e2e/persistent-footer.spec.js::test:the non-Agent launcher copies its prompt and remains aligned without narrow-screen overflow@L251` (5 edge(s))
 - `toHaveText` (5 edge(s))
 - `url` (4 edge(s))
+- `./e2e/persistent-footer.spec.js::test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357` (4 edge(s))
+- `getByRole` (4 edge(s))
+- `./e2e/persistent-footer.spec.js::test:one stable footer survives view replacement across every application and legal route@L202` (3 edge(s))
+- `toHaveCount` (3 edge(s))
+- `request` (3 edge(s))
 
 ### Incoming
 
-- `expect` (53 edge(s))
-- `locator` (28 edge(s))
-- `./e2e/persistent-footer.spec.js` (16 edge(s))
-- `toBeVisible` (12 edge(s))
-- `evaluate` (11 edge(s))
-- `toHaveAttribute` (11 edge(s))
-- `getBoundingClientRect` (11 edge(s))
-- `goto` (8 edge(s))
+- `expect` (18 edge(s))
+- `./e2e/persistent-footer.spec.js` (14 edge(s))
+- `locator` (14 edge(s))
 - `route` (7 edge(s))
-- `getByRole` (7 edge(s))
-- `getElementById` (7 edge(s))
-- `toBe` (6 edge(s))
-- `querySelector` (6 edge(s))
+- `goto` (6 edge(s))
+- `toBeVisible` (6 edge(s))
+- `toHaveAttribute` (6 edge(s))
+- `./e2e/persistent-footer.spec.js::test:the non-Agent launcher copies its prompt and remains aligned without narrow-screen overflow@L251` (5 edge(s))
 - `./e2e/persistent-footer.spec.js::test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357` (5 edge(s))
 - `toHaveText` (5 edge(s))
+- `getByRole` (4 edge(s))
+- `./e2e/persistent-footer.spec.js::test:one stable footer survives view replacement across every application and legal route@L202` (3 edge(s))
+- `url` (3 edge(s))
+- `releaseConfiguration` (3 edge(s))
+- `./e2e/persistent-footer.spec.js::test:Cookie Preferences reports a storage failure without changing consent or reloading@L463` (2 edge(s))

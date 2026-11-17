@@ -79,7 +79,7 @@ Community of 723 nodes
 - **login** (criticality: 0.72, depth: 9)
 - **detach_task_tag** (criticality: 0.71, depth: 6)
 - **get_current_user** (criticality: 0.71, depth: 3)
-- *... and 70 more flows.*
+- *... and 28 more flows.*
 
 ## Dependencies
 

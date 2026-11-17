@@ -1,0 +1,139 @@
+// Command oneshot runs a single prompt against an agent config and prints the response.
+//
+// Usage:
+//
+//	# From an ADK config.json file:
+//	go run ./examples/oneshot -config config.json -task "What pods are running?"
+//
+//	# From a sample provider config:
+//	go run ./examples/oneshot -config examples/oneshot/testdata/openai.json -task "List namespaces"
+//
+//	# Stream mode:
+//	go run ./examples/oneshot -config config.json -task "Tell me a joke" -stream
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log/slog"
+	"os"
+
+	adkagent "google.golang.org/adk/v2/agent"
+	"google.golang.org/adk/v2/runner"
+	adksession "google.golang.org/adk/v2/session"
+	"google.golang.org/genai"
+
+	"github.com/niravshah2705/symphony/go/adk/pkg/agent"
+	"github.com/niravshah2705/symphony/go/adk/pkg/config"
+	"github.com/niravshah2705/symphony/go/adk/pkg/mcp"
+	"github.com/niravshah2705/symphony/go/pkg/logging"
+)
+
+func main() {
+	configPath := flag.String("config", "config.json", "Path to agent config.json")
+	task := flag.String("task", "", "Prompt to send to the agent (required)")
+	stream := flag.Bool("stream", false, "Enable streaming output")
+	logLevel := flag.String("log-level", "warn", "Log level (debug, info, warn, error)")
+	flag.Parse()
+
+	if *task == "" {
+		fmt.Fprintln(os.Stderr, "error: -task is required")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	logger, err := logging.New(os.Stderr, *logLevel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid log level %q: %v\n", *logLevel, err)
+		os.Exit(1)
+	}
+	slog.SetDefault(logger)
+	ctx := logging.IntoContext(context.Background(), logger)
+
+	agentConfig, err := config.LoadAgentConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	logger.Info("loaded config",
+		"model_type", config.ModelType(agentConfig.Agent.Model),
+		"http_tools", len(agentConfig.Agent.HttpTools),
+		"sse_tools", len(agentConfig.Agent.SseTools),
+		"stream", agentConfig.Agent.GetStream())
+
+	// Override stream if flag is set
+	if *stream {
+		t := true
+		agentConfig.Agent.Stream = &t
+	}
+
+	adkAgent, err := agent.CreateGoogleADKAgent(ctx, agentConfig, "oneshot", nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating agent: %v\n", err)
+		os.Exit(1)
+	}
+
+	sessionService := adksession.InMemoryService()
+	r, err := runner.New(runner.Config{
+		AppName:        "oneshot",
+		Agent:          adkAgent,
+		SessionService: sessionService,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating runner: %v\n", err)
+		os.Exit(1)
+	}
+
+	sess, err := sessionService.Create(ctx, &adksession.CreateRequest{
+		AppName: "oneshot",
+		UserID:  "user",
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating session: %v\n", err)
+		os.Exit(1)
+	}
+
+	content := &genai.Content{
+		Role:  string(genai.RoleUser),
+		Parts: []*genai.Part{{Text: *task}},
+	}
+
+	useStream := agentConfig.Agent.GetStream()
+	streamMode := adkagent.StreamingModeNone
+	if useStream {
+		streamMode = adkagent.StreamingModeSSE
+	}
+
+	for ev, err := range r.Run(mcp.WithDiscoveryScope(ctx), "user", sess.Session.ID(), content, adkagent.RunConfig{
+		StreamingMode: streamMode,
+	}) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\nerror: %v\n", err)
+			os.Exit(1)
+		}
+		printEvent(ev)
+	}
+	fmt.Println()
+}
+
+func printEvent(ev *adksession.Event) {
+	if ev == nil || ev.Content == nil {
+		return
+	}
+	for _, part := range ev.Content.Parts {
+		if part == nil {
+			continue
+		}
+		if part.Text != "" {
+			fmt.Print(part.Text)
+		}
+		if part.FunctionCall != nil {
+			fmt.Fprintf(os.Stderr, "[tool call: %s]\n", part.FunctionCall.Name)
+		}
+		if part.FunctionResponse != nil {
+			fmt.Fprintf(os.Stderr, "[tool response: %s]\n", part.FunctionResponse.Name)
+		}
+	}
+}

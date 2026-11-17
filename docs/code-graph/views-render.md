@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 743 nodes
+Community of 783 nodes
 
-- **Size**: 743 nodes
-- **Cohesion**: 0.4928
+- **Size**: 783 nodes
+- **Cohesion**: 0.4739
 - **Dominant Language**: javascript
 
 ## Members
@@ -26,8 +26,15 @@ Community of 743 nodes
 | setAccessTokenProvider | Function | ./public/js/api.js | 16-18 |
 | contextId | Function | ./public/js/api.js | 20-23 |
 | setRequestContext | Function | ./public/js/api.js | 26-31 |
+| llmGatewayFlag | Function | ./public/js/api.js | 50-57 |
+| refreshAccessToken | Function | ./public/js/api.js | 72-75 |
+| readJson | Function | ./public/js/api.js | 77-83 |
+| errorCode | Function | ./public/js/api.js | 87-90 |
+| getApiBase | Function | ./public/js/api.js | 98-101 |
 | setApiBase | Function | ./public/js/api.js | 112-115 |
 | uploadToSignedUrl | Function | ./public/js/api.js | 123-140 |
+| notifyAuthenticationRequired | Function | ./public/js/api.js | 142-146 |
+| request | Function | ./public/js/api.js | 148-226 |
 | openStream | Function | ./public/js/api.js | 253-332 |
 | mintFailureCanRetry | Function | ./public/js/api.js | 260-264 |
 | scheduleReconnect | Function | ./public/js/api.js | 266-279 |
@@ -57,15 +64,8 @@ Community of 743 nodes
 | beginMicrosoftSignIn | Function | ./public/js/app.js | 508-516 |
 | authProviderButtons | Function | ./public/js/app.js | 523-541 |
 | beginSignOut | Function | ./public/js/app.js | 543-551 |
-| renderAuthControl | Function | ./public/js/app.js | 553-713 |
-| renderAuthenticationGate | Function | ./public/js/app.js | 715-774 |
-| renderSignInRequired | Function | ./public/js/app.js | 779-801 |
-| renderAccessDenied | Function | ./public/js/app.js | 803-815 |
-| render | Function | ./public/js/app.js | 817-899 |
-| capitalize | Function | ./public/js/app.js | 901-904 |
-| start | Function | ./public/js/app.js | 908-916 |
 
-*... and 693 more members.*
+*... and 733 more members.*
 
 ## Execution Flows
 
@@ -79,42 +79,42 @@ Community of 743 nodes
 - **beginSignOut** (criticality: 0.76, depth: 6)
 - **hostedConnection** (criticality: 0.75, depth: 8)
 - **render** (criticality: 0.73, depth: 6)
-- *... and 14 more flows.*
+- *... and 4 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
+- `append` (231 edge(s))
 - `addEventListener` (227 edge(s))
-- `append` (221 edge(s))
-- `map` (165 edge(s))
-- `String` (114 edge(s))
-- `push` (102 edge(s))
-- `trim` (97 edge(s))
-- `equal` (90 edge(s))
-- `filter` (82 edge(s))
+- `map` (169 edge(s))
+- `String` (118 edge(s))
+- `equal` (117 edge(s))
+- `push` (116 edge(s))
+- `trim` (109 edge(s))
+- `filter` (83 edge(s))
+- `Boolean` (73 edge(s))
 - `isArray` (72 edge(s))
-- `Boolean` (69 edge(s))
+- `setAttribute` (65 edge(s))
+- `has` (62 edge(s))
 - `catch` (62 edge(s))
-- `setAttribute` (61 edge(s))
-- `has` (59 edge(s))
 - `Number` (55 edge(s))
 - `querySelector` (52 edge(s))
 
 ### Incoming
 
+- `./public/js/api.js` (197 edge(s))
 - `./public/js/views/settings.js` (137 edge(s))
+- `equal` (117 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (90 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
 - `./public/js/views/agent-jobs.js` (43 edge(s))
 - `./public/js/views/calls.js` (43 edge(s))
 - `./public/js/i18n.js` (34 edge(s))
-- `match` (29 edge(s))
+- `match` (31 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
-- `./public/js/auth.js` (23 edge(s))
-- `deepEqual` (21 edge(s))
+- `./public/js/auth.js` (24 edge(s))
+- `deepEqual` (24 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
-- `./public/js/views/cost.js` (15 edge(s))
