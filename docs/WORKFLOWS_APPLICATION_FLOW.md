@@ -187,11 +187,41 @@ nothing changes for an install that never touches kagent.
 
 ## 7. Running a published agent
 
-Publishing makes the definition exist; starting a run is a separate surface. The
-planner's `/kagent/status` and `/runtime/:backend/run` routes are **not wired
-yet** — they are on hold pending the planner→orchestrator retirement decision,
-and adding them to a service that may be retired would land the same routes
-twice. Until then the live-cluster check is direct:
+Publishing makes the definition exist; starting a run is a separate surface, and
+it is **not a Kubernetes operation**. In kagent 1.0 a Session — a running
+conversation with one Agent — is deliberately not a custom resource and does not
+live in etcd: kagent's own gRPC API creates it and kagent's PostgreSQL database
+tracks it. Creating, sharing and deleting Sessions, and conversing with one, are
+*kagent-native* operations, authorized by kagent's own gRPC authentication —
+"independent of who can `kubectl apply` an Agent" is the docs' phrasing.
+
+Two consequences for this codebase, both easy to get wrong from the adapter's
+shape alone:
+
+- **The namespaced Role of §7 of the authentication doc cannot start a run.** It
+  is the credential for publish only. A run needs a second client — kagent's
+  Session API and then the A2A conversation transport — and a second identity,
+  because kagent authorizes that plane itself. Nothing in `agent/kagent.js`
+  speaks either protocol today, so there is no `run` route to point at.
+- **The conversation addresses the Agent, not the Session.** Callers reach
+  kagent's A2A gateway at HTTP `/agents/{namespace}/{name}` (gRPC carries the same
+  `namespace/name` in the standard A2A `tenant` field), and the Session id is the
+  A2A `contextId`: omit it and the message starts a conversation, repeat it and
+  the message continues that one. So a workflow run maps to *one context per node
+  execution*, which is a product decision about what the canvas does with a
+  thread, not a transport detail.
+
+Idle Sessions are deleted after `config.sessions.idleTtl` (seven days by
+default), and deleting an Agent retires its definition while existing Sessions
+keep the revision they pinned — so a publish-then-delete does not interrupt a
+run in progress, and re-creating an Agent under the same name gives it a new
+identity that cannot inherit the old one's last successful revision.
+
+Where the endpoint should live is decided: the **gateway**, beside the publish
+route, since the gateway is the control-plane HTTP origin and runs no
+model-generated code. It is not implemented here because it is a different
+client against a different authorization plane, not a missing line in the router.
+Until it exists, the live-cluster check for a publish is direct:
 
 ```
 kubectl get agents.api.kagent.dev -n <KAGENT_NAMESPACE> -o yaml

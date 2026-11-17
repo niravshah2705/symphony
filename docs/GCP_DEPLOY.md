@@ -492,8 +492,11 @@ Three things to know before turning it on:
   coder-control; kagent must not follow it there until something in those
   services imports the adapter, and it never reaches `coder_worker_env`. On the
   cluster side that means a namespaced Role granting the gateway's identity
-  create/get/list/patch/delete on `*.api.kagent.dev` in `kagent_namespace` and
-  on the ConfigMaps it composes there — a wider binding than that and one
+  get/list/create/update/patch/delete on `*.api.kagent.dev` in `kagent_namespace`
+  and on the ConfigMaps it composes there. `get` and `update` are not extras:
+  applying an already-published agent is a read-then-replace, because the replace
+  must name the stored `resourceVersion`, so a Role without either lets the first
+  publish succeed and fails every later one. A wider binding than that and one
   tenant's publish reaches another tenant's agents.
 
 `terraform output kagent` reports `configured`, `switch`, `api_url`, `namespace`,
