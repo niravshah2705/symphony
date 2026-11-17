@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 255 nodes
+Community of 257 nodes
 
-- **Size**: 255 nodes
-- **Cohesion**: 0.3221
+- **Size**: 257 nodes
+- **Cohesion**: 0.3223
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 255 nodes
 | test:runWithRetry with 0 retries never retries@L92 | Test | ./packages/shared/src/agent/llm-retry.test.js | 92-96 |
 | makeStream | Function | ./packages/shared/src/agent/llm-retry.test.js | 128-134 |
 
-*... and 205 more members.*
+*... and 207 more members.*
 
 ## Execution Flows
 
@@ -97,8 +97,8 @@ Community of 255 nodes
 ### Incoming
 
 - `equal` (158 edge(s))
+- `./packages/shared/src/agent/llm.js` (49 edge(s))
 - `./packages/shared/src/agent/localization.js` (48 edge(s))
-- `./packages/shared/src/agent/llm.js` (47 edge(s))
 - `./packages/shared/src/agent/local-intelligence.js` (44 edge(s))
 - `deepEqual` (40 edge(s))
 - `strictEqual` (37 edge(s))

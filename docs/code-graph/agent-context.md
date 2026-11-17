@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 362 nodes
+Community of 367 nodes
 
-- **Size**: 362 nodes
-- **Cohesion**: 0.3380
+- **Size**: 367 nodes
+- **Cohesion**: 0.3355
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 362 nodes
 | test:repository classifier distinguishes remote outages from local workflow errors@L121 | Test | ./packages/shared/src/agent/availability.test.js | 121-142 |
 | clean | Function | ./packages/shared/src/agent/business-pipeline.js | 62-64 |
 
-*... and 312 more members.*
+*... and 317 more members.*
 
 ## Execution Flows
 
@@ -76,14 +76,14 @@ Community of 362 nodes
 
 ### Outgoing
 
-- `equal` (275 edge(s))
+- `equal` (282 edge(s))
 - `String` (57 edge(s))
-- `deepEqual` (52 edge(s))
+- `deepEqual` (53 edge(s))
 - `push` (49 edge(s))
 - `strictEqual` (40 edge(s))
 - `step` (37 edge(s))
-- `filter` (30 edge(s))
-- `map` (28 edge(s))
+- `filter` (31 edge(s))
+- `map` (29 edge(s))
 - `warn` (25 edge(s))
 - `toISOString` (24 edge(s))
 - `ok` (24 edge(s))
@@ -94,11 +94,11 @@ Community of 362 nodes
 
 ### Incoming
 
-- `equal` (275 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (77 edge(s))
+- `equal` (282 edge(s))
+- `./packages/shared/src/agent/coder-orchestrator.js` (78 edge(s))
 - `./packages/shared/src/linear.js` (72 edge(s))
-- `./packages/shared/src/agent/scheduler.js` (55 edge(s))
-- `deepEqual` (52 edge(s))
+- `./packages/shared/src/agent/scheduler.js` (56 edge(s))
+- `deepEqual` (53 edge(s))
 - `./packages/shared/src/agent/business-pipeline.js` (40 edge(s))
 - `strictEqual` (40 edge(s))
 - `./packages/shared/src/agent/coder-flow.test.js` (32 edge(s))
@@ -107,5 +107,5 @@ Community of 362 nodes
 - `./packages/shared/src/agent/apply.js` (22 edge(s))
 - `after` (21 edge(s))
 - `./packages/shared/src/agent/business-pipeline.test.js` (20 edge(s))
-- `./packages/shared/src/agent/scheduler.test.js` (19 edge(s))
+- `./packages/shared/src/agent/scheduler.test.js` (20 edge(s))
 - `./packages/shared/src/agent/approval-gate.js` (15 edge(s))

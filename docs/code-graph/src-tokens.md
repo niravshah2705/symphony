@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 194 nodes
+Community of 195 nodes
 
-- **Size**: 194 nodes
-- **Cohesion**: 0.1904
+- **Size**: 195 nodes
+- **Cohesion**: 0.1900
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 194 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | sendBrowser | Function | ./packages/shared-core/src/billing/notify.js | 20-41 |
 
-*... and 144 more members.*
+*... and 145 more members.*
 
 ## Execution Flows
 
@@ -86,7 +86,7 @@ Community of 194 nodes
 ### Outgoing
 
 - `equal` (53 edge(s))
-- `isArray` (27 edge(s))
+- `isArray` (33 edge(s))
 - `filter` (23 edge(s))
 - `String` (22 edge(s))
 - `includes` (22 edge(s))
@@ -103,7 +103,7 @@ Community of 194 nodes
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (147 edge(s))
+- `./packages/shared-core/src/store.js` (148 edge(s))
 - `equal` (53 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))
