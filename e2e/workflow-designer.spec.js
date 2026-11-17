@@ -264,8 +264,8 @@ async function installDesignerStubs(page, {
   return { apiMutations, workflowApiRequests, store };
 }
 
-async function openDesigner(page) {
-  const response = await page.goto('/#/workflows', { waitUntil: 'domcontentloaded' });
+async function openDesigner(page, path = '/#/workflows') {
+  const response = await page.goto(path, { waitUntil: 'domcontentloaded' });
   expect(response && response.ok()).toBeTruthy();
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('.workflow-page')).toBeVisible();
@@ -490,6 +490,75 @@ test('organization admin creates a safe custom agent, links nodes, and shares th
 
   expect(recording.workflowApiRequests, 'edits are per-graph writes, never a whole-collection import')
     .not.toContain('POST /api/workflows/import');
+});
+
+test('an agent node binds to a runtime and its harness environment survives the round trip', async ({ page }) => {
+  const recording = await installDesignerStubs(page);
+  await openDesigner(page);
+
+  const selectExample = async () => page.getByRole('combobox', { name: 'Active workflow' })
+    .selectOption({ label: 'Independent operations · example' });
+  await selectExample();
+  await selectCanvasNode(page, 'DevOps readiness');
+
+  const inspector = page.getByRole('complementary', { name: 'Workflow inspector' });
+  const runtime = inspector.locator('.workflow-inspector-section', { hasText: /^Runtime binding/ });
+  const labelled = (label) => runtime.locator('.workflow-field', { hasText: new RegExp(`^${label}`) }).locator('select');
+
+  // No env editor until the backend can use one: a substrate node has no Harness
+  // to render these into, and offering rows that never reach a CR is a promise
+  // the publish path would break.
+  await expect(inspector.locator('.workflow-inspector-section', { hasText: /^Harness environment/ })).toHaveCount(0);
+  await inspector.getByRole('button', { name: 'Kagent (in-cluster CRDs)' }).click();
+  await expect(inspector.locator('.workflow-inspector-section', { hasText: /^Harness environment/ })).toBeVisible();
+
+  await labelled('Harness').selectOption('claude-code');
+  await labelled('Task tier').selectOption('complex');
+
+  const environment = inspector.locator('.workflow-inspector-section', { hasText: /^Harness environment/ });
+  const envRows = environment.locator('.workflow-env-row');
+  const scratch = environment.locator('.workflow-env-row--new');
+  const dropped = environment.locator('.workflow-env-dropped');
+  await expect(envRows).toHaveCount(1, 'the scratch row is the only one, and it is never rebuilt under the caret');
+
+  await scratch.locator('input').nth(0).fill('LOG_LEVEL');
+  await scratch.locator('input').nth(1).fill('debug');
+  await scratch.locator('input').nth(1).press('Enter');
+  await expect(envRows).toHaveCount(2);
+  await expect(dropped).toBeEmpty();
+  await expect(envRows.first().locator('input').nth(0)).toHaveValue('LOG_LEVEL');
+  await expect(scratch.locator('input').nth(0)).toHaveValue('', 'a saved row clears the scratch row');
+
+  // The credential-shaped row is refused rather than saved, and the text stays
+  // where it was typed so it can be corrected: clearing it would eat the attempt
+  // and an empty message would read as a successful add.
+  await scratch.locator('input').nth(0).fill('OPENAI_API_KEY');
+  await scratch.locator('input').nth(1).fill('sk-abcdefghijklmnopqrstuvwxyz123456');
+  await scratch.locator('input').nth(1).press('Enter');
+  await expect(dropped).toContainText('was not saved');
+  await expect(scratch.locator('input').nth(0)).toHaveValue('OPENAI_API_KEY');
+  await expect(envRows.first().locator('input').nth(0)).toHaveValue('LOG_LEVEL');
+
+  const boundNode = () => (recording.store.graphs(PRIMARY_ORG.id)
+    .flatMap((graph) => graph.nodes || []).find((node) => node.id === 'io-devops') || {});
+  await expect.poll(boundNode).toHaveProperty('backend', 'kagent');
+  await expect.poll(() => boundNode().taskTier).toBe('complex');
+  await expect.poll(() => boundNode().kagentSpec?.env).toEqual([{ name: 'LOG_LEVEL', value: 'debug' }]);
+
+  // A new document, not a hash change, and with the local draft cache dropped:
+  // what the tab shows afterwards can only have come from the server copy.
+  await page.evaluate(() => window.localStorage.clear());
+  await openDesigner(page, '/?reopen-designer#/workflows');
+  await selectExample();
+  await selectCanvasNode(page, 'DevOps readiness');
+  await expect(inspector.getByRole('button', { name: 'Kagent (in-cluster CRDs)' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(labelled('Harness')).toHaveValue('claude-code');
+  await expect(inspector.locator('.workflow-env-row').first().locator('input').nth(0)).toHaveValue('LOG_LEVEL');
+  await expect(inspector.locator('.workflow-env-row').first().locator('input').nth(1)).toHaveValue('debug');
+
+  // The card says which runtime a publish would target, because the four
+  // standalone lanes look otherwise identical.
+  await expect(page.locator('.workflow-node').filter({ hasText: 'DevOps readiness' })).toContainText('kagent · claude-code · complex');
 });
 
 test('organization members read the shared workflows and cannot change them for anyone', async ({ page }) => {

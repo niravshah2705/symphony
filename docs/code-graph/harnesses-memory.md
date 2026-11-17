@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 306 nodes
+Community of 307 nodes
 
-- **Size**: 306 nodes
-- **Cohesion**: 0.2379
+- **Size**: 307 nodes
+- **Cohesion**: 0.2382
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,7 +16,7 @@ Community of 306 nodes
 |------|------|------|-------|
 | test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
 | test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
-| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
+| test:the worker pool name the planner selects is one string in four places@L573 | Test | ./deploy/gcp/substrate-env.test.js | 573-620 |
 | test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
 | test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
 | test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
@@ -65,10 +65,12 @@ Community of 306 nodes
 | test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
 | test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 256 more members.*
+*... and 257 more members.*
 
 ## Execution Flows
 
+- **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
+- **generatePlan** (criticality: 0.67, depth: 6)
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)

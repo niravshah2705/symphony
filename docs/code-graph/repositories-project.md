@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 723 nodes
+Community of 714 nodes
 
-- **Size**: 723 nodes
-- **Cohesion**: 0.5417
+- **Size**: 714 nodes
+- **Cohesion**: 0.5278
 - **Dominant Language**: python
 
 ## Members
@@ -65,7 +65,7 @@ Community of 723 nodes
 | list_external_grants | Function | ./services/org/app/api/v1/routes_project_grants.py | 39-43 |
 | revoke_external_grant | Function | ./services/org/app/api/v1/routes_project_grants.py | 47-54 |
 
-*... and 673 more members.*
+*... and 664 more members.*
 
 ## Execution Flows
 
@@ -85,36 +85,36 @@ Community of 723 nodes
 
 ### Outgoing
 
-- `get` (335 edge(s))
+- `get` (323 edge(s))
 - `str` (179 edge(s))
 - `Depends` (173 edge(s))
-- `json` (98 edge(s))
-- `post` (62 edge(s))
+- `json` (80 edge(s))
+- `post` (54 edge(s))
 - `setattr` (54 edge(s))
-- `delete` (53 edge(s))
 - `uuid4` (44 edge(s))
+- `delete` (43 edge(s))
 - `set` (38 edge(s))
 - `raises` (36 edge(s))
 - `query` (32 edge(s))
 - `track` (31 edge(s))
-- `len` (29 edge(s))
+- `len` (28 edge(s))
 - `BaseModel` (27 edge(s))
-- `patch` (21 edge(s))
+- `./services/org/tests/e2e/test_lifecycle.py::test_full_lifecycle` (24 edge(s))
 
 ### Incoming
 
-- `json` (87 edge(s))
-- `get` (74 edge(s))
-- `post` (56 edge(s))
+- `json` (69 edge(s))
+- `get` (62 edge(s))
 - `setattr` (49 edge(s))
+- `post` (48 edge(s))
 - `uuid4` (37 edge(s))
 - `raises` (36 edge(s))
+- `./services/org/tests/e2e/test_lifecycle.py::test_full_lifecycle` (24 edge(s))
 - `./services/org/tests/unit/test_project_collaboration.py` (24 edge(s))
-- `len` (22 edge(s))
-- `patch` (21 edge(s))
+- `len` (21 edge(s))
 - `./services/org/app/api/v1/routes_me.py` (20 edge(s))
-- `delete` (17 edge(s))
 - `./services/org/tests/unit/test_environment_init.py` (16 edge(s))
 - `./services/org/app/api/v1/routes_auth.py` (13 edge(s))
 - `./services/org/app/services/environment_service.py` (13 edge(s))
 - `./services/org/tests/unit/test_services.py` (13 edge(s))
+- `./services/org/app/errors.py` (12 edge(s))

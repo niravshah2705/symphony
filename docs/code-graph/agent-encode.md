@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 133 nodes
+Community of 130 nodes
 
-- **Size**: 133 nodes
-- **Cohesion**: 0.3274
+- **Size**: 130 nodes
+- **Cohesion**: 0.3489
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 133 nodes
 | test:a granted scope with no applier refuses before any cluster write@L267 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 267-287 |
 | test:a scope the spec never grants is withheld by name, not an error@L289 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 289-318 |
 
-*... and 83 more members.*
+*... and 80 more members.*
 
 ## Execution Flows
 
@@ -80,17 +80,17 @@ Community of 133 nodes
 
 ### Outgoing
 
-- `equal` (90 edge(s))
+- `equal` (82 edge(s))
 - `String` (47 edge(s))
 - `push` (30 edge(s))
 - `alloc` (30 edge(s))
 - `concat` (29 edge(s))
 - `map` (28 edge(s))
 - `trim` (17 edge(s))
-- `deepEqual` (16 edge(s))
+- `deepEqual` (15 edge(s))
 - `Number` (14 edge(s))
 - `require` (14 edge(s))
-- `includes` (14 edge(s))
+- `includes` (13 edge(s))
 - `isBuffer` (12 edge(s))
 - `filter` (10 edge(s))
 - `replace` (10 edge(s))
@@ -98,18 +98,18 @@ Community of 133 nodes
 
 ### Incoming
 
-- `equal` (90 edge(s))
+- `equal` (82 edge(s))
 - `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
-- `deepEqual` (16 edge(s))
+- `deepEqual` (15 edge(s))
 - `./packages/shared-core/src/store.js` (13 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.test.js` (12 edge(s))
 - `./packages/shared-core/src/agent/substrate-runner.js` (11 edge(s))
 - `./packages/shared-core/src/agent/substrate.test.js` (11 edge(s))
-- `includes` (8 edge(s))
 - `./packages/shared-core/src/guardrails/consumers.js` (8 edge(s))
 - `./packages/shared-core/src/guardrails/spec.js` (8 edge(s))
 - `ok` (7 edge(s))
+- `includes` (7 edge(s))
 - `./packages/shared-core/src/agent/substrate-atespace.test.js` (6 edge(s))
 - `push` (6 edge(s))
 - `./packages/shared-core/src/guardrails/spec.test.js` (6 edge(s))

@@ -4,16 +4,25 @@
 
 ## Overview
 
-Community of 216 nodes
+Community of 300 nodes
 
-- **Size**: 216 nodes
-- **Cohesion**: 0.2651
+- **Size**: 300 nodes
+- **Cohesion**: 0.2351
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 34-38 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 41-51 |
+| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 57-68 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 71-79 |
+| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 82-85 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 108-120 |
+| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 122-147 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 150-160 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 163-175 |
 | dnsLabel | Function | ./packages/shared-core/src/agent/kagent.js | 36-42 |
 | kagentConfig | Function | ./packages/shared-core/src/agent/kagent.js | 44-60 |
 | defaultRequest | Function | ./packages/shared-core/src/agent/kagent.js | 62-93 |
@@ -55,17 +64,8 @@ Community of 216 nodes
 | test:the rendered CR never carries a bearer token, kubeconfig path or secret value@L278 | Test | ./packages/shared-core/src/agent/kagent.test.js | 278-284 |
 | isLocalInference | Function | ./packages/shared-core/src/agent/model-presets.js | 25-25 |
 | isPurposeRole | Function | ./packages/shared-core/src/agent/model-presets.js | 46-46 |
-| assert | Function | ./packages/shared-core/src/agent/model-presets.js | 65-67 |
-| validateCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 69-197 |
-| getPreset | Function | ./packages/shared-core/src/agent/model-presets.js | 210-212 |
-| presetsForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 214-219 |
-| presetForRole | Function | ./packages/shared-core/src/agent/model-presets.js | 221-226 |
-| presetForModel | Function | ./packages/shared-core/src/agent/model-presets.js | 228-230 |
-| clampInt | Function | ./packages/shared-core/src/agent/model-presets.js | 232-236 |
-| clampNumber | Function | ./packages/shared-core/src/agent/model-presets.js | 238-242 |
-| clampTemperature | Function | ./packages/shared-core/src/agent/model-presets.js | 244-249 |
 
-*... and 166 more members.*
+*... and 250 more members.*
 
 ## Execution Flows
 
@@ -79,42 +79,42 @@ Community of 216 nodes
 - **resetTenantToDefaults** (criticality: 0.70, depth: 6)
 - **getActorTemplate** (criticality: 0.70, depth: 8)
 - **importV1Workflows** (criticality: 0.70, depth: 6)
-- *... and 13 more flows.*
+- *... and 20 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (128 edge(s))
-- `isArray` (61 edge(s))
-- `includes` (52 edge(s))
-- `deepEqual` (47 edge(s))
-- `map` (44 edge(s))
-- `push` (37 edge(s))
-- `slice` (36 edge(s))
+- `equal` (150 edge(s))
+- `isArray` (63 edge(s))
+- `deepEqual` (61 edge(s))
+- `includes` (53 edge(s))
+- `push` (52 edge(s))
+- `map` (45 edge(s))
+- `slice` (42 edge(s))
+- `String` (39 edge(s))
 - `filter` (36 edge(s))
-- `String` (30 edge(s))
+- `set` (23 edge(s))
+- `trim` (23 edge(s))
 - `has` (23 edge(s))
+- `test` (22 edge(s))
+- `ok` (22 edge(s))
 - `find` (20 edge(s))
-- `test` (18 edge(s))
-- `ok` (18 edge(s))
-- `toISOString` (16 edge(s))
-- `trim` (15 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (147 edge(s))
-- `equal` (128 edge(s))
-- `deepEqual` (47 edge(s))
+- `equal` (150 edge(s))
+- `./packages/shared-core/src/store.js` (148 edge(s))
+- `deepEqual` (61 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/store.js` (38 edge(s))
 - `./packages/shared-core/src/workflow/model.js` (37 edge(s))
 - `./packages/shared-core/src/agent/kagent.test.js` (26 edge(s))
 - `./packages/shared-core/src/agent/kagent.js` (25 edge(s))
-- `ok` (18 edge(s))
-- `./packages/shared-core/src/workflow/model.test.js` (12 edge(s))
-- `match` (10 edge(s))
-- `includes` (10 edge(s))
-- `join` (9 edge(s))
-- `stringify` (8 edge(s))
-- `./packages/shared-core/src/agent/oauth-tokens.js` (7 edge(s))
+- `./packages/shared-core/src/messaging/events.js` (25 edge(s))
+- `ok` (22 edge(s))
+- `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
+- `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
+- `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
+- `match` (13 edge(s))
+- `push` (12 edge(s))

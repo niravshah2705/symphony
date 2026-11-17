@@ -144,6 +144,29 @@ function safeId(value) {
   return String(value || '').replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 100);
 }
 
+/**
+ * The env rows a publish would actually carry. Everything else is already gone:
+ * the model drops unnamed rows, reserved names and credential-shaped pairs on
+ * normalize, so the editor must not offer back what the CRD will refuse.
+ */
+function envRowsOf(node) {
+  const rows = node && node.kagentSpec && Array.isArray(node.kagentSpec.env) ? node.kagentSpec.env : [];
+  return rows.filter((row) => row && typeof row.name === 'string' && row.name);
+}
+
+/**
+ * Card footer: which runtime a publish of this node would target. A node says
+ * "Agent profile" without that and the canvas then looks identical whether it
+ * will render kagent CRDs or a substrate actor — which is the one thing an
+ * operator needs before clicking publish.
+ */
+function agentRuntimeSummary(node) {
+  const parts = [node.backend === 'kagent' ? 'kagent' : 'substrate'];
+  if (node.backend === 'kagent' && node.harness) parts.push(node.harness);
+  parts.push(node.taskTier || 'medium');
+  return parts.join(' · ');
+}
+
 function nodeLabel(node, state) {
   if (node.name) return node.name;
   if (node.kind === 'agent') return findAgentProfile(node.refId, state)?.name || 'Agent';
@@ -696,7 +719,7 @@ export async function renderWorkflows(view) {
       el('footer', { class: 'workflow-node-footer' }, [
         node.kind === 'approval' ? el('span', {}, node.requiredRole || 'Human reviewer') : null,
         node.kind === 'environment' ? el('span', {}, 'Execution context') : null,
-        node.kind === 'agent' ? el('span', {}, 'Agent profile') : null,
+        node.kind === 'agent' ? el('span', {}, agentRuntimeSummary(node)) : null,
       ]),
       outputPort,
     ]);
@@ -885,6 +908,181 @@ export async function renderWorkflows(view) {
     ];
   }
 
+  /**
+   * Runtime binding for an agent node. These live on the NODE rather than the
+   * profile because one curated agent can run on either backend, and a publish
+   * reads exactly these four names. The env editor appears only under kagent
+   * because a substrate run ignores those bindings — but the state keeps
+   * `kagentSpec` when the backend changes, so switching over to compare patterns
+   * and back does not quietly delete a teammate's harness configuration.
+   */
+  function agentRuntimeSection(node) {
+    const live = () => (currentWorkflow().nodes.find((candidate) => candidate.id === node.id) || node);
+    const patch = (next, { redraw = false } = {}) => updateSelectedNode(next, { redrawInspector: redraw });
+    const patchEnv = (rows) => {
+      const spec = { ...deepClone(live().kagentSpec || {}), env: rows };
+      patch({ kagentSpec: spec });
+    };
+
+    const segmented = el('div', { class: 'workflow-segmented', role: 'group', 'aria-label': 'Execution backend' });
+    for (const value of designerModel.WORKFLOW_NODE_BACKENDS) {
+      const button = el('button', {
+        type: 'button',
+        disabled: !canEdit,
+        'aria-pressed': String(value === (node.backend || 'substrate')),
+      }, value === 'kagent' ? 'Kagent (in-cluster CRDs)' : 'Substrate (sandbox actors)');
+      button.addEventListener('click', () => {
+        if (!canEdit || value === live().backend) return;
+        patch({ backend: value }, { redraw: true });
+      });
+      segmented.append(button);
+    }
+
+    const choice = (label, values, current, key, emptyLabel) => {
+      const select = el('select', { disabled: !canEdit }, [
+        ...(emptyLabel ? [option('', emptyLabel, !current)] : []),
+        ...values.map((value) => option(value, value, value === current)),
+      ]);
+      select.addEventListener('change', () => patch({ [key]: select.value }));
+      return field(label, select);
+    };
+
+    // Env rows commit on `change`, not on every keystroke. The editor keeps the
+    // list it has already written rather than re-reading the node, because the
+    // save normalizes asynchronously: a row checked against state immediately
+    // after a write reads as "not saved", and the next write then sends the same
+    // name twice — and the model keeps the first entry, so the value the user
+    // just typed would be dropped. `normalizeKagentSpec` is the same function
+    // the save path runs, so the editor's list and the saved list cannot diverge.
+    const rows = el('div', { class: 'workflow-env-rows' });
+    const dropped = el('p', { class: 'workflow-env-dropped', role: 'status' }, '');
+    const envCountNote = el('small', { class: 'muted' }, '');
+    const accepted = (next) => (designerModel.normalizeKagentSpec({ env: next }).spec || {}).env || [];
+    let envDraft = accepted(envRowsOf(live()));
+
+    const envRow = (row) => {
+      const name = textInput(row.name, {
+        maxlength: '128', placeholder: 'NAME', disabled: !canEdit, 'aria-label': 'Environment variable name',
+      });
+      const value = textInput(row.value, {
+        maxlength: '2048', placeholder: 'literal value', disabled: !canEdit, 'aria-label': `Value for ${row.name}`,
+      });
+      const commit = () => {
+        const index = envDraft.findIndex((item) => item.name === name.dataset.committed);
+        if (index < 0) return renderRows();
+        const next = [...envDraft];
+        next[index] = { name: name.value.trim(), value: value.value };
+        writeEnv(next);
+        renderRows();
+      };
+      name.dataset.committed = row.name;
+      name.addEventListener('change', commit);
+      value.addEventListener('change', commit);
+      const remove = el('button', {
+        type: 'button', class: 'workflow-icon-button', disabled: !canEdit,
+        'aria-label': `Remove ${row.name}`,
+      }, icon('close', { size: 13 }));
+      remove.addEventListener('click', () => {
+        writeEnv(envDraft.filter((item) => item.name !== name.dataset.committed));
+        renderRows();
+      });
+      return el('div', { class: 'workflow-env-row' }, [name, value, remove]);
+    };
+
+    // The row you are adding to is a fixed element with its own commit, not a
+    // `change` handler: a name change and a value change are two separate blurs,
+    // and committing on the first would clear the row before the value is typed
+    // while committing on the second would send a nameless row the model drops.
+    const scratchName = textInput('', {
+      maxlength: '128', placeholder: 'NAME', disabled: !canEdit, 'aria-label': 'New environment variable name',
+    });
+    const scratchValue = textInput('', {
+      maxlength: '2048', placeholder: 'literal value', disabled: !canEdit, 'aria-label': 'New environment variable value',
+    });
+    const addVar = el('button', {
+      type: 'button', class: 'workflow-env-add', disabled: !canEdit,
+    }, 'Add variable');
+    const scratch = el('div', { class: 'workflow-env-row workflow-env-row--new' }, [
+      scratchName, scratchValue, addVar,
+    ]);
+    rows.append(scratch);
+    const commitScratch = () => {
+      const updated = { name: scratchName.value.trim(), value: scratchValue.value };
+      addVar.blur();
+      if (!updated.name) return;
+      writeEnv([...envDraft, updated]);
+      const saved = envDraft.find((item) => item.name === updated.name);
+      if (!saved) {
+        dropped.textContent = `"${updated.name}" was not saved: the name or the value reads like a credential, or the name is not a valid environment variable. Keys belong in a ModelConfig apiKeySecret or a RemoteMCPServer header reference.`;
+      } else if (saved.value !== updated.value) {
+        dropped.textContent = `"${updated.name}" already has a value. Edit that row instead of adding a second one.`;
+      } else {
+        scratchName.value = '';
+        scratchValue.value = '';
+        dropped.textContent = '';
+      }
+      renderRows();
+    };
+    addVar.addEventListener('click', commitScratch);
+    for (const input of [scratchName, scratchValue]) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        commitScratch();
+      });
+    }
+
+    const writeEnv = (next) => {
+      envDraft = accepted(next);
+      patchEnv(envDraft);
+    };
+
+    function renderRows() {
+      const onScreen = Array.from(rows.children).filter((child) => child !== scratch);
+      const agrees = onScreen.length === envDraft.length
+        && onScreen.every((row, i) => row.children[0].value.trim() === envDraft[i].name);
+      if (agrees) {
+        // Only values moved: patch them in place so the caret stays where the
+        // user put it. A row the model rewrote (truncated or refused) is the
+        // only input this touches.
+        onScreen.forEach((row, i) => {
+          if (row.children[1].value !== envDraft[i].value) row.children[1].value = envDraft[i].value;
+          row.children[0].dataset.committed = envDraft[i].name;
+        });
+      } else {
+        // Rebuilt around the scratch row rather than into it: replacing the
+        // container's children would detach the input being typed into.
+        onScreen.forEach((row) => row.remove());
+        for (const row of envDraft.map(envRow)) rows.insertBefore(row, scratch);
+      }
+      scratch.hidden = !canEdit || envDraft.length >= designerModel.KAGENT_ENV_MAX;
+      envCountNote.textContent = `${envDraft.length} of ${designerModel.KAGENT_ENV_MAX} variables. PLUGIN_ROOT and PLUGIN_DATA are reserved by the runtime; a name that reads like a credential is refused.`;
+    }
+    renderRows();
+
+    const sections = [
+      el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Runtime binding'),
+        field('Execution backend', segmented),
+        choice('Harness', designerModel.HARNESS_OPTIONS, node.harness, 'harness', 'Platform default'),
+        choice('Model family', designerModel.MODEL_FAMILIES, node.modelFamily, 'modelFamily', 'Inherit from the profile'),
+        choice('Task tier', designerModel.TASK_TIERS, node.taskTier || 'medium', 'taskTier', ''),
+        el('p', { class: 'muted' }, 'Publish reads these four; the substrate pattern ignores the kagent bindings and runs the profile as an actor.'),
+      ]),
+    ];
+
+    if (node.backend === 'kagent') {
+      sections.push(el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Harness environment'),
+        rows,
+        dropped,
+        el('p', { class: 'workflow-secret-warning' }, 'Literal values only. A name or value that looks like a credential is dropped here — keys belong in a ModelConfig apiKeySecret or a RemoteMCPServer header reference.'),
+        envCountNote,
+      ]));
+    }
+    return sections;
+  }
+
   function nodeInspector(node) {
     const workflow = currentWorkflow();
     const name = textInput(node.name || nodeLabel(node, state), { maxlength: '100', disabled: !canEdit });
@@ -918,6 +1116,7 @@ export async function renderWorkflows(view) {
         });
         body.push(edit);
       }
+      if (node.kind === 'agent') body.push(...agentRuntimeSection(node));
     }
 
     const dependency = el('select', { disabled: !canEdit }, [

@@ -903,6 +903,32 @@ body.workflow-dragging * { cursor: grabbing !important; }
 .workflow-connection-summary .icon { width: 13px; height: 13px; color: var(--muted); }
 .workflow-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .workflow-field-grid .workflow-field { margin-bottom: 0; }
+.workflow-env-rows { display: grid; gap: 6px; margin-bottom: 8px; }
+.workflow-env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.workflow-env-row input { min-width: 0; margin-bottom: 0; }
+.workflow-env-row .workflow-icon-button { flex: none; }
+.workflow-env-row--new .workflow-env-add {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.workflow-env-row--new .workflow-env-add:disabled { opacity: 0.45; }
+.workflow-env-dropped:not(:empty) {
+  margin: 0 0 8px;
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .workflow-check {
   min-height: 32px;
   display: grid;

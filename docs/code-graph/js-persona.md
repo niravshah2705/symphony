@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| allowedByPersona | Function | ./public/js/views/workflows.js | 522-522 |
-| allowedCategoriesForPersona | Function | ./public/js/workflow-designer-model.mjs | 1444-1448 |
-| personaAllowsCategory | Function | ./public/js/workflow-designer-model.mjs | 1450-1454 |
+| allowedByPersona | Function | ./public/js/views/workflows.js | 545-545 |
+| allowedCategoriesForPersona | Function | ./public/js/workflow-designer-model.mjs | 1448-1452 |
+| personaAllowsCategory | Function | ./public/js/workflow-designer-model.mjs | 1454-1458 |
 
 ## Execution Flows
 

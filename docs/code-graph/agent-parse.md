@@ -4,38 +4,108 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 228 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.0000
+- **Size**: 228 nodes
+- **Cohesion**: 0.2820
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| parseCodeInput | Function | ./packages/shared-core/src/agent/claude-oauth.js | 91-105 |
-| test:parseCodeInput splits code#state, tolerates bare code and full URLs@L47 | Test | ./packages/shared/src/agent/claude-oauth.test.js | 47-56 |
+| liveConfig | Function | ./e2e-live/full-pipeline.spec.js | 23-26 |
+| requiredPipelineFixture | Function | ./e2e-live/full-pipeline.spec.js | 35-45 |
+| issueFromResponse | Function | ./e2e-live/full-pipeline.spec.js | 47-53 |
+| finalEvidence | Function | ./e2e-live/full-pipeline.spec.js | 55-86 |
+| test:03 — Tenant A completes the approved plan → code → test → deploy pipeline@L88 | Test | ./e2e-live/full-pipeline.spec.js | 88-290 |
+| load | Function | ./e2e-live/full-pipeline.spec.js | 169-173 |
+| contextHeaders | Function | ./e2e-live/scripts/audit.js | 20-27 |
+| readBoundedJson | Function | ./e2e-live/scripts/audit.js | 29-39 |
+| requestJson | Function | ./e2e-live/scripts/audit.js | 41-64 |
+| assert | Function | ./e2e-live/scripts/audit.js | 66-68 |
+| noElevatedClaims | Function | ./e2e-live/scripts/audit.js | 70-80 |
+| validateIdentity | Function | ./e2e-live/scripts/audit.js | 82-104 |
+| browserSession | Function | ./e2e-live/scripts/audit.js | 106-132 |
+| normalizeRepository | Function | ./e2e-live/scripts/audit.js | 134-136 |
+| hasCanary | Function | ./e2e-live/scripts/audit.js | 138-140 |
+| ownContextHeaders | Function | ./e2e-live/scripts/audit.js | 142-144 |
+| auditTenantReadiness | Function | ./e2e-live/scripts/audit.js | 146-194 |
+| githubHeaders | Function | ./e2e-live/scripts/audit.js | 196-205 |
+| githubRequest | Function | ./e2e-live/scripts/audit.js | 207-221 |
+| githubContent | Function | ./e2e-live/scripts/audit.js | 223-231 |
+| auditRepository | Function | ./e2e-live/scripts/audit.js | 233-258 |
+| auditRecord | Function | ./e2e-live/scripts/audit.js | 260-262 |
+| writeAudit | Function | ./e2e-live/scripts/audit.js | 264-271 |
+| runAudit | Function | ./e2e-live/scripts/audit.js | 273-378 |
+| usage | Function | ./e2e-live/scripts/capture-auth.js | 12-18 |
+| parseCaptureArgs | Function | ./e2e-live/scripts/capture-auth.js | 20-43 |
+| atomicWriteStorageState | Function | ./e2e-live/scripts/capture-auth.js | 45-63 |
+| verifySignedIn | Function | ./e2e-live/scripts/capture-auth.js | 65-82 |
+| captureTenant | Function | ./e2e-live/scripts/capture-auth.js | 84-100 |
+| main | Function | ./e2e-live/scripts/capture-auth.js | 102-136 |
+| liveConfig | Function | ./e2e-live/security-evidence.spec.js | 34-37 |
+| requestRecord | Function | ./e2e-live/security-evidence.spec.js | 41-44 |
+| requestLabel | Function | ./e2e-live/security-evidence.spec.js | 46-48 |
+| isTenantPrivateRequest | Function | ./e2e-live/security-evidence.spec.js | 50-74 |
+| privateRequestLabels | Function | ./e2e-live/security-evidence.spec.js | 76-78 |
+| openAgent | Function | ./e2e-live/security-evidence.spec.js | 80-92 |
+| settlePublishedWork | Function | ./e2e-live/security-evidence.spec.js | 94-98 |
+| sendAgentRequest | Function | ./e2e-live/security-evidence.spec.js | 100-104 |
+| accountContextSnapshot | Function | ./e2e-live/security-evidence.spec.js | 106-126 |
+| containsText | Function | ./e2e-live/security-evidence.spec.js | 128-130 |
+| payloadContainsAny | Function | ./e2e-live/security-evidence.spec.js | 132-136 |
+| expectNoFixtureDisclosure | Function | ./e2e-live/security-evidence.spec.js | 138-149 |
+| runStatus | Function | ./e2e-live/security-evidence.spec.js | 151-153 |
+| traverseMainNavigation | Function | ./e2e-live/security-evidence.spec.js | 155-205 |
+| persistRecordedResult | Function | ./e2e-live/security-evidence.spec.js | 207-228 |
+| describe:recorded anonymous security journey@L230 | Test | ./e2e-live/security-evidence.spec.js | 230-369 |
+| test:01 — public questions and RAG work, while every pipeline start is denied@L233 | Test | ./e2e-live/security-evidence.spec.js | 233-368 |
+| describe:recorded authenticated tenant-isolation journey@L371 | Test | ./e2e-live/security-evidence.spec.js | 371-674 |
+| test:02 — Tenant A cannot discover or control Tenant B through UI or API@L374 | Test | ./e2e-live/security-evidence.spec.js | 374-673 |
+| requiredString | Function | ./e2e-live/support/config.js | 17-23 |
+
+*... and 178 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **runCoder** (criticality: 0.67, depth: 7)
+- **runPlannedCoder** (criticality: 0.66, depth: 7)
 
 ## Dependencies
 
 ### Outgoing
 
-- `deepEqual` (5 edge(s))
-- `parseCodeInput` (5 edge(s))
-- `trim` (2 edge(s))
-- `String` (1 edge(s))
-- `test` (1 edge(s))
-- `get` (1 edge(s))
-- `split` (1 edge(s))
+- `equal` (139 edge(s))
+- `join` (84 edge(s))
+- `expect` (73 edge(s))
+- `includes` (68 edge(s))
+- `String` (58 edge(s))
+- `endsWith` (40 edge(s))
+- `trim` (36 edge(s))
+- `execFileSync` (34 edge(s))
+- `stringify` (32 edge(s))
+- `test` (30 edge(s))
+- `toBe` (29 edge(s))
+- `parse` (29 edge(s))
+- `locator` (28 edge(s))
+- `throws` (28 edge(s))
+- `encodeURIComponent` (26 edge(s))
 
 ### Incoming
 
-- `deepEqual` (5 edge(s))
-- `parseCodeInput` (5 edge(s))
-- `./packages/shared-core/src/agent/claude-oauth.js` (2 edge(s))
-- `./packages/shared/src/agent/claude-oauth.test.js` (1 edge(s))
+- `equal` (138 edge(s))
+- `./packages/shared/src/agent/repository-broker.js` (83 edge(s))
+- `expect` (56 edge(s))
+- `./packages/shared/src/agent/repository-broker.test.js` (54 edge(s))
+- `join` (42 edge(s))
+- `throws` (28 edge(s))
+- `./e2e-live/scripts/audit.js` (27 edge(s))
+- `toBe` (26 edge(s))
+- `./e2e-live/support/config.js` (24 edge(s))
+- `execFileSync` (24 edge(s))
+- `./e2e-live/support/security-evidence.js` (22 edge(s))
+- `./e2e-live/support/pipeline-evidence.js` (21 edge(s))
+- `./e2e-live/security-evidence.spec.js` (17 edge(s))
+- `rejects` (17 edge(s))
+- `encodeURIComponent` (16 edge(s))

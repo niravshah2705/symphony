@@ -1426,6 +1426,10 @@ export {
   normalizeGateConfig,
   validateGateConfig,
   normalizeConnectorList,
+  // The canvas disables "Add variable" at this count; the model drops the 41st
+  // row silently, so the two have to read one number or the editor promises rows
+  // that vanish on save.
+  KAGENT_ENV_MAX,
 };
 
 /** Convert a v1 workflow graph into the v2 shape (substrate defaults backfilled). */
