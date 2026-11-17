@@ -25,15 +25,20 @@ permissions:
 
 concurrency:
   group: runtime-images-${{ github.ref }}
-  cancel-in-progress: true
+  # A run publishes multi-arch tags; cancelling it mid-push can leave a
+  # manifest list pointing at a partially uploaded set.
+  cancel-in-progress: false
 
 jobs:
   plan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Preflight the version manifest
         run: scripts/verify-runtime-images.sh
@@ -42,23 +47,33 @@ jobs:
         id: build-matrix
         env:
           ONLY_RUNTIME: ${{ github.event.inputs.runtime }}
+          BUILD_CONTEXT: go
         run: |
-          python3 - "$ONLY_RUNTIME" <<'PY'
+          python3 - "$ONLY_RUNTIME" "$BUILD_CONTEXT" <<'PY' >> "$GITHUB_OUTPUT"
           import csv, json, sys
-          only = sys.argv[1].strip()
+          only, context = sys.argv[1].strip().rstrip("/"), sys.argv[2].strip().rstrip("/")
+          prefix = context + "/"
           rows = []
           with open("go/harness/runtime-images.csv", newline="") as fh:
               for r in csv.DictReader(fh):
                   if only and r["runtime"] != only:
                       continue
+                  image, version = r["image"], r["version"]
+                  tags = [f"{image}:{version}"]
+                  if (r.get("current") or "").strip() == "true":
+                      tags.append(f"{image}:latest")
+                  dockerfile = r["dockerfile"].strip()
+                  if not dockerfile.startswith(prefix):
+                      sys.exit(f"{dockerfile} is not inside the {context}/ build context")
                   rows.append({
                       "runtime": r["runtime"],
-                      "dockerfile": r["dockerfile"],
-                      "image": r["image"],
-                      "version": r["version"],
+                      # build-push-action resolves `file` against `context`.
+                      "dockerfile": dockerfile[len(prefix):],
+                      "image": image,
+                      "version": version,
+                      "tags": ",".join(tags),
                       "amd64": (r.get("amd64_sha256") or "").strip(),
                       "arm64": (r.get("arm64_sha256") or "").strip(),
-                      "current": (r.get("current") or "").strip(),
                   })
           if not rows:
               sys.exit("no rows selected from runtime-images.csv")
@@ -68,6 +83,7 @@ jobs:
   build:
     needs: plan
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -75,7 +91,9 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     name: ${{ matrix.runtime }} ${{ matrix.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: docker/setup-qemu-action@v3
 
@@ -101,8 +119,6 @@ jobs:
             RUNTIME_VERSION=${{ matrix.version }}
             AMD64_SHA256=${{ matrix.amd64 }}
             ARM64_SHA256=${{ matrix.arm64 }}
-          tags: >-
-            ${{ matrix.image }}:${{ matrix.version }}
-            ${{ matrix.current == 'true' && format(',{0}:latest', matrix.image) || '' }}
+          tags: ${{ matrix.tags }}
           cache-from: type=gha,scope=runtime-${{ matrix.runtime }}-${{ matrix.version }}
           cache-to: type=gha,mode=max,scope=runtime-${{ matrix.runtime }}-${{ matrix.version }}
