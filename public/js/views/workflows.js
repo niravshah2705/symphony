@@ -89,6 +89,19 @@ let flushPendingDesignerSave = null;
 let onDesignerReconnect = null;
 let persistenceEventsBound = false;
 
+/**
+ * A workspace switch drops the queued designer save instead of flushing it.
+ *
+ * The save flushes on `pagehide`, and a switch reloads the page — by which point
+ * `changeWorkspaceOrganization` has already repointed every request header at the
+ * new organization. Flushing would therefore re-file organization A's workflow
+ * under organization B's context (or 404 trying), which is the worse failure: the
+ * draft does not belong to the tenant the user is standing in either way.
+ */
+export function invalidate() {
+  flushPendingDesignerSave = null;
+}
+
 function bindPersistenceEvents() {
   if (persistenceEventsBound) return;
   persistenceEventsBound = true;

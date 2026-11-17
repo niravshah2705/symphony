@@ -7,6 +7,7 @@ import {
   createSingleFlight,
 } from './auth-retry.mjs';
 import { mintedStreamContextQuerySuffix } from './stream-context.mjs';
+import { readLlmGatewayFlag } from './llm-gateway.mjs';
 
 // Thin fetch wrapper around the backend API.
 
@@ -34,26 +35,13 @@ export function getRequestContext() {
   return requestContext;
 }
 
-/**
- * Per-request LLM gateway opt-in (feature flag). Stored in localStorage —
- * `localStorage.setItem('aiFleetLlmGateway', 'litellm')` — and read per
- * request so toggling applies immediately. The gateway honors the resulting
- * X-AI-Fleet-Llm-Gateway header only on deployments with THAT gateway
- * configured; everywhere else requests follow the standard route.
- * Must stay a subset of shared-core's CONFIG.LLM_GATEWAY_MODES (the browser
- * bundle cannot import it, so this list is deliberately duplicated — an unknown
- * value is dropped at ingestion anyway, never forwarded).
- */
-const LLM_GATEWAY_STORAGE_KEY = 'aiFleetLlmGateway';
-const LLM_GATEWAY_MODES = ['langsmith', 'litellm'];
-
+// Read per request (see llm-gateway.mjs for the storage contract), so toggling the
+// flag applies to the next call without a reload.
 function llmGatewayFlag() {
-  try {
-    const value = (window.localStorage.getItem(LLM_GATEWAY_STORAGE_KEY) || '').trim().toLowerCase();
-    return LLM_GATEWAY_MODES.includes(value) ? value : '';
-  } catch (_) {
-    return ''; /* storage unavailable (private mode) — flag off */
-  }
+  return readLlmGatewayFlag({
+    storage: typeof window === 'undefined' ? null : window.localStorage,
+    organizationId: requestContext.organizationId,
+  });
 }
 
 /** EventSource cannot send custom headers, so its short-lived token-bound context
