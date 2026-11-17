@@ -14,7 +14,7 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| decodePushMessage | Function | ./packages/shared-core/src/messaging/publisher.js | 37-45 |
+| decodePushMessage | Function | ./packages/shared-core/src/messaging/publisher.js | 36-44 |
 | test:decodePushMessage returns null for malformed input@L40 | Test | ./packages/shared/src/messaging/publisher.test.js | 40-44 |
 
 ## Execution Flows

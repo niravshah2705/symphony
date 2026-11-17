@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| planWith | Function | ./packages/shared/src/agent/model-routing.test.js | 72-77 |
-| test:PlanSchema: a missing tshirtSize defaults to M@L79 | Test | ./packages/shared/src/agent/model-routing.test.js | 79-82 |
-| test:PlanSchema: keeps a messy tshirtSize (clamped later at write time)@L84 | Test | ./packages/shared/src/agent/model-routing.test.js | 84-87 |
+| planWith | Function | ./packages/shared/src/agent/model-routing.test.js | 55-60 |
+| test:PlanSchema: a missing tshirtSize defaults to M@L62 | Test | ./packages/shared/src/agent/model-routing.test.js | 62-65 |
+| test:PlanSchema: keeps a messy tshirtSize (clamped later at write time)@L67 | Test | ./packages/shared/src/agent/model-routing.test.js | 67-70 |
 
 ## Execution Flows
 

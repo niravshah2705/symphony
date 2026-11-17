@@ -4,18 +4,19 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 3 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.2069
+- **Size**: 3 nodes
+- **Cohesion**: 0.1622
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| envLocal | Function | ./deploy/gcp/substrate-env.test.js | 153-160 |
-| test:substrate env reaches the dispatchers and never the worker@L213 | Test | ./deploy/gcp/substrate-env.test.js | 213-237 |
+| tfFile | Function | ./deploy/gcp/substrate-env.test.js | 28-28 |
+| envLocal | Function | ./deploy/gcp/substrate-env.test.js | 152-159 |
+| test:substrate env reaches the dispatchers and no other workload@L212 | Test | ./deploy/gcp/substrate-env.test.js | 212-235 |
 
 ## Execution Flows
 
@@ -25,18 +26,21 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (4 edge(s))
+- `doesNotMatch` (3 edge(s))
 - `indexOf` (2 edge(s))
-- `ok` (2 edge(s))
-- `doesNotMatch` (2 edge(s))
+- `match` (2 edge(s))
 - `notEqual` (1 edge(s))
 - `filter` (1 edge(s))
+- `ok` (1 edge(s))
 - `slice` (1 edge(s))
 - `min` (1 edge(s))
+- `forEach` (1 edge(s))
+- `readFileSync` (1 edge(s))
+- `join` (1 edge(s))
 
 ### Incoming
 
-- `match` (4 edge(s))
-- `./deploy/gcp/substrate-env.test.js` (2 edge(s))
-- `doesNotMatch` (2 edge(s))
-- `ok` (1 edge(s))
+- `./deploy/gcp/substrate-env.test.js` (10 edge(s))
+- `doesNotMatch` (3 edge(s))
+- `match` (2 edge(s))
+- `forEach` (1 edge(s))

@@ -1,10 +1,13 @@
 # AI Fleet Architecture Diagram
 
 This diagram shows the preset-routed agent architecture. The browser-facing,
-SDK-free **gateway** retains browser/domain APIs and proxies isolated agent
-services. The rollout-gated durable control plane adds an SDK-free
-**orchestrator** plus **tester** and approval-gated **deployer** alongside the
-existing **planner** and **coder**. Linear is the ticket system, Ollama/LM Studio/OMLX provide
+SDK-free **gateway** retains browser/domain APIs and proxies the isolated agent
+surface. The **orchestrator** is the single internal agent service: the
+browser-facing agent surface (the retired planner/coder services' routes), the
+durable `plan → code → test → deploy` control plane, and the Agent Substrate
+control plane; the approval-gated **deployer** stays rollout-gated beside it.
+Every agent run itself executes in an **Agent Substrate actor** — an ephemeral
+gVisor sandbox per run, not a service. Linear is the ticket system, Ollama/LM Studio/OMLX provide
 the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runtime
 (shipped once in `@ai-fleet/shared`) uses skills plus Linear/GitHub tools to plan
 and execute work.
@@ -19,19 +22,15 @@ flowchart LR
   User["User / operator"] --> Browser["AI Fleet SPA<br/>Business, Projects, Board, Agent, Settings"]
   Browser -->|same-origin REST| Gateway["Gateway service :4000<br/>services/gateway<br/>SPA + user API + OAuth"]
 
-  Gateway -->|proxy /api/agent| Planner["Planner service :4010<br/>services/planner<br/>scheduler + /api/agent"]
-  Gateway -->|proxy /api/coder| CoderSvc["Coder service :4020<br/>services/coder<br/>board monitor + /api/coder"]
+  Gateway -->|proxy /api/agent| AgentSvc["Orchestrator agent surface :4010<br/>services/orchestrator<br/>scheduler + /api/agent + /api/coder"]
 
   Gateway --> Store["Shared store<br/>data/store.json<br/>non-secret settings, jobs"]
-  Planner --> Store
-  CoderSvc --> Store
+  AgentSvc --> Store
   Gateway --> StreamProxy["Stream-token proxy sidecar<br/>loopback mint / verify<br/>only holder of signing secret"]
-  Planner --> EgressProxy["Egress proxy sidecar<br/>fixed allow-listed routes<br/>credential injection"]
-  CoderSvc --> EgressProxy
+  AgentSvc --> EgressProxy["Egress proxy sidecar<br/>fixed allow-listed routes<br/>credential injection"]
   SettingsSvc["Settings service<br/>KMS-encrypted org/project vault<br/>managed + customer resolver"] --> EgressProxy
   Shared["@ai-fleet/shared<br/>config · store · linear · logger/util<br/>+ DeepAgent runtime (one copy)"] -.->|imported by| Gateway
-  Shared -.->|imported by| Planner
-  Shared -.->|imported by| CoderSvc
+  Shared -.->|imported by| AgentSvc
   Catalog["LLM preset catalog<br/>agent/llm-presets.json<br/>limits, sampling, reasoning adapters"] --> Shared
   EgressProxy -->|GraphQL with selected scope credential| Linear["Linear<br/>ticket management<br/>projects, milestones, issues, labels"]
 
@@ -53,8 +52,7 @@ flowchart LR
     CoderAgent -->|route by issue label| LlmRouter
   end
 
-  Planner -->|scheduler, run-now| AgentRuntime
-  CoderSvc -->|board monitor, run one ticket| AgentRuntime
+  AgentSvc -->|scheduler, run-now, run one ticket<br/>(each run in a substrate actor)| AgentRuntime
 
   subgraph LocalLlm["Local LLM providers"]
     Ollama["Ollama<br/>http://localhost:11434<br/>@langchain/ollama"]

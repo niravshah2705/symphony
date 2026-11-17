@@ -14,13 +14,13 @@ Community of 8 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| envFor | Function | ./scripts/start-all.js | 77-122 |
-| prefixStream | Function | ./scripts/start-all.js | 124-135 |
-| startService | Function | ./scripts/start-all.js | 137-153 |
-| waitForHealth | Function | ./scripts/start-all.js | 155-172 |
-| probe | Function | ./scripts/start-all.js | 158-169 |
-| shutdown | Function | ./scripts/start-all.js | 174-181 |
-| main | Function | ./scripts/start-all.js | 183-190 |
+| envFor | Function | ./scripts/start-all.js | 75-120 |
+| prefixStream | Function | ./scripts/start-all.js | 122-133 |
+| startService | Function | ./scripts/start-all.js | 135-151 |
+| waitForHealth | Function | ./scripts/start-all.js | 153-170 |
+| probe | Function | ./scripts/start-all.js | 156-167 |
+| shutdown | Function | ./scripts/start-all.js | 172-179 |
+| main | Function | ./scripts/start-all.js | 181-188 |
 | test:local stream-token broker is standalone and exclusively receives its secret@L6 | Test | ./scripts/start-all.test.js | 6-32 |
 
 ## Execution Flows

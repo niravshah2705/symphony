@@ -14,12 +14,12 @@ Community of 6 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| routeHandler | Function | ./services/planner/src/routes/settings.credentials.test.js | 8-14 |
-| invoke | Function | ./services/planner/src/routes/settings.credentials.test.js | 16-30 |
-| withRouter | Function | ./services/planner/src/routes/settings.credentials.test.js | 32-53 |
-| test:public planner settings never derive credential state from legacy plaintext store fields@L55 | Test | ./services/planner/src/routes/settings.credentials.test.js | 55-63 |
-| test:legacy planner credential routes and integration fields fail explicitly without writes@L65 | Test | ./services/planner/src/routes/settings.credentials.test.js | 65-81 |
-| test:planner integration route still accepts non-secret provider and repository choices@L83 | Test | ./services/planner/src/routes/settings.credentials.test.js | 83-96 |
+| routeHandler | Function | ./services/orchestrator/src/routes/settings.credentials.test.js | 8-14 |
+| invoke | Function | ./services/orchestrator/src/routes/settings.credentials.test.js | 16-30 |
+| withRouter | Function | ./services/orchestrator/src/routes/settings.credentials.test.js | 32-53 |
+| test:public planner settings never derive credential state from legacy plaintext store fields@L55 | Test | ./services/orchestrator/src/routes/settings.credentials.test.js | 55-63 |
+| test:legacy planner credential routes and integration fields fail explicitly without writes@L65 | Test | ./services/orchestrator/src/routes/settings.credentials.test.js | 65-81 |
+| test:planner integration route still accepts non-secret provider and repository choices@L83 | Test | ./services/orchestrator/src/routes/settings.credentials.test.js | 83-96 |
 
 ## Execution Flows
 
@@ -48,7 +48,7 @@ No execution flows pass through this community.
 ### Incoming
 
 - `equal` (7 edge(s))
-- `./services/planner/src/routes/settings.credentials.test.js` (6 edge(s))
+- `./services/orchestrator/src/routes/settings.credentials.test.js` (6 edge(s))
 - `deepEqual` (2 edge(s))
 - `toUpperCase` (1 edge(s))
 - `match` (1 edge(s))

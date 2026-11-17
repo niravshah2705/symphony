@@ -12,7 +12,7 @@
 #   docker compose up --build
 #
 # Verify the isolation holds:
-#   docker compose exec planner env | grep -iE 'TOKEN|KEY|SECRET'   # -> nothing
+#   docker compose exec agent env | grep -iE 'TOKEN|KEY|SECRET'   # -> nothing
 #
 # Provider credentials live in the organization vault exposed by SETTINGS_URL.
 # The stream secret is supplied only to the dedicated broker process.
@@ -68,32 +68,19 @@ services:
       timeout: 3s
       retries: 5
 
-  # -------- planner agent runtime (NO raw secrets) --------------------------
-  planner:
+  # -------- agent surface (orchestrator image; NO raw secrets) --------------
+  agent:
     build:
       context: .
-      dockerfile: deploy/gcp/Dockerfile.planner
+      dockerfile: deploy/gcp/Dockerfile.orchestrator
+    entrypoint: ["node", "services/orchestrator/src/agent-server.js"]
     # Share the proxy's network namespace so 127.0.0.1:4030 reaches the sidecar
     # (the Compose analogue of Cloud Run's shared loopback).
     network_mode: "service:proxy"
     environment:
-      PLANNER_PORT: "8080"
+      AGENT_SERVICE_PORT: "8080"
       EGRESS_PROXY_URL: "http://127.0.0.1:4030"
       # NOTE: deliberately NO provider secrets here — the proxy injects them.
-    depends_on:
-      proxy:
-        condition: service_healthy
-
-  # -------- coder agent runtime (NO raw secrets) ----------------------------
-  coder:
-    build:
-      context: .
-      dockerfile: deploy/gcp/Dockerfile.coder
-    network_mode: "service:proxy"
-    environment:
-      CODER_SERVICE_PORT: "8081"
-      CODER_ROLE: "control"
-      EGRESS_PROXY_URL: "http://127.0.0.1:4030"
     depends_on:
       proxy:
         condition: service_healthy
@@ -107,13 +94,10 @@ services:
     environment:
       PORT: "4000"
       AUTH_MODE: "disabled"
-      PLANNER_URL: "http://proxy:8080"
-      CODER_URL: "http://proxy:8081"
+      AGENT_URL: "http://proxy:8080"
       STREAM_TOKEN_SERVICE_URL: "http://127.0.0.1:4031"
     depends_on:
       stream-token-broker:
         condition: service_healthy
-      planner:
-        condition: service_started
-      coder:
+      agent:
         condition: service_started

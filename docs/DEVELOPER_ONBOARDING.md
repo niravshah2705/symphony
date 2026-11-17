@@ -75,14 +75,16 @@ and their local infrastructure processes with prefixed output:
   receives only its loopback `STREAM_TOKEN_SERVICE_URL`; planner/coder and the
   gateway never receive the secret.
 - **gateway** (`services/gateway/src/index.js`) wires the user-facing routes,
-  serves the SPA, and **reverse-proxies** `/api/agent/*` → planner and
-  `/api/coder/*` → coder. It is the only browser-facing origin.
-- **planner** (`services/planner/src/index.js`) mounts `/api/agent` and
+  serves the SPA, and **reverse-proxies** `/api/agent/*` and
+  `/api/coder/*` → the orchestrator agent surface. It is the only browser-facing origin.
+- **orchestrator agent surface** (`services/orchestrator/src/agent-server.js`)
+  mounts `/api/agent` + `/api/coder` and
   **starts the enrichment scheduler** (`scheduler.startScheduler()`), which also
-  reconciles interrupted jobs.
-- **coder** (`services/coder/src/index.js`) mounts `/api/coder` and **starts the
-  board monitor** so `aiplanned` projects are picked up automatically (each poll
-  self-guards on missing keys).
+  reconciles interrupted jobs. The same surface is mounted inside the pipeline
+  orchestrator in the cloud, and inside every substrate actor.
+- Agent runs (planning, code-writing, testing) execute in **Agent Substrate
+  actors** — per-run gVisor sandboxes dispatched by the orchestrator; the
+  retired coder board monitor no longer polls (the durable pipeline owns dispatch).
 
 The application services import the same `@ai-fleet/shared` library, so there
 is exactly one copy of every module (config, store, Linear client, deep-agent
@@ -146,8 +148,10 @@ The SPA (`public/js/app.js`) hash-routes between workspace views; the core plann
 
 ## 5. Agent stages and durable orchestration (developer mental model)
 
-Each execution stage runs in an isolated service (`services/planner`,
-`services/coder`, `services/tester`, `services/deployer`). They are built from
+Planning and code-writing are task *roles*, not services: the stage handlers run
+in the orchestrator (`services/orchestrator`) and each agent run executes inside
+an **Agent Substrate actor** (gVisor on GKE); `services/deployer` stays a
+separate rollout-gated service. They are built from
 the SAME **workflow-driven framework** that lives once in
 the shared library (`packages/shared/src/agent/framework.js`), configured by a
 declarative *workflow file* (`agent/workflows/*.workflow.js`). A workflow declares

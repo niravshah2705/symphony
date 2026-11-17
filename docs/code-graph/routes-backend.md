@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| backendDefaults | Function | ./services/planner/src/routes/codex.js | 27-34 |
-| codexPublic | Function | ./services/planner/src/routes/codex.js | 37-59 |
+| backendDefaults | Function | ./services/orchestrator/src/routes/codex.js | 27-34 |
+| codexPublic | Function | ./services/orchestrator/src/routes/codex.js | 37-59 |
 
 ## Execution Flows
 
@@ -31,4 +31,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/codex.js` (5 edge(s))
+- `./services/orchestrator/src/routes/codex.js` (5 edge(s))

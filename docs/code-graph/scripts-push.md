@@ -29,7 +29,7 @@ Community of 31 nodes
 | test:a stream that flaps (dies before 60s) on every open stops reconnecting after 6 failures@L163 | Test | ./e2e/workspace-stream-failure.spec.js | 163-174 |
 | test:a connection that stays open past the 60s health threshold resets the failure budget@L176 | Test | ./e2e/workspace-stream-failure.spec.js | 176-203 |
 | test:DirectStageCommandBus dispatches the contract to an injected local handler@L46 | Test | ./packages/shared-core/src/pipeline/bus.test.js | 46-57 |
-| test:diagnostics report services, local model, integrations, and SDK readiness without secrets@L55 | Test | ./packages/shared/src/agent/diagnostics.test.js | 55-86 |
+| test:diagnostics report services, local model, integrations, and SDK readiness without secrets@L55 | Test | ./packages/shared/src/agent/diagnostics.test.js | 55-85 |
 | test:streamWithRetry passes chunks through on success@L104 | Test | ./packages/shared/src/agent/llm-retry.test.js | 104-108 |
 | test:streamWithRetry retries when the stream fails BEFORE the first chunk@L110 | Test | ./packages/shared/src/agent/llm-retry.test.js | 110-124 |
 | test:streamWithRetry does NOT retry once a chunk has been yielded (would duplicate output)@L126 | Test | ./packages/shared/src/agent/llm-retry.test.js | 126-141 |

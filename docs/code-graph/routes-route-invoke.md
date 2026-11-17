@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| routeHandler | Function | ./services/planner/src/routes/settings.omlx.test.js | 8-14 |
-| invoke | Function | ./services/planner/src/routes/settings.omlx.test.js | 16-36 |
+| routeHandler | Function | ./services/orchestrator/src/routes/settings.omlx.test.js | 8-14 |
+| invoke | Function | ./services/orchestrator/src/routes/settings.omlx.test.js | 16-36 |
 
 ## Execution Flows
 
@@ -25,7 +25,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/routes/settings.omlx.test.js::test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38` (3 edge(s))
+- `./services/orchestrator/src/routes/settings.omlx.test.js::test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38` (3 edge(s))
 - `handler` (1 edge(s))
 - `catch` (1 edge(s))
 - `reject` (1 edge(s))
@@ -35,5 +35,5 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/settings.omlx.test.js::test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38` (3 edge(s))
-- `./services/planner/src/routes/settings.omlx.test.js` (2 edge(s))
+- `./services/orchestrator/src/routes/settings.omlx.test.js::test:planner OMLX preset settings reject plaintext keys and save only non-secret connection data@L38` (3 edge(s))
+- `./services/orchestrator/src/routes/settings.omlx.test.js` (2 edge(s))

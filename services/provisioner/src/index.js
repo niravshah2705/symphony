@@ -53,20 +53,13 @@ function buildCfg(projectNumber) {
     substrateUrl: (CONFIG.SUBSTRATE && CONFIG.SUBSTRATE.url) || '',
     serviceAccounts: {
       gateway: process.env.GATEWAY_SA || '',
-      planner: process.env.PLANNER_SA || '',
-      coder: process.env.CODER_SA || '',
       orchestrator: process.env.ORCHESTRATOR_SA || '',
-      tester: process.env.TESTER_SA || '',
       deployer: process.env.DEPLOYER_SA || '',
       pubsubPush: process.env.PUBSUB_PUSH_SA || '',
     },
     sourceServiceNames: {
       gateway: process.env.GATEWAY_SERVICE_NAME || 'gateway',
-      planner: process.env.PLANNER_SERVICE_NAME || 'planner',
-      coder: process.env.CODER_SERVICE_NAME || 'coder-control',
-      worker: process.env.CODER_JOB_NAME || 'coder-worker',
       orchestrator: process.env.ORCHESTRATOR_SERVICE_NAME || 'pipeline-orchestrator',
-      tester: process.env.TESTER_SERVICE_NAME || 'pipeline-tester',
       deployer: process.env.DEPLOYER_SERVICE_NAME || 'pipeline-deployer',
     },
   };

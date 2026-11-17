@@ -14,15 +14,15 @@ Community of 9 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent.js | 69-78 |
-| getHeader | Function | ./services/planner/src/routes/agent.js | 70-73 |
-| jobsForContext | Function | ./services/planner/src/routes/agent.js | 80-86 |
-| jobsForRequest | Function | ./services/planner/src/routes/agent.js | 88-90 |
-| recordsForRequest | Function | ./services/planner/src/routes/agent.js | 92-97 |
-| recordForRequest | Function | ./services/planner/src/routes/agent.js | 99-101 |
-| stampRequestContext | Function | ./services/planner/src/routes/agent.js | 103-110 |
-| conversationForRequest | Function | ./services/planner/src/routes/agent.js | 116-121 |
-| substrateContext | Function | ./services/planner/src/routes/agent.js | 663-673 |
+| requestWorkspaceContext | Function | ./services/orchestrator/src/routes/agent.js | 69-78 |
+| getHeader | Function | ./services/orchestrator/src/routes/agent.js | 70-73 |
+| jobsForContext | Function | ./services/orchestrator/src/routes/agent.js | 80-86 |
+| jobsForRequest | Function | ./services/orchestrator/src/routes/agent.js | 88-90 |
+| recordsForRequest | Function | ./services/orchestrator/src/routes/agent.js | 92-97 |
+| recordForRequest | Function | ./services/orchestrator/src/routes/agent.js | 99-101 |
+| stampRequestContext | Function | ./services/orchestrator/src/routes/agent.js | 103-110 |
+| conversationForRequest | Function | ./services/orchestrator/src/routes/agent.js | 116-121 |
+| substrateContext | Function | ./services/orchestrator/src/routes/agent.js | 663-673 |
 
 ## Execution Flows
 
@@ -44,4 +44,4 @@ Community of 9 nodes
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.js` (40 edge(s))
+- `./services/orchestrator/src/routes/agent.js` (40 edge(s))

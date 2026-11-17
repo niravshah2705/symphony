@@ -8,6 +8,16 @@ For the design and the operator-facing tables see
 [`SUBSTRATE_INTEGRATION.md`](./SUBSTRATE_INTEGRATION.md); this file is only the
 progress ledger and the by-hand path.
 
+> **Superseded 2026-11 (harness migration completed).** The custom Cloud Run
+> harness is retired: Agent Substrate is now the only execution pattern, and the
+> planner/coder/tester Cloud Run services no longer exist. Where this ledger says
+> "the planner deployment", read **the orchestrator** — the agent surface and the
+> substrate control env moved there. Causes 5 and 9 remain genuinely open: the
+> orchestrator still needs `substrate_url` wired (pending 1) and a control plane it
+> is allowed to dial (pending 2). The "silently keeps using the Cloud Run pattern"
+> symptom in cause 5 no longer applies — with the fallback gone, a missing
+> `SUBSTRATE_*` env fails loudly instead.
+
 ## Bottom line
 
 **Sandbox capacity is live.** A `WorkerPool` exists, its 2 workers are Ready and

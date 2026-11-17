@@ -15,7 +15,7 @@ name: Substrate control plane (preflight / install)
 # revision (docs/SUBSTRATE_INTEGRATION.md §5 step 3).
 #
 # Why its own workflow instead of another Deploy to GCP job: dispatching
-# deploy.yml runs its path filters, and a branch that touches services/planner/**
+# deploy.yml runs its path filters, and a branch that touches services/orchestrator/**
 # or public/** rebuilds and redeploys those Cloud Run services from that branch.
 # A control-plane preflight must never be able to ship unmerged code, so nothing
 # here can deploy the app.

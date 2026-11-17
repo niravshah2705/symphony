@@ -1,13 +1,14 @@
 # -----------------------------------------------------------------------------
-# GCS bucket for chat attachments (services/planner/src/routes/agent-attachments.js).
+# GCS bucket for chat attachments (services/orchestrator/src/routes/agent-attachments.js).
 # -----------------------------------------------------------------------------
 # Holds user-uploaded files (pdf/docx/txt/jpg/png) scoped per
 # organizations/{orgId}/projects/{projectId}/conversations/{conversationId}/...
 # — tenant content, unlike the SPA/skills buckets, so this one is NEVER public
 # and its CORS allowlist is the real app origin, not "*".
 #
-# Only planner mints signed upload URLs and reads objects back for extraction
-# (packages/shared-core/src/attachments/gcs.js) — no other service gets a grant.
+# Only the orchestrator mints signed upload URLs and reads objects back for
+# extraction (packages/shared-core/src/attachments/gcs.js) — no other service
+# gets a grant.
 
 resource "google_storage_bucket" "attachments" {
   project  = var.project_id
@@ -29,20 +30,19 @@ resource "google_storage_bucket" "attachments" {
   depends_on = [google_project_service.services]
 }
 
-resource "google_storage_bucket_iam_member" "planner_attachments_readwrite" {
+resource "google_storage_bucket_iam_member" "orchestrator_attachments_readwrite" {
   bucket = google_storage_bucket.attachments.name
-  role   = "roles/storage.objectAdmin" # planner both mints upload URLs and reads objects back for extraction
-  member = "serviceAccount:${google_service_account.planner.email}"
+  role   = "roles/storage.objectAdmin" # the orchestrator both mints upload URLs and reads objects back for extraction
+  member = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
 # Signed-URL generation on Cloud Run (no keyfile, ADC only) goes through the IAM
 # Credentials API's signBlob, which requires the signing SA to hold
-# serviceAccountTokenCreator ON ITSELF — mirrors the coder_actas_self pattern in
-# iam.tf. Without this, gcs.js's getSignedUrl() throws at runtime in Cloud Run
-# even though it works locally with a keyfile/emulator — a real risk to verify
-# in an actual deploy, not just locally.
-resource "google_service_account_iam_member" "planner_signblob_self" {
-  service_account_id = google_service_account.planner.name
+# serviceAccountTokenCreator ON ITSELF. Without this, gcs.js's getSignedUrl()
+# throws at runtime in Cloud Run even though it works locally with a
+# keyfile/emulator — a real risk to verify in an actual deploy, not just locally.
+resource "google_service_account_iam_member" "orchestrator_signblob_self" {
+  service_account_id = google_service_account.orchestrator.name
   role               = "roles/iam.serviceAccountTokenCreator"
-  member             = "serviceAccount:${google_service_account.planner.email}"
+  member             = "serviceAccount:${google_service_account.orchestrator.email}"
 }

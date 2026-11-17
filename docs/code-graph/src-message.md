@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| messageWorkspaceContext | Function | ./services/coder/src/pubsub.js | 31-33 |
-| messageWorkspaceContextInput | Function | ./services/coder/src/pubsub.js | 35-40 |
-| runMessageInWorkspace | Function | ./services/coder/src/pubsub.js | 42-54 |
+| messageWorkspaceContext | Function | ./services/orchestrator/src/pubsub.js | 40-42 |
+| messageWorkspaceContextInput | Function | ./services/orchestrator/src/pubsub.js | 44-50 |
+| runMessageInWorkspace | Function | ./services/orchestrator/src/pubsub.js | 52-64 |
 
 ## Execution Flows
 
@@ -36,4 +36,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/coder/src/pubsub.js` (9 edge(s))
+- `./services/orchestrator/src/pubsub.js` (9 edge(s))

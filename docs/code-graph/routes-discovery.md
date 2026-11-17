@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| discoveryProfileFrom | Function | ./services/planner/src/routes/settings.js | 353-356 |
-| selectionPreset | Function | ./services/planner/src/routes/settings.js | 359-389 |
+| discoveryProfileFrom | Function | ./services/orchestrator/src/routes/settings.js | 353-356 |
+| selectionPreset | Function | ./services/orchestrator/src/routes/settings.js | 359-389 |
 
 ## Execution Flows
 
@@ -36,4 +36,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/settings.js` (3 edge(s))
+- `./services/orchestrator/src/routes/settings.js` (3 edge(s))

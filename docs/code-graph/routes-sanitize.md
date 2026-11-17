@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| clampInt | Function | ./services/planner/src/routes/agent.js | 148-152 |
-| sanitizeLabels | Function | ./services/planner/src/routes/agent.js | 169-173 |
-| sanitizeConfig | Function | ./services/planner/src/routes/agent.js | 176-198 |
+| clampInt | Function | ./services/orchestrator/src/routes/agent.js | 148-152 |
+| sanitizeLabels | Function | ./services/orchestrator/src/routes/agent.js | 169-173 |
+| sanitizeConfig | Function | ./services/orchestrator/src/routes/agent.js | 176-198 |
 
 ## Execution Flows
 
@@ -40,4 +40,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.js` (4 edge(s))
+- `./services/orchestrator/src/routes/agent.js` (4 edge(s))

@@ -14,12 +14,12 @@ Community of 6 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| analyticsConfigured | Function | ./services/planner/src/routes/observability.js | 14-16 |
-| preferUsed | Function | ./services/planner/src/routes/observability.js | 19-24 |
-| toAnalyticsPayload | Function | ./services/planner/src/routes/observability.js | 26-68 |
-| test:planner observability analytics mapper exposes the stable UI contract@L7 | Test | ./services/planner/src/routes/observability.test.js | 7-66 |
-| test:observability mapper surfaces resource usage, preferring used over configured@L68 | Test | ./services/planner/src/routes/observability.test.js | 68-98 |
-| test:observability mapper distinguishes missing configuration from provider outage@L100 | Test | ./services/planner/src/routes/observability.test.js | 100-110 |
+| analyticsConfigured | Function | ./services/orchestrator/src/routes/observability.js | 14-16 |
+| preferUsed | Function | ./services/orchestrator/src/routes/observability.js | 19-24 |
+| toAnalyticsPayload | Function | ./services/orchestrator/src/routes/observability.js | 26-68 |
+| test:planner observability analytics mapper exposes the stable UI contract@L7 | Test | ./services/orchestrator/src/routes/observability.test.js | 7-66 |
+| test:observability mapper surfaces resource usage, preferring used over configured@L68 | Test | ./services/orchestrator/src/routes/observability.test.js | 68-98 |
+| test:observability mapper distinguishes missing configuration from provider outage@L100 | Test | ./services/orchestrator/src/routes/observability.test.js | 100-110 |
 
 ## Execution Flows
 
@@ -37,7 +37,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/observability.js` (6 edge(s))
+- `./services/orchestrator/src/routes/observability.js` (6 edge(s))
 - `deepEqual` (6 edge(s))
 - `equal` (4 edge(s))
-- `./services/planner/src/routes/observability.test.js` (3 edge(s))
+- `./services/orchestrator/src/routes/observability.test.js` (3 edge(s))

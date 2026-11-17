@@ -294,10 +294,8 @@ else
     docker push "${IMAGE_BASE}/$1:${IMAGE_TAG}"
   }
   build_push gateway       Dockerfile.gateway
-  build_push planner       Dockerfile.planner
-  build_push coder-control Dockerfile.coder   # dual-role image; also runs the worker Job
+  build_push substrate-actor Dockerfile.substrate-actor  # gVisor actor image; digest-pinned into substrate_planner_image at deploy time
   build_push pipeline-orchestrator Dockerfile.orchestrator
-  build_push pipeline-tester       Dockerfile.tester
   build_push pipeline-deployer     Dockerfile.deployer
   build_push proxy Dockerfile.proxy
   build_push email-service Dockerfile.email
@@ -325,7 +323,7 @@ gsutil setmeta -h "Cache-Control:no-store" "gs://${SPA_BUCKET}/config.js"
 gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${SPA_BUCKET}/**/*.mjs" >/dev/null 2>&1 || true
 
 # --- 8. Full apply ----------------------------------------------------------
-log "Full apply (Cloud Run services + job, Pub/Sub, Scheduler, Firestore, IAM)"
+log "Full apply (Cloud Run services, Pub/Sub, Scheduler, Firestore, IAM)"
 
 # Idempotently import pre-existing Firestore composite indexes if missing from state
 chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"

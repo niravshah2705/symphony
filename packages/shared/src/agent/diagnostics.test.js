@@ -55,7 +55,7 @@ test('package detection recognizes installed ESM packages without a default expo
 test('diagnostics report services, local model, integrations, and SDK readiness without secrets', async () => {
   const requested = [];
   const report = await runDiagnostics(configuredSettings, {
-    services: { plannerUrl: 'http://planner.internal:4010', coderUrl: 'http://coder.internal:4020' },
+    services: { agentUrl: 'http://agent.internal:4010' },
     fetch: async (url) => {
       requested.push(url);
       return response(200);
@@ -69,12 +69,11 @@ test('diagnostics report services, local model, integrations, and SDK readiness 
   assert.equal(report.generatedAt, '2026-07-16T12:00:00.000Z');
   assert.deepEqual(requested.sort(), [
     'http://127.0.0.1:11434/api/tags',
-    'http://coder.internal:4020/api/coder',
-    'http://planner.internal:4010/api/agent/status',
+    'http://agent.internal:4010/api/agent/status',
   ]);
   const ids = new Set(report.checks.map((item) => item.id));
   for (const id of [
-    'planner-service', 'coder-service', 'local-model', 'planning-integration', 'repository-integration',
+    'agent-surface', 'local-model', 'planning-integration', 'repository-integration',
     'service-log', 'langfuse-integration', 'deepagents-sdk', 'codex-sdk', 'claude-sdk', 'qoder-sdk',
   ]) assert.equal(ids.has(id), true, id);
 
@@ -82,7 +81,7 @@ test('diagnostics report services, local model, integrations, and SDK readiness 
   for (const secret of ['jira-secret', 'gitlab-secret', 'langfuse-secret', 'codex-secret', 'claude-secret', 'qoder-secret']) {
     assert.equal(serialized.includes(secret), false);
   }
-  assert.equal(serialized.includes('planner.internal'), false);
+  assert.equal(serialized.includes('agent.internal'), false);
 });
 
 test('diagnostics distinguish unavailable endpoints and missing SDK packages', async () => {
@@ -93,14 +92,14 @@ test('diagnostics distinguish unavailable endpoints and missing SDK packages', a
     planningProvider: 'linear',
     repositoryProvider: 'github',
   }, {
-    services: { plannerUrl: 'http://localhost:4010', coderUrl: 'http://localhost:4020' },
+    services: { agentUrl: 'http://localhost:4010' },
     fetch: async () => { throw new Error('connection refused with private detail'); },
     resolvePackage: () => { throw new Error('missing'); },
     readLogTail: async () => ({ text: '[2026-07-16T11:59:00.000Z] ERROR secret detail omitted\n', bytesRead: 60, exists: true }),
   });
 
   assert.equal(report.status, 'degraded');
-  assert.equal(report.checks.find((item) => item.id === 'planner-service').status, 'unavailable');
+  assert.equal(report.checks.find((item) => item.id === 'agent-surface').status, 'unavailable');
   assert.equal(report.checks.find((item) => item.id === 'codex-sdk').details.installed, false);
   assert.equal(JSON.stringify(report).includes('private detail'), false);
 });

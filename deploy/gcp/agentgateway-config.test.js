@@ -146,7 +146,7 @@ test('the gateway origin is sidecar-only', () => {
   const hits = [...cloudRun.matchAll(/AGENTGATEWAY_PROXY_UPSTREAM/g)];
   assert.equal(hits.length, 1, 'the origin may be published from one place only');
   const start = cloudRun.indexOf('proxy_plain_env = merge(');
-  const end = cloudRun.indexOf('planner_env = merge(');
+  const end = cloudRun.indexOf('# The agent workloads', start);
   assert.ok(start !== -1 && end > hits[0].index, 'that place is the sidecar env map');
 
   const proxyMap = cloudRun.slice(start, end);
@@ -249,7 +249,7 @@ test('the a2a seam is closed by admission, not by a policy', () => {
   const doc = read('docs', 'SUBSTRATE_INTEGRATION.md');
   const section = doc.slice(doc.indexOf('## 12. A2A'));
   assert.notEqual(section, -1, 'the a2a scope section was deleted while the seam stayed');
-  assert.match(section, /the planner/, 'it must name who would publish a card');
+  assert.match(section, /the orchestrator/, 'it must name who would publish a card');
   assert.match(section, /allowedRoutes\.namespaces\.from/, 'it must name the line that opens the seam');
   assert.match(section, /suspend|delete/, 'it must say why an actor address cannot back a card');
 });

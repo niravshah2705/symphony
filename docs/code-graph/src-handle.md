@@ -31,15 +31,15 @@ Community of 27 nodes
 | test:substrate-atespace: refuses a name the deployment would not resolve to itself@L125 | Test | ./services/provisioner/src/handler.test.js | 125-136 |
 | test:substrate-atespace: an ateapi error still settles the step as FAILED@L138 | Test | ./services/provisioner/src/handler.test.js | 138-147 |
 | test:substrate-atespace: a message without the step address performs nothing@L149 | Test | ./services/provisioner/src/handler.test.js | 149-155 |
-| buildCfg | Function | ./services/provisioner/src/index.js | 29-73 |
+| buildCfg | Function | ./services/provisioner/src/index.js | 29-66 |
 | enabled | Function | ./services/provisioner/src/index.js | 30-33 |
-| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 76-86 |
-| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 90-102 |
-| patchInternal | Function | ./services/provisioner/src/index.js | 105-114 |
-| writeBack | Function | ./services/provisioner/src/index.js | 116-118 |
-| writeStepStatus | Function | ./services/provisioner/src/index.js | 123-129 |
-| createApp | Function | ./services/provisioner/src/index.js | 131-157 |
-| start | Function | ./services/provisioner/src/index.js | 159-169 |
+| resolveProjectNumber | Function | ./services/provisioner/src/index.js | 69-79 |
+| s2sAuthHeader | Function | ./services/provisioner/src/index.js | 83-95 |
+| patchInternal | Function | ./services/provisioner/src/index.js | 98-107 |
+| writeBack | Function | ./services/provisioner/src/index.js | 109-111 |
+| writeStepStatus | Function | ./services/provisioner/src/index.js | 116-122 |
+| createApp | Function | ./services/provisioner/src/index.js | 124-150 |
+| start | Function | ./services/provisioner/src/index.js | 152-162 |
 | test:buildCfg passes the shared stream-token broker URL into tenant plans@L8 | Test | ./services/provisioner/src/index.test.js | 8-20 |
 
 ## Execution Flows

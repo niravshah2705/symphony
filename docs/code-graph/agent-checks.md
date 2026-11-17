@@ -7,7 +7,7 @@
 Community of 15 nodes
 
 - **Size**: 15 nodes
-- **Cohesion**: 0.2222
+- **Cohesion**: 0.2155
 - **Dominant Language**: javascript
 
 ## Members
@@ -25,10 +25,10 @@ Community of 15 nodes
 | summarizeLogTail | Function | ./packages/shared-core/src/agent/diagnostics.js | 111-132 |
 | integrationChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 134-178 |
 | sdkChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 180-239 |
-| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 241-257 |
-| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 259-294 |
-| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 296-300 |
-| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 303-326 |
+| serviceChecks | Function | ./packages/shared-core/src/agent/diagnostics.js | 241-256 |
+| localModelCheck | Function | ./packages/shared-core/src/agent/diagnostics.js | 258-293 |
+| reportStatus | Function | ./packages/shared-core/src/agent/diagnostics.js | 295-299 |
+| runDiagnostics | Function | ./packages/shared-core/src/agent/diagnostics.js | 302-325 |
 
 ## Execution Flows
 

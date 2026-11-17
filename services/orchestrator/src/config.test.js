@@ -35,8 +35,7 @@ test('pipeline messaging uses dedicated StageCommand topics', () => {
   });
   assert.equal(config.resultsTopic, undefined);
   assert.notEqual(config.stageTopics.plan, CONFIG.GCP.plannerTopic);
-  assert.notEqual(config.stageTopics.code, CONFIG.GCP.coderTopic);
-  assert.equal(config.stageEndpoints.plan, `${CONFIG.SERVICES.plannerUrl}/internal/pipeline/stage`);
+  assert.equal(config.stageEndpoints.plan, `${CONFIG.SERVICES.agentUrl}/internal/pipeline/stage/plan`);
 });
 
 test('pipeline topic env names and push identity are configurable', () => {

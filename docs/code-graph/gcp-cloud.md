@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 26 nodes
+Community of 25 nodes
 
-- **Size**: 26 nodes
-- **Cohesion**: 0.2095
+- **Size**: 25 nodes
+- **Cohesion**: 0.2107
 - **Dominant Language**: javascript
 
 ## Members
@@ -23,23 +23,22 @@ Community of 26 nodes
 | test:gateway sets an explicit long-lived request timeout for SSE streams@L89 | Test | ./deploy/gcp/pipeline-infra.test.js | 89-97 |
 | test:fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations@L99 | Test | ./deploy/gcp/pipeline-infra.test.js | 99-112 |
 | test:skills mounts preserve configured Cloud Run service and proxy CPUs@L114 | Test | ./deploy/gcp/pipeline-infra.test.js | 114-130 |
-| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132 | Test | ./deploy/gcp/pipeline-infra.test.js | 132-165 |
-| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L167 | Test | ./deploy/gcp/pipeline-infra.test.js | 167-181 |
-| test:deploy workflow does not query disabled optional Cloud Run services@L183 | Test | ./deploy/gcp/pipeline-infra.test.js | 183-214 |
-| test:identity verification is deployed as an internal Firestore-backed gateway dependency@L216 | Test | ./deploy/gcp/pipeline-infra.test.js | 216-247 |
-| test:required image resolution failure makes the tag output step fail@L297 | Test | ./deploy/gcp/pipeline-infra.test.js | 297-319 |
-| test:pipeline topology enforces dedicated topics and brokered agent egress@L321 | Test | ./deploy/gcp/pipeline-infra.test.js | 321-371 |
-| test:stream-token broker owns the signing secret behind private IAM@L373 | Test | ./deploy/gcp/pipeline-infra.test.js | 373-469 |
-| test@L439 | Test | ./deploy/gcp/pipeline-infra.test.js | 439-439 |
-| test@L454 | Test | ./deploy/gcp/pipeline-infra.test.js | 454-454 |
-| test:proxy artifact retention preserves a multi-revision broker rollback window@L471 | Test | ./deploy/gcp/pipeline-infra.test.js | 471-476 |
-| test:OpenSWE upstream is trusted proxy-only deployment configuration@L478 | Test | ./deploy/gcp/pipeline-infra.test.js | 478-494 |
-| test:orchestrator image remains free of the heavy shared agent SDK workspace@L496 | Test | ./deploy/gcp/pipeline-infra.test.js | 496-502 |
-| test:coder image installs the seccomp launcher for model-controlled commands@L504 | Test | ./deploy/gcp/pipeline-infra.test.js | 504-514 |
-| test:tester image installs the capability-free network sandbox for repository commands@L516 | Test | ./deploy/gcp/pipeline-infra.test.js | 516-525 |
-| test:direct settings operator access is IAM-gated and never public@L527 | Test | ./deploy/gcp/pipeline-infra.test.js | 527-532 |
-| test:tenant vault token derivation root is limited to settings and provisioner@L534 | Test | ./deploy/gcp/pipeline-infra.test.js | 534-544 |
-| test:orchestrator can consume run-bound deployment approvals from settings@L546 | Test | ./deploy/gcp/pipeline-infra.test.js | 546-555 |
+| test:every Cloud Run egress sidecar explicitly opts into the wildcard bind@L132 | Test | ./deploy/gcp/pipeline-infra.test.js | 132-160 |
+| test:deploy workflow fails closed when an unchanged live image tag cannot be resolved@L162 | Test | ./deploy/gcp/pipeline-infra.test.js | 162-176 |
+| test:deploy workflow does not query disabled optional Cloud Run services@L178 | Test | ./deploy/gcp/pipeline-infra.test.js | 178-206 |
+| test:identity verification is deployed as an internal Firestore-backed gateway dependency@L208 | Test | ./deploy/gcp/pipeline-infra.test.js | 208-239 |
+| test:required image resolution failure makes the tag output step fail@L289 | Test | ./deploy/gcp/pipeline-infra.test.js | 289-311 |
+| test:pipeline topology enforces dedicated topics and brokered agent egress@L313 | Test | ./deploy/gcp/pipeline-infra.test.js | 313-364 |
+| test:stream-token broker owns the signing secret behind private IAM@L366 | Test | ./deploy/gcp/pipeline-infra.test.js | 366-462 |
+| test@L432 | Test | ./deploy/gcp/pipeline-infra.test.js | 432-432 |
+| test@L447 | Test | ./deploy/gcp/pipeline-infra.test.js | 447-447 |
+| test:proxy artifact retention preserves a multi-revision broker rollback window@L464 | Test | ./deploy/gcp/pipeline-infra.test.js | 464-469 |
+| test:OpenSWE upstream is trusted proxy-only deployment configuration@L471 | Test | ./deploy/gcp/pipeline-infra.test.js | 471-486 |
+| test:orchestrator image remains free of the heavy shared agent SDK workspace@L488 | Test | ./deploy/gcp/pipeline-infra.test.js | 488-494 |
+| test:actor image installs the seccomp launcher for model-controlled commands@L496 | Test | ./deploy/gcp/pipeline-infra.test.js | 496-513 |
+| test:direct settings operator access is IAM-gated and never public@L515 | Test | ./deploy/gcp/pipeline-infra.test.js | 515-520 |
+| test:tenant vault token derivation root is limited to settings and provisioner@L522 | Test | ./deploy/gcp/pipeline-infra.test.js | 522-532 |
+| test:orchestrator can consume run-bound deployment approvals from settings@L534 | Test | ./deploy/gcp/pipeline-infra.test.js | 534-543 |
 
 ## Execution Flows
 
@@ -49,36 +48,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `match` (127 edge(s))
-- `doesNotMatch` (26 edge(s))
-- `indexOf` (23 edge(s))
-- `slice` (15 edge(s))
-- `ok` (7 edge(s))
-- `equal` (7 edge(s))
+- `match` (119 edge(s))
+- `doesNotMatch` (27 edge(s))
+- `indexOf` (20 edge(s))
+- `slice` (14 edge(s))
+- `equal` (10 edge(s))
+- `ok` (6 edge(s))
+- `join` (5 edge(s))
 - `map` (4 edge(s))
 - `filter` (4 edge(s))
 - `matchAll` (4 edge(s))
-- `join` (3 edge(s))
 - `notEqual` (3 edge(s))
 - `sort` (3 edge(s))
 - `deepEqual` (3 edge(s))
+- `existsSync` (2 edge(s))
 - `flatMap` (2 edge(s))
-- `localeCompare` (2 edge(s))
 
 ### Incoming
 
-- `match` (127 edge(s))
-- `doesNotMatch` (26 edge(s))
-- `./deploy/gcp/pipeline-infra.test.js` (24 edge(s))
-- `indexOf` (19 edge(s))
-- `slice` (13 edge(s))
-- `ok` (7 edge(s))
-- `equal` (7 edge(s))
+- `match` (119 edge(s))
+- `doesNotMatch` (27 edge(s))
+- `./deploy/gcp/pipeline-infra.test.js` (23 edge(s))
+- `indexOf` (16 edge(s))
+- `slice` (12 edge(s))
+- `equal` (10 edge(s))
+- `ok` (6 edge(s))
+- `join` (4 edge(s))
 - `map` (4 edge(s))
 - `filter` (4 edge(s))
 - `matchAll` (4 edge(s))
 - `sort` (3 edge(s))
 - `deepEqual` (3 edge(s))
+- `existsSync` (2 edge(s))
 - `flatMap` (2 edge(s))
-- `localeCompare` (2 edge(s))
-- `join` (2 edge(s))

@@ -1,0 +1,983 @@
+'use strict';
+
+const express = require('express');
+const {
+  getApiKey,
+  getSettings,
+  patchSettings,
+  getAssumedRole,
+  getAgentConfig,
+  setAgentConfig,
+  listJobs,
+  removeJob,
+  clearFinishedJobs,
+  readStore,
+  listMemories,
+  addMemory,
+  removeMemory,
+  listConversations,
+  getConversation,
+  addConversation,
+  appendConversationMessages,
+  updateConversation,
+  removeConversation,
+  getApprovalGate,
+  listApprovalGates,
+} = require('@ai-fleet/shared/store');
+const { getProjectsWithLabels, getAllProjectLabels } = require('@ai-fleet/shared/linear');
+const { asyncHandler } = require('@ai-fleet/shared/util');
+const { CONFIG } = require('@ai-fleet/shared/config');
+const { SENTINEL_TOKEN, projectEgressHeaders } = require('@ai-fleet/shared/egress');
+const { resolveMissingSecrets } = require('@ai-fleet/shared/secrets/s2s-resolver');
+const { currentWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
+const scheduler = require('@ai-fleet/shared/agent/scheduler');
+const { llmReady, providerForRole } = require('@ai-fleet/shared/agent/llm');
+const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
+const { applySettingsPatch, sanitizeSettingsPatch } = require('@ai-fleet/shared/agent/settings-patch');
+const workspaceRouter = require('@ai-fleet/shared/agent/workspace-router');
+const { searchDocuments } = require('@ai-fleet/shared/agent/knowledge-search');
+const memory = require('@ai-fleet/shared/agent/memory');
+const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
+const approvalGate = require('@ai-fleet/shared/agent/approval-gate');
+const conversations = require('@ai-fleet/shared/agent/conversations');
+const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
+const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
+const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
+const attachmentsService = require('@ai-fleet/shared/attachments/service');
+const substrate = require('@ai-fleet/shared/agent/substrate');
+const substrateRunner = require('@ai-fleet/shared/agent/substrate-runner');
+const guardrailSpec = require('@ai-fleet/shared/guardrails/spec');
+const guardrailConsumers = require('@ai-fleet/shared/guardrails/consumers');
+const billingGate = require('@ai-fleet/shared/billing/gate');
+
+const REF_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
+const GATE_ID_PATTERN = /^gate_[A-Za-z0-9_-]{1,64}$/;
+const GATE_STATUSES = Object.freeze(['awaiting-approval', 'approved', 'auto-approved', 'proceeded', 'superseded']);
+
+// Server-side defense-in-depth for secret leakage. The browser strips secrets
+// before sending (public/js/secret-scan.mjs), but the API is the real trust
+// boundary — client checks can be bypassed by calling this endpoint directly.
+// So every user-text field is scrubbed again with the shared redactor before it
+// is classified, searched, enriched, or persisted. Generous cap so ordinary
+// messages are never truncated; the 1mb express.json limit bounds the request.
+const MAX_REDACT_BYTES = 1_000_000;
+const redactUserText = (value) => redactSecrets(String(value == null ? '' : value), [], MAX_REDACT_BYTES);
+
+const router = express.Router();
+
+function requestWorkspaceContext(req) {
+  const getHeader = (name) => {
+    if (req && typeof req.get === 'function') return req.get(name);
+    return req && req.headers ? req.headers[name] : undefined;
+  };
+  return normalizeEventContext({
+    organizationId: getHeader('x-ai-fleet-organization-id') || '',
+    projectId: getHeader('x-ai-fleet-project-id') || '',
+  });
+}
+
+function jobsForContext(context, kind) {
+  const jobs = listJobs(kind);
+  // Auth-disabled/local installs do not send selection headers. Preserve their
+  // existing single-workspace behavior instead of hiding legacy jobs.
+  if (!context.organizationId) return jobs;
+  return jobs.filter((job) => matchesEventContext(job, context));
+}
+
+function jobsForRequest(req, kind) {
+  return jobsForContext(requestWorkspaceContext(req), kind);
+}
+
+function recordsForRequest(req, records) {
+  const context = requestWorkspaceContext(req);
+  // No headers is the trusted, auth-disabled local-development contract.
+  if (!context.organizationId) return records;
+  return records.filter((record) => matchesEventContext(record, context));
+}
+
+function recordForRequest(req, records, id) {
+  return recordsForRequest(req, records).find((record) => record.id === id) || null;
+}
+
+function stampRequestContext(req, record = {}) {
+  const context = requestWorkspaceContext(req);
+  return {
+    ...record,
+    ...(context.organizationId ? { orgId: context.organizationId } : {}),
+    ...(context.projectId ? { nativeProjectId: context.projectId } : {}),
+  };
+}
+
+function schedulerStatusForContext(context) {
+  return scheduler.getStatus(context);
+}
+
+function conversationForRequest(req, id) {
+  const conversation = getConversation(id);
+  return conversation && matchesEventContext(conversation, requestWorkspaceContext(req))
+    ? conversation
+    : null;
+}
+
+// Deps for the DELETE-cascade call into attachmentsService below. The full
+// attachments router (agent-attachments.js) builds its own copy of this —
+// duplicated rather than imported to avoid a circular require (that router
+// is required FROM this file).
+function attachmentDeps(context) {
+  return {
+    embeddingApiKey: CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : getSettings().antigravityApiKey || '',
+    workspaceContext: context,
+  };
+}
+
+/**
+ * Enforce that a role is assumed before any enrichment action. This is the
+ * server-side gate behind the UI's disabled state — UI gating alone is not
+ * authorization (client-side-enforcement / authentication-failures checklists).
+ */
+function requireAssumedRole(req, res, next) {
+  const role = getAssumedRole();
+  if (!role) {
+    return res.status(403).json({ error: 'Assume a role before enriching projects.' });
+  }
+  req.assumedRole = role;
+  next();
+}
+
+function clampInt(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** Configured model name for the active provider (for status display). */
+function activeModelFor(provider, settings) {
+  if (provider === 'claude') return settings.claudeModel || CONFIG.CLAUDE.defaultModel;
+  if (provider === 'codex') {
+    const fallback = CONFIG.OAUTH.backend === 'chatgpt' ? CONFIG.OAUTH.chatgptModel : CONFIG.OAUTH.defaultModel;
+    return settings.codexModel || fallback;
+  }
+  if (provider === 'lmstudio') return settings.lmstudioModel;
+  if (provider === 'omlx') return settings.omlxModel;
+  if (provider === 'huggingface') return settings.huggingfaceModel;
+  if (provider === 'antigravity') return settings.antigravityModel || CONFIG.ANTIGRAVITY.defaultModel;
+  if (provider === 'qoder') return settings.qoderModel || CONFIG.QODER.defaultModel;
+  return settings.ollamaModel;
+}
+
+function sanitizeLabels(value, fallback) {
+  if (!Array.isArray(value)) return fallback;
+  const cleaned = [...new Set(value.map((l) => String(l || '').trim()).filter(Boolean))];
+  return cleaned;
+}
+
+/** Whitelist + clamp the config patch — never persist arbitrary fields. */
+function sanitizeConfig(body, current) {
+  const b = body || {};
+  const intervalMinutes = CONFIG.INTERVAL_OPTIONS.includes(Number(b.intervalMinutes))
+    ? Number(b.intervalMinutes)
+    : current.intervalMinutes;
+  return {
+    parallelProcessing: clampInt(b.parallelProcessing, 1, 8, current.parallelProcessing),
+    maxConcurrentCoders: clampInt(b.maxConcurrentCoders, 1, 8, current.maxConcurrentCoders),
+    maxProjectsPerRun: clampInt(b.maxProjectsPerRun, 1, 20, current.maxProjectsPerRun),
+    maxMilestones: clampInt(b.maxMilestones, 1, 12, current.maxMilestones),
+    maxIssuesPerMilestone: clampInt(b.maxIssuesPerMilestone, 0, 12, current.maxIssuesPerMilestone),
+    intervalMinutes,
+    enrichLabels: b.enrichLabels !== undefined ? sanitizeLabels(b.enrichLabels, current.enrichLabels) : current.enrichLabels,
+    scheduleEnabled: typeof b.scheduleEnabled === 'boolean' ? b.scheduleEnabled : current.scheduleEnabled,
+    autoAssignLead: typeof b.autoAssignLead === 'boolean' ? b.autoAssignLead : current.autoAssignLead,
+    autoLabelNewProjects:
+      typeof b.autoLabelNewProjects === 'boolean' ? b.autoLabelNewProjects : current.autoLabelNewProjects,
+    createIssues: typeof b.createIssues === 'boolean' ? b.createIssues : current.createIssues,
+    addDependencies: typeof b.addDependencies === 'boolean' ? b.addDependencies : current.addDependencies,
+    // Minutes to hold an amber/red requirement gate before auto-approving (1 min – 7 days).
+    evaluationApprovalWaitMinutes: clampInt(b.evaluationApprovalWaitMinutes, 1, 10080, current.evaluationApprovalWaitMinutes),
+  };
+}
+
+// GET /api/agent/config
+router.get('/config', (req, res) => {
+  res.json({ config: getAgentConfig() });
+});
+
+// GET /api/agent/models — scheduler interval choices (local).
+router.get('/models', (req, res) => {
+  res.json({ intervals: CONFIG.INTERVAL_OPTIONS });
+});
+
+// GET /api/agent/ollama-models — models installed on the configured Ollama host.
+// Best-effort: returns an empty list if Ollama is unreachable.
+router.get(
+  '/ollama-models',
+  asyncHandler(async (req, res) => {
+    const host = String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.OLLAMA.defaultHost : getSettings().ollamaHost || CONFIG.OLLAMA.defaultHost
+    ).replace(/\/$/, '');
+    const headers = CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {};
+    try {
+      const resp = await fetch(`${host}/api/tags`, { headers, signal: AbortSignal.timeout(4000) });
+      if (!resp.ok) return res.json({ models: [], reachable: false });
+      const data = await resp.json();
+      const models = (data.models || []).map((m) => m.name).filter(Boolean).sort();
+      res.json({ models, reachable: true });
+    } catch (_) {
+      res.json({ models: [], reachable: false });
+    }
+  })
+);
+
+// GET /api/agent/lmstudio-models — models available on the configured LM Studio
+// host. LM Studio exposes an OpenAI-compatible list at `/v1/models`. Best-effort:
+// returns an empty list if LM Studio is unreachable.
+router.get(
+  '/lmstudio-models',
+  asyncHandler(async (req, res) => {
+    const host = String(
+      CONFIG.EGRESS_PROXY_URL ? CONFIG.LMSTUDIO.defaultHost : getSettings().lmstudioHost || CONFIG.LMSTUDIO.defaultHost
+    ).replace(/\/$/, '');
+    const headers = CONFIG.EGRESS_PROXY_URL ? projectEgressHeaders(currentWorkspaceContext()) : {};
+    try {
+      const resp = await fetch(`${host}/v1/models`, { headers, signal: AbortSignal.timeout(4000) });
+      if (!resp.ok) return res.json({ models: [], reachable: false });
+      const data = await resp.json();
+      const models = (data.data || []).map((m) => m.id).filter(Boolean).sort();
+      res.json({ models, reachable: true });
+    } catch (_) {
+      res.json({ models: [], reachable: false });
+    }
+  })
+);
+
+// GET /api/agent/omlx-models — models advertised by the configured oMLX server.
+// oMLX auto-loads/evicts models, so discovery represents availability rather
+// than the model's current in-memory state. Optional API-key auth stays server-side.
+router.get(
+  '/omlx-models',
+  asyncHandler(async (req, res) => {
+    const settings = getSettings();
+    const host = String(CONFIG.EGRESS_PROXY_URL ? CONFIG.OMLX.defaultHost : settings.omlxHost || CONFIG.OMLX.defaultHost)
+      .replace(/\/v1\/?$/i, '')
+      .replace(/\/$/, '');
+    const headers = { Accept: 'application/json' };
+    if (CONFIG.EGRESS_PROXY_URL) Object.assign(headers, projectEgressHeaders(currentWorkspaceContext()));
+    if (CONFIG.EGRESS_PROXY_URL || settings.omlxApiKey) {
+      headers.Authorization = `Bearer ${CONFIG.EGRESS_PROXY_URL ? SENTINEL_TOKEN : settings.omlxApiKey}`;
+    }
+    try {
+      const resp = await fetch(`${host}${CONFIG.OMLX.apiPath}/models`, {
+        headers,
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!resp.ok) return res.json({ models: [], reachable: false });
+      const data = await resp.json();
+      const models = (data.data || [])
+        .map((model) => {
+          const id = String(model && model.id || '').trim();
+          if (!id) return null;
+          const contextWindow = Number(model.max_model_len);
+          return {
+            id,
+            label: id,
+            ...(Number.isFinite(contextWindow) && contextWindow > 0 ? { contextWindow } : {}),
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      res.json({ models, reachable: true, source: 'local' });
+    } catch (_) {
+      res.json({ models: [], reachable: false });
+    }
+  })
+);
+
+// GET /api/agent/labels — distinct Linear project labels (for the dropdown).
+router.get(
+  '/labels',
+  asyncHandler(async (req, res) => {
+    const labels = await getAllProjectLabels(getApiKey());
+    res.json({ labels });
+  })
+);
+
+// PUT /api/agent/config
+router.put('/config', (req, res) => {
+  const next = sanitizeConfig(req.body, getAgentConfig());
+  setAgentConfig(next);
+  // A schedule toggle / cadence change is a status transition — push it to the
+  // workspace stream so every open workspace updates without polling /status.
+  const context = requestWorkspaceContext(req);
+  workspaceEvents.publishAgentStatus(
+    { ...schedulerStatusForContext(context), assumedRole: getAssumedRole() },
+    context,
+  );
+  res.json({ config: next });
+});
+
+// GET /api/agent/status — scheduler + readiness for the dashboard.
+router.get('/status', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  const settings = getSettings();
+  const config = getAgentConfig();
+  const codexTokens = settings.codexTokens;
+  // The planner runs on the `thinking` role, so the dashboard LLM pill reflects
+  // that role's provider/model and readiness.
+  const provider = providerForRole(settings, 'thinking');
+  const byomProvider = settings.byomProvider || settings.llmProvider || 'ollama';
+  res.json({
+    ...schedulerStatusForContext(context),
+    assumedRole: getAssumedRole(),
+    llmConfigured: llmReady(settings, 'thinking'),
+    llmProvider: provider,
+    // Model for the active provider — used for the dashboard's LLM pill.
+    activeModel: activeModelFor(provider, settings),
+    byomProvider: byomProvider,
+    byomActiveModel: activeModelFor(byomProvider, settings),
+    ollamaModel: settings.ollamaModel,
+    lmstudioModel: settings.lmstudioModel,
+    omlxModel: settings.omlxModel,
+    huggingfaceModel: settings.huggingfaceModel,
+    antigravityModel: settings.antigravityModel,
+    codexModel: settings.codexModel || CONFIG.OAUTH.defaultModel,
+    codexConnected: Boolean(codexTokens && (codexTokens.accessToken || codexTokens.refreshToken)),
+    // Tracing is on when the org switch is on and the pair is resolvable — in
+    // proxied deployments the agent holds the sentinel, so only the switch counts.
+    tracingEnabled: Boolean(settings.langfuseTracing && (CONFIG.EGRESS_PROXY_URL || settings.langfusePublicKey)),
+    langfuseProject: CONFIG.LANGFUSE.projectId,
+    langfuseEnvironment: CONFIG.LANGFUSE.environment,
+    enrichLabels: config.enrichLabels,
+    intervalMinutes: config.intervalMinutes,
+  });
+});
+
+// GET /api/agent/candidates — open projects the auto-enrichment will pick up
+// (no lead + configured label). Read-only preview. Role required.
+router.get(
+  '/candidates',
+  requireAssumedRole,
+  asyncHandler(async (req, res) => {
+    const labels = getAgentConfig().enrichLabels;
+    const projects = await getProjectsWithLabels(getApiKey(), labels);
+    res.json({ labels, projects: projects.map((p) => ({ id: p.id, name: p.name, progress: p.progress })) });
+  })
+);
+
+// GET /api/agent/jobs — enrichment job history.
+router.get('/jobs', (req, res) => {
+  res.json({ jobs: jobsForRequest(req) });
+});
+
+// POST /api/agent/message — deterministic intent and safety gate for the Agent
+// omnibox. Greetings and rejected abuse never reach retrieval, a model, tools,
+// or a mutation. Business/general requests may use the configured local model
+// only to enrich their bounded, already-routed context.
+router.post(
+  '/message',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const route = workspaceRouter.classifyIntent(redactUserText(body.input));
+    let enrichment = null;
+    let warning = null;
+    let memoryDraft = null;
+    let canPrepare = false;
+
+    if (route.intent === 'business') {
+      // Keep /message fast: the real 6-step pipeline (fraud, revenue, memory,
+      // spec breakdown, UI design, scheduling) runs on demand via /business/prepare.
+      canPrepare = true;
+    } else if (route.intent === 'general') {
+      try {
+        enrichment = await localIntelligence.enrichInput({
+          input: route.input,
+          scenario: 'planning',
+          metadata: { intent: route.intent, workflow: 'thinker' },
+          settings: getSettings(),
+        });
+      } catch (error) {
+        warning = error && error.message
+          ? error.message
+          : 'The configured local model was unavailable; the deterministic route is still ready.';
+      }
+    } else if (route.intent === 'knowledge') {
+      // "Remember this" phrasing yields a confirmable draft only — the write is a
+      // separate, explicit POST /memory. Free text never auto-persists.
+      memoryDraft = memory.detectMemoryWrite(route.input);
+    }
+
+    res.json({ route, enrichment, warning, memoryDraft, canPrepare });
+  })
+);
+
+// POST /api/agent/knowledge-search — bounded, read-only lexical retrieval over
+// the workspace's README/docs corpus. It returns real relative paths and
+// snippets, never arbitrary files, absolute paths, credentials, or model prose.
+router.post('/knowledge-search', (req, res) => {
+  res.json(searchDocuments(redactUserText(req.body && (req.body.query || req.body.input))));
+});
+
+// POST /api/agent/memory-search — typed, read-only recall across the five memory
+// scopes, blended with reviewed documentation. Scope is detected from the query
+// when not explicitly supplied. Never returns secrets or absolute paths.
+router.post('/memory-search', (req, res) => {
+  const body = req.body || {};
+  const query = redactUserText(typeof body.query === 'string' ? body.query : typeof body.input === 'string' ? body.input : '');
+  const requested = typeof body.scope === 'string' ? body.scope.toLowerCase() : '';
+  const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : memory.detectMemoryScope(query);
+  const results = memory.searchMemories(query, recordsForRequest(req, listMemories()), { scope });
+  // Blend reviewed docs for the workspace scope (or when the scope is ambiguous).
+  if ((scope === 'workspace' || scope === 'all') && query.trim()) {
+    try {
+      const docs = searchDocuments(query);
+      for (const doc of docs.results || []) {
+        results.push({ scope: 'workspace', type: 'Workspace document', title: doc.title, summary: doc.snippet, status: doc.path, refId: null });
+      }
+    } catch (_) {
+      // A bad/empty query for the doc index is non-fatal; stored memory still returns.
+    }
+  }
+  res.json({ query, scope, results: results.slice(0, 12) });
+});
+
+// POST /api/agent/memory — persist a confirmed memory (the write). Validation
+// (scope allowlist, bounded fields, safe refId) happens in normalizeMemory;
+// a MemoryError carries a 400 to the central error handler.
+router.post('/memory', (req, res) => {
+  const record = addMemory(stampRequestContext(req, memory.normalizeMemory(req.body)));
+  res.status(201).json({ memory: record });
+});
+
+// GET /api/agent/memory — list stored memories, optionally filtered by scope/refId.
+router.get('/memory', (req, res) => {
+  const requested = typeof req.query.scope === 'string' ? req.query.scope.toLowerCase() : '';
+  const scope = memory.MEMORY_SCOPES.includes(requested) ? requested : undefined;
+  const refId = typeof req.query.refId === 'string' && REF_ID_PATTERN.test(req.query.refId) ? req.query.refId : undefined;
+  res.json({ memories: recordsForRequest(req, listMemories({ scope, refId })) });
+});
+
+// DELETE /api/agent/memory/:id — remove one stored memory.
+router.delete('/memory/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^mem_[A-Za-z0-9-]{1,80}$/.test(id)) return res.status(400).json({ error: 'Invalid memory id.' });
+  if (!recordForRequest(req, listMemories(), id) || !removeMemory(id)) {
+    return res.status(404).json({ error: 'Memory not found.' });
+  }
+  res.json({ ok: true });
+});
+
+// POST /api/agent/business/prepare — run the real, on-demand business pipeline.
+// The unsafe gate is re-asserted inside prepareBusiness; a missing role/project
+// degrades the scheduling stage rather than failing the whole request.
+router.post(
+  '/business/prepare',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    let business = null;
+    if (typeof body.businessId === 'string' && REF_ID_PATTERN.test(body.businessId)) {
+      business = recordForRequest(req, readStore().businesses, body.businessId);
+    }
+    const payload = await businessPipeline.prepareBusiness({
+      input: typeof body.input === 'string' ? body.input : '',
+      business,
+      settings: getSettings(),
+      assumedRole: getAssumedRole(),
+      ...stampRequestContext(req),
+    });
+    res.json({ business: payload });
+  })
+);
+
+// POST /api/agent/business/evaluate — requirement-readiness preflight (step 0),
+// run BEFORE design/scheduling. Returns a traffic-light signal + acceptance
+// criteria. Green proceeds straight to the pipeline (no gate); amber/red opens a
+// durable approval gate that holds the pipeline pending human refinement. The
+// signal is computed server-side from readiness scores — the model cannot force
+// green (business-pipeline normalizeEvaluation clamps it down).
+router.post(
+  '/business/evaluate',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    let business = null;
+    if (typeof body.businessId === 'string' && REF_ID_PATTERN.test(body.businessId)) {
+      business = recordForRequest(req, readStore().businesses, body.businessId);
+    }
+    const conversationId = typeof body.conversationId === 'string' && CONV_ID_PATTERN.test(body.conversationId)
+      ? body.conversationId
+      : null;
+
+    const result = await businessPipeline.evaluateRequirement({
+      input: typeof body.input === 'string' ? body.input : '',
+      settings: getSettings(),
+      business,
+    });
+
+    if (result.blocked) return res.json({ blocked: true, answer: result.answer, signal: result.signal });
+    if (result.signal === 'green') return res.json({ evaluation: result.evaluation, signal: 'green', gate: null });
+
+    const gate = approvalGate.createGate(stampRequestContext(req, {
+      requirement: result.goal,
+      businessId: business ? business.id : null,
+      conversationId,
+      evaluation: result.evaluation,
+      signal: result.signal,
+      waitMinutes: getAgentConfig().evaluationApprovalWaitMinutes,
+    }));
+    res.json({ evaluation: result.evaluation, signal: result.signal, gate });
+  })
+);
+
+// GET /api/agent/business/gates — list gates (optional ?businessId= &status=).
+router.get('/business/gates', (req, res) => {
+  const filter = {};
+  if (typeof req.query.businessId === 'string' && REF_ID_PATTERN.test(req.query.businessId)) filter.businessId = req.query.businessId;
+  if (typeof req.query.status === 'string' && GATE_STATUSES.includes(req.query.status)) filter.status = req.query.status;
+  res.json({ gates: recordsForRequest(req, listApprovalGates(filter)) });
+});
+
+// GET /api/agent/business/gates/:id — one gate (front-end polls for the countdown
+// and to auto-advance when status flips to proceeded).
+router.get('/business/gates/:id', (req, res) => {
+  if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+  const gate = recordForRequest(req, listApprovalGates(), req.params.id);
+  if (!gate) return res.status(404).json({ error: 'Approval gate not found.' });
+  res.json({ gate });
+});
+
+// POST /api/agent/business/gates/:id/approve — human "approve & proceed now".
+router.post(
+  '/business/gates/:id/approve',
+  asyncHandler(async (req, res) => {
+    if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+    if (!recordForRequest(req, listApprovalGates(), req.params.id)) {
+      return res.status(404).json({ error: 'Approval gate not found.' });
+    }
+    const { gate, business } = await approvalGate.approveGate(req.params.id);
+    res.json({ gate, business });
+  })
+);
+
+// POST /api/agent/business/gates/:id/reevaluate — refine the requirement + re-score.
+router.post(
+  '/business/gates/:id/reevaluate',
+  asyncHandler(async (req, res) => {
+    if (!GATE_ID_PATTERN.test(req.params.id)) return res.status(400).json({ error: 'Invalid gate id.' });
+    if (!recordForRequest(req, listApprovalGates(), req.params.id)) {
+      return res.status(404).json({ error: 'Approval gate not found.' });
+    }
+    const body = req.body || {};
+    const out = await approvalGate.reevaluateGate(req.params.id, typeof body.input === 'string' ? body.input : '');
+    res.json(out);
+  })
+);
+
+// ---- Conversation threads (agent workspace history) --------------------
+// Persisted server-side in the shared store, mirroring jobs/memories. Validation
+// (id shape, role allowlist, bounded fields) lives in agent/conversations.js; a
+// ConversationError carries its status to the central error handler.
+
+// GET /api/agent/conversations — thread summaries (no messages), newest-first.
+router.get('/conversations', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  res.json({
+    conversations: listConversations()
+      .filter((conversation) => matchesEventContext(conversation, context))
+      .map(conversations.summarizeConversation),
+  });
+});
+
+// POST /api/agent/conversations — create an empty thread.
+router.post('/conversations', (req, res) => {
+  const body = req.body || {};
+  const title = typeof body.title === 'string' && body.title.trim() ? conversations.normalizeTitle(body.title) : undefined;
+  const context = requestWorkspaceContext(req);
+  res.status(201).json({ conversation: addConversation({
+    ...(title ? { title } : {}),
+    ...(context.organizationId ? { orgId: context.organizationId } : {}),
+    ...(context.projectId ? { nativeProjectId: context.projectId } : {}),
+  }) });
+});
+
+// GET /api/agent/conversations/:id — full thread with messages.
+router.get('/conversations/:id', (req, res) => {
+  if (!CONV_ID_PATTERN.test(String(req.params.id || ''))) return res.status(400).json({ error: 'Invalid conversation id.' });
+  const conversation = conversationForRequest(req, req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+  res.json({ conversation });
+});
+
+// POST /api/agent/conversations/:id/messages — append a turn; auto-titles an
+// untitled thread from its first user message.
+router.post('/conversations/:id/messages', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  const existing = conversationForRequest(req, id);
+  if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
+  const messages = conversations.normalizeMessages(req.body && req.body.messages)
+    .map((message) => ({ ...message, text: redactUserText(message.text) }));
+  const updated = appendConversationMessages(id, messages);
+  const untitled = !existing.title || existing.title === 'New conversation';
+  const hadUser = (existing.messages || []).some((message) => message.role === 'user');
+  const firstUser = hadUser ? null : messages.find((message) => message.role === 'user');
+  const conversation = untitled && firstUser
+    ? updateConversation(id, { title: conversations.deriveTitle(firstUser.text) })
+    : updated;
+  res.json({ conversation });
+});
+
+// PATCH /api/agent/conversations/:id — rename.
+router.patch('/conversations/:id', (req, res) => {
+  const id = String(req.params.id || '');
+  if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+  if (!conversationForRequest(req, id)) return res.status(404).json({ error: 'Conversation not found.' });
+  const conversation = updateConversation(id, { title: conversations.normalizeTitle(req.body && req.body.title) });
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found.' });
+  res.json({ conversation });
+});
+
+// DELETE /api/agent/conversations/:id — remove a thread, cascading to its
+// attachments first (best-effort — a cleanup failure must never block the
+// conversation delete itself, and never orphan an unbounded background job).
+router.delete(
+  '/conversations/:id',
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id || '');
+    if (!CONV_ID_PATTERN.test(id)) return res.status(400).json({ error: 'Invalid conversation id.' });
+    const existing = conversationForRequest(req, id);
+    if (!existing) return res.status(404).json({ error: 'Conversation not found.' });
+    if (existing.orgId && existing.nativeProjectId) {
+      const context = { organizationId: existing.orgId, projectId: existing.nativeProjectId };
+      await attachmentsService
+        .removeAllAttachmentsForConversation(
+          { orgId: existing.orgId, projectId: existing.nativeProjectId, conversationId: id },
+          attachmentDeps(context)
+        )
+        .catch(() => {});
+    }
+    if (!removeConversation(id)) return res.status(404).json({ error: 'Conversation not found.' });
+    res.json({ ok: true });
+  })
+);
+
+// ── Agent Substrate (execution substrate = 'substrate') ───────────────────────
+
+function substrateContext(req) {
+  const context = requestWorkspaceContext(req);
+  const settings = getSettings();
+  const organizationId =
+    (typeof req.query.organizationId === 'string' && req.query.organizationId.trim()) ||
+    (req.body && req.body.organizationId) || context.organizationId || 'default';
+  const projectId =
+    (typeof req.query.projectId === 'string' && req.query.projectId.trim()) ||
+    (req.body && req.body.projectId) || context.projectId || 'default';
+  return { settings, organizationId, projectId, context };
+}
+
+// GET /api/agent/substrate/status — Control-plane health + atespace + live actors.
+router.get(
+  '/substrate/status',
+  asyncHandler(async (req, res) => {
+    const { settings, organizationId, projectId } = substrateContext(req);
+    const atespace = substrate.resolveSubstrateAtespace({
+      atespace: typeof req.query.atespace === 'string' ? req.query.atespace : settings.substrateAtespace,
+      organizationId,
+      projectId,
+    });
+    const url = settings.substrateUrl || CONFIG.SUBSTRATE?.url || '';
+    // Sequential: the actor list is only fetched once the control plane answers,
+    // so it cannot share a Promise.all with the status call it depends on.
+    const status = await substrate.getControlPlaneStatus({ url, atespace });
+    const actors = url && status && status.connected
+      ? await substrate.listActors({ url, atespace }).catch(() => [])
+      : [];
+    res.json({
+      agentPattern: settings.agentPattern || 'substrate',
+      atespace,
+      workerPool: substrate.resolveSubstrateWorkerPool(settings.substrateWorkerPool),
+      ingressUrl: substrate.resolveSubstrateIngressUrl(settings.substrateIngressUrl),
+      configured: Boolean(url),
+      status,
+      actors: actors.map((a) => ({
+        name: a.metadata?.name,
+        state: a.status?.state,
+        workerPod: a.status?.workerPod,
+        nodeName: a.status?.nodeName,
+      })),
+    });
+  })
+);
+
+// POST /api/agent/substrate/run — run the planning prompt on a per-run ephemeral actor.
+router.post(
+  '/substrate/run',
+  asyncHandler(async (req, res) => {
+    const { settings, organizationId, projectId } = substrateContext(req);
+    const prompt = String((req.body && req.body.prompt) || '').trim();
+    if (!prompt) return res.status(400).json({ error: 'prompt is required.' });
+    if (!(settings.agentPattern === 'substrate' || settings.substrateUrl)) {
+      return res.status(409).json({ error: 'Substrate is not the active agent pattern and is not configured.' });
+    }
+    // Managed credentials resolved server-side (vault/KMS single source); never returned.
+    const creds = await resolveMissingSecrets(
+      { githubToken: settings.githubToken, openrouterApiKey: settings.openrouterApiKey },
+      { organizationId, projectId }
+    );
+    const result = await substrateRunner.runPlanningOnSubstrate({
+      organizationId,
+      projectId,
+      projectName: (req.body && req.body.projectName) || projectId,
+      userId: String(req.get('x-ai-fleet-user-id') || '').slice(0, 200) || null,
+      prompt,
+      guardrailSpec: guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec),
+      secrets: creds,
+      llm: req.body && req.body.llm,
+      traceContext: { runId: req.body && req.body.runId },
+    });
+    res.json({
+      ok: true,
+      finalText: result.finalText,
+      model: result.model,
+      substrate: {
+        atespace: result.substrate?.atespace,
+        actorName: result.substrate?.actorName,
+        credentialSync: result.substrate?.credentialSync?.state,
+        // Scopes the guardrail spec does not grant: a configured GitHub token
+        // that the actor cannot read is a policy answer, not a bug, and the UI
+        // has to say which one it is looking at.
+        credentialWithheld: result.substrate?.credentialSync?.withheld || [],
+      },
+    });
+  })
+);
+
+// PUT /api/agent/substrate/secrets/sync — push managed creds to the credential-provider.
+router.put(
+  '/substrate/secrets/sync',
+  asyncHandler(async (req, res) => {
+    const { settings, organizationId } = substrateContext(req);
+    const creds = await resolveMissingSecrets(
+      { githubToken: settings.githubToken, openrouterApiKey: settings.openrouterApiKey },
+      { organizationId, projectId: (req.body && req.body.projectId) || 'default' }
+    );
+    const atespace = substrate.resolveSubstrateAtespace({ atespace: settings.substrateAtespace, organizationId });
+    // No applyManifest seam is wired in a Cloud Run planner (no in-cluster k8s
+    // client). So this resolves the intended credential-provider state and either
+    // reports it fingerprint-only (nothing in scope) or throws naming the granted
+    // scope it could not apply. Both are surfaced: what it must never do is skip a
+    // grant and look applied. The actor still never receives raw values.
+    const sync = await substrateRunner.syncSubstrateSecrets({
+      organizationId,
+      atespace,
+      secrets: creds,
+      guardrailSpec: guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec),
+    }).catch((err) => ({ pending: true, reason: err?.message || String(err), state: substrateRunner.fingerprintOnly(creds) }));
+    res.json({ ok: true, atespace, sync });
+  })
+);
+
+// POST /api/agent/substrate/pattern — select the execution substrate + config.
+// Persisted to the JS store the substrate code actually reads (not the Python
+// settings service), so the pattern, substrate URL/atespace/pool/image and the
+// actor budget all take effect for the planner immediately.
+router.post(
+  '/substrate/pattern',
+  asyncHandler(async (req, res) => {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const pattern = String(body.agentPattern || '').trim().toLowerCase();
+    if (pattern !== 'substrate') {
+      return res.status(400).json({ error: 'agentPattern must be substrate; the Cloud Run harness is retired.' });
+    }
+    const patch = { agentPattern: pattern };
+    for (const key of ['substrateUrl', 'substrateIngressUrl', 'substrateAtespace', 'substrateActorTemplate', 'substrateWorkerPool', 'substratePlannerImage']) {
+      if (typeof body[key] === 'string') patch[key] = body[key].trim();
+    }
+    for (const key of ['substrateTimeoutMs', 'substrateActorTtlMs']) {
+      if (Number.isFinite(Number(body[key]))) patch[key] = Number(body[key]);
+    }
+    // Pin-by-digest is mandatory for ActorTemplate; reject a floating tag early.
+    if (patch.substratePlannerImage && !patch.substratePlannerImage.includes('@sha256:')) {
+      return res.status(400).json({ error: 'substratePlannerImage must be digest-pinned (name@sha256:...).' });
+    }
+    patchSettings(patch);
+    const settings = getSettings();
+    res.json({
+      ok: true,
+      agentPattern: settings.agentPattern,
+      substrate: {
+        url: settings.substrateUrl,
+        ingressUrl: settings.substrateIngressUrl,
+        atespace: settings.substrateAtespace,
+        workerPool: settings.substrateWorkerPool,
+        actorTemplate: settings.substrateActorTemplate,
+        plannerImage: settings.substratePlannerImage,
+        timeoutMs: settings.substrateTimeoutMs,
+        actorTtlMs: settings.substrateActorTtlMs,
+      },
+    });
+  })
+);
+
+// GET /api/agent/guardrail — the unified spec + per-pattern render preview.
+router.get(
+  '/guardrail',
+  asyncHandler(async (req, res) => {
+    const settings = getSettings();
+    const spec = guardrailSpec.normalizeGuardrailSpec(settings.guardrailSpec);
+    res.json({
+      agentPattern: settings.agentPattern || 'substrate',
+      spec,
+      preview: {
+        atenetEgress: guardrailConsumers.buildAtenetEgressPolicy(spec),
+        namespacePolicy: guardrailConsumers.buildNamespaceNetworkPolicy(spec, { namespace: 'tenant-a' }),
+        credentialProvider: guardrailConsumers.buildCredentialProviderPolicy(spec),
+      },
+    });
+  })
+);
+
+// POST /api/agent/guardrail — validate + persist the shared guardrail spec.
+router.post(
+  '/guardrail',
+  asyncHandler(async (req, res) => {
+    const spec = guardrailSpec.normalizeGuardrailSpec(req.body && req.body.spec ? req.body.spec : req.body);
+    const { ok, errors } = guardrailSpec.validateGuardrailSpec(spec);
+    if (!ok) return res.status(400).json({ error: 'Invalid guardrail spec.', errors });
+    patchSettings({ guardrailSpec: spec });
+    res.json({ ok: true, spec });
+  })
+);
+
+// Chat attachments (upload/extract/embed/index, retrieval, and the /ask
+// endpoint) — a fully self-contained, newly-added surface split into its own
+// router file rather than growing this already-large one further.
+router.use(require('./agent-attachments'));
+
+// POST /api/agent/enrich-input — turn short user notes into a clearer brief via
+// the configured LOCAL role only (Ollama / LM Studio / oMLX; never a hosted fallback).
+router.post(
+  '/enrich-input',
+  asyncHandler(async (req, res) => {
+    const input = localIntelligence.normalizeEnrichmentRequest(req.body);
+    const enrichment = await localIntelligence.enrichInput({ ...input, settings: getSettings() });
+    res.json({ enrichment });
+  })
+);
+
+// POST /api/agent/settings-command — interpret a natural-language settings
+// request with the LOCAL model only, then apply the validated (non-secret) patch
+// to the store (data/store.json). Pass { apply: false } to preview without saving.
+router.post(
+  '/settings-command',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const instruction =
+      typeof body.instruction === 'string'
+        ? body.instruction
+        : typeof body.input === 'string'
+          ? body.input
+          : '';
+    const proposal = await localIntelligence.proposeSettings({ instruction, settings: getSettings() });
+    const preview = body.apply === false;
+    const outcome = preview ? sanitizeSettingsPatch(proposal.patch) : applySettingsPatch(proposal.patch);
+    res.json({
+      command: {
+        instruction: proposal.instruction,
+        notes: proposal.notes,
+        patch: proposal.patch,
+        provenance: proposal.provenance,
+        warnings: proposal.warnings,
+      },
+      applied: preview ? [] : outcome.applied,
+      preview: preview ? outcome.patch : undefined,
+      rejected: outcome.rejected,
+      ignored: outcome.ignored,
+    });
+  })
+);
+
+// DELETE /api/agent/jobs — clear all finished (done/error) jobs.
+router.delete('/jobs', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  let jobs;
+  if (!context.organizationId) {
+    jobs = clearFinishedJobs();
+  } else {
+    for (const job of jobsForContext(context)) {
+      if (job.status === 'done' || job.status === 'error') removeJob(job.id);
+    }
+    jobs = jobsForContext(context);
+  }
+  res.json({ jobs });
+});
+
+// DELETE /api/agent/jobs/:id — remove a single job.
+router.delete('/jobs/:id', (req, res) => {
+  const context = requestWorkspaceContext(req);
+  const job = jobsForContext(context).find((candidate) => candidate.id === req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found.' });
+  const removed = removeJob(req.params.id);
+  if (!removed) return res.status(404).json({ error: 'Job not found.' });
+  res.json({ ok: true });
+});
+
+// POST /api/agent/enqueue — queue ONE project for the planner, then kick a
+// non-overlapping tick so it starts without waiting for the cadence. Role-gated
+// (the same server-side gate as run-now); projectId is bounded and only ever
+// passed as a parameterized Linear GraphQL variable, never a path.
+router.post(
+  '/enqueue',
+  requireAssumedRole,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+    if (!projectId || projectId.length > 200) return res.status(400).json({ error: 'projectId is required.' });
+    const projectName = typeof body.projectName === 'string' ? body.projectName.slice(0, 200) : projectId;
+    const context = requestWorkspaceContext(req);
+    const orgId = context.organizationId || null;
+    if (orgId) {
+      const fundInfo = billingGate.getOrgFundStatus(orgId);
+      if (fundInfo && fundInfo.fundsAvailable === false) {
+        return res.status(402).json({
+          error: fundInfo.reason || 'Organization funds unavailable — scheduled calls and enqueue disabled.',
+          code: 'funds_unavailable',
+          fundStatus: fundInfo.fundStatus || 'unavailable',
+          fundsAvailable: false,
+        });
+      }
+    }
+    const job = scheduler.enqueue({
+      projectId,
+      projectName,
+      assumedRole: req.assumedRole,
+      orgId,
+      nativeProjectId: context.projectId || null,
+    });
+    // Fire-and-forget tick; the queued job is processed on this (or the next) tick.
+    Promise.resolve(scheduler.processPending()).catch(() => {});
+    res.json({ job, status: schedulerStatusForContext(context) });
+  })
+);
+
+// POST /api/agent/run-now — manual scheduler tick (still bounded/non-overlapping).
+router.post(
+  '/run-now',
+  requireAssumedRole,
+  asyncHandler(async (req, res) => {
+    const context = requestWorkspaceContext(req);
+    const orgId = context.organizationId || null;
+    if (orgId) {
+      const fundInfo = billingGate.getOrgFundStatus(orgId);
+      if (fundInfo && fundInfo.fundsAvailable === false) {
+        return res.status(402).json({
+          error: fundInfo.reason || 'Organization funds unavailable — scheduled calls disabled.',
+          code: 'funds_unavailable',
+          fundStatus: fundInfo.fundStatus || 'unavailable',
+          fundsAvailable: false,
+        });
+      }
+    }
+    const result = await scheduler.processPending();
+    res.json({ result, status: schedulerStatusForContext(context) });
+  })
+);
+
+module.exports = router;

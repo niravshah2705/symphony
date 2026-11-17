@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| ProjectTaskError | Class | ./services/planner/src/routes/issues.js | 38-44 |
-| constructor | Function | ./services/planner/src/routes/issues.js | 39-43 |
+| ProjectTaskError | Class | ./services/orchestrator/src/routes/issues.js | 38-44 |
+| constructor | Function | ./services/orchestrator/src/routes/issues.js | 39-43 |
 
 ## Execution Flows
 
@@ -25,4 +25,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/issues.js` (2 edge(s))
+- `./services/orchestrator/src/routes/issues.js` (2 edge(s))

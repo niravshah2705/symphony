@@ -14,17 +14,17 @@ Community of 11 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| queryLanguages | Function | ./services/planner/src/routes/localization.js | 18-21 |
-| suggestionsForRequest | Function | ./services/planner/src/routes/localization.js | 24-60 |
-| translationForBody | Function | ./services/planner/src/routes/localization.js | 62-74 |
-| createLocalizationRouter | Function | ./services/planner/src/routes/localization.js | 77-91 |
-| test:planner localization router exposes the agreed suggestions and translation routes@L13 | Test | ./services/planner/src/routes/localization.test.js | 13-19 |
-| test:suggestions use browser hints and coarse IP location without returning the address@L21 | Test | ./services/planner/src/routes/localization.test.js | 21-46 |
-| test:suggestions use the gateway-resolved client address rather than the planner socket peer@L48 | Test | ./services/planner/src/routes/localization.test.js | 48-66 |
-| test:suggestions remain usable when lookup is offline or the request address is private@L68 | Test | ./services/planner/src/routes/localization.test.js | 68-92 |
-| test:translation body passes only locale, texts, and server settings to the translator@L94 | Test | ./services/planner/src/routes/localization.test.js | 94-116 |
-| test:translation route helper rejects a missing JSON object before reading settings@L118 | Test | ./services/planner/src/routes/localization.test.js | 118-125 |
-| test@L122 | Test | ./services/planner/src/routes/localization.test.js | 122-122 |
+| queryLanguages | Function | ./services/orchestrator/src/routes/localization.js | 18-21 |
+| suggestionsForRequest | Function | ./services/orchestrator/src/routes/localization.js | 24-60 |
+| translationForBody | Function | ./services/orchestrator/src/routes/localization.js | 62-74 |
+| createLocalizationRouter | Function | ./services/orchestrator/src/routes/localization.js | 77-91 |
+| test:planner localization router exposes the agreed suggestions and translation routes@L13 | Test | ./services/orchestrator/src/routes/localization.test.js | 13-19 |
+| test:suggestions use browser hints and coarse IP location without returning the address@L21 | Test | ./services/orchestrator/src/routes/localization.test.js | 21-46 |
+| test:suggestions use the gateway-resolved client address rather than the planner socket peer@L48 | Test | ./services/orchestrator/src/routes/localization.test.js | 48-66 |
+| test:suggestions remain usable when lookup is offline or the request address is private@L68 | Test | ./services/orchestrator/src/routes/localization.test.js | 68-92 |
+| test:translation body passes only locale, texts, and server settings to the translator@L94 | Test | ./services/orchestrator/src/routes/localization.test.js | 94-116 |
+| test:translation route helper rejects a missing JSON object before reading settings@L118 | Test | ./services/orchestrator/src/routes/localization.test.js | 118-125 |
+| test@L122 | Test | ./services/orchestrator/src/routes/localization.test.js | 122-122 |
 
 ## Execution Flows
 
@@ -53,8 +53,8 @@ No execution flows pass through this community.
 ### Incoming
 
 - `equal` (18 edge(s))
-- `./services/planner/src/routes/localization.js` (8 edge(s))
-- `./services/planner/src/routes/localization.test.js` (6 edge(s))
+- `./services/orchestrator/src/routes/localization.js` (8 edge(s))
+- `./services/orchestrator/src/routes/localization.test.js` (6 edge(s))
 - `deepEqual` (3 edge(s))
 - `ok` (3 edge(s))
 - `doesNotMatch` (2 edge(s))

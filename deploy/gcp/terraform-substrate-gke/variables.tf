@@ -301,7 +301,7 @@ variable "substrate_control_plane_public" {
     (path prefix /substrate.ateapi.v1.Control), so substrateUrl can be the same
     public host as substrateIngressUrl. Default false: the control plane creates
     and deletes actors and mints actor JWTs, and this config adds no caller
-    authentication in front of it. Leave false until the planner reaches ateapi
+    authentication in front of it. Leave false until the orchestrator reaches ateapi
     over VPC egress or an authN policy is attached to that route.
 EOT
   type        = bool

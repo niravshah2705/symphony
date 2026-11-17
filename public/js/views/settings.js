@@ -918,7 +918,6 @@ function runtimeTiles(ctx, scopeState) {
 /* ===================== Execution substrate (agent pattern) + guardrails ===================== */
 
 const AGENT_PATTERNS = [
-  { id: 'cloudrun', label: 'Cloud Run (in-process)', meta: 'Agent runs in the planner container (default).' },
   { id: 'substrate', label: 'Agent Substrate', meta: 'Zero-trust K8s runtime; per-run ephemeral actor, managed egress.' },
 ];
 
@@ -930,7 +929,7 @@ function patternSection(ctx, scopeState) {
 
   const render = () => {
     clear(card);
-    const active = ctx.settings.agentPattern || 'cloudrun';
+    const active = ctx.settings.agentPattern || 'substrate';
     const tiles = el('div', { class: 'sx-tiles', dataset: { lockKey: 'agentPattern' } });
     for (const p of AGENT_PATTERNS) {
       const selected = p.id === active;

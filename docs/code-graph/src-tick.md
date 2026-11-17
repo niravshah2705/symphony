@@ -7,17 +7,17 @@
 Community of 4 nodes
 
 - **Size**: 4 nodes
-- **Cohesion**: 0.2500
+- **Cohesion**: 0.2239
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| shouldRunAutonomousTick | Function | ./services/coder/src/pubsub.js | 56-64 |
-| dispatchCoderTick | Function | ./services/coder/src/pubsub.js | 66-89 |
-| test:coder autonomous ticks fail closed only on an unpinned shared cloud runtime@L127 | Test | ./services/coder/src/pubsub.test.js | 127-158 |
-| test:coder orchestrator rollout suppresses autonomous polling@L160 | Test | ./services/coder/src/pubsub.test.js | 160-173 |
+| shouldRunAutonomousTick | Function | ./services/orchestrator/src/pubsub.js | 66-74 |
+| dispatchPlannerTick | Function | ./services/orchestrator/src/pubsub.js | 76-98 |
+| test:planner autonomous ticks fail closed only on an unpinned shared cloud runtime@L188 | Test | ./services/orchestrator/src/pubsub.test.js | 188-225 |
+| test:planner orchestrator rollout suppresses autonomous planning@L227 | Test | ./services/orchestrator/src/pubsub.test.js | 227-240 |
 
 ## Execution Flows
 
@@ -28,24 +28,29 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `equal` (7 edge(s))
+- `require` (3 edge(s))
 - `then` (2 edge(s))
 - `warn` (2 edge(s))
 - `Boolean` (2 edge(s))
-- `require` (2 edge(s))
 - `setImmediate` (2 edge(s))
 - `deepEqual` (2 edge(s))
 - `catch` (1 edge(s))
 - `resolve` (1 edge(s))
-- `pollOnce` (1 edge(s))
-- `start` (1 edge(s))
+- `processPending` (1 edge(s))
 - `error` (1 edge(s))
+- `doesNotMatch` (1 edge(s))
+- `readFileSync` (1 edge(s))
+- `join` (1 edge(s))
 
 ### Incoming
 
 - `equal` (7 edge(s))
-- `./services/coder/src/pubsub.js` (5 edge(s))
-- `./services/coder/src/pubsub.test.js` (2 edge(s))
-- `require` (2 edge(s))
+- `./services/orchestrator/src/pubsub.js` (5 edge(s))
+- `require` (3 edge(s))
+- `./services/orchestrator/src/pubsub.test.js` (2 edge(s))
 - `setImmediate` (2 edge(s))
 - `deepEqual` (2 edge(s))
 - `then` (1 edge(s))
+- `doesNotMatch` (1 edge(s))
+- `readFileSync` (1 edge(s))
+- `join` (1 edge(s))

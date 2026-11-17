@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| callRoute | Function | ./services/planner/src/routes/agent.test.js | 47-64 |
-| next | Function | ./services/planner/src/routes/agent.test.js | 521-521 |
+| callRoute | Function | ./services/orchestrator/src/routes/agent.test.js | 47-64 |
+| next | Function | ./services/orchestrator/src/routes/agent.test.js | 521-521 |
 
 ## Execution Flows
 
@@ -25,7 +25,7 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/routes/agent.test.js::test:enqueue is role-gated, validates projectId, and queues exactly one project@L400` (4 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:enqueue is role-gated, validates projectId, and queues exactly one project@L400` (4 edge(s))
 - `resolve` (2 edge(s))
 - `reject` (2 edge(s))
 - `find` (1 edge(s))
@@ -37,5 +37,5 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.test.js::test:enqueue is role-gated, validates projectId, and queues exactly one project@L400` (4 edge(s))
-- `./services/planner/src/routes/agent.test.js` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:enqueue is role-gated, validates projectId, and queues exactly one project@L400` (4 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js` (3 edge(s))

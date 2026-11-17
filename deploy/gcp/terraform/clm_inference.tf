@@ -70,21 +70,13 @@ resource "google_cloud_run_v2_service" "clm" {
   depends_on = [google_project_service.services]
 }
 
-# Grant Invoker only to internal caller service accounts (planner, coder, gateway)
-resource "google_cloud_run_v2_service_iam_member" "planner_invokes_clm" {
+# Grant Invoker only to internal caller service accounts (orchestrator, gateway)
+resource "google_cloud_run_v2_service_iam_member" "orchestrator_invokes_clm" {
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.clm.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.planner.email}"
-}
-
-resource "google_cloud_run_v2_service_iam_member" "coder_invokes_clm" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.clm.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.coder.email}"
+  member   = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_clm" {

@@ -4,46 +4,49 @@
 
 ## Overview
 
-Community of 30 nodes
+Community of 33 nodes
 
-- **Size**: 30 nodes
-- **Cohesion**: 0.3120
+- **Size**: 33 nodes
+- **Cohesion**: 0.3229
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| cleanId | Function | ./services/coder/src/pipeline-stage.js | 45-48 |
-| issueIdsFromCommand | Function | ./services/coder/src/pipeline-stage.js | 50-72 |
-| assertRepositorySnapshot | Function | ./services/coder/src/pipeline-stage.js | 74-108 |
-| codingKeys | Function | ./services/coder/src/pipeline-stage.js | 110-121 |
-| loadPipelineIssue | Function | ./services/coder/src/pipeline-stage.js | 123-150 |
-| orderCodingIssues | Function | ./services/coder/src/pipeline-stage.js | 152-186 |
-| priorTerminalOutcome | Function | ./services/coder/src/pipeline-stage.js | 188-194 |
-| authoritativeCodingReceipt | Function | ./services/coder/src/pipeline-stage.js | 196-212 |
-| safeReason | Function | ./services/coder/src/pipeline-stage.js | 214-216 |
-| publicReview | Function | ./services/coder/src/pipeline-stage.js | 218-228 |
-| executeCodingStage | Function | ./services/coder/src/pipeline-stage.js | 233-389 |
-| inCommandWorkspace | Function | ./services/coder/src/pipeline-stage.js | 391-399 |
-| createCoderPipelineRouter | Function | ./services/coder/src/pipeline-stage.js | 401-421 |
-| command | Function | ./services/coder/src/pipeline-stage.test.js | 27-60 |
-| routeStack | Function | ./services/coder/src/pipeline-stage.test.js | 62-65 |
-| responseRecorder | Function | ./services/coder/src/pipeline-stage.test.js | 67-75 |
-| exactAgent | Function | ./services/coder/src/pipeline-stage.test.js | 77-85 |
-| loadedIssue | Function | ./services/coder/src/pipeline-stage.test.js | 87-99 |
-| scopedStore | Function | ./services/coder/src/pipeline-stage.test.js | 101-116 |
-| mergeReceipt | Function | ./services/coder/src/pipeline-stage.test.js | 118-140 |
-| test:coder consumes planner work items deterministically and propagates exact harness/provider/model@L142 | Test | ./services/coder/src/pipeline-stage.test.js | 142-193 |
-| test:explicit snapshotted work item wins over planner output@L195 | Test | ./services/coder/src/pipeline-stage.test.js | 195-210 |
-| test:coder rejects an oversized planner batch before resolution or side effects@L212 | Test | ./services/coder/src/pipeline-stage.test.js | 212-234 |
-| test:coder orders planner work by Linear dependencies and rejects unresolved blockers@L236 | Test | ./services/coder/src/pipeline-stage.test.js | 236-250 |
-| test:coder fails closed before execution when the repository snapshot drifts@L252 | Test | ./services/coder/src/pipeline-stage.test.js | 252-280 |
-| test:coder publishes a terminal failure and deduplicates command execution across both routes@L282 | Test | ./services/coder/src/pipeline-stage.test.js | 282-319 |
-| test:coder pipeline router constructs its configured default authentication middleware@L321 | Test | ./services/coder/src/pipeline-stage.test.js | 321-330 |
-| test:coder rejects label-only recovery for a terminal aidone work item as ambiguous@L332 | Test | ./services/coder/src/pipeline-stage.test.js | 332-351 |
-| test:coder rejects a completed model verdict without a broker merge receipt@L353 | Test | ./services/coder/src/pipeline-stage.test.js | 353-368 |
-| test:coder rejects an issue linked to another native project before any mutation@L370 | Test | ./services/coder/src/pipeline-stage.test.js | 370-391 |
+| parseVerdict | Function | ./services/orchestrator/src/coding-stage.js | 24-42 |
+| cleanId | Function | ./services/orchestrator/src/coding-stage.js | 63-66 |
+| issueIdsFromCommand | Function | ./services/orchestrator/src/coding-stage.js | 68-90 |
+| assertRepositorySnapshot | Function | ./services/orchestrator/src/coding-stage.js | 92-126 |
+| codingKeys | Function | ./services/orchestrator/src/coding-stage.js | 128-139 |
+| loadPipelineIssue | Function | ./services/orchestrator/src/coding-stage.js | 141-168 |
+| orderCodingIssues | Function | ./services/orchestrator/src/coding-stage.js | 170-204 |
+| priorTerminalOutcome | Function | ./services/orchestrator/src/coding-stage.js | 206-212 |
+| authoritativeCodingReceipt | Function | ./services/orchestrator/src/coding-stage.js | 214-230 |
+| safeReason | Function | ./services/orchestrator/src/coding-stage.js | 232-234 |
+| publicReview | Function | ./services/orchestrator/src/coding-stage.js | 236-246 |
+| executeCodingStage | Function | ./services/orchestrator/src/coding-stage.js | 251-407 |
+| command | Function | ./services/orchestrator/src/coding-stage.test.js | 25-58 |
+| exactAgent | Function | ./services/orchestrator/src/coding-stage.test.js | 60-68 |
+| loadedIssue | Function | ./services/orchestrator/src/coding-stage.test.js | 70-82 |
+| scopedStore | Function | ./services/orchestrator/src/coding-stage.test.js | 84-99 |
+| mergeReceipt | Function | ./services/orchestrator/src/coding-stage.test.js | 101-123 |
+| test:coder consumes planner work items deterministically and propagates exact harness/provider/model@L125 | Test | ./services/orchestrator/src/coding-stage.test.js | 125-176 |
+| test:explicit snapshotted work item wins over planner output@L178 | Test | ./services/orchestrator/src/coding-stage.test.js | 178-193 |
+| test:coder rejects an oversized planner batch before resolution or side effects@L195 | Test | ./services/orchestrator/src/coding-stage.test.js | 195-217 |
+| test:coder orders planner work by Linear dependencies and rejects unresolved blockers@L219 | Test | ./services/orchestrator/src/coding-stage.test.js | 219-233 |
+| test:coder fails closed before execution when the repository snapshot drifts@L235 | Test | ./services/orchestrator/src/coding-stage.test.js | 235-263 |
+| test:coder rejects label-only recovery for a terminal aidone work item as ambiguous@L265 | Test | ./services/orchestrator/src/coding-stage.test.js | 265-284 |
+| test:coder rejects a completed model verdict without a broker merge receipt@L286 | Test | ./services/orchestrator/src/coding-stage.test.js | 286-301 |
+| test:coder rejects an issue linked to another native project before any mutation@L303 | Test | ./services/orchestrator/src/coding-stage.test.js | 303-324 |
+| test:parseVerdict reads a fenced verdict JSON block (completed)@L328 | Test | ./services/orchestrator/src/coding-stage.test.js | 328-333 |
+| test:parseVerdict reads an insufficient JSON verdict with its reason@L335 | Test | ./services/orchestrator/src/coding-stage.test.js | 335-339 |
+| test:parseVerdict extracts the merged PR URL when completed@L341 | Test | ./services/orchestrator/src/coding-stage.test.js | 341-346 |
+| test:parseVerdict leaves pr null when absent@L348 | Test | ./services/orchestrator/src/coding-stage.test.js | 348-351 |
+| test:parseVerdict accepts a plain VERDICT: line@L353 | Test | ./services/orchestrator/src/coding-stage.test.js | 353-357 |
+| test:parseVerdict normalizes case in the status field@L359 | Test | ./services/orchestrator/src/coding-stage.test.js | 359-362 |
+| test:parseVerdict defaults to insufficient when no verdict is present@L364 | Test | ./services/orchestrator/src/coding-stage.test.js | 364-368 |
+| test:parseVerdict defaults to insufficient on empty/nullish input@L370 | Test | ./services/orchestrator/src/coding-stage.test.js | 370-373 |
 
 ## Execution Flows
 
@@ -53,36 +56,33 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (25 edge(s))
-- `String` (19 edge(s))
-- `map` (8 edge(s))
+- `equal` (30 edge(s))
+- `String` (22 edge(s))
 - `deepEqual` (8 edge(s))
-- `push` (7 edge(s))
+- `map` (7 edge(s))
+- `trim` (6 edge(s))
+- `push` (6 edge(s))
 - `slice` (6 edge(s))
-- `trim` (4 edge(s))
-- `every` (4 edge(s))
+- `toLowerCase` (4 edge(s))
 - `rejects` (4 edge(s))
-- `pipelineStageAuth` (3 edge(s))
 - `isArray` (3 edge(s))
 - `has` (3 edge(s))
 - `values` (3 edge(s))
-- `ok` (3 edge(s))
-- `toLowerCase` (2 edge(s))
+- `match` (3 edge(s))
+- `repoParts` (2 edge(s))
+- `get` (2 edge(s))
 
 ### Incoming
 
-- `equal` (25 edge(s))
-- `./services/coder/src/pipeline-stage.js` (23 edge(s))
-- `./services/coder/src/pipeline-stage.test.js` (17 edge(s))
+- `equal` (30 edge(s))
+- `./services/orchestrator/src/coding-stage.js` (21 edge(s))
+- `./services/orchestrator/src/coding-stage.test.js` (21 edge(s))
 - `deepEqual` (8 edge(s))
 - `rejects` (4 edge(s))
-- `push` (3 edge(s))
-- `ok` (3 edge(s))
-- `every` (3 edge(s))
+- `push` (2 edge(s))
 - `map` (2 edge(s))
 - `throws` (2 edge(s))
-- `./services/coder/src/index.js` (1 edge(s))
-- `pipelineStageAuth` (1 edge(s))
-- `next` (1 edge(s))
-- `toPipelinePushEnvelope` (1 edge(s))
-- `handler` (1 edge(s))
+- `ok` (1 edge(s))
+- `every` (1 edge(s))
+- `from` (1 edge(s))
+- `match` (1 edge(s))

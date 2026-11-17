@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| boundedText | Function | ./services/planner/src/routes/issues.js | 46-51 |
-| normalizeProjectTask | Function | ./services/planner/src/routes/issues.js | 53-70 |
-| test:planner project task validation bounds tracker inputs@L9 | Test | ./services/planner/src/routes/issues.test.js | 9-26 |
+| boundedText | Function | ./services/orchestrator/src/routes/issues.js | 46-51 |
+| normalizeProjectTask | Function | ./services/orchestrator/src/routes/issues.js | 53-70 |
+| test:planner project task validation bounds tracker inputs@L9 | Test | ./services/orchestrator/src/routes/issues.test.js | 9-26 |
 
 ## Execution Flows
 
@@ -37,7 +37,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/issues.js` (4 edge(s))
+- `./services/orchestrator/src/routes/issues.js` (4 edge(s))
 - `throws` (3 edge(s))
-- `./services/planner/src/routes/issues.test.js` (1 edge(s))
+- `./services/orchestrator/src/routes/issues.test.js` (1 edge(s))
 - `deepEqual` (1 edge(s))

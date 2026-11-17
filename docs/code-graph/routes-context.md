@@ -14,11 +14,11 @@ Community of 5 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| requestWorkspaceContext | Function | ./services/planner/src/routes/agent-attachments.js | 33-42 |
-| getHeader | Function | ./services/planner/src/routes/agent-attachments.js | 34-37 |
-| resolveOrgProjectContext | Function | ./services/planner/src/routes/agent-attachments.js | 44-49 |
-| conversationForRequest | Function | ./services/planner/src/routes/agent-attachments.js | 51-59 |
-| requireOrgProjectContext | Function | ./services/planner/src/routes/agent-attachments.js | 63-70 |
+| requestWorkspaceContext | Function | ./services/orchestrator/src/routes/agent-attachments.js | 33-42 |
+| getHeader | Function | ./services/orchestrator/src/routes/agent-attachments.js | 34-37 |
+| resolveOrgProjectContext | Function | ./services/orchestrator/src/routes/agent-attachments.js | 44-49 |
+| conversationForRequest | Function | ./services/orchestrator/src/routes/agent-attachments.js | 51-59 |
+| requireOrgProjectContext | Function | ./services/orchestrator/src/routes/agent-attachments.js | 63-70 |
 
 ## Execution Flows
 
@@ -37,4 +37,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/agent-attachments.js` (17 edge(s))
+- `./services/orchestrator/src/routes/agent-attachments.js` (17 edge(s))

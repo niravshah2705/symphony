@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| routeHandler | Function | ./services/planner/src/routes/agent.test.js | 10-14 |
-| invoke | Function | ./services/planner/src/routes/agent.test.js | 24-28 |
-| invokeWithBody | Function | ./services/planner/src/routes/agent.test.js | 30-34 |
+| routeHandler | Function | ./services/orchestrator/src/routes/agent.test.js | 10-14 |
+| invoke | Function | ./services/orchestrator/src/routes/agent.test.js | 24-28 |
+| invokeWithBody | Function | ./services/orchestrator/src/routes/agent.test.js | 30-34 |
 
 ## Execution Flows
 
@@ -26,14 +26,14 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/routes/agent.test.js::test:omnibox policy routes greetings and unsafe requests before local inference@L66` (5 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:omnibox policy routes greetings and unsafe requests before local inference@L66` (5 edge(s))
 - `handler` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98` (2 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.test.js::test:omnibox policy routes greetings and unsafe requests before local inference@L66` (5 edge(s))
-- `./services/planner/src/routes/agent.test.js` (3 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:omnibox policy routes greetings and unsafe requests before local inference@L66` (5 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:OMLX model discovery uses /v1/models, keeps Bearer auth server-side, and normalizes profiles@L98` (2 edge(s))

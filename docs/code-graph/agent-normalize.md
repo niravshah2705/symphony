@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 428 nodes
+Community of 438 nodes
 
-- **Size**: 428 nodes
-- **Cohesion**: 0.2535
+- **Size**: 438 nodes
+- **Cohesion**: 0.2545
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,15 +15,12 @@ Community of 428 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | test:only the publish job can mint cloud credentials@L59 | Test | ./deploy/gcp/harness-registry-workflow.test.js | 59-101 |
-| test:optional image resolver uses a SHA placeholder only while disabled@L249 | Test | ./deploy/gcp/pipeline-infra.test.js | 249-295 |
-| test:the worker pool name the planner selects is one string in four places@L569 | Test | ./deploy/gcp/substrate-env.test.js | 569-616 |
+| test:optional image resolver uses a SHA placeholder only while disabled@L241 | Test | ./deploy/gcp/pipeline-infra.test.js | 241-287 |
+| test:the worker pool name the planner selects is one string in four places@L567 | Test | ./deploy/gcp/substrate-env.test.js | 567-614 |
 | test:the power workflow waits only on namespaces the module still creates@L138 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 138-160 |
 | test@L146 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 146-146 |
 | test:the static-IP grant lists the addresses the module owns@L162 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 162-177 |
 | test:Cookie Preferences contains keyboard focus and persists analytics opt-out and opt-in across reloads@L357 | Test | ./e2e/persistent-footer.spec.js | 357-461 |
-| test:recordStackLink persists the link and recovers the blocker identifier@L952 | Test | ./packages/shared/src/agent/coder-flow.test.js | 952-973 |
-| test:recordStackLink is a no-op when the run was not stacked@L975 | Test | ./packages/shared/src/agent/coder-flow.test.js | 975-984 |
-| recordStackLink | Function | ./packages/shared/src/agent/coder-orchestrator.js | 690-710 |
 | memoryMiddleware | Function | ./packages/shared/src/agent/coverage-service.js | 55-57 |
 | memoryStore | Function | ./packages/shared/src/agent/coverage-service.js | 59-61 |
 | resolveMemoryState | Function | ./packages/shared/src/agent/coverage-service.js | 70-80 |
@@ -64,8 +61,11 @@ Community of 428 nodes
 | scoreCoverage | Function | ./packages/shared/src/agent/global-questions.js | 299-321 |
 | notAssessedResults | Function | ./packages/shared/src/agent/global-questions.js | 327-341 |
 | randomId | Function | ./packages/shared/src/agent/global-questions.js | 343-348 |
+| test:mergeBank keeps untouched defaults as origin=default and layers overrides@L56 | Test | ./packages/shared/src/agent/global-questions.test.js | 56-66 |
+| test:a tombstone hides a default without deleting it, and removing the tombstone restores it@L68 | Test | ./packages/shared/src/agent/global-questions.test.js | 68-72 |
+| test:mergeBank appends custom rows and orders by category then order@L74 | Test | ./packages/shared/src/agent/global-questions.test.js | 74-81 |
 
-*... and 378 more members.*
+*... and 388 more members.*
 
 ## Execution Flows
 
@@ -74,7 +74,6 @@ Community of 428 nodes
 - **createMemoryMiddleware** (criticality: 0.67, depth: 6)
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
-- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
@@ -83,18 +82,18 @@ Community of 428 nodes
 - `equal` (483 edge(s))
 - `join` (136 edge(s))
 - `includes` (100 edge(s))
-- `String` (90 edge(s))
+- `String` (91 edge(s))
 - `match` (73 edge(s))
 - `ok` (72 edge(s))
-- `isArray` (60 edge(s))
+- `isArray` (61 edge(s))
 - `map` (55 edge(s))
 - `deepEqual` (53 edge(s))
-- `trim` (43 edge(s))
+- `trim` (44 edge(s))
+- `slice` (41 edge(s))
 - `filter` (41 edge(s))
-- `slice` (40 edge(s))
 - `endsWith` (39 edge(s))
 - `throws` (35 edge(s))
-- `execFileSync` (34 edge(s))
+- `push` (34 edge(s))
 
 ### Incoming
 

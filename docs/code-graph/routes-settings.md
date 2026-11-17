@@ -4,21 +4,20 @@
 
 ## Overview
 
-Community of 5 nodes
+Community of 4 nodes
 
-- **Size**: 5 nodes
-- **Cohesion**: 0.2034
+- **Size**: 4 nodes
+- **Cohesion**: 0.0750
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| withSettings | Function | ./services/planner/src/routes/settings.substrate.test.js | 14-28 |
-| getPublic | Function | ./services/planner/src/routes/settings.substrate.test.js | 30-37 |
-| test:GET / exposes the execution substrate so the Settings UI can mark it active@L39 | Test | ./services/planner/src/routes/settings.substrate.test.js | 39-61 |
-| test:an unset or unknown agentPattern reports cloudrun and every substrate key is present@L63 | Test | ./services/planner/src/routes/settings.substrate.test.js | 63-69 |
-| test:substrate exposure carries no credential material@L71 | Test | ./services/planner/src/routes/settings.substrate.test.js | 71-81 |
+| settingsMatchTier | Function | ./services/orchestrator/src/routes/settings.js | 78-82 |
+| effectiveComplexityTier | Function | ./services/orchestrator/src/routes/settings.js | 85-88 |
+| publicSettings | Function | ./services/orchestrator/src/routes/settings.js | 142-299 |
+| oneOf | Function | ./services/orchestrator/src/routes/settings.js | 349-351 |
 
 ## Execution Flows
 
@@ -28,20 +27,17 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (14 edge(s))
-- `ok` (2 edge(s))
+- `isFinite` (3 edge(s))
+- `Number` (3 edge(s))
 - `includes` (2 edge(s))
-- `find` (1 edge(s))
-- `handle` (1 edge(s))
-- `stringify` (1 edge(s))
-- `resolve` (1 edge(s))
-- `require` (1 edge(s))
-- `after` (1 edge(s))
+- `Boolean` (2 edge(s))
+- `getSettings` (1 edge(s))
+- `normalizeAgentRuntime` (1 edge(s))
+- `normalizeWorkflowPattern` (1 edge(s))
+- `settingsPatchForTier` (1 edge(s))
+- `every` (1 edge(s))
+- `entries` (1 edge(s))
 
 ### Incoming
 
-- `equal` (14 edge(s))
-- `./services/planner/src/routes/settings.substrate.test.js` (5 edge(s))
-- `includes` (2 edge(s))
-- `ok` (1 edge(s))
-- `stringify` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.js` (21 edge(s))

@@ -7,7 +7,7 @@
 Community of 22 nodes
 
 - **Size**: 22 nodes
-- **Cohesion**: 0.2521
+- **Cohesion**: 0.2528
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,27 +15,27 @@ Community of 22 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | read | Function | ./deploy/gcp/substrate-env.test.js | 27-27 |
-| envNamesRead | Function | ./deploy/gcp/substrate-env.test.js | 122-144 |
-| walk | Function | ./deploy/gcp/substrate-env.test.js | 132-141 |
-| envNamesEmitted | Function | ./deploy/gcp/substrate-env.test.js | 147-150 |
-| varBlock | Function | ./deploy/gcp/substrate-env.test.js | 163-167 |
-| varDefault | Function | ./deploy/gcp/substrate-env.test.js | 169-175 |
-| test:Terraform emits only SUBSTRATE_* names that shipped code reads@L177 | Test | ./deploy/gcp/substrate-env.test.js | 177-184 |
-| test:every substrate setting the code can honor is reachable from Terraform@L186 | Test | ./deploy/gcp/substrate-env.test.js | 186-201 |
-| test:no credential-shaped key is ever emitted into the substrate env maps@L203 | Test | ./deploy/gcp/substrate-env.test.js | 203-211 |
-| test:the actor callback opens only with an identity allowed to call it@L239 | Test | ./deploy/gcp/substrate-env.test.js | 239-301 |
-| test@L293 | Test | ./deploy/gcp/substrate-env.test.js | 293-293 |
-| test@L297 | Test | ./deploy/gcp/substrate-env.test.js | 297-297 |
-| test:environment_init reaches the org service under the name its settings class reads@L303 | Test | ./deploy/gcp/substrate-env.test.js | 303-324 |
-| test:the substrate surface is dark until an operator names a control plane@L447 | Test | ./deploy/gcp/substrate-env.test.js | 447-487 |
-| test:atespace names Terraform accepts are names the app will not silently drop@L527 | Test | ./deploy/gcp/substrate-env.test.js | 527-567 |
-| test@L563 | Test | ./deploy/gcp/substrate-env.test.js | 563-563 |
-| test:the worker pool is tainted with the key atelet tolerates@L618 | Test | ./deploy/gcp/substrate-env.test.js | 618-644 |
-| test:the worker pool boots on its own disk and inside the regional SSD quota@L646 | Test | ./deploy/gcp/substrate-env.test.js | 646-719 |
-| declared | Function | ./deploy/gcp/substrate-env.test.js | 673-678 |
-| test@L716 | Test | ./deploy/gcp/substrate-env.test.js | 716-716 |
-| test:rewriting the postgres claim also re-migrates the database@L721 | Test | ./deploy/gcp/substrate-env.test.js | 721-748 |
-| test@L731 | Test | ./deploy/gcp/substrate-env.test.js | 731-731 |
+| envNamesRead | Function | ./deploy/gcp/substrate-env.test.js | 122-143 |
+| walk | Function | ./deploy/gcp/substrate-env.test.js | 131-140 |
+| envNamesEmitted | Function | ./deploy/gcp/substrate-env.test.js | 146-149 |
+| varBlock | Function | ./deploy/gcp/substrate-env.test.js | 162-166 |
+| varDefault | Function | ./deploy/gcp/substrate-env.test.js | 168-174 |
+| test:Terraform emits only SUBSTRATE_* names that shipped code reads@L176 | Test | ./deploy/gcp/substrate-env.test.js | 176-183 |
+| test:every substrate setting the code can honor is reachable from Terraform@L185 | Test | ./deploy/gcp/substrate-env.test.js | 185-200 |
+| test:no credential-shaped key is ever emitted into the substrate env maps@L202 | Test | ./deploy/gcp/substrate-env.test.js | 202-210 |
+| test:the actor callback opens only with an identity allowed to call it@L237 | Test | ./deploy/gcp/substrate-env.test.js | 237-299 |
+| test@L291 | Test | ./deploy/gcp/substrate-env.test.js | 291-291 |
+| test@L295 | Test | ./deploy/gcp/substrate-env.test.js | 295-295 |
+| test:environment_init reaches the org service under the name its settings class reads@L301 | Test | ./deploy/gcp/substrate-env.test.js | 301-322 |
+| test:the substrate surface is dark until an operator names a control plane@L445 | Test | ./deploy/gcp/substrate-env.test.js | 445-485 |
+| test:atespace names Terraform accepts are names the app will not silently drop@L525 | Test | ./deploy/gcp/substrate-env.test.js | 525-565 |
+| test@L561 | Test | ./deploy/gcp/substrate-env.test.js | 561-561 |
+| test:the worker pool is tainted with the key atelet tolerates@L616 | Test | ./deploy/gcp/substrate-env.test.js | 616-642 |
+| test:the worker pool boots on its own disk and inside the regional SSD quota@L644 | Test | ./deploy/gcp/substrate-env.test.js | 644-717 |
+| declared | Function | ./deploy/gcp/substrate-env.test.js | 671-676 |
+| test@L714 | Test | ./deploy/gcp/substrate-env.test.js | 714-714 |
+| test:rewriting the postgres claim also re-migrates the database@L719 | Test | ./deploy/gcp/substrate-env.test.js | 719-746 |
+| test@L729 | Test | ./deploy/gcp/substrate-env.test.js | 729-729 |
 
 ## Execution Flows
 
@@ -49,8 +49,8 @@ No execution flows pass through this community.
 - `ok` (23 edge(s))
 - `equal` (18 edge(s))
 - `exec` (14 edge(s))
-- `join` (8 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L569` (6 edge(s))
+- `join` (7 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L567` (6 edge(s))
 - `doesNotMatch` (6 edge(s))
 - `matchAll` (4 edge(s))
 - `replace` (3 edge(s))
@@ -68,7 +68,7 @@ No execution flows pass through this community.
 - `./deploy/gcp/substrate-env.test.js` (18 edge(s))
 - `equal` (18 edge(s))
 - `exec` (11 edge(s))
-- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L569` (6 edge(s))
+- `./deploy/gcp/substrate-env.test.js::test:the worker pool name the planner selects is one string in four places@L567` (6 edge(s))
 - `doesNotMatch` (6 edge(s))
 - `has` (2 edge(s))
 - `deepEqual` (2 edge(s))

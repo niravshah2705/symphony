@@ -7,19 +7,19 @@
 Community of 6 nodes
 
 - **Size**: 6 nodes
-- **Cohesion**: 0.0758
+- **Cohesion**: 0.0787
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| fakeClients | Function | ./packages/shared/src/provisioning/provisioning.test.js | 31-49 |
-| test:provision reuses live images and creates the full stack, returning the deployments map@L479 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 479-507 |
-| test:provision is idempotent — already-existing resources do not fail@L509 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 509-516 |
-| test:pipeline provision clones all three shared pipeline services and writes back their URLs@L518 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 518-543 |
-| test:invalid slug is rejected before any client call@L545 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 545-550 |
-| test:teardown deletes every per-tenant resource@L554 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 554-564 |
+| fakeClients | Function | ./packages/shared/src/provisioning/provisioning.test.js | 31-46 |
+| test:provision reuses live images and creates the full stack, returning the deployments map@L395 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 395-423 |
+| test:provision is idempotent — already-existing resources do not fail@L425 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 425-432 |
+| test:pipeline provision clones the orchestrator + deployer and writes back their URLs@L434 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 434-457 |
+| test:invalid slug is rejected before any client call@L459 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 459-464 |
+| test:teardown deletes every per-tenant resource@L468 | Test | ./packages/shared/src/provisioning/provisioning.test.js | 468-478 |
 
 ## Execution Flows
 
@@ -29,8 +29,8 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (30 edge(s))
-- `push` (12 edge(s))
+- `equal` (29 edge(s))
+- `push` (9 edge(s))
 - `./packages/shared/src/provisioning/provisioner.js::provision` (5 edge(s))
 - `filter` (5 edge(s))
 - `deepEqual` (2 edge(s))
@@ -44,7 +44,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `equal` (30 edge(s))
+- `equal` (29 edge(s))
 - `./packages/shared/src/provisioning/provisioning.test.js` (6 edge(s))
 - `./packages/shared/src/provisioning/provisioner.js::provision` (5 edge(s))
 - `filter` (5 edge(s))

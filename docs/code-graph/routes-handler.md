@@ -14,11 +14,11 @@ Community of 5 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| handlerFor | Function | ./services/planner/src/routes/agent.test.js | 17-22 |
-| call | Function | ./services/planner/src/routes/agent.test.js | 37-44 |
-| test:message yields a confirmable memory draft and canPrepare, never auto-writing@L230 | Test | ./services/planner/src/routes/agent.test.js | 230-240 |
-| test:business/prepare re-blocks unsafe input without a model call@L242 | Test | ./services/planner/src/routes/agent.test.js | 242-247 |
-| test:conversation routes reject malformed ids and unknown threads@L310 | Test | ./services/planner/src/routes/agent.test.js | 310-316 |
+| handlerFor | Function | ./services/orchestrator/src/routes/agent.test.js | 17-22 |
+| call | Function | ./services/orchestrator/src/routes/agent.test.js | 37-44 |
+| test:message yields a confirmable memory draft and canPrepare, never auto-writing@L230 | Test | ./services/orchestrator/src/routes/agent.test.js | 230-240 |
+| test:business/prepare re-blocks unsafe input without a model call@L242 | Test | ./services/orchestrator/src/routes/agent.test.js | 242-247 |
+| test:conversation routes reject malformed ids and unknown threads@L310 | Test | ./services/orchestrator/src/routes/agent.test.js | 310-316 |
 
 ## Execution Flows
 
@@ -28,36 +28,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L466` (16 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586` (8 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L466` (16 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586` (8 edge(s))
 - `equal` (7 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
 - `ok` (3 edge(s))
 - `require` (3 edge(s))
 - `resolve` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:memory-search detects scope from the query and returns scoped stored matches@L175` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:business/prepare resolves the linked business and forwards pipeline output@L249` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:a cascade failure never blocks the conversation delete itself@L347` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:memory-search detects scope from the query and returns scoped stored matches@L175` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:business/prepare resolves the linked business and forwards pipeline output@L249` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:a cascade failure never blocks the conversation delete itself@L347` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374` (2 edge(s))
 - `catch` (1 edge(s))
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L466` (16 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586` (8 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:conversation threads: create, append (auto-title), list, get, rename, delete@L266` (16 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:planner job and status routes honor the exact selected organization and project@L466` (16 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:memory write, list, and delete round-trip with server-side validation@L144` (14 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:redacts secrets in inbound user text server-side across every ingest path (defense in depth)@L586` (8 edge(s))
 - `equal` (7 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
-- `./services/planner/src/routes/agent.test.js` (5 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:memory records are stamped and isolated by selected organization/project@L192` (6 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js` (5 edge(s))
 - `require` (3 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:memory-search detects scope from the query and returns scoped stored matches@L175` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:business/prepare resolves the linked business and forwards pipeline output@L249` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:a cascade failure never blocks the conversation delete itself@L347` (2 edge(s))
-- `./services/planner/src/routes/agent.test.js::test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:memory-search detects scope from the query and returns scoped stored matches@L175` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:business/prepare resolves the linked business and forwards pipeline output@L249` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:deleting a conversation cascades to its attachments (best-effort) before removing it@L318` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:a cascade failure never blocks the conversation delete itself@L347` (2 edge(s))
+- `./services/orchestrator/src/routes/agent.test.js::test:a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)@L374` (2 edge(s))
 - `ok` (2 edge(s))
 - `every` (1 edge(s))

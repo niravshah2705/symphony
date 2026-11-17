@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| plannerHandler | Function | ./services/planner/src/pubsub.test.js | 11-15 |
-| invoke | Function | ./services/planner/src/pubsub.test.js | 17-28 |
+| plannerHandler | Function | ./services/orchestrator/src/pubsub.test.js | 11-15 |
+| invoke | Function | ./services/orchestrator/src/pubsub.test.js | 17-28 |
 
 ## Execution Flows
 
@@ -25,10 +25,10 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106` (3 edge(s))
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81` (2 edge(s))
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106` (3 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158` (2 edge(s))
 - `resolve` (1 edge(s))
 - `handler` (1 edge(s))
 - `toPushEnvelope` (1 edge(s))
@@ -39,8 +39,8 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106` (3 edge(s))
-- `./services/planner/src/pubsub.test.js` (2 edge(s))
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81` (2 edge(s))
-- `./services/planner/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub preserves concurrent decoded workspace contexts through detached processing@L106` (3 edge(s))
+- `./services/orchestrator/src/pubsub.test.js` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub scopes every conversation event to the native workspace context@L30` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub validation errors remain scoped and never use the Linear project as native context@L81` (2 edge(s))
+- `./services/orchestrator/src/pubsub.test.js::test:planner Pub/Sub missing context keeps legacy empty-workspace behavior@L158` (2 edge(s))

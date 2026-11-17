@@ -5,13 +5,13 @@
  *
  * A per-tenant stack is cloned from the live SHARED source service. Historically
  * only `containers[0]` was copied — so an egress-proxy SIDECAR added to the
- * shared planner/coder would NOT propagate to tenant stacks, silently leaving
- * per-tenant agents with no proxy (and, once secrets move to the sidecar, no
- * credentials). These helpers normally copy EVERY container, overlaying
- * per-tenant plain env on the primary (ingress) container and a small patch on
- * each sidecar, while preserving each container's own image + secret env +
- * resources + mounts. An explicit `primaryContainerOnly` migration can converge
- * a legacy service by dropping obsolete sidecars.
+ * shared orchestrator/deployer would NOT propagate to tenant stacks, silently
+ * leaving per-tenant agents with no proxy (and, once secrets move to the
+ * sidecar, no credentials). These helpers normally copy EVERY container,
+ * overlaying per-tenant plain env on the primary (ingress) container and a
+ * small patch on each sidecar, while preserving each container's own image +
+ * secret env + resources + mounts. An explicit `primaryContainerOnly` migration
+ * can converge a legacy service by dropping obsolete sidecars.
  *
  * Extracted as pure functions so the multi-container behavior is unit-tested
  * without any GCP client.
@@ -54,16 +54,6 @@ function extractSourceService(svc) {
     volumes: svc.template.volumes,
     executionEnvironment: svc.template.executionEnvironment,
     maxInstanceRequestConcurrency: svc.template.maxInstanceRequestConcurrency,
-  };
-}
-
-/** Extract all containers + volumes/exec-env from a v2 JOB (template.template). */
-function extractSourceJob(job) {
-  const t = job.template.template;
-  return {
-    containers: extractContainers(t.containers),
-    volumes: t.volumes,
-    executionEnvironment: t.executionEnvironment,
   };
 }
 
@@ -132,7 +122,6 @@ module.exports = {
   splitEnv,
   extractContainers,
   extractSourceService,
-  extractSourceJob,
   mergeServiceScaling,
   toEnvList,
   cloneContainers,

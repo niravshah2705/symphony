@@ -737,7 +737,7 @@ test('legacy enqueue preserves plan-to-tested automation while coder starts stay
   assert.deepEqual(submitted[1].options.adaptRequest(submitted[1].body), { issueId: 'ENG-9' });
 });
 
-test('rollout-off compatibility routes retain legacy planner/coder publishing', async () => {
+test('rollout-off compatibility keeps the planner queue and refuses legacy coder dispatch', async () => {
   const published = [];
   const conversations = [];
   let unexpectedAdmission = 0;
@@ -751,13 +751,9 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
     },
     publish: async (topic, message) => { published.push({ topic, message }); },
     plannerTopic: 'planner-topic',
-    coderTopic: 'coder-topic',
   });
   const planner = await invoke(handlers.enqueue, request({ projectId: 'linear-project', projectName: 'Alpha' }));
-  const coder = await invoke(handlers.coderRun, request({ issueId: 'ENG-9' }));
   assert.deepEqual(planner.body, { accepted: true, conversationId: 'legacy-conversation-1' });
-  assert.deepEqual(coder.body, { accepted: true, conversationId: 'legacy-conversation-2' });
-  assert.equal(unexpectedAdmission, 0);
   assert.deepEqual(published, [
     {
       topic: 'planner-topic',
@@ -773,26 +769,18 @@ test('rollout-off compatibility routes retain legacy planner/coder publishing', 
         traceparent: null,
       },
     },
-    {
-      topic: 'coder-topic',
-      message: {
-        issueId: 'ENG-9',
-        conversationId: 'legacy-conversation-2',
-        orgId: 'org-1',
-        nativeProjectId: 'project-1',
-        llmGateway: null,
-        traceparent: null,
-      },
-    },
   ]);
+
+  // The coder service and its topic are retired: with the orchestrator off
+  // there is no coding dispatch path, and the route fails closed.
+  const coder = await invoke(handlers.coderRun, request({ issueId: 'ENG-9' }));
+  assert.equal(coder.status, 503);
+  assert.equal(coder.body.code, 'pipeline_orchestrator_unavailable');
+  assert.equal(unexpectedAdmission, 0);
 
   assert.deepEqual(
     await invoke(handlers.enqueue, request({ projectId: '' })),
     { status: 400, body: { error: 'projectId is required.' }, error: null },
-  );
-  assert.deepEqual(
-    await invoke(handlers.coderRun, request({ issueId: '' })),
-    { status: 400, body: { error: 'issueId is required.' }, error: null },
   );
 });
 

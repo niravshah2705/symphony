@@ -4,19 +4,18 @@
 
 ## Overview
 
-Community of 3 nodes
+Community of 2 nodes
 
-- **Size**: 3 nodes
-- **Cohesion**: 0.2857
+- **Size**: 2 nodes
+- **Cohesion**: 0.2500
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| completedOperation | Function | ./packages/shared/src/provisioning/provisioning.test.js | 55-62 |
-| updateService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 369-372 |
-| updateJob | Function | ./packages/shared/src/provisioning/provisioning.test.js | 445-448 |
+| completedOperation | Function | ./packages/shared/src/provisioning/provisioning.test.js | 52-59 |
+| updateService | Function | ./packages/shared/src/provisioning/provisioning.test.js | 363-366 |
 
 ## Execution Flows
 
@@ -26,8 +25,8 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `push` (2 edge(s))
+- `push` (1 edge(s))
 
 ### Incoming
 
-- `./packages/shared/src/provisioning/provisioning.test.js` (3 edge(s))
+- `./packages/shared/src/provisioning/provisioning.test.js` (2 edge(s))

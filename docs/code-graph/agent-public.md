@@ -15,7 +15,7 @@ Community of 2 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | publicCatalog | Function | ./packages/shared-core/src/agent/model-presets.js | 810-812 |
-| test:planner PUT /complexity applies a tier to every task role and records history@L60 | Test | ./services/planner/src/routes/settings.complexity.test.js | 60-91 |
+| test:planner PUT /complexity applies a tier to every task role and records history@L60 | Test | ./services/orchestrator/src/routes/settings.complexity.test.js | 60-91 |
 
 ## Execution Flows
 
@@ -26,9 +26,9 @@ No execution flows pass through this community.
 ### Outgoing
 
 - `equal` (13 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::withRouter` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::routeHandler` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::invoke` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::withRouter` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::routeHandler` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::invoke` (1 edge(s))
 - `getState` (1 edge(s))
 - `ok` (1 edge(s))
 - `find` (1 edge(s))
@@ -36,17 +36,17 @@ No execution flows pass through this community.
 - `require` (1 edge(s))
 - `round` (1 edge(s))
 - `stringify` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::test@L90` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::test@L90` (1 edge(s))
 
 ### Incoming
 
 - `equal` (13 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (2 edge(s))
 - `./packages/shared-core/src/store.js` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::withRouter` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::routeHandler` (1 edge(s))
-- `./services/planner/src/routes/settings.complexity.test.js::invoke` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::withRouter` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::routeHandler` (1 edge(s))
+- `./services/orchestrator/src/routes/settings.complexity.test.js::invoke` (1 edge(s))
 - `getState` (1 edge(s))
 - `ok` (1 edge(s))
 - `find` (1 edge(s))

@@ -14,31 +14,31 @@ Community of 25 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| deps | Function | ./services/planner/src/routes/global-questions.js | 39-46 |
-| actor | Function | ./services/planner/src/routes/global-questions.js | 49-51 |
-| invalidateCoverageForOrg | Function | ./services/planner/src/routes/global-questions.js | 58-63 |
-| body | Function | ./services/planner/src/routes/global-questions.js | 65-67 |
-| bankById | Function | ./services/planner/src/routes/global-questions.js | 70-74 |
-| listQuestions | Function | ./services/planner/src/routes/global-questions.js | 76-84 |
-| createQuestion | Function | ./services/planner/src/routes/global-questions.js | 86-99 |
-| updateQuestion | Function | ./services/planner/src/routes/global-questions.js | 101-119 |
-| deleteQuestion | Function | ./services/planner/src/routes/global-questions.js | 121-136 |
-| coverageReport | Function | ./services/planner/src/routes/global-questions.js | 138-148 |
-| aiAssist | Function | ./services/planner/src/routes/global-questions.js | 150-193 |
-| createGlobalQuestionsRouter | Function | ./services/planner/src/routes/global-questions.js | 195-206 |
-| makeStore | Function | ./services/planner/src/routes/global-questions.test.js | 25-50 |
-| makeRes | Function | ./services/planner/src/routes/global-questions.test.js | 52-57 |
-| makeReq | Function | ./services/planner/src/routes/global-questions.test.js | 59-62 |
-| test:the planner global-questions router exposes exactly the bank, coverage and assist routes@L80 | Test | ./services/planner/src/routes/global-questions.test.js | 80-85 |
-| test:GET returns the merged bank with the counts the panel header shows@L87 | Test | ./services/planner/src/routes/global-questions.test.js | 87-96 |
-| test:POST creates a custom row and refuses to overwrite a platform default id@L98 | Test | ./services/planner/src/routes/global-questions.test.js | 98-116 |
-| test:PUT edits a default as an override and rejects re-filing it into another category@L118 | Test | ./services/planner/src/routes/global-questions.test.js | 118-133 |
-| test:DELETE tombstones a default and hard-removes a custom row@L135 | Test | ./services/planner/src/routes/global-questions.test.js | 135-152 |
-| test:every bank mutation invalidates this org\'s cached coverage report@L154 | Test | ./services/planner/src/routes/global-questions.test.js | 154-168 |
-| test:a partial patch of a custom choice row cannot drop the choices it relies on@L170 | Test | ./services/planner/src/routes/global-questions.test.js | 170-178 |
-| test:POST coverage forwards refresh, ids and org context and returns the report as-is@L180 | Test | ./services/planner/src/routes/global-questions.test.js | 180-193 |
-| test:ai-assist validates the mode, previews only, and re-validates every proposal@L195 | Test | ./services/planner/src/routes/global-questions.test.js | 195-237 |
-| test:rewrite binds a proposal to the question being rewritten so the panel can save it@L239 | Test | ./services/planner/src/routes/global-questions.test.js | 239-259 |
+| deps | Function | ./services/orchestrator/src/routes/global-questions.js | 39-46 |
+| actor | Function | ./services/orchestrator/src/routes/global-questions.js | 49-51 |
+| invalidateCoverageForOrg | Function | ./services/orchestrator/src/routes/global-questions.js | 58-63 |
+| body | Function | ./services/orchestrator/src/routes/global-questions.js | 65-67 |
+| bankById | Function | ./services/orchestrator/src/routes/global-questions.js | 70-74 |
+| listQuestions | Function | ./services/orchestrator/src/routes/global-questions.js | 76-84 |
+| createQuestion | Function | ./services/orchestrator/src/routes/global-questions.js | 86-99 |
+| updateQuestion | Function | ./services/orchestrator/src/routes/global-questions.js | 101-119 |
+| deleteQuestion | Function | ./services/orchestrator/src/routes/global-questions.js | 121-136 |
+| coverageReport | Function | ./services/orchestrator/src/routes/global-questions.js | 138-148 |
+| aiAssist | Function | ./services/orchestrator/src/routes/global-questions.js | 150-193 |
+| createGlobalQuestionsRouter | Function | ./services/orchestrator/src/routes/global-questions.js | 195-206 |
+| makeStore | Function | ./services/orchestrator/src/routes/global-questions.test.js | 25-50 |
+| makeRes | Function | ./services/orchestrator/src/routes/global-questions.test.js | 52-57 |
+| makeReq | Function | ./services/orchestrator/src/routes/global-questions.test.js | 59-62 |
+| test:the planner global-questions router exposes exactly the bank, coverage and assist routes@L80 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 80-85 |
+| test:GET returns the merged bank with the counts the panel header shows@L87 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 87-96 |
+| test:POST creates a custom row and refuses to overwrite a platform default id@L98 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 98-116 |
+| test:PUT edits a default as an override and rejects re-filing it into another category@L118 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 118-133 |
+| test:DELETE tombstones a default and hard-removes a custom row@L135 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 135-152 |
+| test:every bank mutation invalidates this org\'s cached coverage report@L154 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 154-168 |
+| test:a partial patch of a custom choice row cannot drop the choices it relies on@L170 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 170-178 |
+| test:POST coverage forwards refresh, ids and org context and returns the report as-is@L180 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 180-193 |
+| test:ai-assist validates the mode, previews only, and re-validates every proposal@L195 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 195-237 |
+| test:rewrite binds a proposal to the question being rewritten so the panel can save it@L239 | Test | ./services/orchestrator/src/routes/global-questions.test.js | 239-259 |
 
 ## Execution Flows
 
@@ -67,8 +67,8 @@ No execution flows pass through this community.
 ### Incoming
 
 - `equal` (27 edge(s))
-- `./services/planner/src/routes/global-questions.js` (20 edge(s))
-- `./services/planner/src/routes/global-questions.test.js` (13 edge(s))
+- `./services/orchestrator/src/routes/global-questions.js` (20 edge(s))
+- `./services/orchestrator/src/routes/global-questions.test.js` (13 edge(s))
 - `deepEqual` (7 edge(s))
 - `throws` (4 edge(s))
 - `some` (2 edge(s))

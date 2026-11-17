@@ -11,9 +11,9 @@ function csv(value) {
   return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function stageEndpoint(base, override) {
+function stageEndpoint(base, stage, override) {
   if (override) return String(override).trim();
-  return base ? `${String(base).replace(/\/$/, '')}/internal/pipeline/stage` : '';
+  return base ? `${String(base).replace(/\/$/, '')}/internal/pipeline/stage/${stage}` : '';
 }
 
 function loadConfig(env = process.env) {
@@ -42,10 +42,12 @@ function loadConfig(env = process.env) {
       env.PIPELINE_RESULTS_ALLOWED_EMAILS || env.PUBSUB_PUSH_SA || CONFIG.GCP.pushServiceAccount,
     ),
     stageEndpoints: Object.freeze({
-      plan: stageEndpoint(CONFIG.SERVICES.plannerUrl, env.PIPELINE_PLAN_URL),
-      code: stageEndpoint(CONFIG.SERVICES.coderUrl, env.PIPELINE_CODE_URL),
-      test: stageEndpoint(CONFIG.SERVICES.testerUrl, env.PIPELINE_TEST_URL),
-      deploy: stageEndpoint(CONFIG.SERVICES.deployerUrl, env.PIPELINE_DEPLOY_URL),
+      // plan/code/test all execute in the agent surface process since Agent
+      // Substrate retired the per-service planner/coder/tester deployments.
+      plan: stageEndpoint(CONFIG.SERVICES.agentUrl, 'plan', env.PIPELINE_PLAN_URL),
+      code: stageEndpoint(CONFIG.SERVICES.agentUrl, 'code', env.PIPELINE_CODE_URL),
+      test: stageEndpoint(CONFIG.SERVICES.agentUrl, 'test', env.PIPELINE_TEST_URL),
+      deploy: stageEndpoint(CONFIG.SERVICES.deployerUrl, 'deploy', env.PIPELINE_DEPLOY_URL),
     }),
     stageTopics: Object.freeze({
       plan: String(env.PUBSUB_PIPELINE_PLAN_TOPIC || CONFIG.GCP.pipelinePlanTopic).trim(),

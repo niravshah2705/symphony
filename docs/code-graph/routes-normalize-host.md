@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| normalizeHost | Function | ./services/planner/src/routes/settings.js | 307-317 |
-| normalizeOmlxHost | Function | ./services/planner/src/routes/settings.js | 320-323 |
+| normalizeHost | Function | ./services/orchestrator/src/routes/settings.js | 307-317 |
+| normalizeOmlxHost | Function | ./services/orchestrator/src/routes/settings.js | 320-323 |
 
 ## Execution Flows
 
@@ -31,4 +31,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/settings.js` (8 edge(s))
+- `./services/orchestrator/src/routes/settings.js` (8 edge(s))

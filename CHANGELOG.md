@@ -4,6 +4,41 @@ All notable changes to AI Fleet (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
+## 2026-11-17
+
+### Removed
+
+- **Cloud Run agent harness retired — Agent Substrate is the only execution
+  pattern.** `resolveAgentPattern()` no longer honors `agentPattern='cloudrun'`
+  (legacy values coerce to `substrate`). The planner, coder and tester Cloud Run
+  services are deleted along with their Dockerfiles, the coder-worker Cloud Run
+  Job, their Pub/Sub topics, Artifact Registry repos, IAM bindings and CI build
+  jobs. The planner's browser-facing surface (`/api/agent/*`, `/api/coder/*`,
+  settings, projects, issues, roles, observability) moved to the orchestrator's
+  agent surface (`services/orchestrator/src/agent-server.js`); the gateway now
+  proxies everything there.
+  - **Release note:** any environment still relying on `CODER_ROLE=worker` queue
+    polling must have migrated to substrate before deploying this — the worker
+    Job, `CODER_JOB_*`/`CODER_TOPIC`/`TESTER_IMAGE` wiring and the planner/coder
+    queue pop/publish helpers are gone with no fallback.
+  - `POST/GET /api/coder/monitor` is retired and answers
+    `410 coder_monitor_retired`; the board's coder monitor loop was deleted.
+- `deploy/gcp/Dockerfile.planner` → `Dockerfile.substrate-actor` (the actor
+  image, `SUBSTRATE_ACTOR_MODE=true`, entry
+  `services/orchestrator/src/substrate-actor-entry.js`); `Dockerfile.coder` and
+  `Dockerfile.tester` deleted. `substrate_planner_image` still pins the actor
+  image digest, now built from the actor Dockerfile.
+
+### Changed
+
+- Substrate control env placement: the **orchestrator** gets the full
+  control-plane + actor-callback pair, the provisioner the control plane only,
+  and the deployer and every other workload nothing. The `run.invoker` binding
+  for the substrate actor identity moved from the planner to the orchestrator.
+- Per-tenant provisioning no longer stands up `pl-`/`cc-`/`cw-`/`pt-` agent
+  services; actors run in the shared substrate with per-tenant
+  `SUBSTRATE_ORG_ID` / `SUBSTRATE_WORKER_POOL` (`naming.substrateActor`).
+
 ## 2026-08-11
 
 A dependency-modernization pass: reviewed every workspace's dependencies and

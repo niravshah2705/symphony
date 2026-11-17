@@ -14,9 +14,9 @@ Community of 3 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| stubSubstrate | Function | ./services/planner/src/routes/agent.substrate.test.js | 15-45 |
-| handlerFor | Function | ./services/planner/src/routes/agent.substrate.test.js | 47-51 |
-| invoke | Function | ./services/planner/src/routes/agent.substrate.test.js | 53-57 |
+| stubSubstrate | Function | ./services/orchestrator/src/routes/agent.substrate.test.js | 15-45 |
+| handlerFor | Function | ./services/orchestrator/src/routes/agent.substrate.test.js | 47-51 |
+| invoke | Function | ./services/orchestrator/src/routes/agent.substrate.test.js | 53-57 |
 
 ## Execution Flows
 
@@ -26,8 +26,8 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L59` (3 edge(s))
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L69` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L59` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L69` (3 edge(s))
 - `require` (2 edge(s))
 - `find` (1 edge(s))
 - `ok` (1 edge(s))
@@ -36,6 +36,6 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/agent.substrate.test.js` (3 edge(s))
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L59` (3 edge(s))
-- `./services/planner/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L69` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.substrate.test.js` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.substrate.test.js::test:GET /substrate/status answers instead of throwing when the control plane is up@L59` (3 edge(s))
+- `./services/orchestrator/src/routes/agent.substrate.test.js::test:GET /substrate/status skips the actor list when the control plane is unreachable@L69` (3 edge(s))

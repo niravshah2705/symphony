@@ -136,20 +136,22 @@ first for orientation). graphify's community report is
 ## What this is
 
 **AI Fleet** — a microservice-decomposed tool to manage Linear projects and run
-isolated planner + coder deep-agent services over a shared library. npm
-workspaces: `packages/*` (shared libs, CLI) and `services/*` (gateway, planner,
-coder, org, settings, proxy). Product docs and setup live in [`README.md`](./README.md).
+isolated planner + coder deep agents as Agent Substrate actors (gVisor on GKE)
+over a shared library. npm
+workspaces: `packages/*` (shared libs, CLI) and `services/*` (gateway,
+orchestrator, deployer, provisioner, org, settings, proxy). Product docs and setup live in [`README.md`](./README.md).
 
 ## Egress isolation: the proxy sidecar (agents hold no raw secrets)
 
-The planner / coder-control / coder-worker containers must never hold a raw
+The agent workloads — the orchestrator and the substrate actors it dispatches —
+must never hold a raw
 third-party credential (GitHub / Linear / LLM keys) — model-generated code in
-the coder could read `process.env` and exfiltrate it. Instead an **egress proxy
+the agent could read `process.env` and exfiltrate it. Instead an **egress proxy
 sidecar** (`services/proxy`) runs co-located with each agent runtime (Cloud Run
 multi-container, shared loopback) and injects the real credential on every
 outbound call.
 
-- **Boundary:** `EGRESS_PROXY_URL` (set on every deployed planner/coder/worker — NOT the
+- **Boundary:** `EGRESS_PROXY_URL` (set on every deployed agent workload — NOT the
   gateway). When set, `packages/shared/src/config.js` points every provider base
   URL at `${EGRESS_PROXY_URL}<prefix>` (see `packages/shared/src/egress.js` for
   the canonical prefix→upstream map) and the agent sends a **sentinel** token;
@@ -183,7 +185,7 @@ outbound call.
 
   | Workload | Holds |
   |---|---|
-  | agent / actor / coder container | the sentinel only — unchanged |
+  | agent / actor container | the sentinel only — unchanged |
   | egress proxy sidecar | the org's agentgateway (or LiteLLM) virtual key; provider keys it injects today |
   | agentgateway | the provider key (managed: LiteLLM master; customer: per-org Secret) |
   | actor egress (atenet-egress) | registry-pull + clone creds; its `openrouter-api-key` retires once actor LLM egress is fronted by the gateway |
@@ -203,11 +205,11 @@ outbound call.
   unmatched path is attacker-selected, which is why `prefix` is sanitised and
   truncated rather than echoed.
 - **Substrate env is a capability, not a URL:** `deploy/gcp/terraform/substrate.tf`
-  renders the `SUBSTRATE_*` map and decides who receives it — planner (control
-  plane + the actor-callback pair), coder-control and provisioner (control plane
-  only). The shared-stack coder **worker** gets none of it, and the reason is the
+  renders the `SUBSTRATE_*` map and decides who receives it — orchestrator
+  (control plane + the actor-callback pair) and provisioner (control plane
+  only). The deployer and every other workload get none of it, and the reason is the
   difference between the two deployment shapes: a per-tenant stack can hand its
-  worker the control-plane address because `SUBSTRATE_ALLOWED_ATESPACES` pins it
+  job runners the control-plane address because `SUBSTRATE_ALLOWED_ATESPACES` pins it
   to one nameable space and its in-cluster Role reaches only that namespace,
   whereas the shared stack's identity spans tenants — there the address turns
   model-generated code into a caller that can create, assign and delete actors in
@@ -223,7 +225,7 @@ outbound call.
   asserting its own existence. And the actor callback opens only when
   `substrate_actor_member` names a `serviceAccount:` or `principal://` identity:
   `substrate.tf` gates the four `SUBSTRATE_ACTOR_*` names on it and `iam.tf`
-  creates the matching `run.invoker` binding on the planner from the same
+  creates the matching `run.invoker` binding on the orchestrator from the same
   variable, because an env without the binding is a refused call and a binding
   without the env is an open prompt endpoint. `deploy/gcp/substrate-env.test.js`
   holds both halves — the env names Terraform emits versus the ones
@@ -255,14 +257,14 @@ outbound call.
   self-hosted LiteLLM proxy (`LITELLM_PROXY_UPSTREAM` on the sidecar,
   `LITELLM_URL` on direct/local runs; Bearer `litellmApiKey`, an operator-minted
   model-scoped virtual key in that org's vault — NEVER the gateway master key,
-  because `/litellm` forwards any sub-path and a coder-reachable admin key defeats
+  because `/litellm` forwards any sub-path and an agent-reachable admin key defeats
   the egress boundary; the ephemeral Postgres also means a redeploy invalidates it,
   so flagged runs fail closed until it is re-minted. `docs/LLM_GATEWAY.md` gives the
   off-ramp.) Server gates: `LLM_GATEWAY_ENABLED=true` and
   `LITELLM_GATEWAY_ENABLED=true` respectively (else the header is dropped at
   ingestion). The flag threads on the org/project context channel:
   `request-context.js` → Pub/Sub message field / `PipelineStart.request.llmGateway`
-  → coder job env `LLM_GATEWAY_FLAG` → merged into the `settings` passed to
+  → coder stage env `LLM_GATEWAY_FLAG` → merged into the `settings` passed to
   `resolveLlm`, which emits a `gateway: '<mode>'` descriptor (`wireModelId()`
   prefixes `provider/model` ON THE WIRE only, and only for langsmith — LiteLLM
   matches `model_name` verbatim, so its entries must equal the BARE model id;

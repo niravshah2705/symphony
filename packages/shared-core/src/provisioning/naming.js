@@ -32,16 +32,10 @@ function names(slug) {
   assertSlug(slug);
   return {
     gateway: `gw-${slug}`,
-    planner: `pl-${slug}`,
-    coder: `cc-${slug}`, // coder-control service
     orchestrator: `po-${slug}`,
-    tester: `pt-${slug}`,
     deployer: `pd-${slug}`,
-    worker: `cw-${slug}`, // coder-worker Cloud Run Job
     plannerTopic: `planner-${slug}`,
-    coderTopic: `coder-${slug}`,
     plannerPushSub: `planner-${slug}-push`,
-    coderPushSub: `coder-${slug}-push`,
     pipelinePlanTopic: `pipeline-plan-${slug}`,
     pipelineCodeTopic: `pipeline-code-${slug}`,
     pipelineTestTopic: `pipeline-test-${slug}`,
@@ -59,11 +53,10 @@ function names(slug) {
     pipelineTestResultsPushSub: `pipeline-test-results-${slug}-push`,
     pipelineDeployResultsPushSub: `pipeline-deploy-results-${slug}-push`,
     plannerTick: `planner-tick-${slug}`,
-    coderTick: `coder-tick-${slug}`,
   };
 }
 
-/** Deterministic https URLs for the three per-tenant services. */
+/** Deterministic https URLs for the per-tenant services. */
 function urls(slug, { projectNumber, region }) {
   assertSlug(slug);
   if (!projectNumber || !region) {
@@ -73,10 +66,7 @@ function urls(slug, { projectNumber, region }) {
   const n = names(slug);
   return {
     gateway: `https://${n.gateway}-${suffix}`,
-    planner: `https://${n.planner}-${suffix}`,
-    coder: `https://${n.coder}-${suffix}`,
     orchestrator: `https://${n.orchestrator}-${suffix}`,
-    tester: `https://${n.tester}-${suffix}`,
     deployer: `https://${n.deployer}-${suffix}`,
   };
 }

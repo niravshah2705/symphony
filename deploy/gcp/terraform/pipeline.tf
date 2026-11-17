@@ -1,34 +1,43 @@
 # -----------------------------------------------------------------------------
-# Durable fixed pipeline — orchestrator + brokered tester/deployer services and
-# eight stage-specific Pub/Sub channels. The entire topology is rollout-gated. The
-# legacy planner/coder topics are intentionally never referenced here.
+# Durable fixed pipeline — the orchestrator (the single internal agent service:
+# browser agent surface + legacy planner queue + plan/code/test stage handlers +
+# substrate control plane) and the brokered deployer service, over eight
+# stage-specific Pub/Sub channels. The orchestrator is unconditional; the
+# deployer and the stage channels remain rollout-gated.
 # -----------------------------------------------------------------------------
 
 locals {
   pipeline_on = var.pipeline_orchestrator_enabled
 
-  orchestrator_env = merge(local.common_env, {
+  # The orchestrator IS the agent workload now: it absorbed the retired
+  # planner's browser surface + queue and the coder-control/tester stage
+  # handlers, so it carries their env: the egress sidecar pair, the skills and
+  # memory mounts, and the substrate env. Per substrate.tf, the orchestrator
+  # gets the FULL local.substrate_env (control plane + the actor-callback pair,
+  # because actors call /internal/plan/run back on this service); the deployer
+  # is a stage executor inside the boundary and gets none of it. NEVER set
+  # SUBSTRATE_ACTOR_MODE here as a plain env on a normal deployment — it comes
+  # only through substrate_actor_env, which is all-or-nothing with the matching
+  # run.invoker binding in iam.tf.
+  orchestrator_env = merge(local.common_env, local.egress_env, local.skills_env, local.memory_env, local.substrate_env, {
     ORCHESTRATOR_SERVICE_PORT       = "8080"
+    AGENT_SERVICE_PORT              = "8080"
     ORCHESTRATOR_URL                = local.orchestrator_url
+    AGENT_URL                       = local.orchestrator_url
     SETTINGS_URL                    = local.settings_url
+    ORG_URL                         = local.org_url
+    EMAIL_TOPIC                     = google_pubsub_topic.email.name
     PIPELINE_STORE_BACKEND          = "firestore"
     PIPELINE_RESULTS_AUDIENCE       = local.orchestrator_url
     PIPELINE_RESULTS_ALLOWED_EMAILS = google_service_account.pubsub_push.email
     PUBSUB_PUSH_AUDIENCE            = local.orchestrator_url
     PUBSUB_PUSH_SA                  = google_service_account.pubsub_push.email
-  })
-
-  tester_env = merge(local.common_env, local.egress_env, {
-    TESTER_SERVICE_PORT                = "8080"
-    TESTER_PORT                        = "8080"
-    SETTINGS_URL                       = local.settings_url
-    ORG_URL                            = local.org_url
-    ORCHESTRATOR_URL                   = local.orchestrator_url
+    }, local.pipeline_on ? {
+    PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC = var.pipeline_plan_results_topic
+    PUBSUB_PIPELINE_CODE_RESULTS_TOPIC = var.pipeline_code_results_topic
     PUBSUB_PIPELINE_TEST_RESULTS_TOPIC = var.pipeline_test_results_topic
     PIPELINE_STAGE_STORE_BACKEND       = "firestore"
-    PUBSUB_PUSH_AUDIENCE               = local.tester_url
-    PUBSUB_PUSH_SA                     = google_service_account.pubsub_push.email
-  })
+  } : {})
 
   deployer_env = merge(local.common_env, local.egress_env, {
     DEPLOYER_SERVICE_PORT                = "8080"
@@ -61,7 +70,6 @@ check "pipeline_topics_are_dedicated" {
   assert {
     condition = length(distinct([
       var.planner_topic,
-      var.coder_topic,
       var.pipeline_plan_topic,
       var.pipeline_code_topic,
       var.pipeline_test_topic,
@@ -70,25 +78,20 @@ check "pipeline_topics_are_dedicated" {
       var.pipeline_code_results_topic,
       var.pipeline_test_results_topic,
       var.pipeline_deploy_results_topic,
-    ])) == 10
-    error_message = "Pipeline command/result topics must be stage-specific, unique, and must not reuse either legacy planner/coder topic."
+    ])) == 9
+    error_message = "Pipeline command/result topics must be stage-specific, unique, and must not reuse the legacy planner topic."
   }
 }
 
 # --- Trust roles --------------------------------------------------------------
 
+# Unconditional: the orchestrator serves the browser agent surface and the
+# legacy planner queue even when the durable pipeline flag is off — the
+# gateway's AGENT_URL points here and nothing else answers those routes.
 resource "google_service_account" "orchestrator" {
-  count        = local.pipeline_on ? 1 : 0
   project      = var.project_id
   account_id   = "pipeline-orchestrator-sa"
-  display_name = "AI Fleet durable pipeline orchestrator"
-}
-
-resource "google_service_account" "tester" {
-  count        = local.pipeline_on ? 1 : 0
-  project      = var.project_id
-  account_id   = "pipeline-tester-sa"
-  display_name = "AI Fleet brokered pipeline tester"
+  display_name = "AI Fleet orchestrator + agent surface"
 }
 
 resource "google_service_account" "deployer" {
@@ -99,17 +102,9 @@ resource "google_service_account" "deployer" {
 }
 
 resource "google_project_iam_member" "orchestrator_datastore" {
-  count   = local.pipeline_on ? 1 : 0
   project = var.project_id
   role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.orchestrator[0].email}"
-}
-
-resource "google_project_iam_member" "tester_datastore" {
-  count   = local.pipeline_on ? 1 : 0
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.tester[0].email}"
+  member  = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
 resource "google_project_iam_member" "deployer_datastore" {
@@ -122,13 +117,13 @@ resource "google_project_iam_member" "deployer_datastore" {
 # Agent sidecars resolve managed/customer credentials through settings. The
 # resolver token is scoped to the exact container that needs it; pipeline
 # identities receive no Secret Manager accessor role.
-
 resource "google_cloud_run_v2_service_iam_member" "pipeline_proxy_invokes_settings" {
   for_each = local.pipeline_on ? {
-    orchestrator = google_service_account.orchestrator[0].email
-    tester       = google_service_account.tester[0].email
+    orchestrator = google_service_account.orchestrator.email
     deployer     = google_service_account.deployer[0].email
-  } : {}
+    } : {
+    orchestrator = google_service_account.orchestrator.email
+  }
   project  = var.project_id
   location = var.region
   name     = google_cloud_run_v2_service.settings.name
@@ -139,7 +134,6 @@ resource "google_cloud_run_v2_service_iam_member" "pipeline_proxy_invokes_settin
 # --- Cloud Run control/data plane --------------------------------------------
 
 resource "google_cloud_run_v2_service" "orchestrator" {
-  count               = local.pipeline_on ? 1 : 0
   project             = var.project_id
   name                = var.orchestrator_service_name
   location            = var.region
@@ -147,19 +141,78 @@ resource "google_cloud_run_v2_service" "orchestrator" {
   labels              = merge(local.common_labels, { component = "pipeline-orchestrator" })
   deletion_protection = false
 
+  lifecycle {
+    precondition {
+      condition     = var.container_concurrency == 1 || try(tonumber(var.cloud_run_proxy_cpu) >= 1, false)
+      error_message = "container_concurrency values above 1 require cloud_run_proxy_cpu to be at least 1 vCPU when the egress proxy is enabled."
+    }
+    precondition {
+      condition     = !local.pipeline_on || var.min_instances <= 1
+      error_message = "with pipeline_orchestrator_enabled, the orchestrator caps at one instance for synchronous stage execution; min_instances must be 0 or 1 to match."
+    }
+  }
+
   template {
-    service_account                  = google_service_account.orchestrator[0].email
+    service_account                  = google_service_account.orchestrator.email
+    timeout                          = "3600s"
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
-    max_instance_request_concurrency = 1
+    max_instance_request_concurrency = var.container_concurrency
+
     scaling {
-      min_instance_count = 0
-      max_instance_count = var.max_instances
+      min_instance_count = var.min_instances
+      # Stage execution is synchronous and the pipeline caps at one instance
+      # when enabled; otherwise the shared ceiling applies.
+      max_instance_count = local.pipeline_on ? 1 : var.max_instances
+    }
+
+    # Versioned skills bundle mounted read-only via gcsfuse (skills.tf).
+    dynamic "volumes" {
+      for_each = local.skills_mount_enabled ? [1] : []
+      content {
+        name = "skills"
+        gcs {
+          bucket    = google_storage_bucket.skills[0].name
+          read_only = true
+        }
+      }
+    }
+
+    # Cloud SQL Auth Proxy socket + the connection-string secret file
+    # (memory.tf). A secret FILE (not secret env) keeps agent primaries
+    # secret-env-free (requireSecretFreePrimary).
+    dynamic "volumes" {
+      for_each = local.memory_enabled ? [1] : []
+      content {
+        name = "cloudsql"
+        cloud_sql {
+          instances = [google_sql_database_instance.memory[0].connection_name]
+        }
+      }
+    }
+
+    dynamic "volumes" {
+      for_each = local.memory_enabled ? [1] : []
+      content {
+        name = "memory-db-url"
+        secret {
+          secret = google_secret_manager_secret.memory_database_url[0].secret_id
+          items {
+            version = "latest"
+            path    = "url"
+          }
+        }
+      }
     }
 
     containers {
-      name  = "app"
-      image = local.orchestrator_image
-      ports { container_port = 8080 }
+      name       = "app"
+      image      = local.orchestrator_image
+      depends_on = ["egress-proxy"]
+
+      ports {
+        container_port = 8080
+      }
+
       dynamic "env" {
         for_each = local.orchestrator_env
         content {
@@ -167,61 +220,30 @@ resource "google_cloud_run_v2_service" "orchestrator" {
           value = env.value
         }
       }
-      env {
-        name  = "INTERNAL_API_TOKEN"
-        value = var.internal_api_token
-      }
-      resources {
-        limits            = { cpu = var.cloud_run_service_cpu, memory = "512Mi" }
-        cpu_idle          = true
-        startup_cpu_boost = true
-      }
-    }
-  }
-
-  depends_on = [
-    google_firestore_database.default,
-    google_project_iam_member.orchestrator_datastore,
-    google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings,
-  ]
-}
-
-resource "google_cloud_run_v2_service" "tester" {
-  count               = local.pipeline_on ? 1 : 0
-  project             = var.project_id
-  name                = var.tester_service_name
-  location            = var.region
-  ingress             = var.internal_ingress
-  labels              = merge(local.common_labels, { component = "pipeline-tester" })
-  deletion_protection = false
-
-  template {
-    service_account                  = google_service_account.tester[0].email
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
-    max_instance_request_concurrency = 1
-    timeout                          = "3600s"
-    scaling {
-      min_instance_count = 0
-      # Stage execution is synchronous. Firestore-backed execution claims and
-      # result replay make Pub/Sub redelivery safe across process restarts; one
-      # instance also avoids unnecessary concurrent work for this heavy stage.
-      max_instance_count = 1
-    }
-
-    containers {
-      name       = "app"
-      image      = local.tester_image
-      depends_on = ["egress-proxy"]
-      ports { container_port = 8080 }
-      dynamic "env" {
-        for_each = local.tester_env
+      dynamic "volume_mounts" {
+        for_each = local.skills_mount_enabled ? [1] : []
         content {
-          name  = env.key
-          value = env.value
+          name       = "skills"
+          mount_path = "/skills"
         }
       }
+      dynamic "volume_mounts" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+      dynamic "volume_mounts" {
+        for_each = local.memory_enabled ? [1] : []
+        content {
+          name       = "memory-db-url"
+          mount_path = "/secrets/memory-db"
+        }
+      }
+
       resources {
-        limits            = { cpu = var.cloud_run_service_cpu, memory = "1Gi" }
+        limits            = { cpu = var.cloud_run_service_cpu, memory = "512Mi" }
         cpu_idle          = true
         startup_cpu_boost = true
       }
@@ -230,6 +252,7 @@ resource "google_cloud_run_v2_service" "tester" {
     containers {
       name  = "egress-proxy"
       image = local.proxy_image
+
       dynamic "env" {
         for_each = local.proxy_plain_env
         content {
@@ -237,6 +260,9 @@ resource "google_cloud_run_v2_service" "tester" {
           value = env.value
         }
       }
+      # Managed keys are resolved by the settings service (single source) and
+      # returned over the S2S the invoker binding below opens — the sidecar
+      # mounts no provider secret.
       env {
         name  = "INTERNAL_API_TOKEN"
         value = var.internal_api_token
@@ -259,9 +285,15 @@ resource "google_cloud_run_v2_service" "tester" {
   }
 
   depends_on = [
+    google_project_service.services,
     google_firestore_database.default,
-    google_project_iam_member.tester_datastore,
+    google_project_iam_member.orchestrator_datastore,
     google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings,
+    google_storage_bucket.skills,
+    google_sql_database_instance.memory,
+    google_secret_manager_secret_version.memory_database_url,
+    google_secret_manager_secret_iam_member.orchestrator_memory_database_url,
+    google_project_iam_member.orchestrator_memory_db_client,
   ]
 }
 
@@ -306,6 +338,7 @@ resource "google_cloud_run_v2_service" "deployer" {
     containers {
       name  = "egress-proxy"
       image = local.proxy_image
+
       dynamic "env" {
         for_each = local.proxy_plain_env
         content {
@@ -399,15 +432,18 @@ resource "google_pubsub_topic_iam_member" "orchestrator_stage_publish" {
   project = var.project_id
   topic   = each.value
   role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.orchestrator[0].email}"
+  member  = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
-# Stage executors can publish only typed results, not commands.
+# Stage executors can publish only typed results, not commands. plan/code/test
+# all execute inside the orchestrator now (or in its substrate actors, metered
+# by the orchestrator), so one publisher identity covers the three; deploy
+# stays its own brokered service.
 resource "google_pubsub_topic_iam_member" "pipeline_result_publish" {
   for_each = local.pipeline_on ? {
-    plan   = google_service_account.planner.email
-    code   = google_service_account.coder.email
-    test   = google_service_account.tester[0].email
+    plan   = google_service_account.orchestrator.email
+    code   = google_service_account.orchestrator.email
+    test   = google_service_account.orchestrator.email
     deploy = google_service_account.deployer[0].email
   } : {}
   project = var.project_id
@@ -419,20 +455,20 @@ resource "google_pubsub_topic_iam_member" "pipeline_result_publish" {
 # --- Authenticated push delivery ---------------------------------------------
 
 resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_orchestrator" {
-  count    = local.pipeline_on ? 1 : 0
   project  = var.project_id
   location = var.region
-  name     = google_cloud_run_v2_service.orchestrator[0].name
+  name     = google_cloud_run_v2_service.orchestrator.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.gateway.email}"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "push_invokes_pipeline" {
   for_each = local.pipeline_on ? {
-    orchestrator = google_cloud_run_v2_service.orchestrator[0].name
-    tester       = google_cloud_run_v2_service.tester[0].name
+    orchestrator = google_cloud_run_v2_service.orchestrator.name
     deployer     = google_cloud_run_v2_service.deployer[0].name
-  } : {}
+    } : {
+    orchestrator = google_cloud_run_v2_service.orchestrator.name
+  }
   project  = var.project_id
   location = var.region
   name     = each.value
@@ -440,102 +476,27 @@ resource "google_cloud_run_v2_service_iam_member" "push_invokes_pipeline" {
   member   = "serviceAccount:${google_service_account.pubsub_push.email}"
 }
 
-resource "google_pubsub_subscription" "pipeline_plan_push" {
-  count                = local.pipeline_on ? 1 : 0
+# Command pushes for plan/code/test go to ONE service through THREE
+# stage-bound paths. A shared plain path would let one handler silently
+# 204-ack another stage's command — the per-tenant provisioning plan
+# (packages/shared-core/src/provisioning/plan.js) spells the same contract.
+resource "google_pubsub_subscription" "pipeline_command_push" {
+  for_each = local.pipeline_on ? {
+    plan   = { topic = google_pubsub_topic.pipeline_plan[0], stage = "plan" }
+    code   = { topic = google_pubsub_topic.pipeline_code[0], stage = "code" }
+    test   = { topic = google_pubsub_topic.pipeline_test[0], stage = "test" }
+    deploy = { topic = google_pubsub_topic.pipeline_deploy[0], stage = null }
+  } : {}
   project              = var.project_id
-  name                 = "${var.pipeline_plan_topic}-push"
-  topic                = google_pubsub_topic.pipeline_plan[0].id
-  labels               = merge(local.common_labels, { component = "pipeline-plan" })
+  name                 = "${each.value.topic.name}-push"
+  topic                = each.value.topic.id
+  labels               = merge(local.common_labels, { component = "pipeline-${each.key}" })
   ack_deadline_seconds = 600
   push_config {
-    push_endpoint = "${local.planner_url}/pubsub/pipeline-stage"
+    push_endpoint = each.value.stage == null ? "${local.deployer_url}/pubsub/pipeline-stage" : "${local.orchestrator_url}/pubsub/pipeline-stage/${each.value.stage}"
     oidc_token {
       service_account_email = google_service_account.pubsub_push.email
-      audience              = local.planner_url
-    }
-  }
-  dead_letter_policy {
-    dead_letter_topic     = google_pubsub_topic.dead_letter.id
-    max_delivery_attempts = var.max_delivery_attempts
-  }
-  retry_policy {
-    minimum_backoff = "10s"
-    maximum_backoff = "600s"
-  }
-  depends_on = [
-    google_cloud_run_v2_service_iam_member.push_invokes_planner,
-    google_service_account_iam_member.pubsub_agent_token_creator,
-  ]
-}
-
-resource "google_pubsub_subscription" "pipeline_code_push" {
-  count                = local.pipeline_on ? 1 : 0
-  project              = var.project_id
-  name                 = "${var.pipeline_code_topic}-push"
-  topic                = google_pubsub_topic.pipeline_code[0].id
-  labels               = merge(local.common_labels, { component = "pipeline-code" })
-  ack_deadline_seconds = 600
-  push_config {
-    push_endpoint = "${local.coder_url}/pubsub/pipeline-stage"
-    oidc_token {
-      service_account_email = google_service_account.pubsub_push.email
-      audience              = local.coder_url
-    }
-  }
-  dead_letter_policy {
-    dead_letter_topic     = google_pubsub_topic.dead_letter.id
-    max_delivery_attempts = var.max_delivery_attempts
-  }
-  retry_policy {
-    minimum_backoff = "10s"
-    maximum_backoff = "600s"
-  }
-  depends_on = [
-    google_cloud_run_v2_service_iam_member.push_invokes_coder,
-    google_service_account_iam_member.pubsub_agent_token_creator,
-  ]
-}
-
-resource "google_pubsub_subscription" "pipeline_test_push" {
-  count                = local.pipeline_on ? 1 : 0
-  project              = var.project_id
-  name                 = "${var.pipeline_test_topic}-push"
-  topic                = google_pubsub_topic.pipeline_test[0].id
-  labels               = merge(local.common_labels, { component = "pipeline-test" })
-  ack_deadline_seconds = 600
-  push_config {
-    push_endpoint = "${local.tester_url}/pubsub/pipeline-stage"
-    oidc_token {
-      service_account_email = google_service_account.pubsub_push.email
-      audience              = local.tester_url
-    }
-  }
-  dead_letter_policy {
-    dead_letter_topic     = google_pubsub_topic.dead_letter.id
-    max_delivery_attempts = var.max_delivery_attempts
-  }
-  retry_policy {
-    minimum_backoff = "10s"
-    maximum_backoff = "600s"
-  }
-  depends_on = [
-    google_cloud_run_v2_service_iam_member.push_invokes_pipeline,
-    google_service_account_iam_member.pubsub_agent_token_creator,
-  ]
-}
-
-resource "google_pubsub_subscription" "pipeline_deploy_push" {
-  count                = local.pipeline_on ? 1 : 0
-  project              = var.project_id
-  name                 = "${var.pipeline_deploy_topic}-push"
-  topic                = google_pubsub_topic.pipeline_deploy[0].id
-  labels               = merge(local.common_labels, { component = "pipeline-deploy" })
-  ack_deadline_seconds = 600
-  push_config {
-    push_endpoint = "${local.deployer_url}/pubsub/pipeline-stage"
-    oidc_token {
-      service_account_email = google_service_account.pubsub_push.email
-      audience              = local.deployer_url
+      audience              = each.value.stage == null ? local.deployer_url : local.orchestrator_url
     }
   }
   dead_letter_policy {
@@ -585,14 +546,35 @@ resource "google_pubsub_subscription" "pipeline_results_push" {
   ]
 }
 
+# The four command subscriptions were separate count=1 resources; folding them
+# into one for_each map without these moved{} blocks would DESTROY and recreate
+# them, and a fresh subscription never receives messages published before it
+# existed — in-flight stage commands would be dropped during the cutover.
+moved {
+  from = google_pubsub_subscription.pipeline_plan_push
+  to   = google_pubsub_subscription.pipeline_command_push["plan"]
+}
+moved {
+  from = google_pubsub_subscription.pipeline_code_push
+  to   = google_pubsub_subscription.pipeline_command_push["code"]
+}
+moved {
+  from = google_pubsub_subscription.pipeline_test_push
+  to   = google_pubsub_subscription.pipeline_command_push["test"]
+}
+moved {
+  from = google_pubsub_subscription.pipeline_deploy_push
+  to   = google_pubsub_subscription.pipeline_command_push["deploy"]
+}
+
 # Pub/Sub's service agent needs subscriber on every source subscription to make
 # dead-letter forwarding work (the DLQ publisher binding is shared in pubsub.tf).
 resource "google_pubsub_subscription_iam_member" "pipeline_dead_letter_subscriber" {
   for_each = local.pipeline_on ? {
-    plan_command   = google_pubsub_subscription.pipeline_plan_push[0].name
-    code_command   = google_pubsub_subscription.pipeline_code_push[0].name
-    test_command   = google_pubsub_subscription.pipeline_test_push[0].name
-    deploy_command = google_pubsub_subscription.pipeline_deploy_push[0].name
+    plan_command   = google_pubsub_subscription.pipeline_command_push["plan"].name
+    code_command   = google_pubsub_subscription.pipeline_command_push["code"].name
+    test_command   = google_pubsub_subscription.pipeline_command_push["test"].name
+    deploy_command = google_pubsub_subscription.pipeline_command_push["deploy"].name
     plan_result    = google_pubsub_subscription.pipeline_results_push["plan"].name
     code_result    = google_pubsub_subscription.pipeline_results_push["code"].name
     test_result    = google_pubsub_subscription.pipeline_results_push["test"].name

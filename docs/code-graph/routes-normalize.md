@@ -14,12 +14,12 @@ Community of 6 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| normalizeRepo | Function | ./services/planner/src/routes/businesses.js | 43-48 |
-| normalizeRepoProvider | Function | ./services/planner/src/routes/businesses.js | 50-53 |
-| repositoryFields | Function | ./services/planner/src/routes/businesses.js | 55-67 |
-| test:planner business repository normalization preserves provider-specific namespaces@L8 | Test | ./services/planner/src/routes/businesses.test.js | 8-12 |
-| test:business repository validation rejects provider/host mismatches@L14 | Test | ./services/planner/src/routes/businesses.test.js | 14-21 |
-| test:business repository updates retain their stored provider@L23 | Test | ./services/planner/src/routes/businesses.test.js | 23-35 |
+| normalizeRepo | Function | ./services/orchestrator/src/routes/businesses.js | 43-48 |
+| normalizeRepoProvider | Function | ./services/orchestrator/src/routes/businesses.js | 50-53 |
+| repositoryFields | Function | ./services/orchestrator/src/routes/businesses.js | 55-67 |
+| test:planner business repository normalization preserves provider-specific namespaces@L8 | Test | ./services/orchestrator/src/routes/businesses.test.js | 8-12 |
+| test:business repository validation rejects provider/host mismatches@L14 | Test | ./services/orchestrator/src/routes/businesses.test.js | 14-21 |
+| test:business repository updates retain their stored provider@L23 | Test | ./services/orchestrator/src/routes/businesses.test.js | 23-35 |
 
 ## Execution Flows
 
@@ -39,8 +39,8 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/businesses.js` (8 edge(s))
-- `./services/planner/src/routes/businesses.test.js` (3 edge(s))
+- `./services/orchestrator/src/routes/businesses.js` (8 edge(s))
+- `./services/orchestrator/src/routes/businesses.test.js` (3 edge(s))
 - `match` (3 edge(s))
 - `equal` (3 edge(s))
 - `deepEqual` (2 edge(s))

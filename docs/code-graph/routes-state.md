@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| stateRank | Function | ./services/planner/src/routes/issues.js | 15-18 |
-| buildColumns | Function | ./services/planner/src/routes/issues.js | 21-36 |
+| stateRank | Function | ./services/orchestrator/src/routes/issues.js | 15-18 |
+| buildColumns | Function | ./services/orchestrator/src/routes/issues.js | 21-36 |
 
 ## Execution Flows
 
@@ -35,4 +35,4 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/issues.js` (3 edge(s))
+- `./services/orchestrator/src/routes/issues.js` (3 edge(s))

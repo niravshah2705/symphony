@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 86 nodes
+Community of 80 nodes
 
-- **Size**: 86 nodes
-- **Cohesion**: 0.3444
+- **Size**: 80 nodes
+- **Cohesion**: 0.3545
 - **Dominant Language**: javascript
 
 ## Members
@@ -29,17 +29,11 @@ Community of 86 nodes
 | finishIssue | Function | ./packages/shared/src/agent/apply.js | 378-410 |
 | safeAt | Function | ./packages/shared/src/agent/apply.js | 412-414 |
 | errMsg | Function | ./packages/shared/src/agent/apply.js | 416-418 |
-| test:pickStateByType prefers the state whose name matches@L909 | Test | ./packages/shared/src/agent/coder-flow.test.js | 909-911 |
-| test:pickStateByType falls back to the lowest-position state of the type@L913 | Test | ./packages/shared/src/agent/coder-flow.test.js | 913-916 |
-| test:pickStateByType resolves the completed (Done) state@L918 | Test | ./packages/shared/src/agent/coder-flow.test.js | 918-920 |
-| test:pickStateByType returns null when no state of the type exists@L922 | Test | ./packages/shared/src/agent/coder-flow.test.js | 922-924 |
-| test:dependencyLinks returns all blockers latest-first, including already-Done ones@L940 | Test | ./packages/shared/src/agent/coder-flow.test.js | 940-950 |
-| isDoneState | Function | ./packages/shared/src/agent/coder-orchestrator.js | 232-235 |
-| blockers | Function | ./packages/shared/src/agent/coder-orchestrator.js | 251-256 |
-| dependencyLinks | Function | ./packages/shared/src/agent/coder-orchestrator.js | 265-271 |
-| fetchPlannedProjects | Function | ./packages/shared/src/agent/coder-orchestrator.js | 273-276 |
-| fetchPlannedTasks | Function | ./packages/shared/src/agent/coder-orchestrator.js | 279-307 |
-| test:normalizeTshirtSize: trims/uppercases valid sizes and defaults unknown to M@L89 | Test | ./packages/shared/src/agent/model-routing.test.js | 89-95 |
+| test:pickStateByType prefers the state whose name matches@L95 | Test | ./packages/shared/src/agent/coder-flow.test.js | 95-97 |
+| test:pickStateByType falls back to the lowest-position state of the type@L99 | Test | ./packages/shared/src/agent/coder-flow.test.js | 99-102 |
+| test:pickStateByType resolves the completed (Done) state@L104 | Test | ./packages/shared/src/agent/coder-flow.test.js | 104-106 |
+| test:pickStateByType returns null when no state of the type exists@L108 | Test | ./packages/shared/src/agent/coder-flow.test.js | 108-110 |
+| test:normalizeTshirtSize: trims/uppercases valid sizes and defaults unknown to M@L72 | Test | ./packages/shared/src/agent/model-routing.test.js | 72-78 |
 | cleanId | Function | ./packages/shared/src/agent/pipeline-labels.js | 19-22 |
 | linearProjectId | Function | ./packages/shared/src/agent/pipeline-labels.js | 27-36 |
 | lower | Function | ./packages/shared/src/agent/pipeline-labels.js | 38-40 |
@@ -64,12 +58,17 @@ Community of 86 nodes
 | getTeamStates | Function | ./packages/shared/src/linear.js | 365-369 |
 | getIssueDetail | Function | ./packages/shared/src/linear.js | 372-376 |
 | pickStateByType | Function | ./packages/shared/src/linear.js | 383-392 |
+| createComment | Function | ./packages/shared/src/linear.js | 395-401 |
+| summarize | Function | ./packages/shared/src/linear.js | 407-411 |
+| createProject | Function | ./packages/shared/src/linear.js | 413-427 |
+| getUsers | Function | ./packages/shared/src/linear.js | 429-432 |
+| getOpenProjects | Function | ./packages/shared/src/linear.js | 435-438 |
+| projectLabelSet | Function | ./packages/shared/src/linear.js | 440-443 |
 
-*... and 36 more members.*
+*... and 30 more members.*
 
 ## Execution Flows
 
-- **resume** (criticality: 0.67, depth: 8)
 - **startScheduler** (criticality: 0.65, depth: 5)
 
 ## Dependencies
@@ -78,34 +77,34 @@ Community of 86 nodes
 
 - `step` (34 edge(s))
 - `strictEqual` (20 edge(s))
-- `push` (18 edge(s))
-- `String` (17 edge(s))
-- `map` (13 edge(s))
-- `filter` (11 edge(s))
+- `push` (17 edge(s))
+- `String` (15 edge(s))
 - `trim` (10 edge(s))
 - `toLowerCase` (10 edge(s))
-- `has` (9 edge(s))
-- `get` (7 edge(s))
+- `filter` (9 edge(s))
+- `map` (9 edge(s))
+- `has` (8 edge(s))
 - `deepEqual` (7 edge(s))
-- `set` (6 edge(s))
+- `get` (6 edge(s))
 - `log` (6 edge(s))
-- `sort` (5 edge(s))
+- `set` (5 edge(s))
 - `find` (4 edge(s))
+- `isArray` (4 edge(s))
 
 ### Incoming
 
 - `./packages/shared/src/linear.js` (72 edge(s))
 - `./packages/shared/src/agent/apply.js` (22 edge(s))
 - `strictEqual` (20 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js` (8 edge(s))
 - `./packages/shared/src/agent/pipeline-labels.test.js` (7 edge(s))
 - `deepEqual` (7 edge(s))
 - `./packages/shared/src/agent/pipeline-labels.js` (6 edge(s))
-- `./packages/shared/src/agent/coder-flow.test.js` (5 edge(s))
 - `./packages/shared/src/linear.test.js` (5 edge(s))
+- `./packages/shared/src/agent/coder-flow.test.js` (4 edge(s))
 - `./packages/shared/src/agent/tools.js` (3 edge(s))
 - `./scripts/reset-aifail.js` (3 edge(s))
 - `equal` (2 edge(s))
 - `./packages/shared/src/agent/schema.js` (2 edge(s))
-- `./packages/shared/src/agent/coder-orchestrator.js::pollOnce` (1 edge(s))
-- `deepStrictEqual` (1 edge(s))
+- `./packages/shared/src/agent/model-routing.test.js` (1 edge(s))
+- `./packages/shared/src/agent/coder.js` (1 edge(s))
+- `./packages/shared/src/agent/scheduler.js::runJob` (1 edge(s))

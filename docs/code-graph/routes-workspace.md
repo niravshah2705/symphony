@@ -14,10 +14,10 @@ Community of 4 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| workspaceContext | Function | ./services/planner/src/routes/businesses.js | 13-15 |
-| inWorkspace | Function | ./services/planner/src/routes/businesses.js | 17-20 |
-| contextFields | Function | ./services/planner/src/routes/businesses.js | 22-28 |
-| test:business records follow the exact selected native workspace@L37 | Test | ./services/planner/src/routes/businesses.test.js | 37-45 |
+| workspaceContext | Function | ./services/orchestrator/src/routes/businesses.js | 13-15 |
+| inWorkspace | Function | ./services/orchestrator/src/routes/businesses.js | 17-20 |
+| contextFields | Function | ./services/orchestrator/src/routes/businesses.js | 22-28 |
+| test:business records follow the exact selected native workspace@L37 | Test | ./services/orchestrator/src/routes/businesses.test.js | 37-45 |
 
 ## Execution Flows
 
@@ -34,7 +34,7 @@ No execution flows pass through this community.
 
 ### Incoming
 
-- `./services/planner/src/routes/businesses.js` (10 edge(s))
+- `./services/orchestrator/src/routes/businesses.js` (10 edge(s))
 - `equal` (5 edge(s))
-- `./services/planner/src/routes/businesses.test.js` (1 edge(s))
+- `./services/orchestrator/src/routes/businesses.test.js` (1 edge(s))
 - `deepEqual` (1 edge(s))

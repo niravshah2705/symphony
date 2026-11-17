@@ -24,23 +24,20 @@ const CFG = {
   deadLetterTopic: 'agent-requests-deadletter',
   emailTopic: 'email-delivery',
   orgS2sSigningKey: 'test-org-signing-key-0123456789abcdef',
-  serviceAccounts: { gateway: 'gw@sa', planner: 'pl@sa', coder: 'cc@sa', pubsubPush: 'push@sa' },
-  sourceServiceNames: { gateway: 'gateway', planner: 'planner', coder: 'coder-control', worker: 'coder-worker' },
+  serviceAccounts: { gateway: 'gw@sa', orchestrator: 'po@sa', pubsubPush: 'push@sa' },
+  sourceServiceNames: { gateway: 'gateway', orchestrator: 'pipeline-orchestrator' },
 };
 
 function fakeClients(overrides = {}) {
-  const calls = { createService: [], createJob: [], createTopic: [], createPushSubscription: [], createSchedulerJob: [], deletes: [], imageReads: [] };
+  const calls = { createService: [], createTopic: [], createPushSubscription: [], createSchedulerJob: [], deletes: [], imageReads: [] };
   const base = {
     calls,
     getServiceImage: async (name) => { calls.imageReads.push(name); return `registry/${name}:sha256abc`; },
-    getJobImage: async (name) => { calls.imageReads.push(name); return `registry/${name}:sha256abc`; },
     createService: async (spec) => { calls.createService.push(spec); },
-    createJob: async (spec) => { calls.createJob.push(spec); },
     createTopic: async (name) => { calls.createTopic.push(name); },
     createPushSubscription: async (spec) => { calls.createPushSubscription.push(spec); },
     createSchedulerJob: async (spec) => { calls.createSchedulerJob.push(spec); },
     deleteService: async (n) => { calls.deletes.push(['service', n]); },
-    deleteJob: async (n) => { calls.deletes.push(['job', n]); },
     deleteTopic: async (n) => { calls.deletes.push(['topic', n]); },
     deleteSubscription: async (n) => { calls.deletes.push(['sub', n]); },
     deleteSchedulerJob: async (n) => { calls.deletes.push(['sched', n]); },
@@ -70,13 +67,12 @@ function envEntries(container) {
 test('names + urls are deterministic and Run-safe', () => {
   const n = names(SLUG);
   assert.equal(n.gateway, 'gw-t3f9a1b2c4d5');
-  assert.equal(n.planner, 'pl-t3f9a1b2c4d5');
-  assert.equal(n.coder, 'cc-t3f9a1b2c4d5');
-  assert.equal(n.worker, 'cw-t3f9a1b2c4d5');
+  assert.equal(n.orchestrator, 'po-t3f9a1b2c4d5');
   assert.equal(n.plannerTopic, 'planner-t3f9a1b2c4d5');
+  assert.equal(n.plannerTick, 'planner-tick-t3f9a1b2c4d5');
   const u = urls(SLUG, CFG);
   assert.equal(u.gateway, 'https://gw-t3f9a1b2c4d5-123456.us-central1.run.app');
-  assert.equal(u.planner, 'https://pl-t3f9a1b2c4d5-123456.us-central1.run.app');
+  assert.equal(u.orchestrator, 'https://po-t3f9a1b2c4d5-123456.us-central1.run.app');
 });
 
 test('assertSlug rejects unsafe / client-shaped values', () => {
@@ -93,18 +89,20 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
   const u = urls(SLUG, CFG);
 
   // STORE_NAMESPACE = slug everywhere (the isolation switch).
-  for (const svc of [plan.services.gateway, plan.services.planner, plan.services.coder, plan.worker]) {
+  for (const svc of [plan.services.gateway, plan.services.orchestrator]) {
     assert.equal(svc.env.STORE_NAMESPACE, SLUG);
     assert.equal(svc.env.MESSAGING_MODE, 'pubsub');
     assert.equal(svc.env.STORE_BACKEND, 'firestore');
     assert.equal(svc.env.PUBSUB_PLANNER_TOPIC, 'planner-' + SLUG);
   }
-  assert.equal(plan.services.planner.env.EMAIL_TOPIC, 'email-delivery');
+  assert.equal(plan.services.orchestrator.env.EMAIL_TOPIC, 'email-delivery');
   // Per-tenant topics.
-  assert.deepEqual(plan.topics.map((t) => t.name), ['planner-' + SLUG, 'coder-' + SLUG]);
-  // Gateway: this tenant's planner/coder, SHARED org/settings.
-  assert.equal(plan.services.gateway.env.PLANNER_URL, u.planner);
-  assert.equal(plan.services.gateway.env.CODER_URL, u.coder);
+  assert.deepEqual(plan.topics.map((t) => t.name), ['planner-' + SLUG]);
+  // Gateway: this tenant's orchestrator surface, SHARED org/settings.
+  assert.equal(plan.services.gateway.env.AGENT_URL, u.orchestrator);
+  assert.equal(plan.services.gateway.env.ORCHESTRATOR_URL, u.orchestrator);
+  assert.equal(plan.services.gateway.env.PLANNER_URL, undefined);
+  assert.equal(plan.services.gateway.env.CODER_URL, undefined);
   assert.equal(plan.services.gateway.env.ORG_URL, CFG.sharedOrgUrl);
   assert.equal(plan.services.gateway.env.SETTINGS_URL, CFG.sharedSettingsUrl);
   assert.equal(plan.services.gateway.env.API_BASE_URL, u.gateway);
@@ -117,7 +115,7 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
   assert.equal(plan.services.gateway.env.EGRESS_PROXY_URL, undefined);
   assert.equal(plan.services.gateway.primaryContainerOnly, true);
   assert.equal(plan.services.gateway.sidecarEnv, undefined);
-  for (const service of [plan.services.planner, plan.services.coder, plan.worker]) {
+  for (const service of [plan.services.orchestrator]) {
     assert.equal(service.env.EGRESS_PROXY_URL, 'http://127.0.0.1:4030');
     assert.equal(service.requireSecretFreePrimary, true);
     assert.equal(service.requireEgressProxy, true);
@@ -131,7 +129,7 @@ test('plan encodes tenant isolation: STORE_NAMESPACE, per-tenant topics, shared 
 test('plan pins the tenant substrate atespace derived from the slug', () => {
   const plan = buildPlan(SLUG, CFG);
   assert.equal(atespace(SLUG), 'tenant-t3f9a1b2c4d5');
-  for (const svc of [plan.services.gateway, plan.services.planner, plan.services.coder, plan.worker]) {
+  for (const svc of [plan.services.gateway, plan.services.orchestrator]) {
     assert.equal(svc.env.SUBSTRATE_ATESPACE, atespace(SLUG));
     assert.equal(svc.env.SUBSTRATE_ALLOWED_ATESPACES, atespace(SLUG));
     // No substrate configured for this tenant: the pattern stays inert rather
@@ -149,10 +147,12 @@ test('plan passes the substrate endpoints through when the tenant has them', () 
     substrateWorkerPool: 'pool-acme',
     substratePlannerImage: 'ghcr.io/acme/planner@sha256:aaaa',
   });
-  assert.equal(plan.services.planner.env.SUBSTRATE_URL, 'https://ateapi.example.com:443');
-  assert.equal(plan.services.planner.env.SUBSTRATE_INGRESS_URL, 'https://substrate.example.com');
-  assert.equal(plan.services.planner.env.SUBSTRATE_WORKER_POOL, 'pool-acme');
-  assert.equal(plan.services.planner.env.SUBSTRATE_PLANNER_IMAGE, 'ghcr.io/acme/planner@sha256:aaaa');
+  // The substrate control env lives on the tenant orchestrator — nowhere else.
+  assert.equal(plan.services.orchestrator.env.SUBSTRATE_URL, 'https://ateapi.example.com:443');
+  assert.equal(plan.services.orchestrator.env.SUBSTRATE_INGRESS_URL, 'https://substrate.example.com');
+  assert.equal(plan.services.orchestrator.env.SUBSTRATE_WORKER_POOL, 'pool-acme');
+  assert.equal(plan.services.orchestrator.env.SUBSTRATE_PLANNER_IMAGE, 'ghcr.io/acme/planner@sha256:aaaa');
+  assert.equal(plan.services.orchestrator.env.SUBSTRATE_ACTOR_MODE, undefined);
 });
 
 test('plan: passes customDomain as FIREBASE_CUSTOM_DOMAIN to tenant gateway', () => {
@@ -165,18 +165,16 @@ test('plan: only gateway is unauthenticated; agents are network-reachable but IA
   const u = urls(SLUG, CFG);
   assert.equal(plan.services.gateway.ingress, 'INGRESS_TRAFFIC_ALL');
   assert.equal(plan.services.gateway.allowUnauthenticated, true);
-  for (const svc of [plan.services.planner, plan.services.coder]) {
+  for (const svc of [plan.services.orchestrator]) {
     assert.equal(svc.ingress, 'INGRESS_TRAFFIC_ALL');
     assert.equal(svc.allowUnauthenticated, false);
     assert.deepEqual(svc.invokers, ['gw@sa', 'push@sa']);
   }
-  assert.equal(plan.services.planner.env.PUBSUB_PUSH_AUDIENCE, u.planner);
-  assert.equal(plan.services.coder.env.PUBSUB_PUSH_AUDIENCE, u.coder);
-  assert.equal(plan.services.coder.env.CODER_JOB_NAME, 'cw-' + SLUG);
-  // Subs + scheduler point at each service's own endpoint + audience.
+  assert.equal(plan.services.orchestrator.env.PUBSUB_PUSH_AUDIENCE, u.orchestrator);
+  // The legacy planner queue now lands on the tenant orchestrator surface.
   const plannerSub = plan.subscriptions.find((s) => s.topic === 'planner-' + SLUG);
-  assert.equal(plannerSub.pushEndpoint, u.planner + '/pubsub/planner');
-  assert.equal(plannerSub.audience, u.planner);
+  assert.equal(plannerSub.pushEndpoint, u.orchestrator + '/pubsub/planner');
+  assert.equal(plannerSub.audience, u.orchestrator);
   assert.equal(plannerSub.oidcServiceAccount, 'push@sa');
 });
 
@@ -185,9 +183,7 @@ test('plan labels every resource with tenant + organization for attribution', ()
   const expectBase = { 'managed-by': 'ai-fleet-provisioner', tenancy: 'dedicated', tenant: SLUG, organization: ORG_ID };
 
   assert.deepEqual(plan.services.gateway.labels, { ...expectBase, component: 'gateway' });
-  assert.deepEqual(plan.services.planner.labels, { ...expectBase, component: 'planner' });
-  assert.deepEqual(plan.services.coder.labels, { ...expectBase, component: 'coder-control' });
-  assert.deepEqual(plan.worker.labels, { ...expectBase, component: 'coder-worker' });
+  assert.deepEqual(plan.services.orchestrator.labels, { ...expectBase, component: 'pipeline-orchestrator' });
   assert.equal(plan.topics[0].name, 'planner-' + SLUG);
   assert.deepEqual(plan.topics[0].labels, { ...expectBase, component: 'planner' });
   assert.deepEqual(plan.subscriptions[0].labels, { ...expectBase, component: 'planner' });
@@ -200,14 +196,10 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
     pipelineDeploymentEnabled: false,
     serviceAccounts: {
       ...CFG.serviceAccounts,
-      orchestrator: 'po@sa',
-      tester: 'pt@sa',
       deployer: 'pd@sa',
     },
     sourceServiceNames: {
       ...CFG.sourceServiceNames,
-      orchestrator: 'pipeline-orchestrator',
-      tester: 'pipeline-tester',
       deployer: 'pipeline-deployer',
     },
   };
@@ -216,7 +208,7 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
   const u = urls(SLUG, cfg);
 
   assert.deepEqual(
-    plan.topics.slice(2).map((topic) => topic.name),
+    plan.topics.slice(1).map((topic) => topic.name),
     [
       n.pipelinePlanTopic,
       n.pipelineCodeTopic,
@@ -229,37 +221,30 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
     ],
   );
   assert.notEqual(n.pipelinePlanTopic, n.plannerTopic);
-  assert.notEqual(n.pipelineCodeTopic, n.coderTopic);
   assert.deepEqual(plan.topics.find((topic) => topic.name === n.pipelinePlanTopic).publishers, ['po@sa']);
   for (const [topic, publisher] of [
-    [n.pipelinePlanResultsTopic, 'pl@sa'],
-    [n.pipelineCodeResultsTopic, 'cc@sa'],
-    [n.pipelineTestResultsTopic, 'pt@sa'],
+    [n.pipelinePlanResultsTopic, 'po@sa'],
+    [n.pipelineCodeResultsTopic, 'po@sa'],
+    [n.pipelineTestResultsTopic, 'po@sa'],
     [n.pipelineDeployResultsTopic, 'pd@sa'],
   ]) {
     assert.deepEqual(plan.topics.find((entry) => entry.name === topic).publishers, [publisher]);
   }
   assert.equal(plan.services.gateway.env.ORCHESTRATOR_URL, u.orchestrator);
   assert.equal(plan.services.orchestrator.env.PIPELINE_STORE_BACKEND, 'firestore');
-  assert.equal(plan.services.orchestrator.env.EGRESS_PROXY_URL, undefined);
   assert.equal(plan.services.orchestrator.env.SETTINGS_URL, CFG.sharedSettingsUrl);
-  for (const service of [plan.services.planner, plan.services.coder, plan.services.tester, plan.services.deployer]) {
+  for (const service of [plan.services.orchestrator, plan.services.deployer]) {
     assert.equal(service.env.PIPELINE_STAGE_STORE_BACKEND, 'firestore');
   }
-  assert.equal(plan.services.planner.env.PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC, n.pipelinePlanResultsTopic);
-  assert.equal(plan.services.coder.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC, n.pipelineCodeResultsTopic);
-  assert.equal(plan.services.tester.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC, n.pipelineTestResultsTopic);
+  assert.equal(plan.services.orchestrator.env.PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC, n.pipelinePlanResultsTopic);
+  assert.equal(plan.services.orchestrator.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC, n.pipelineCodeResultsTopic);
+  assert.equal(plan.services.orchestrator.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC, n.pipelineTestResultsTopic);
   assert.equal(plan.services.deployer.env.PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC, n.pipelineDeployResultsTopic);
-  for (const service of [
-    plan.services.planner,
-    plan.services.coder,
-    plan.services.tester,
-    plan.services.deployer,
-  ]) {
+  for (const service of [plan.services.orchestrator, plan.services.deployer]) {
     assert.equal(service.maxInstanceCount, 1);
     assert.equal(service.requestTimeoutSeconds, 3600);
   }
-  for (const service of [plan.services.tester, plan.services.deployer]) {
+  for (const service of [plan.services.orchestrator, plan.services.deployer]) {
     assert.equal(service.requireSecretFreePrimary, true);
     assert.equal(service.requireEgressProxy, true);
     assert.equal(service.env.EGRESS_PROXY_URL, 'http://127.0.0.1:4030');
@@ -267,8 +252,8 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
     assert.match(service.sidecarEnv.ORG_INTERNAL_API_TOKEN, /^[A-Za-z0-9_-]{43}$/);
   }
   assert.equal(
-    plan.services.planner.sidecarEnv.ORG_INTERNAL_API_TOKEN,
-    plan.services.tester.sidecarEnv.ORG_INTERNAL_API_TOKEN,
+    plan.services.orchestrator.sidecarEnv.ORG_INTERNAL_API_TOKEN,
+    plan.services.deployer.sidecarEnv.ORG_INTERNAL_API_TOKEN,
   );
   assert.equal(plan.services.deployer.env.PIPELINE_DEPLOYMENT_ENABLED, 'false');
   for (const [stage, topic] of [
@@ -282,9 +267,18 @@ test('durable pipeline plan uses dedicated tenant topics and brokered agent serv
       `${u.orchestrator}/pubsub/pipeline-stage-results/${stage}`,
     );
   }
-  for (const topic of [n.pipelinePlanTopic, n.pipelineCodeTopic, n.pipelineTestTopic, n.pipelineDeployTopic]) {
-    assert.equal(plan.subscriptions.find((subscription) => subscription.topic === topic).ackDeadlineSeconds, 600);
+  // Stage commands: plan/code/test land on the orchestrator's stage-bound path
+  // segments; deploy keeps its own service.
+  for (const stage of ['plan', 'code', 'test']) {
+    const topic = n[`pipeline${stage[0].toUpperCase()}${stage.slice(1)}Topic`];
+    const sub = plan.subscriptions.find((subscription) => subscription.topic === topic);
+    assert.equal(sub.pushEndpoint, `${u.orchestrator}/pubsub/pipeline-stage/${stage}`);
+    assert.equal(sub.audience, u.orchestrator);
+    assert.equal(sub.ackDeadlineSeconds, 600);
   }
+  const deploySub = plan.subscriptions.find((subscription) => subscription.topic === n.pipelineDeployTopic);
+  assert.equal(deploySub.pushEndpoint, `${u.deployer}/pubsub/pipeline-stage`);
+  assert.equal(deploySub.ackDeadlineSeconds, 600);
 });
 
 test('mandatory per-tenant egress proxy fails closed without an organization signing key', () => {
@@ -372,10 +366,9 @@ test('GCP adapter reconciles a legacy gateway sidecar down to one brokered conta
     },
     async setIamPolicy() {},
   };
-  const jobs = {};
   const clients = createGcpClients(
     { projectId: CFG.projectId, region: CFG.region },
-    { run: { services, jobs } },
+    { run: { services } },
   );
 
   await clients.createService({
@@ -399,109 +392,32 @@ test('GCP adapter reconciles a legacy gateway sidecar down to one brokered conta
   assert.equal(primary.dependsOn, undefined);
 });
 
-test('GCP adapter reconciles an existing tenant worker job with sidecar-only egress credentials', async () => {
-  const plan = buildPlan(SLUG, CFG);
-  const parent = `projects/${CFG.projectId}/locations/${CFG.region}`;
-  const sourceName = `${parent}/jobs/${CFG.sourceServiceNames.worker}`;
-  const tenantName = `${parent}/jobs/${plan.worker.name}`;
-  const updates = [];
-  let updateCompleted = 0;
-
-  const source = {
-    template: {
-      template: {
-        executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2',
-        containers: [
-          {
-            name: 'worker',
-            image: 'registry/worker@sha256:source',
-            env: [{ name: 'SOURCE_ONLY', value: 'must-not-leak' }],
-          },
-          {
-            name: 'proxy',
-            image: 'registry/proxy@sha256:source',
-            env: [
-              { name: 'PROXY_CAPABILITIES', value: 'old-value' },
-              {
-                name: 'PROVIDER_CREDENTIAL',
-                valueSource: { secretKeyRef: { secret: 'provider-vault', version: 'latest' } },
-              },
-            ],
-          },
-        ],
-      },
-    },
-  };
-  const services = {};
-  const jobs = {
-    async getJob({ name }) {
-      if (name === sourceName) return [source];
-      if (name === tenantName) return [{ name: tenantName, etag: 'job-etag-current' }];
-      throw new Error(`unexpected job read: ${name}`);
-    },
-    async createJob() {
-      throw alreadyExists();
-    },
-    async updateJob(request) {
-      updates.push(request);
-      return [completedOperation(() => { updateCompleted += 1; })];
-    },
-  };
-  const clients = createGcpClients(
-    { projectId: CFG.projectId, region: CFG.region },
-    { run: { services, jobs } },
-  );
-
-  await clients.createJob({
-    ...plan.worker,
-    image: 'registry/worker@sha256:source',
-  });
-
-  assert.equal(updates.length, 1);
-  assert.equal(updateCompleted, 1);
-  assert.equal(updates[0].job.name, tenantName);
-  assert.equal(updates[0].job.etag, 'job-etag-current');
-
-  const [primary, proxy] = updates[0].job.template.template.containers;
-  const primaryEnv = envEntries(primary);
-  const proxyEnv = envEntries(proxy);
-  assert.equal(primaryEnv.EGRESS_PROXY_URL.value, 'http://127.0.0.1:4030');
-  assert.equal(primaryEnv.PROVIDER_CREDENTIAL, undefined);
-  assert.equal(primaryEnv.ORG_INTERNAL_API_TOKEN, undefined);
-  assert.equal(proxyEnv.PROXY_CAPABILITIES.value, 'egress');
-  assert.equal(proxyEnv.PROXY_ORG_ID.value, ORG_ID);
-  assert.match(proxyEnv.ORG_INTERNAL_API_TOKEN.value, /^[A-Za-z0-9_-]{43}$/);
-  assert.deepEqual(proxyEnv.PROVIDER_CREDENTIAL.valueSource, {
-    secretKeyRef: { secret: 'provider-vault', version: 'latest' },
-  });
-});
-
 test('provision reuses live images and creates the full stack, returning the deployments map', async () => {
   const clients = fakeClients();
   const result = await provision(SLUG, CFG, { clients });
   const u = urls(SLUG, CFG);
 
   // Reused the ORIGINAL images from the SHARED services (no rebuild).
-  assert.deepEqual(clients.calls.imageReads.sort(), ['coder-control', 'coder-worker', 'gateway', 'planner']);
+  assert.deepEqual(clients.calls.imageReads.sort(), ['gateway', 'pipeline-orchestrator']);
   const byName = Object.fromEntries(clients.calls.createService.map((s) => [s.name, s]));
   assert.equal(byName['gw-' + SLUG].image, 'registry/gateway:sha256abc');
-  assert.equal(byName['pl-' + SLUG].image, 'registry/planner:sha256abc');
-  assert.equal(byName['cc-' + SLUG].image, 'registry/coder-control:sha256abc');
+  assert.equal(byName['po-' + SLUG].image, 'registry/pipeline-orchestrator:sha256abc');
   // The executor threads labels through to the create call.
   assert.equal(byName['gw-' + SLUG].labels.organization, ORG_ID);
   assert.equal(byName['gw-' + SLUG].labels.tenant, SLUG);
-  assert.equal(clients.calls.createJob[0].image, 'registry/coder-worker:sha256abc');
-  assert.equal(clients.calls.createJob[0].env.STORE_NAMESPACE, SLUG);
 
   // Topics/subs/schedulers created.
-  assert.equal(clients.calls.createTopic.length, 2);
-  assert.equal(clients.calls.createPushSubscription.length, 2);
-  assert.equal(clients.calls.createSchedulerJob.length, 2);
+  assert.equal(clients.calls.createTopic.length, 1);
+  assert.equal(clients.calls.createPushSubscription.length, 1);
+  assert.equal(clients.calls.createSchedulerJob.length, 1);
 
   // Returned deployments map (what Organization.deployments is set to).
   assert.equal(result.status, 'provisioned');
   assert.equal(result.gateway.url, u.gateway);
-  assert.equal(result.worker.name, 'cw-' + SLUG);
+  assert.equal(result.orchestrator.name, 'po-' + SLUG);
+  assert.equal(result.planner, undefined);
+  assert.equal(result.coder, undefined);
+  assert.equal(result.worker, undefined);
   assert.equal(result.error, null);
   assert.ok(result.updated_at);
 });
@@ -515,30 +431,28 @@ test('provision is idempotent — already-existing resources do not fail', async
   assert.equal(second.status, 'provisioned');
 });
 
-test('pipeline provision clones all three shared pipeline services and writes back their URLs', async () => {
+test('pipeline provision clones the orchestrator + deployer and writes back their URLs', async () => {
   const clients = fakeClients();
   const cfg = {
     ...CFG,
     pipelineOrchestratorEnabled: true,
     serviceAccounts: {
       ...CFG.serviceAccounts,
-      orchestrator: 'po@sa', tester: 'pt@sa', deployer: 'pd@sa',
+      deployer: 'pd@sa',
     },
     sourceServiceNames: {
       ...CFG.sourceServiceNames,
-      orchestrator: 'pipeline-orchestrator', tester: 'pipeline-tester', deployer: 'pipeline-deployer',
+      deployer: 'pipeline-deployer',
     },
   };
   const result = await provision(SLUG, cfg, { clients });
   assert.deepEqual(clients.calls.imageReads.sort(), [
-    'coder-control', 'coder-worker', 'gateway', 'pipeline-deployer',
-    'pipeline-orchestrator', 'pipeline-tester', 'planner',
+    'gateway', 'pipeline-deployer', 'pipeline-orchestrator',
   ]);
-  assert.equal(clients.calls.createService.length, 6);
-  assert.equal(clients.calls.createTopic.length, 10);
-  assert.equal(clients.calls.createPushSubscription.length, 10);
+  assert.equal(clients.calls.createService.length, 3);
+  assert.equal(clients.calls.createTopic.length, 9);
+  assert.equal(clients.calls.createPushSubscription.length, 9);
   assert.equal(result.orchestrator.url, urls(SLUG, cfg).orchestrator);
-  assert.equal(result.tester.status, 'provisioned');
   assert.equal(result.deployer.status, 'provisioned');
 });
 
@@ -555,10 +469,10 @@ test('teardown deletes every per-tenant resource', async () => {
   const clients = fakeClients();
   const result = await teardown(SLUG, { clients });
   const kinds = clients.calls.deletes.map((d) => d[0]);
-  assert.equal(kinds.filter((k) => k === 'service').length, 6);
-  assert.equal(kinds.filter((k) => k === 'job').length, 1);
-  assert.equal(kinds.filter((k) => k === 'sub').length, 10);
-  assert.equal(kinds.filter((k) => k === 'topic').length, 10);
-  assert.equal(kinds.filter((k) => k === 'sched').length, 2);
+  assert.equal(kinds.filter((k) => k === 'service').length, 3);
+  assert.equal(kinds.filter((k) => k === 'sub').length, 9);
+  assert.equal(kinds.filter((k) => k === 'topic').length, 9);
+  assert.equal(kinds.filter((k) => k === 'sched').length, 1);
+  assert.equal(kinds.filter((k) => k === 'job').length, 0);
   assert.equal(result.status, 'torn_down');
 });
