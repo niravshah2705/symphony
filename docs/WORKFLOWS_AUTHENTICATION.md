@@ -175,17 +175,20 @@ metadata: { name: fleet-workflows-kagent, namespace: kagent }
 rules:
   - apiGroups: ["api.kagent.dev"]
     resources: ["agents", "agenttemplates", "harnesses", "modelconfigs", "remotemcpservers"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
 ```
 
 Scope rules behind that shape: the adapter only ever addresses one namespace, so
 a `ClusterRole` would buy it more than the feature needs; and the long-prompt
 `ConfigMap` is written by the same call, so `configmaps` is required for
-publishes past the inline limit. Binding this Role to the gateway's service
-account is an **operator decision and is not provisioned by this repo** —
+publishes past the inline limit. `get` is not optional decoration: applying an
+existing Agent is a read-then-replace, because the replace has to name the
+stored `resourceVersion`. `delete` covers the un-publish half, which removes the
+Agent and its prompt ConfigMap together. Binding this Role to the gateway's
+service account is an **operator decision and is not provisioned by this repo** —
 `docs/GCP_DEPLOY.md` states the requirement. Until it exists, publishes against a
 configured cluster answer `502` with the API server's refusal, and
 `GET /kagent/capabilities` reports the same failure instead of looking

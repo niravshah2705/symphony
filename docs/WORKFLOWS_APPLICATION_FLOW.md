@@ -149,7 +149,16 @@ workflows overwrite one another's CR.
 | `kagentSpec.egressPolicyRefs[]` | the Agent's egress policy references |
 
 kagent surfaces skills as tools; it does not append their prompts, which is why
-composition happens here rather than upstream. A publish answers:
+composition happens here rather than upstream.
+
+Publishing the same node twice is a **replace, not a second create**: the adapter
+reads the stored Agent, writes back against its `resourceVersion`, and re-reads
+once if that copy moved underneath it. A replace that omits the version is not a
+force-write — the API server refuses it `422 must be specified for an update`, so
+the read is what makes a re-publish of an already-published node work at all.
+`created` in the response says which of the two paths was taken.
+
+A publish answers:
 
 - `200` with `{ name, namespace, created, warnings, harnessEnv }`;
 - `503 kagent_not_configured` when the switch is off — an unconfigured cluster is
