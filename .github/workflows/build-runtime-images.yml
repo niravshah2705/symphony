@@ -47,12 +47,10 @@ jobs:
         id: build-matrix
         env:
           ONLY_RUNTIME: ${{ github.event.inputs.runtime }}
-          BUILD_CONTEXT: go
         run: |
-          python3 - "$ONLY_RUNTIME" "$BUILD_CONTEXT" <<'PY' >> "$GITHUB_OUTPUT"
-          import csv, json, sys
-          only, context = sys.argv[1].strip().rstrip("/"), sys.argv[2].strip().rstrip("/")
-          prefix = context + "/"
+          python3 - "$ONLY_RUNTIME" <<'PY' >> "$GITHUB_OUTPUT"
+          import csv, json, os, sys
+          only = sys.argv[1].strip()
           rows = []
           with open("go/harness/runtime-images.csv", newline="") as fh:
               for r in csv.DictReader(fh):
@@ -63,12 +61,13 @@ jobs:
                   if (r.get("current") or "").strip() == "true":
                       tags.append(f"{image}:latest")
                   dockerfile = r["dockerfile"].strip()
-                  if not dockerfile.startswith(prefix):
-                      sys.exit(f"{dockerfile} is not inside the {context}/ build context")
+                  # build-push-action resolves `file` against the workspace root,
+                  # not against `context` — the CSV path stays repo-relative.
+                  if not os.path.isfile(dockerfile):
+                      sys.exit(f"{dockerfile} is not a file in this repository")
                   rows.append({
                       "runtime": r["runtime"],
-                      # build-push-action resolves `file` against `context`.
-                      "dockerfile": dockerfile[len(prefix):],
+                      "dockerfile": dockerfile,
                       "image": image,
                       "version": version,
                       "tags": ",".join(tags),
