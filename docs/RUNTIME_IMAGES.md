@@ -22,7 +22,7 @@ intentional. Integrating them behind `substratePlannerImage` /
 | `go/harness/runtime-images.csv` | **Version manifest** — the source of truth for what gets built |
 | `go/harness/<runtime>/Dockerfile` | Per-runtime multi-stage image build |
 | `scripts/verify-runtime-images.sh` | CSV preflight (resolvability + checksum report) |
-| `.github/workflows/build-runtime-images.yml` | Builds + pushes to ghcr on manifest change |
+| `.github/workflows/build-runtime-images.yml` | Publishes to ghcr from `main`; a PR run only validates the rows |
 | `go/LICENSE.kagent` | Upstream Apache-2.0 license for the vendored code |
 
 ## Images and tags
@@ -38,6 +38,34 @@ intentional. Integrating them behind `substratePlannerImage` /
 
 Each runtime ships **current + last 3 versions** (4 tags) in the CSV.
 
+`current` is a *tagging* flag, so a rotation moves two rows: the new current row
+(builds `:<version>` + `:latest`) and the demoted one (its `current` flipped to
+`false`). Both are rebuilt — republishing the demoted row without `:latest` is
+the cheap way to keep `:latest` pointing at exactly one digest, and two builds
+beats sixteen.
+
+## What gets rebuilt
+
+| Change | Rows published |
+| --- | --- |
+| `runtime-images.csv` on a PR | none — the run resolves, preflights and reports the rows it *would* publish |
+| `runtime-images.csv` merged to `main` | only rows whose version, checksums or `current` moved |
+| a `Dockerfile` or the workflow itself | the whole manifest (16) — the recipe changed for every image |
+| anything else on `main` | nothing (the workflow does not trigger) |
+| `workflow_dispatch`, `rebuild: all` | the whole manifest, or one runtime if `runtime` is set |
+| `workflow_dispatch`, `rebuild: changed` | rows that moved versus the previous commit |
+
+Two consequences worth knowing:
+
+- **Only `main` publishes.** A branch push no longer builds and pushes images, so
+  a PR does not consume ~30 minutes of runner time or repoint a tag that the
+  merged branch is about to change.
+- **A Go adapter change rebuilds nothing by itself.** The manifest drives the
+  matrix, and the adapter is not a manifest row — after landing one, run
+  `workflow_dispatch` with `rebuild: all`. The buildx cache is scoped per runtime
+  (`scope=runtime-<name>`), so that run reuses the compiled adapter layer rather
+  than starting cold, and a version rotation reuses it too.
+
 ## Rotating versions (the normal workflow)
 
 1. Edit `go/harness/runtime-images.csv`:
@@ -48,12 +76,17 @@ Each runtime ships **current + last 3 versions** (4 tags) in the CSV.
      deepagent/deepseek the checksum columns stay empty (uv/npm resolve integrity).
 2. Run the preflight:
    ```bash
-   scripts/verify-runtime-images.sh          # checks every version still resolves
+   scripts/verify-runtime-images.sh           # checks every version still resolves
    scripts/verify-runtime-images.sh --hash    # also downloads and prints the CLI shas
    ```
-   Use the `--hash` output to populate the claude/codex checksum columns.
-3. Commit + merge. The `build-runtime-images` workflow triggers on the CSV change,
-   cross-builds `linux/amd64` + `linux/arm64`, and pushes to ghcr.
+   Use the `--hash` output to populate the claude/codex checksum columns. CI runs
+   the same check with `--selected <file>` limited to the rows it is about to
+   publish, so a stale row in an unrelated runtime reports as a `WARN` instead of
+   blocking your bump — but a stale row **in** the selection fails the run.
+3. Commit + open a PR. The workflow resolves and validates those rows and posts
+   the selection to the run summary, publishing nothing.
+4. Merge. The `main` run rebuilds only the rows that moved and pushes them to ghcr
+   (`linux/amd64` + `linux/arm64`).
 
 ## Checksum policy
 
@@ -98,3 +131,7 @@ exit, e.g. `docker run --rm claude-runtime:local --check`.
   codex stay on the musl base, because their vendors ship prebuilt musl binaries.
 - `npm install -g --allow-scripts=…` is kept verbatim; native-module postinstall
   steps run by default with npm.
+- **The manifest is data-only.** Every non-empty line after the header is a row,
+  so a `# comment` becomes a row with an empty `dockerfile` and the plan job fails
+  naming it (`row # …: is not a file`). Blank lines are fine; notes about a
+  rotation belong in the PR, not the CSV.
