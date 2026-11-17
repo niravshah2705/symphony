@@ -176,9 +176,14 @@ export function createWorkflowSync({ client, model, storage = null, organization
   async function load() {
     const draft = readDraft();
     const debt = readDebt();
+    const draftGraphs = draft && Array.isArray(draft.workflows) ? draft.workflows : [];
+    const canMigrate = Boolean(draftGraphs.length && canWrite);
     let payload;
     try {
-      payload = await client.getWorkflows();
+      // Local graphs we have not pushed ask the server to hold its platform
+      // examples back: seeding the tenant first would fill the collection and
+      // leave the v1 import below with nothing to import into.
+      payload = await client.getWorkflows({ migrate: canMigrate });
     } catch (error) {
       if (isOfflineError(error)) {
         offline = true;
@@ -201,9 +206,8 @@ export function createWorkflowSync({ client, model, storage = null, organization
 
     let workflows = Array.isArray(payload.workflows) ? payload.workflows : [];
     let source = 'server';
-    const draftGraphs = draft && Array.isArray(draft.workflows) ? draft.workflows : [];
 
-    if (!workflows.length && draftGraphs.length && canWrite) {
+    if (!workflows.length && canMigrate) {
       // The server imports into an empty collection inside a transaction, so a
       // second tab racing us gets `skipped` rather than a duplicate graph.
       let imported = null;
@@ -220,9 +224,10 @@ export function createWorkflowSync({ client, model, storage = null, organization
     }
 
     if (!workflows.length) {
-      // Nothing on the server and nothing local: the gateway already lazy-seeded
-      // platform defaults, so an empty answer means seeding is off. Use the
-      // built-in examples rather than showing a blank canvas.
+      // Nothing on the server and nothing importable from here: an answered
+      // migration read is either a tenant that stopped seeding (the marker is
+      // already set and its graphs were deleted) or an import the server
+      // refused. Use the built-in examples rather than showing a blank canvas.
       recordRevisions({ workflows: [] });
       const seeded = model.createInitialState();
       recordContent(seeded);

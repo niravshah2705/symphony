@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 566 nodes
+Community of 567 nodes
 
-- **Size**: 566 nodes
-- **Cohesion**: 0.3026
+- **Size**: 567 nodes
+- **Cohesion**: 0.3003
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,7 +17,7 @@ Community of 566 nodes
 | test:each metric filter names a field the emitting code actually writes@L95 | Test | ./deploy/gcp/observability-config.test.js | 95-118 |
 | test:user creates orgs and projects, then manages pending invitations@L264 | Test | ./e2e/organization-flow.spec.js | 264-321 |
 | test:captures a persona at onboarding and reflects it after reload@L350 | Test | ./e2e/organization-flow.spec.js | 350-372 |
-| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L402 | Test | ./e2e/workflow-designer.spec.js | 402-537 |
+| test:organization admin creates a safe custom agent, links nodes, and shares the graph with the organization@L406 | Test | ./e2e/workflow-designer.spec.js | 406-541 |
 | encodeVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 13-25 |
 | encodeTag | Function | ./packages/shared-core/src/agent/grpc-wire.js | 27-29 |
 | pbVarint | Function | ./packages/shared-core/src/agent/grpc-wire.js | 31-37 |
@@ -65,19 +65,19 @@ Community of 566 nodes
 | test:metering happens on the control plane, not in the actor request body@L185 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 185-204 |
 | test:an actor that reports no usage still records exactly one (skipped) attempt@L206 | Test | ./packages/shared-core/src/agent/substrate-runner.test.js | 206-221 |
 
-*... and 516 more members.*
+*... and 517 more members.*
 
 ## Execution Flows
 
 - **childMain** (criticality: 0.73, depth: 9)
-- **listActors** (criticality: 0.71, depth: 8)
+- **listActors** (criticality: 0.70, depth: 8)
 - **getActorTemplate** (criticality: 0.70, depth: 8)
 - **isBillingBlocked** (criticality: 0.69, depth: 7)
 - **main** (criticality: 0.68, depth: 4)
 - **main** (criticality: 0.67, depth: 4)
 - **main** (criticality: 0.67, depth: 4)
-- **getGithubToken** (criticality: 0.62, depth: 8)
 - **recordActorUsage** (criticality: 0.61, depth: 3)
+- **getGithubToken** (criticality: 0.61, depth: 8)
 - **getApiKey** (criticality: 0.58, depth: 7)
 - *... and 1 more flows.*
 
@@ -85,30 +85,30 @@ Community of 566 nodes
 
 ### Outgoing
 
-- `equal` (692 edge(s))
-- `String` (118 edge(s))
+- `equal` (701 edge(s))
+- `String` (116 edge(s))
 - `deepEqual` (93 edge(s))
 - `map` (76 edge(s))
 - `Number` (66 edge(s))
 - `push` (64 edge(s))
 - `filter` (49 edge(s))
+- `throws` (45 edge(s))
 - `expect` (44 edge(s))
-- `throws` (44 edge(s))
 - `ok` (41 edge(s))
 - `stringify` (41 edge(s))
 - `now` (39 edge(s))
 - `toISOString` (36 edge(s))
-- `trim` (34 edge(s))
 - `find` (32 edge(s))
+- `trim` (32 edge(s))
 
 ### Incoming
 
-- `equal` (692 edge(s))
+- `equal` (701 edge(s))
 - `deepEqual` (93 edge(s))
 - `./packages/shared-core/src/store.js` (76 edge(s))
 - `./packages/shared-core/src/agent/substrate.js` (72 edge(s))
+- `throws` (45 edge(s))
 - `expect` (44 edge(s))
-- `throws` (44 edge(s))
 - `ok` (41 edge(s))
 - `./packages/shared-core/src/agent/grpc-wire.js` (36 edge(s))
 - `./scripts/flexprice-phase1-probes.js` (34 edge(s))

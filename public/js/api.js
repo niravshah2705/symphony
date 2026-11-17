@@ -355,7 +355,10 @@ export const api = {
   // Workflow designer (per-organization, schema v2). PUT carries the revision
   // the server last returned, so a concurrent edit surfaces as a conflict
   // carrying the server copy instead of silently overwriting it.
-  getWorkflows: () => request('/workflows'),
+  // `{ migrate: true }` asks the gateway to report an unseeded tenant as empty
+  // rather than handing back the platform examples, so a localStorage graph
+  // still has somewhere to be imported into. See /api/workflows?migrate=1.
+  getWorkflows: ({ migrate = false } = {}) => request(migrate ? '/workflows?migrate=1' : '/workflows'),
   createWorkflow: (graph) => request('/workflows', { method: 'POST', body: JSON.stringify(graph) }),
   putWorkflow: (id, graph, revision) => request(`/workflows/${encodeURIComponent(id)}`, {
     method: 'PUT',

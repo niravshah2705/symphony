@@ -146,6 +146,9 @@ async function installDesignerStubs(page, {
 } = {}) {
   const apiMutations = [];
   const workflowApiRequests = [];
+  // Full URLs of the workflow GETs: the query string is what a migrating
+  // browser sends, and `pathname` alone cannot show it.
+  const workflowReadUrls = [];
   const publishes = [];
   const capabilitiesReads = [];
   // The gateway seeds platform defaults into a tenant the first time it is
@@ -171,6 +174,7 @@ async function installDesignerStubs(page, {
     const pathname = new URL(request.url()).pathname;
     if (request.method() !== 'GET') apiMutations.push(`${request.method()} ${pathname}`);
     if (/workflow/i.test(pathname)) workflowApiRequests.push(`${request.method()} ${pathname}`);
+    if (/workflow/i.test(pathname) && request.method() === 'GET') workflowReadUrls.push(request.url());
 
     const organizationHeader = request.headers()['x-ai-fleet-organization-id'] || organizations[0]?.id || '';
     const postedGraph = () => {
@@ -301,7 +305,7 @@ async function installDesignerStubs(page, {
     return json(route, {});
   });
 
-  return { apiMutations, workflowApiRequests, store, publishes, capabilitiesReads };
+  return { apiMutations, workflowApiRequests, workflowReadUrls, store, publishes, capabilitiesReads };
 }
 
 async function openDesigner(page, path = '/#/workflows') {
@@ -659,6 +663,47 @@ test('a teammate saving first surfaces a conflict instead of being overwritten',
     const workflow = state?.workflows?.find((item) => item.id === state.activeWorkflowId);
     return { name: workflow?.name, description: workflow?.description };
   }, workflowStorageKey(PRIMARY_ORG.id))).toEqual({ name: 'Contested flow', description: 'Edited from the first tab.' });
+});
+
+test('a browser holding unsaved v1 graphs migrates them into an empty tenant instead of taking the examples', async ({ page }) => {
+  // The whole point of the migrate read: lazy seeding used to answer this load
+  // with platform graphs, which made the tenant non-empty and the import below
+  // refuse — so a designer's local work could never reach the server.
+  await page.addInitScript(([storageKey]) => {
+    localStorage.setItem(storageKey, JSON.stringify({
+      schemaVersion: 1,
+      activeWorkflowId: 'v1-mine',
+      workflows: [{
+        id: 'v1-mine',
+        name: 'My old flow',
+        description: 'Designed offline before the tenant existed.',
+        viewport: { x: 0, y: 0, zoom: 1 },
+        nodes: [{ id: 'v1-n1', kind: 'agent', refId: 'planning', name: 'Plan', x: 120, y: 120, modelPreference: 'balanced' }],
+        edges: [],
+      }],
+      customAgents: [],
+      customContexts: [],
+    }));
+  }, [workflowStorageKey(PRIMARY_ORG.id)]);
+
+  const recording = await installDesignerStubs(page, { workflows: { [PRIMARY_ORG.id]: [] } });
+  await openDesigner(page);
+
+  const workflowSelect = page.getByRole('combobox', { name: 'Active workflow' });
+  await expect(workflowSelect.locator('option')).toHaveCount(1);
+  await expect(workflowSelect.locator('option')).toContainText('My old flow');
+  await expect(page.locator('.workflow-node')).toHaveCount(1);
+
+  expect(recording.workflowReadUrls.join('\n')).toContain('migrate=1');
+  expect(recording.workflowApiRequests).toContain('POST /api/workflows/import');
+  await expect.poll(() => recording.store.graphs(PRIMARY_ORG.id).map((graph) => graph.id)).toEqual(['v1-mine']);
+
+  // The migrated graph is the tenant now: a later reload takes the normal read
+  // and must not import a second copy.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.workflow-page')).toBeVisible();
+  await expect(workflowSelect.locator('option')).toHaveCount(1);
+  expect(recording.workflowApiRequests.filter((line) => line === 'POST /api/workflows/import')).toHaveLength(1);
 });
 
 test('a kagent node offers the names the cluster reported, and publishing saves the graph first', async ({ page }) => {

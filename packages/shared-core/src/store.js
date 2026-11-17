@@ -342,6 +342,10 @@ const DEFAULT_STORE = Object.freeze({
   agents: [],
   personaGrants: [],
   userProfiles: {},
+  // When the tenant's graph collection was first filled. Null means "never",
+  // so seeding a tenant that deleted every graph is what this timestamp
+  // prevents; see `seedTenantFromDefaults` in workflow/store.js.
+  workflowGraphsSeededAt: null,
   // Platform-global default overrides (agents/workflows/gate), persisted only
   // in the legacy singleton root — read via readLegacyStore by the defaults API.
   workflowDefaults: {},
@@ -467,6 +471,7 @@ function normalizeStore(parsed) {
     agents: Array.isArray(source.agents) ? source.agents : [],
     personaGrants: Array.isArray(source.personaGrants) ? source.personaGrants : [],
     userProfiles: normalizeUserProfiles(source.userProfiles),
+    workflowGraphsSeededAt: typeof source.workflowGraphsSeededAt === 'string' ? source.workflowGraphsSeededAt : null,
     workflowDefaults: source.workflowDefaults && typeof source.workflowDefaults === 'object' && !Array.isArray(source.workflowDefaults)
       ? { ...source.workflowDefaults } : {},
     billing: normalizeBilling(source.billing),
@@ -508,7 +513,7 @@ function seedStore() {
 // Top-level keys kept together in one Firestore document (small, singleton) vs.
 // the growing arrays that each become a per-record sub-collection so no single
 // document approaches Firestore's 1 MB limit.
-const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing', 'userProfiles', 'workflowDefaults'];
+const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing', 'userProfiles', 'workflowDefaults', 'workflowGraphsSeededAt'];
 const STORE_COLLECTION_KEYS = [
   'jobs', 'memories', 'conversations', 'approvals', 'stackLinks', 'settingsHistory',
   // Discovery question overrides: one doc per question, so an org that adds many

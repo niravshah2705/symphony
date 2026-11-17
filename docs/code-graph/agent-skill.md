@@ -4,9 +4,9 @@
 
 ## Overview
 
-Community of 424 nodes
+Community of 425 nodes
 
-- **Size**: 424 nodes
+- **Size**: 425 nodes
 - **Cohesion**: 0.2540
 - **Dominant Language**: javascript
 
@@ -65,7 +65,7 @@ Community of 424 nodes
 | createFsArgNormalizerMiddleware | Function | ./packages/shared/src/agent/fs-arg-normalizer.js | 57-68 |
 | test:remaps `path` to `file_path` for read_file (the observed failure)@L11 | Test | ./packages/shared/src/agent/fs-arg-normalizer.test.js | 11-19 |
 
-*... and 374 more members.*
+*... and 375 more members.*
 
 ## Execution Flows
 
@@ -76,6 +76,7 @@ Community of 424 nodes
 - **runCoder** (criticality: 0.67, depth: 7)
 - **runPlannedCoder** (criticality: 0.66, depth: 7)
 - **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 
@@ -89,9 +90,9 @@ Community of 424 nodes
 - `isArray` (55 edge(s))
 - `strictEqual` (50 edge(s))
 - `trim` (46 edge(s))
-- `require` (39 edge(s))
+- `require` (40 edge(s))
 - `endsWith` (39 edge(s))
-- `slice` (37 edge(s))
+- `slice` (38 edge(s))
 - `execFileSync` (37 edge(s))
 - `deepStrictEqual` (37 edge(s))
 - `map` (36 edge(s))

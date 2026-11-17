@@ -75,7 +75,12 @@ function createWorkflowsRouter({ kagentAdapter = null, substrateAdapter = null }
   const router = express.Router();
 
   router.get('/', asyncHandler(async (req, res) => {
-    wfStore.seedTenantFromDefaults();
+    // `?migrate=1` asks for the tenant's real emptiness instead of a seeded
+    // copy: the designer sends it only when it holds localStorage graphs it
+    // has not imported yet, and lazy seeding would answer that read with
+    // platform examples, so the import would never find an empty collection.
+    const migrate = String(req.query.migrate || '') === '1';
+    wfStore.seedTenantFromDefaults({ seedGraphs: !migrate });
     const ctx = callerContext(req);
     res.set('Cache-Control', 'no-store').json({
       workflows: wfStore.listWorkflows(),

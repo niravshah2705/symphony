@@ -76,30 +76,52 @@ function duplicateWorkflow(id, { name, actor = null } = {}) {
 }
 
 /**
- * Idempotent first-load seed: copy the platform default WORKFLOWS when the
- * tenant has none. Agent profiles are not copied — the merged read (platform
- * defaults + tenant overrides by id) already presents them, and only genuine
- * tenant edits create stored overrides.
+ * First-load seed: copy the platform default WORKFLOWS into a tenant whose
+ * collection has never been initialized. Agent profiles are not copied — the
+ * merged read (platform defaults + tenant overrides by id) already presents
+ * them, and only genuine tenant edits create stored overrides.
+ *
+ * Graphs seed once per tenant and never again: `workflowGraphsSeededAt` records
+ * that the collection has been initialized, so an operator who deletes every
+ * graph is not overruled by the next read. Emptiness alone cannot make that
+ * call — it is both "never seeded" and "deliberately emptied". Tenants that
+ * predate the marker are stamped on the first read that finds graphs, which is
+ * what keeps delete-all honest for them too.
+ *
+ * `seedGraphs: false` defers the copy for the v1-migration read (see
+ * `?migrate=1` in the gateway route), where an empty answer must stay empty so
+ * the client can see it has somewhere to import into. Grants keep seeding on
+ * emptiness: `personaGrants()` merges the stored records over
+ * `DEFAULT_PERSONA_GRANTS`, so an empty collection already reads as the
+ * defaults and there is no deliberate state for a marker to protect.
  */
-function seedTenantFromDefaults() {
+function seedTenantFromDefaults({ seedGraphs = true } = {}) {
   const current = readStore();
   const seeded = { workflows: false, agents: false, personaGrants: false };
   let next = current;
-  if (!next.workflows.length) {
+  let marked = false;
+  if (!next.workflowGraphsSeededAt) {
     const stamp = nowIso();
-    next = {
-      ...next,
-      workflows: defaults.cloneDefaults().workflows.map((workflow) => ({
-        ...workflow, revision: 1, updatedAt: stamp, updatedBy: null,
-      })),
-    };
-    seeded.workflows = true;
+    if (next.workflows.length) {
+      next = { ...next, workflowGraphsSeededAt: stamp };
+      marked = true;
+    } else if (seedGraphs) {
+      next = {
+        ...next,
+        workflowGraphsSeededAt: stamp,
+        workflows: defaults.cloneDefaults().workflows.map((workflow) => ({
+          ...workflow, revision: 1, updatedAt: stamp, updatedBy: null,
+        })),
+      };
+      seeded.workflows = true;
+      marked = true;
+    }
   }
   if (!next.personaGrants.length) {
     next = { ...next, personaGrants: defaults.cloneDefaults().roleGrants };
     seeded.personaGrants = true;
   }
-  if (seeded.workflows || seeded.personaGrants) writeStore(next);
+  if (seeded.workflows || seeded.personaGrants || marked) writeStore(next);
   return { seeded, workflows: readStore().workflows.length };
 }
 
@@ -124,7 +146,7 @@ function importV1Workflows(graphs) {
     imported.push({ ...migrated, revision: 1, updatedAt: stamp, updatedBy: 'v1-import' });
   }
   if (!imported.length) return { ok: false, skipped: true, reason: 'No supplied workflow was valid.', workflows: current.workflows };
-  writeStore({ ...current, workflows: imported });
+  writeStore({ ...current, workflows: imported, workflowGraphsSeededAt: current.workflowGraphsSeededAt || stamp });
   return { ok: true, skipped: false, imported: imported.length, workflows: imported };
 }
 
@@ -135,6 +157,9 @@ function resetTenantToDefaults({ actor = null } = {}) {
   const stamp = nowIso();
   writeStore({
     ...current,
+    // The reset *is* the initialization this tenant asked for, so the marker
+    // moves with it; deleting the restored graphs afterwards must not seed again.
+    workflowGraphsSeededAt: current.workflowGraphsSeededAt || stamp,
     workflows: fresh.workflows.map((workflow) => ({ ...workflow, revision: (0 | Number(current.workflows.find((w) => w.id === workflow.id)?.revision)) + 1, updatedAt: stamp, updatedBy: actor ? String(actor) : 'reset' })),
     agents: [],
     personaGrants: fresh.roleGrants,

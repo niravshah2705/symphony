@@ -41,10 +41,11 @@ function graph(id, overrides = {}) {
 }
 
 function harness({ payload, client = {}, storage = memoryStorage(), organizationId = ORG, canWrite = true } = {}) {
-  const calls = { get: 0, created: [], put: [], deleted: [], imported: [] };
+  const calls = { get: 0, migrate: [], created: [], put: [], deleted: [], imported: [] };
   const api = {
-    getWorkflows: async () => {
+    getWorkflows: async (options) => {
       calls.get += 1;
+      calls.migrate.push(Boolean(options?.migrate));
       if (client.get) return client.get(calls.get);
       return payload;
     },
@@ -94,6 +95,24 @@ test('load takes the tenant graphs, records revisions and caches a draft', async
   assert.equal(result.context.loaded, true);
   assert.ok(storage.data.size > 0, 'a successful load still writes the draft so an offline reload sees it');
   assert.equal(calls.imported.length, 0, 'a populated tenant must never trigger an import');
+});
+
+test('a draft asks the server to hold its platform examples back so the import has somewhere to land', async () => {
+  const seeded = memoryStorage();
+  const draft = { schemaVersion: 1, activeWorkflowId: 'old-1', workflows: [graph('old-1')], customAgents: [], customContexts: [] };
+  seeded.setItem(model.storageKeyForOrganization(ORG), model.serializeState(draft));
+
+  const withDraft = harness({ payload: { workflows: [] }, storage: seeded });
+  await withDraft.sync.load();
+  assert.deepEqual(withDraft.calls.migrate, [true], 'a seeded answer would fill the collection the import refuses to write into');
+
+  const clean = harness({ payload: { workflows: [] } });
+  await clean.sync.load();
+  assert.deepEqual(clean.calls.migrate, [false], 'an empty browser takes the normal lazy-seeded read');
+
+  const member = harness({ payload: { workflows: [] }, storage: seeded, canWrite: false });
+  await member.sync.load();
+  assert.deepEqual(member.calls.migrate, [false], 'a member cannot import, so deferring the seed would only hand them a blank canvas');
 });
 
 test('load carries a localStorage draft over exactly once, and only into an empty tenant', async () => {

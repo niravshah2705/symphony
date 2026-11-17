@@ -73,6 +73,7 @@ Community of 382 nodes
 - **generateIssuesForMilestones** (criticality: 0.67, depth: 4)
 - **generatePlan** (criticality: 0.67, depth: 6)
 - **startScheduler** (criticality: 0.65, depth: 5)
+- **proposeSettings** (criticality: 0.58, depth: 4)
 
 ## Dependencies
 

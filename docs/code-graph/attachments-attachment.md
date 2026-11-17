@@ -4,16 +4,38 @@
 
 ## Overview
 
-Community of 105 nodes
+Community of 185 nodes
 
-- **Size**: 105 nodes
-- **Cohesion**: 0.3826
+- **Size**: 185 nodes
+- **Cohesion**: 0.2945
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
+| prunePending | Function | ./packages/shared-core/src/agent/claude-oauth.js | 34-38 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/claude-oauth.js | 41-51 |
+| createLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 57-68 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/claude-oauth.js | 71-79 |
+| pendingCount | Function | ./packages/shared-core/src/agent/claude-oauth.js | 82-85 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/claude-oauth.js | 108-120 |
+| postToken | Function | ./packages/shared-core/src/agent/claude-oauth.js | 122-147 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 150-160 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/claude-oauth.js | 163-175 |
+| prunePending | Function | ./packages/shared-core/src/agent/oauth.js | 34-38 |
+| createLogin | Function | ./packages/shared-core/src/agent/oauth.js | 44-57 |
+| consumeLogin | Function | ./packages/shared-core/src/agent/oauth.js | 60-68 |
+| pendingCount | Function | ./packages/shared-core/src/agent/oauth.js | 71-74 |
+| buildAuthorizeUrl | Function | ./packages/shared-core/src/agent/oauth.js | 77-87 |
+| normalizeTokenResponse | Function | ./packages/shared-core/src/agent/oauth.js | 90-103 |
+| postToken | Function | ./packages/shared-core/src/agent/oauth.js | 105-130 |
+| exchangeCodeForTokens | Function | ./packages/shared-core/src/agent/oauth.js | 133-142 |
+| refreshTokens | Function | ./packages/shared-core/src/agent/oauth.js | 145-158 |
+| base64url | Function | ./packages/shared-core/src/agent/pkce.js | 12-14 |
+| generateVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 17-19 |
+| challengeFromVerifier | Function | ./packages/shared-core/src/agent/pkce.js | 22-24 |
+| generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | makeFakeStorage | Function | ./packages/shared-core/src/attachments/__fixtures__/fakes.js | 11-47 |
 | makeFakeFirestore | Function | ./packages/shared-core/src/attachments/__fixtures__/fakes.js | 49-155 |
 | chunkText | Function | ./packages/shared-core/src/attachments/chunk.js | 8-24 |
@@ -42,69 +64,57 @@ Community of 105 nodes
 | test:extractText(txt) passes UTF-8 text through verbatim@L23 | Test | ./packages/shared-core/src/attachments/extract.test.js | 23-27 |
 | test:extractText bounds pathologically large text and marks it truncated@L29 | Test | ./packages/shared-core/src/attachments/extract.test.js | 29-34 |
 | test:extractText rejects a non-extractable type rather than silently returning empty text@L36 | Test | ./packages/shared-core/src/attachments/extract.test.js | 36-39 |
-| bucketName | Function | ./packages/shared-core/src/attachments/gcs.js | 8-12 |
-| getBucket | Function | ./packages/shared-core/src/attachments/gcs.js | 17-22 |
-| mintUploadUrl | Function | ./packages/shared-core/src/attachments/gcs.js | 25-35 |
-| getObjectMetadata | Function | ./packages/shared-core/src/attachments/gcs.js | 38-45 |
-| deleteObject | Function | ./packages/shared-core/src/attachments/gcs.js | 47-50 |
-| readObjectBuffer | Function | ./packages/shared-core/src/attachments/gcs.js | 53-57 |
-| objectPath | Function | ./packages/shared-core/src/attachments/gcs.js | 60-62 |
-| test:objectPath is server-derived and includes org/project/conversation/attachment scoping@L8 | Test | ./packages/shared-core/src/attachments/gcs.test.js | 8-11 |
-| test:mintUploadUrl requests a v4 write-scoped signed URL for the exact object path@L13 | Test | ./packages/shared-core/src/attachments/gcs.test.js | 13-26 |
-| test:getObjectMetadata returns null for a non-existent object (never trusts the caller)@L28 | Test | ./packages/shared-core/src/attachments/gcs.test.js | 28-32 |
-| test:getObjectMetadata returns the actual size/contentType for an existing object@L34 | Test | ./packages/shared-core/src/attachments/gcs.test.js | 34-38 |
-| test:deleteObject removes the object and ignores a missing one@L40 | Test | ./packages/shared-core/src/attachments/gcs.test.js | 40-44 |
-| test:readObjectBuffer returns the raw bytes@L46 | Test | ./packages/shared-core/src/attachments/gcs.test.js | 46-50 |
-| AttachmentError | Class | ./packages/shared-core/src/attachments/model.js | 9-15 |
-| constructor | Function | ./packages/shared-core/src/attachments/model.js | 10-14 |
-| sanitizeFilename | Function | ./packages/shared-core/src/attachments/model.js | 18-24 |
-| newAttachmentId | Function | ./packages/shared-core/src/attachments/model.js | 26-28 |
-| newChunkId | Function | ./packages/shared-core/src/attachments/model.js | 30-32 |
-| validateUploadRequest | Function | ./packages/shared-core/src/attachments/model.js | 35-58 |
-| revalidateUploadedObject | Function | ./packages/shared-core/src/attachments/model.js | 65-76 |
-| isValidAttachmentId | Function | ./packages/shared-core/src/attachments/model.js | 78-80 |
-| test:sanitizeFilename strips path separators and control characters, bounds length@L16 | Test | ./packages/shared-core/src/attachments/model.test.js | 16-23 |
 
-*... and 55 more members.*
+*... and 135 more members.*
 
 ## Execution Flows
 
-No execution flows pass through this community.
+- **childMain** (criticality: 0.73, depth: 9)
+- **duplicateWorkflow** (criticality: 0.71, depth: 7)
+- **listActors** (criticality: 0.70, depth: 8)
+- **setUserPersona** (criticality: 0.70, depth: 6)
+- **graphPersonaViolations** (criticality: 0.70, depth: 7)
+- **upsertAgentProfile** (criticality: 0.70, depth: 6)
+- **getActorTemplate** (criticality: 0.70, depth: 8)
+- **ensureFreshCodexTokens** (criticality: 0.67, depth: 6)
+- **ensureFreshClaudeTokens** (criticality: 0.67, depth: 6)
+- **exchangeCodeForTokens** (criticality: 0.67, depth: 2)
+- *... and 13 more flows.*
 
 ## Dependencies
 
 ### Outgoing
 
-- `equal` (82 edge(s))
-- `from` (12 edge(s))
-- `ok` (10 edge(s))
+- `equal` (95 edge(s))
+- `set` (20 edge(s))
+- `deepEqual` (20 edge(s))
+- `push` (18 edge(s))
+- `String` (16 edge(s))
+- `ok` (14 edge(s))
+- `from` (13 edge(s))
+- `slice` (12 edge(s))
+- `require` (12 edge(s))
+- `get` (11 edge(s))
+- `now` (10 edge(s))
+- `trim` (10 edge(s))
+- `match` (9 edge(s))
+- `map` (8 edge(s))
 - `throws` (8 edge(s))
-- `String` (7 edge(s))
-- `deepEqual` (7 edge(s))
-- `map` (7 edge(s))
-- `slice` (6 edge(s))
-- `repeat` (6 edge(s))
-- `match` (6 edge(s))
-- `require` (6 edge(s))
-- `rejects` (6 edge(s))
-- `get` (5 edge(s))
-- `resolve` (4 edge(s))
-- `file` (4 edge(s))
 
 ### Incoming
 
-- `equal` (82 edge(s))
+- `equal` (95 edge(s))
+- `./packages/shared-core/src/messaging/events.js` (24 edge(s))
 - `./packages/shared-core/src/attachments/store.js` (22 edge(s))
+- `./packages/shared-core/src/store/workspace-context.js` (21 edge(s))
+- `deepEqual` (20 edge(s))
+- `./packages/shared-core/src/agent/claude-oauth.js` (16 edge(s))
+- `./packages/shared-core/src/agent/oauth.js` (16 edge(s))
+- `ok` (14 edge(s))
 - `./packages/shared-core/src/attachments/gcs.js` (14 edge(s))
 - `./packages/shared-core/src/attachments/model.js` (14 edge(s))
 - `./packages/shared-core/src/attachments/service.js` (13 edge(s))
 - `from` (12 edge(s))
 - `./packages/shared-core/src/attachments/model.test.js` (12 edge(s))
 - `./packages/shared-core/src/attachments/service.test.js` (12 edge(s))
-- `ok` (10 edge(s))
-- `throws` (8 edge(s))
-- `./packages/shared-core/src/attachments/store.test.js` (8 edge(s))
-- `deepEqual` (7 edge(s))
-- `./packages/shared-core/src/attachments/chunk.test.js` (6 edge(s))
-- `repeat` (6 edge(s))
-- `./packages/shared-core/src/attachments/embed.test.js` (6 edge(s))
+- `push` (12 edge(s))

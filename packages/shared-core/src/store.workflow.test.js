@@ -18,6 +18,7 @@ test('normalizeStore seeds the workflow designer v2 collections', () => {
   assert.deepEqual(normalized.agents, []);
   assert.deepEqual(normalized.personaGrants, []);
   assert.deepEqual(normalized.userProfiles, {});
+  assert.equal(normalized.workflowGraphsSeededAt, null);
 });
 
 test('normalizeStore keeps stored workflow records and coerces junk to safe shapes', () => {
@@ -42,4 +43,15 @@ test('workflow collections shard per-record like the other collection keys', () 
     assert.ok(store.STORE_COLLECTION_KEYS.includes(key), `${key} must be a collection key`);
   }
   assert.ok(store.STORE_MAIN_KEYS.includes('userProfiles'));
+  // The seed marker lives in the main document: a key the backend does not
+  // list is a key that silently never persists, and every tenant would
+  // re-seed on the next deploy.
+  assert.ok(store.STORE_MAIN_KEYS.includes('workflowGraphsSeededAt'));
+});
+
+test('the seed marker survives a round trip and junk reads as never-seeded', () => {
+  const stamp = '2026-11-18T00:00:00.000Z';
+  assert.equal(store.normalizeStore({ workflowGraphsSeededAt: stamp }).workflowGraphsSeededAt, stamp);
+  assert.equal(store.normalizeStore({ workflowGraphsSeededAt: 1731859200000 }).workflowGraphsSeededAt, null);
+  assert.equal(store.normalizeStore({ workflowGraphsSeededAt: {} }).workflowGraphsSeededAt, null);
 });
