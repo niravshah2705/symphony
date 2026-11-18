@@ -5,9 +5,9 @@
 // therefore evaluated against defaults, and three of those defaults disagree
 // with live production: firestore_location (nam5 vs the deployed region),
 // google_one_tap_client_id (empty → count 0) and custom_domain (empty → the
-// for_each drops the live hosting domain). These tests pin the step back to
-// targeted applies and keep destroy guards on the resources a cleared repo
-// variable would otherwise remove.
+// for_each drops the live hosting domain). These tests keep the step to a
+// targeted, read-only plan, keep destroy guards on the resources a cleared repo
+// variable would otherwise remove, and keep any apply out of this step.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -31,7 +31,21 @@ function secretStageStep(workflow) {
   return workflow.slice(start, next === -1 ? workflow.length : next);
 }
 
-test('secret staging step plans only the secret containers it creates', () => {
+// Real shell invocations only: an echo of a command an operator must run by hand
+// is documentation, not something this job executes.
+function stagedTerraformCommands(step) {
+  return step
+    .replace(/\\\n\s*/g, ' ')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /\bterraform (plan|apply|destroy|import)\b/.test(line) && !line.startsWith('echo'))
+    .map((line) => ({
+      verb: line.match(/\bterraform (plan|apply|destroy|import)\b/)[1],
+      line,
+    }));
+}
+
+test('secret staging step plans, never applies, and only for the secret containers', () => {
   const step = secretStageStep(read('.github/workflows/deploy.yml'));
 
   for (const target of [
@@ -45,27 +59,22 @@ test('secret staging step plans only the secret containers it creates', () => {
     assert.ok(step.includes(target), `secret container missing from -target: ${target}`);
   }
 
-  const invocations = (step.match(/^\s*terraform \S+.*$/gm) || []).map((line) => line.trim());
-  assert.ok(invocations.length > 0, 'secret staging step runs no terraform');
-  for (const line of invocations) {
-    assert.match(line, /^terraform apply/, `secret staging must apply, not plan: ${line}`);
-    const continues = line.endsWith('\\');
+  const commands = stagedTerraformCommands(step);
+  assert.equal(commands.length, 1, `expected one staged terraform call, got ${commands.length}`);
+  for (const { verb, line } of commands) {
+    assert.equal(verb, 'plan', `staging step must not mutate: ${line}`);
     assert.ok(
-      continues || line.includes('-target') || line.includes('secret_targets[@]') ||
-        /refresh-only/.test(line),
-      `un-targeted terraform invocation would evaluate the whole stack: ${line}`,
+      line.includes('-target') || line.includes('secret_targets[@]'),
+      `un-targeted plan would evaluate the whole stack on a partial var set: ${line}`,
     );
   }
 });
 
-test('pending state moves are recorded by an apply, not printed by a plan', () => {
+test('a pending state move is handed to the operator instead of applied', () => {
   const step = secretStageStep(read('.github/workflows/deploy.yml'));
-  assert.match(
-    step,
-    /terraform apply[^\n]*-refresh-only[^\n]*-auto-approve/,
-    'a plan -refresh-only never clears a pending moved block',
-  );
-  assert.doesNotMatch(step, /terraform plan[^\n]*-refresh-only/);
+  assert.match(step, /Moved resource instances excluded by targeting/);
+  assert.match(step, /::error::Pending state moves block/);
+  assert.match(step, /echo.*terraform apply -refresh-only/, 'the message must carry the command');
 });
 
 test('flexprice secret references fail loud instead of mounting a placeholder', () => {

@@ -31,16 +31,18 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
 
 ### Fixed
 
-- **The Deploy to GCP secret-staging step no longer plans the whole stack.** It
-  ran an un-targeted `terraform plan` with only six of the ~45 deploy
-  variables, so every other variable fell back to its default: the job died on
-  the email service's `email_public_app_url` precondition (skipping the real
-  apply) and the log showed a phantom `Plan: 33 to add, 14 to change, 38 to
-  destroy` — including a Firestore replace, the One Tap client-id secret and
-  the `platform.archagentix.com` hosting domain. The step is back to targeted
-  `apply` of the six secret containers, and its move-retry branch uses
-  `apply -refresh-only`, since a `plan -refresh-only` prints a pending
-  `moved` block without ever clearing it.
+- **The Deploy to GCP secret-staging step no longer plans the whole stack, and
+  no longer applies at all.** It ran an un-targeted `terraform plan` with only
+  six of the ~45 deploy variables, so every other variable fell back to its
+  default: the job died on the email service's `email_public_app_url`
+  precondition (skipping the real apply) and the log showed a phantom
+  `Plan: 33 to add, 14 to change, 38 to destroy` — including a Firestore
+  replace, the One Tap client-id secret and the `platform.archagentix.com`
+  hosting domain. None of it was the deployment plan: the six repository
+  variables involved all hold the correct values. The step is now a **targeted
+  plan** of the six secret addresses, so a merge cannot mutate production from
+  there; an operator applies. A pending `moved` block, which only an apply can
+  record, now fails with the command to run rather than being retried inline.
 - **Three production resources now refuse a destroy planned by a cleared repo
   variable** (`prevent_destroy`): `google_firestore_database.default` (an
   immutable `location_id` mismatch would drop the database from state),
