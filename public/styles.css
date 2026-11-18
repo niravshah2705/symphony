@@ -24,6 +24,7 @@
   --muted-2: #646b78;
   --panel-sunken: #0e1116;
   --surface-inset: #0d1015;
+  --code-bg: var(--surface-inset);
   --radius: 9px;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   --btn-hover: #262a35;
@@ -65,6 +66,7 @@
   --muted-2: #98a0af;
   --panel-sunken: #efeee9;
   --surface-inset: #faf9f6;
+  --code-bg: var(--panel-2);
   --shadow: 0 8px 28px rgba(30, 38, 53, 0.1);
   --btn-hover: #e8e8e3;
   --overlay: rgba(20, 24, 40, 0.35);

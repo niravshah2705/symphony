@@ -138,6 +138,26 @@ export function createWorkflowSync({ client, model, storage = null, organization
     }
   }
 
+  /**
+   * A step whose agent profile the canvas model does not know is refused by
+   * normalizeNode, so it never reaches the graph — and the operator is left
+   * looking at a shorter lane than the one the tenant saved, with no error to
+   * explain the gap. Name the missing profiles instead.
+   */
+  function findHiddenSteps(rawWorkflows, state) {
+    const hidden = new Set();
+    const keptById = new Map(((state && state.workflows) || []).map((graph) => [graph.id, graph]));
+    for (const graph of rawWorkflows || []) {
+      const kept = keptById.get(graph && graph.id);
+      if (!kept || !Array.isArray(graph.nodes)) continue;
+      const keptRefs = new Set(kept.nodes.filter((node) => node.kind === 'agent').map((node) => node.refId));
+      for (const node of graph.nodes) {
+        if (node && node.kind === 'agent' && node.refId && !keptRefs.has(node.refId)) hidden.add(String(node.refId));
+      }
+    }
+    return [...hidden];
+  }
+
   /** Build canvas state from a server payload, falling back to the local draft. */
   function stateFrom(payload, draft, { schemaVersion = 2 } = {}) {
     const built = model.normalizeState({
@@ -238,6 +258,7 @@ export function createWorkflowSync({ client, model, storage = null, organization
     recordRevisions({ workflows });
     seededExamples = false;
     const serverState = stateFrom({ workflows }, draft);
+    const hiddenProfiles = findHiddenSteps(workflows, serverState);
     recordContent(serverState);
     const state = mergeDebt(serverState, draft, debt);
     offline = false;
@@ -246,9 +267,9 @@ export function createWorkflowSync({ client, model, storage = null, organization
     // that follows it. The push is revision-checked, so a teammate who saved
     // first turns this into a conflict instead of being overwritten.
     if ((debt.dirty.length || debt.deleted.length) && canWrite) {
-      return { state, source, sync: await flush(state), context: { ...context } };
+      return { state, source, sync: await flush(state), hiddenProfiles, context: { ...context } };
     }
-    return { state, source, context: { ...context } };
+    return { state, source, hiddenProfiles, context: { ...context } };
   }
 
   function revisionOf(id) {

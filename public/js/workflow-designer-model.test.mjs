@@ -57,6 +57,7 @@ test('catalogs cover the ADLC roles and the three neutral environment contexts',
     'security', 'devops-deployment', 'observability', 'incident-triage', 'support',
     'data-sanitation', 'commercial-strategy', 'pricing', 'compliance', 'launch',
     'knowledge-publishing',
+    'ideation', 'engineering', 'quality', 'deployment', 'monitoring',
   ]) assert.ok(ids.has(expected), `missing ${expected}`);
 
   assert.deepEqual(BUILT_IN_CONTEXT_CATALOG.map((context) => context.id), ['dev', 'beta', 'prod']);

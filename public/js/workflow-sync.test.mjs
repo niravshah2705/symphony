@@ -361,3 +361,25 @@ test('a persona rejection is reported as an error, not swallowed', async () => {
   assert.equal(result.status, 'error');
   assert.equal(result.error.code, 'persona_denied');
 });
+
+test('a step whose agent profile the canvas cannot draw is named, not dropped in silence', async () => {
+  const { sync } = harness({
+    payload: {
+      workflows: [graph('wf-a', {
+        revision: 1,
+        nodes: [
+          { id: 'n1', kind: 'agent', refId: 'planning', name: 'Plan', x: 0, y: 0 },
+          { id: 'n2', kind: 'agent', refId: 'release-director', name: 'Release', x: 320, y: 0 },
+        ],
+      })],
+    },
+  });
+  const loaded = await sync.load();
+  assert.deepEqual(loaded.hiddenProfiles, ['release-director']);
+  assert.deepEqual(loaded.state.workflows[0].nodes.map((node) => node.id), ['n1']);
+});
+
+test('a load that renders every reported step names no hidden profiles', async () => {
+  const { sync } = harness({ payload: { workflows: [graph('wf-a', { revision: 1 })] } });
+  assert.deepEqual((await sync.load()).hiddenProfiles, []);
+});

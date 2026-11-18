@@ -39,6 +39,34 @@ test('v2 vocabulary constants match the shared-core model', () => {
   }
 });
 
+/**
+ * The canvas refuses an agent node whose refId is not in its catalog, and it
+ * refuses silently — so a platform profile the gateway merged into the tenant
+ * but the browser never mirrored is a node that vanishes from the graph with
+ * no error anywhere. The two lists must stay the same list.
+ */
+test('browser agent catalog mirrors every platform default agent profile', () => {
+  const defaults = require('../../packages/shared-core/src/workflow-defaults.js').DEFAULT_AGENT_PROFILES;
+  const browserById = new Map(browser.CURATED_AGENT_CATALOG.map((profile) => [profile.id, profile]));
+  const serverById = new Map(defaults.map((profile) => [profile.id, profile]));
+
+  for (const profile of defaults) {
+    const mirrored = browserById.get(profile.id);
+    assert.ok(mirrored, `${profile.id} is a platform profile the canvas would drop`);
+    assert.equal(mirrored.name, profile.name, `${profile.id} name drifted`);
+    assert.equal(mirrored.category, profile.category, `${profile.id} category drifted`);
+    assert.equal(mirrored.description, profile.purpose, `${profile.id} purpose drifted`);
+    // A category no persona allows would hide the profile from the palette.
+    if (profile.persona) {
+      assert.equal(browser.personaAllowsCategory(profile.persona, profile.category), true,
+        `${profile.id} (${profile.category}) is not grantable to its own ${profile.persona} persona`);
+    }
+  }
+  for (const profile of browser.CURATED_AGENT_CATALOG) {
+    assert.ok(serverById.has(profile.id), `${profile.id} exists in the browser catalog but not on the server`);
+  }
+});
+
 const OCI = 'ghcr.io/acme/skills/review@sha256:' + 'a'.repeat(64);
 const GIT_REF = { git: { repo: 'https://github.com/acme/skills', commit: 'b'.repeat(40) } };
 
