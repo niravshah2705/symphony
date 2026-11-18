@@ -60,13 +60,19 @@ function describePublishFailure(error) {
 
 const CANVAS_WIDTH = 2500;
 const CANVAS_HEIGHT = 1040;
-const NODE_WIDTH = 202;
+const NODE_WIDTH = 310;
+// A decision gate is a waypoint on the lane, not a card: it is drawn as the
+// compact diamond so it fits the gutter between two agent cards.
+const GATE_NODE_WIDTH = 150;
 const NODE_ANCHOR_Y = 58;
+const GATE_NODE_ANCHOR_Y = 29;
 const GRID_SIZE = 20;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.4;
 const ZOOM_STEP = 0.1;
 const SAVE_DELAY_MS = 280;
+const NODE_BINDING_ROWS_MAX = 4;
+const GATE_CRITERIA_MAX = 2;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const APPROVER_ROLES = Object.freeze([
@@ -211,7 +217,7 @@ function nodeDescription(node, state) {
     : 'Review evidence before downstream work continues.';
 }
 
-/** The card footer: how close this gate is to letting the lane continue. */
+/** How close this gate is to letting the lane continue, counted on its card. */
 function gateBadge(node) {
   const verdict = gateVerdict(node.gateConfig?.cards);
   if (!verdict.total) return 'No assessment cards';
@@ -219,6 +225,23 @@ function gateBadge(node) {
   return verdict.passed
     ? `${verdict.total} cards met · ${verdict.overall}% overall`
     : `${verdict.met}/${verdict.total} cards met`;
+}
+
+function nodeWidth(node) {
+  return node && node.kind === 'gate' ? GATE_NODE_WIDTH : NODE_WIDTH;
+}
+
+function nodeAnchorY(node) {
+  return node && node.kind === 'gate' ? GATE_NODE_ANCHOR_Y : NODE_ANCHOR_Y;
+}
+
+/** What the gate actually scores — the caption lists the cards, not a restate of the verdict. */
+function gateCriteriaTitles(node) {
+  const titles = (node.gateConfig?.cards || [])
+    .map((card) => String(card.title || '').trim())
+    .filter(Boolean);
+  if (titles.length > GATE_CRITERIA_MAX) titles.splice(GATE_CRITERIA_MAX, 0, `+${titles.length - GATE_CRITERIA_MAX} more`);
+  return titles.slice(0, GATE_CRITERIA_MAX + 1);
 }
 
 function nodeKindLabel(node, state) {
@@ -233,6 +256,82 @@ function nodeIconName(node) {
   if (node.kind === 'gate') return 'board';
   if (node.kind === 'environment') return 'sliders';
   return 'spark';
+}
+
+const MODEL_FAMILY_ICONS = Object.freeze({
+  anthropic: 'anthropic',
+  openai: 'openai',
+  gemini: 'gemini',
+  bedrock: 'graph',
+  vertexai: 'chart',
+  byok: 'byom',
+});
+
+/**
+ * Header chip. Every card carries exactly one `.workflow-node-status`: the
+ * canvas is scanned by the tests as "one status per node", so a second chip on
+ * any card would make the count meaningless.
+ */
+function nodeStatusChip(node, summary) {
+  if (summary.standaloneNodeIds.includes(node.id)) return 'Standalone';
+  if (node.kind === 'gate') {
+    const verdict = gateVerdict(node.gateConfig?.cards);
+    if (!verdict.total) return 'No cards';
+    if (verdict.unassessed) return 'Awaiting review';
+    return verdict.passed ? 'Gate met' : 'Below threshold';
+  }
+  if (node.kind === 'approval') return node.requiredRole || 'Human gate';
+  if (node.kind === 'environment') return 'Context';
+  const spec = node.kagentSpec || {};
+  return node.refId || spec.modelConfig || node.systemPrompt ? 'Configured' : 'Needs config';
+}
+
+/** Display name + pin for an immutable artifact source, for a card's binding row. */
+function artifactSourceLabel(source) {
+  if (!source || typeof source !== 'object') return null;
+  if (source.oci) {
+    const [image, digest = ''] = String(source.oci).split('@sha256:');
+    return { name: image.split('/').pop() || image, detail: digest ? digest.slice(0, 12) : '' };
+  }
+  if (source.git) {
+    const url = String(source.git.url || '');
+    return { name: url.split('/').pop()?.replace(/\.git$/, '') || url, detail: String(source.git.commit || '').slice(0, 12) };
+  }
+  const s3 = source.bucket && source.bucket.s3;
+  if (s3) {
+    const key = String(s3.key || '');
+    return { name: key.split('/').pop() || key, detail: String(s3.bucket || '') };
+  }
+  return null;
+}
+
+/**
+ * The bindings a card lists under "Plugins & connectors": what the agent pulls,
+ * what it may call, and which connectors it is wired to. Everything here is a
+ * field the graph already persists — the card only reads it, never invents it,
+ * so a row that shows is a row the publish will actually emit.
+ */
+function nodeBindingRows(node) {
+  const spec = node.kagentSpec || {};
+  const rows = [];
+  for (const plugin of spec.plugins || []) {
+    const label = artifactSourceLabel(plugin.source);
+    if (!label) continue;
+    const skills = Array.isArray(plugin.skills) ? plugin.skills.length : 0;
+    rows.push({ icon: 'folder', kind: 'plugin', name: label.name, detail: [label.detail, skills ? `${skills} skills` : ''].filter(Boolean).join(' · ') });
+  }
+  for (const tool of spec.tools || []) {
+    if (tool.kind === 'mcp') {
+      rows.push({
+        icon: 'code', kind: 'mcp', name: tool.server,
+        detail: [`${(tool.tools || []).length} tools`, tool.requireApproval ? 'approval' : ''].filter(Boolean).join(' · '),
+      });
+    } else if (tool.kind === 'subAgent') {
+      rows.push({ icon: 'user', kind: 'subAgent', name: tool.name, detail: tool.templateRef || '' });
+    }
+  }
+  for (const name of node.connectors || []) rows.push({ icon: 'paperclip', kind: 'connector', name, detail: 'connector' });
+  return rows;
 }
 
 function workflowById(state, id) {
@@ -723,10 +822,10 @@ export async function renderWorkflows(view) {
       const source = nodes.get(edge.source);
       const target = nodes.get(edge.target);
       if (!source || !target) continue;
-      const x1 = source.x + NODE_WIDTH;
-      const y1 = source.y + NODE_ANCHOR_Y;
+      const x1 = source.x + nodeWidth(source);
+      const y1 = source.y + nodeAnchorY(source);
       const x2 = target.x;
-      const y2 = target.y + NODE_ANCHOR_Y;
+      const y2 = target.y + nodeAnchorY(target);
       const bend = Math.max(70, Math.abs(x2 - x1) * 0.42);
       const direction = x2 >= x1 ? 1 : -1;
       const d = `M ${x1} ${y1} C ${x1 + bend * direction} ${y1}, ${x2 - bend * direction} ${y2}, ${x2} ${y2}`;
@@ -778,7 +877,7 @@ export async function renderWorkflows(view) {
       nodeElement.classList.add('is-dragging');
       document.body.classList.add('workflow-dragging');
       const onMove = (moveEvent) => {
-        moving.x = clamp(snap(start.nodeX + (moveEvent.clientX - start.x) / zoom), 0, CANVAS_WIDTH - NODE_WIDTH);
+        moving.x = clamp(snap(start.nodeX + (moveEvent.clientX - start.x) / zoom), 0, CANVAS_WIDTH - nodeWidth(node));
         moving.y = clamp(snap(start.nodeY + (moveEvent.clientY - start.y) / zoom), 0, CANVAS_HEIGHT - 150);
         nodeElement.style.left = `${moving.x}px`;
         nodeElement.style.top = `${moving.y}px`;
@@ -797,6 +896,73 @@ export async function renderWorkflows(view) {
     });
   }
 
+  /**
+   * The agent card's body blocks, in the order an operator reads them: which
+   * harness runs it, which model family it draws on, how hard a tier it is
+   * cleared for, what it is wired to, and the instruction it carries. Each block
+   * is omitted when the field is empty — a card must not imply a binding the
+   * saved graph does not have.
+   */
+  function agentCardSections(node) {
+    const spec = node.kagentSpec || {};
+    const out = [];
+    const metaRow = (label, value, iconName) => el('div', { class: 'workflow-node-field' }, [
+      el('span', { class: 'workflow-node-field-label' }, label),
+      el('span', { class: 'workflow-node-pill' }, [iconName ? icon(iconName, { size: 12 }) : null, el('span', {}, value)]),
+    ]);
+
+    if (node.harness) out.push(metaRow('Harness', node.harness, node.harness === 'deepagent' ? 'deepagent' : 'code'));
+    if (node.modelFamily) {
+      out.push(metaRow('Model family', node.modelFamily, MODEL_FAMILY_ICONS[node.modelFamily] || 'byom'));
+    }
+    if (node.taskTier) {
+      out.push(el('div', { class: 'workflow-node-field workflow-node-field--tiers' }, [
+        el('span', { class: 'workflow-node-field-label' }, 'Task tier'),
+        el('div', { class: 'workflow-node-tiers' }, designerModel.TASK_TIERS.map((tier) => el('span', {
+          class: `workflow-node-tier${tier === node.taskTier ? ' is-active' : ''}`,
+        }, tier))),
+      ]));
+    }
+
+    const advanced = [
+      (spec.tools || []).length ? `${spec.tools.length} tool${spec.tools.length === 1 ? '' : 's'}` : '',
+      envRowsOf(node).length ? `${envRowsOf(node).length} env var${envRowsOf(node).length === 1 ? '' : 's'}` : '',
+      (spec.egressPolicyRefs || []).length ? `${spec.egressPolicyRefs.length} egress polic${spec.egressPolicyRefs.length === 1 ? 'y' : 'ies'}` : '',
+    ].filter(Boolean);
+    if (advanced.length) {
+      out.push(el('button', {
+        type: 'button', class: 'workflow-node-advanced', disabled: !canEdit,
+        'aria-label': `Open the advanced configuration for ${nodeLabel(node, state)}`,
+      }, [icon('sliders', { size: 13 }), el('span', {}, 'Advanced config'), el('span', { class: 'workflow-node-advanced-count' }, advanced.join(', ')), icon('chevron', { size: 13 })]));
+      out[out.length - 1].addEventListener('click', (event) => {
+        event.stopPropagation();
+        selectItem('node', node.id);
+      });
+    }
+
+    const rows = nodeBindingRows(node);
+    if (rows.length) {
+      const shown = rows.slice(0, NODE_BINDING_ROWS_MAX);
+      out.push(el('div', { class: 'workflow-node-bindings' }, [
+        el('span', { class: 'workflow-node-field-label' }, 'Plugins & connectors'),
+        ...shown.map((row) => el('div', { class: `workflow-node-binding workflow-node-binding--${row.kind}` }, [
+          icon(row.icon, { size: 12 }),
+          el('span', { class: 'workflow-node-binding-name' }, row.name),
+          row.detail ? el('span', { class: 'workflow-node-binding-detail' }, row.detail) : null,
+        ])),
+        rows.length > shown.length ? el('span', { class: 'workflow-node-binding-more' }, `+${rows.length - shown.length} more`) : null,
+      ]));
+    }
+
+    if (node.systemPrompt) {
+      out.push(el('div', { class: 'workflow-node-prompt' }, [
+        el('span', { class: 'workflow-node-field-label' }, 'System prompt'),
+        el('p', { class: 'workflow-node-prompt-text', title: node.systemPrompt }, node.systemPrompt),
+      ]));
+    }
+    return out;
+  }
+
   function renderNode(node, workflow, summary, svg) {
     const standalone = summary.standaloneNodeIds.includes(node.id);
     const active = selected.kind === 'node' && selected.id === node.id;
@@ -813,6 +979,9 @@ export async function renderWorkflows(view) {
       'aria-pressed': connectSource === node.id ? 'true' : 'false', title: 'Start connection',
     });
     outputPort.addEventListener('click', (event) => { event.stopPropagation(); beginConnection(node.id); });
+    const egressRefs = (node.kagentSpec && node.kagentSpec.egressPolicyRefs) || [];
+    const profile = node.kind === 'agent' ? findAgentProfile(node.refId, state) : null;
+    const gateTitles = node.kind === 'gate' ? gateCriteriaTitles(node) : [];
     const article = el('article', {
       class: `workflow-node workflow-node--${node.kind}${active ? ' is-selected' : ''}${standalone ? ' is-standalone' : ''}${canEdit ? '' : ' is-readonly'}`,
       style: `left:${node.x}px;top:${node.y}px`, tabindex: '0', role: 'group',
@@ -827,23 +996,65 @@ export async function renderWorkflows(view) {
       },
     }, [
       inputPort,
-      el('div', { class: 'workflow-node-header' }, [
+      // A gate is a waypoint between two lanes, so it is drawn as the diamond
+      // plus a caption that names what it scores; the full assessment lives in
+      // the review dialog that a double-click opens.
+      node.kind === 'gate' ? el('div', { class: 'workflow-node-header workflow-node-gate-diamond' }, [
+        el('span', { class: 'workflow-node-gate-mark' }, '?'),
+        el('span', { class: 'workflow-node-gate-ping' }),
+      ]) : null,
+      node.kind === 'gate' ? el('div', { class: 'workflow-node-gate' }, [
+        el('span', { class: 'workflow-node-kind' }, nodeKindLabel(node, state)),
+        el('strong', { class: 'workflow-node-title' }, nodeLabel(node, state)),
+        el('div', { class: 'workflow-node-gate-criteria' }, gateTitles.length
+          ? gateTitles.map((title) => el('span', {}, title))
+          : [el('span', {}, 'No assessment cards yet')]),
+        el('div', { class: 'workflow-node-gate-foot' }, [
+          el('span', { class: 'workflow-node-status' }, nodeStatusChip(node, summary)),
+          canEdit ? el('button', {
+            type: 'button', class: 'workflow-node-configure', 'aria-label': `Configure the ${nodeLabel(node, state)} gate`,
+          }, 'Click to configure') : null,
+        ]),
+      ]) : null,
+      node.kind === 'gate' ? null : el('div', { class: 'workflow-node-header' }, [
         el('span', { class: 'workflow-node-icon' }, icon(nodeIconName(node), { size: 16 })),
         el('div', { class: 'workflow-node-copy' }, [
           el('span', { class: 'workflow-node-kind' }, nodeKindLabel(node, state)),
           el('strong', { class: 'workflow-node-title' }, nodeLabel(node, state)),
         ]),
-        standalone ? el('span', { class: 'workflow-node-status' }, 'Standalone') : null,
+        el('span', { class: 'workflow-node-status' }, nodeStatusChip(node, summary)),
       ]),
-      el('p', { class: 'workflow-node-body' }, nodeDescription(node, state)),
+      node.kind === 'gate' ? null : el('p', { class: 'workflow-node-body' }, nodeDescription(node, state)),
+      node.kind === 'agent' ? el('div', { class: 'workflow-node-spec' }, agentCardSections(node)) : null,
+      // The graph refuses cycles, so a lane that returns to an earlier step
+      // cannot be drawn as an edge. Where an approval gate names where rejected
+      // work goes, that is the loopback — shown on the card, not left in a field
+      // the canvas otherwise never reads.
+      node.kind === 'approval' && String(node.rejectionHandling || '').trim()
+        ? el('div', { class: 'workflow-node-return' }, [
+          icon('history', { size: 12 }), el('span', {}, node.rejectionHandling),
+        ])
+        : null,
       el('footer', { class: 'workflow-node-footer' }, [
         node.kind === 'approval' ? el('span', {}, node.requiredRole || 'Human reviewer') : null,
         node.kind === 'gate' ? el('span', {}, gateBadge(node)) : null,
         node.kind === 'environment' ? el('span', {}, 'Execution context') : null,
-        node.kind === 'agent' ? el('span', {}, agentRuntimeSummary(node)) : null,
+        node.kind === 'agent' ? el('span', { class: 'workflow-node-runtime' }, agentRuntimeSummary(node)) : null,
+        egressRefs.length ? el('span', { class: 'workflow-node-egress' }, [
+          icon('external', { size: 12 }), egressRefs.slice(0, 2).join(', '),
+          egressRefs.length > 2 ? ` +${egressRefs.length - 2}` : '',
+        ]) : null,
+        profile ? el('button', {
+          type: 'button', class: 'workflow-node-profile', disabled: !canEdit,
+          'aria-label': `Open the agent profile for ${nodeLabel(node, state)}`,
+        }, [el('span', {}, 'Agent profile'), icon('external', { size: 12 })]) : null,
       ]),
       outputPort,
     ]);
+    const configure = article.querySelector('.workflow-node-configure');
+    if (configure) configure.addEventListener('click', (event) => { event.stopPropagation(); openGateReviewFor(node); });
+    const profileButton = article.querySelector('.workflow-node-profile');
+    if (profileButton) profileButton.addEventListener('click', (event) => { event.stopPropagation(); selectItem('agent-profile', node.refId); });
     article.addEventListener('click', (event) => {
       if (event.target.closest('button')) return;
       selectItem('node', node.id);
