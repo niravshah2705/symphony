@@ -367,6 +367,36 @@ substrate_actor_member    = "serviceAccount:substrate-actor@….iam.gserviceacco
 environment_init_enabled  = true                                # org service
 ```
 
+The same names as repository variables, which is how a deployment turns them on
+(`Deploy to GCP → terraform → Terraform apply` passes every one of them; unset
+means empty, so a merge cannot repoint production by itself):
+
+```bash
+gh variable set SUBSTRATE_URL                --body "grpc://…:8443"  # the switch
+gh variable set SUBSTRATE_ATESPACE           --body "tenant-t3f9a2b4c6d8"
+gh variable set SUBSTRATE_ATESPACE_BY_ORG    --body "01934-…=tenant-t3f9a2b4c6d8"  # comma-separated org=space
+gh variable set SUBSTRATE_ALLOWED_ATESPACES  --body "tenant-t3f9a2b4c6d8,tenant-…" # comma-separated names
+gh variable set SUBSTRATE_PLANNER_IMAGE      --body "sha256:…"      # digest, not a tag
+gh variable set SUBSTRATE_WORKER_POOL        --body "planner-pool"  # optional: unset keeps the Terraform default
+gh variable set SUBSTRATE_JWKS_URL           --body "https://…"     # with SUBSTRATE_ACTOR_MODE
+gh variable set SUBSTRATE_ACTOR_MEMBER       --body "serviceAccount:substrate-actor@…"
+```
+
+Names whose Terraform default is already a real value (`substrate_worker_pool`,
+`substrate_actor_jwt_audience`, `substrate_trust_domain`, `substrate_timeout_ms`,
+`substrate_actor_ttl_ms`) are appended only when the repo variable is set: an
+empty `-var` would override the default with `""`, which beats both Terraform and
+an operator's org settings — the same reason `substrate.tf` omits a key rather
+than emitting it blank.
+
+**The harness cutover is gated.** #283 made substrate the only execution
+pattern, and the apply that removes the Cloud Run `planner` / `coder-control` /
+`coder-worker` services is the one that leaves production with no other way to
+run an agent. It fails silently: an unset `substrate_url` is not an error, it is
+a stack whose every run is refused as "not configured". So the apply step
+greps its own plan for those destroys and stops if `SUBSTRATE_URL` is unset,
+before `terraform apply`.
+
 Where the address goes, and where it never goes:
 
 | Workload | Gets | Why |

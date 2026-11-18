@@ -12,11 +12,13 @@ progress ledger and the by-hand path.
 > harness is retired: Agent Substrate is now the only execution pattern, and the
 > planner/coder/tester Cloud Run services no longer exist. Where this ledger says
 > "the planner deployment", read **the orchestrator** — the agent surface and the
-> substrate control env moved there. Causes 5 and 9 remain genuinely open: the
-> orchestrator still needs `substrate_url` wired (pending 1) and a control plane it
-> is allowed to dial (pending 2). The "silently keeps using the Cloud Run pattern"
-> symptom in cause 5 no longer applies — with the fallback gone, a missing
-> `SUBSTRATE_*` env fails loudly instead.
+> substrate control env moved there. Cause 5's plumbing half is now closed (the
+> deploy workflow passes every `substrate_*` variable and refuses the harness
+> cutover while `SUBSTRATE_URL` is unset); what remains open is cause 9 — the
+> orchestrator has a switch but no control plane it is allowed to dial. The
+> "silently keeps using the Cloud Run pattern" symptom in cause 5 no longer
+> applies — with the fallback gone, a missing `SUBSTRATE_*` env fails loudly
+> instead.
 
 ## Bottom line
 
@@ -145,7 +147,7 @@ from asking it to, which is why it is the one still open.
 | 2 | The worker pool was tainted `substrate.ate.dev/workers=true:NoSchedule`, which nothing tolerates — not `atelet`, not worker pods. | nodes existed but stayed empty; the only clue is a Pending pod's `had taint(s) that did not match the tolerations` | fixed by #269 (taint) + the apply |
 | 3 | `substrate-worker-pool` had 0 nodes despite `minNodeCount=1` — nothing demanded capacity. | the autoscaler logs `No scaling options were found … Skip simulation` | fixed: pending worker pods pulled the first node up |
 | 4 | `SSD_TOTAL_GB` 500/500 exhausted by the 500Gi claim, so no new disk could provision. Also why the historic `rollout status statefulset/postgres` timed out. | quota exhaustion does not fail fast; the node simply never appears | fixed by the 50Gi rewrite |
-| 5 | The deployed planner has **no `SUBSTRATE_*` env**: `substrate_url` defaults to `""`, so `substrate_control_env = {}` in the platform root. | the app silently keeps using the Cloud Run pattern; `GET /api/agent/substrate/status` answers `401` to the CI identity, so it cannot be confirmed from outside | **open** |
+| 5 | The deployed planner has **no `SUBSTRATE_*` env**: `substrate_url` defaults to `""`, so `substrate_control_env = {}` in the platform root — and no CI path could set it, because the deploy workflow passed none of the `substrate_*` variables. | the app silently kept using the Cloud Run pattern; now that the fallback is retired the run is refused instead, and the deploy itself stayed green | **plumbing fixed** (the apply step threads every `substrate_*` variable and stops a plan that destroys the last harness with `SUBSTRATE_URL` unset); the address itself is cause 9 |
 | 6 | `ate-api-server` applies Postgres migrations only at startup, so recreating the claim left a healthy-looking control plane on an empty schema. | every pod `Running`; every RPC erroring `relation "workers" does not exist`; workers stuck `Running` but not Ready | fixed by #271 |
 | 7 | The substrate GKE apply was gated behind a `terraform fmt` drift. | plan never ran, so no error surfaced | fixed by #268 |
 | 8 | #270 gave the worker pool a `pd-balanced` boot disk, and **N4 supports no Persistent Disk type at all** — the pool could not provision a node. | `terraform apply` planned clean, GKE accepted the pool config, and only the MIG's instance creation failed: `[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by n4-standard-4 machine type`. The pool stayed on its old template, so capacity kept working and nothing looked broken | fixed: `boot_disk { disk_type = "hyperdisk-balanced" }` |
@@ -153,12 +155,16 @@ from asking it to, which is why it is the one still open.
 
 ## Still pending
 
-1. **Cause 5 — turn the app-side path on.** Decide between setting `substrate_url` in
-   the platform Terraform root (all stacks, one value) or writing `substrateUrl` (plus
-   `substrateIngressUrl`, `substrateAtespace`, `substrateWorkerPool`, a
-   digest-pinned `substratePlannerImage`) into the organization's settings, which is
-   the per-tenant path the pattern router reads. Then trigger a planner run with
-   `agentPattern=substrate` and watch the actor reach `ACTIVE`.
+1. **Cause 5 — turn the app-side path on.** The plumbing half is done: the deploy
+   workflow passes `substrate_url` (and the other thirteen `substrate_*` names) from
+   repo variables, so `gh variable set SUBSTRATE_URL --body "<address>"` now reaches
+   the orchestrator's env, and a plan that removes the last Cloud Run harness with the
+   variable unset fails instead of shipping. The per-tenant alternative — `substrateUrl`
+   (plus `substrateIngressUrl`, `substrateAtespace`, `substrateWorkerPool`, a
+   digest-pinned `substratePlannerImage`) in the organization's settings — is unchanged
+   and still wins for one org. What is left is picking an address that works, which is
+   cause 9, then triggering a planner run with `agentPattern=substrate` and watching the
+   actor reach `ACTIVE`.
 2. **Cause 9 — give the planner a control plane it is allowed to dial.** Setting
    `substrate_url` is only half of it; the address has to actually reach ateapi, and
    the two ways to do that differ in what they expose:
