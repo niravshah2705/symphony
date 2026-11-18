@@ -1,0 +1,909 @@
+package models
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"iter"
+	"log/slog"
+	"regexp"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	smithyjson "github.com/aws/smithy-go/document/json"
+	"google.golang.org/adk/v2/model"
+	"google.golang.org/genai"
+
+	"github.com/niravshah2705/symphony/go/pkg/logging"
+)
+
+// bedrockToolIDValid matches Bedrock's toolUseId constraint: [a-zA-Z0-9_.:-]+
+// bedrockToolNameInvalid matches characters not allowed in Bedrock tool names: [a-zA-Z0-9_-]+
+var (
+	bedrockToolIDValid     = regexp.MustCompile(`^[a-zA-Z0-9_.:-]+$`)
+	bedrockToolIDInvalid   = regexp.MustCompile(`[^a-zA-Z0-9_.:-]`)
+	bedrockToolNameInvalid = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+)
+
+// sanitizeBedrockToolName returns a valid Bedrock tool name.
+// Bedrock requires tool names to match [a-zA-Z0-9_-]+ and be non-empty.
+// nameMap caches original->sanitized so repeated lookups for the same name are
+// consistent. counter is incremented only when a synthetic name is needed.
+func sanitizeBedrockToolName(name string, nameMap map[string]string, counter *int) string {
+	if name == "" {
+		*counter++
+		return fmt.Sprintf("tool_fn_%d", *counter)
+	}
+	if sanitized, ok := nameMap[name]; ok {
+		return sanitized
+	}
+	sanitized := bedrockToolNameInvalid.ReplaceAllString(name, "_")
+	if sanitized == "" {
+		*counter++
+		sanitized = fmt.Sprintf("tool_fn_%d", *counter)
+	}
+	nameMap[name] = sanitized
+	return sanitized
+}
+
+// sanitizeBedrockToolID returns a valid Bedrock toolUseId.
+// Bedrock requires toolUseId to match [a-zA-Z0-9_.:-]+ and be non-empty.
+// idMap caches original→sanitized so FunctionCall and FunctionResponse
+// with the same original ID get the same sanitized ID, unless the ID is empty or fully-invalid.
+func sanitizeBedrockToolID(id string, idMap map[string]string, counter *int) string {
+	if id != "" {
+		if sanitized, ok := idMap[id]; ok {
+			return sanitized
+		}
+	}
+	sanitized := bedrockToolIDInvalid.ReplaceAllString(id, "_")
+	if !bedrockToolIDValid.MatchString(sanitized) {
+		*counter++
+		sanitized = fmt.Sprintf("tool_%d", *counter)
+		return sanitized
+	}
+	idMap[id] = sanitized
+	return sanitized
+}
+
+// BedrockConfig holds Bedrock configuration for the Converse API
+type BedrockConfig struct {
+	TransportConfig
+	Model                        string
+	Region                       string
+	MaxTokens                    *int32
+	Temperature                  *float64
+	TopP                         *float64
+	AdditionalModelRequestFields map[string]any
+	// PromptCaching, when true, appends a default CachePoint block at the
+	// end of the Converse request's system content array and the end of
+	// the toolConfig.tools array. Bedrock caches up to and including those markers
+	// across requests in the same region; cached prefix is billed at a
+	// reduced rate. The marker is silently ignored by Bedrock for models
+	// that do not support prompt caching.
+	PromptCaching bool
+	// CacheTTL selects the cache retention window when PromptCaching is on.
+	// "" or "5m" uses Bedrock's default 5-minute cache (broadest model
+	// support); "1h" opts into extended-TTL caching. See bedrockCachePointBlock.
+	CacheTTL            string
+	GuardrailIdentifier string
+	GuardrailVersion    string
+	GuardrailTrace      string
+}
+
+// BedrockRuntimeOrigin returns the HTTPS origin of Bedrock's runtime endpoint
+// for a region.
+//
+// The endpoint is derived from the region rather than stored on the model
+// spec, so every consumer has to reconstruct it: credential compilation binds
+// the bearer token to this origin, the harness compilers allowlist it, and the
+// ADK builder puts it on the agent's egress list. Copying the format at each
+// site let the credential binding and the allowlist drift apart, and a request
+// those two disagreed on was rejected before it left the pod. This is the one
+// definition they all call; a consumer that needs the egress form appends
+// ":443".
+func BedrockRuntimeOrigin(region string) string {
+	return "https://bedrock-runtime." + region + ".amazonaws.com"
+}
+
+// DecodeBedrockRequestFields preserves provider JSON numbers using the AWS
+// document decoder, whose number type is understood by the Converse encoder.
+func DecodeBedrockRequestFields(raw []byte) (map[string]any, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var fields map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("bedrock additionalModelRequestFields must be valid JSON")
+	}
+	if err := decoder.Decode(&fields); err != nil {
+		return nil, fmt.Errorf("decode bedrock additionalModelRequestFields: %w", err)
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("bedrock additionalModelRequestFields must be a JSON object")
+	}
+	var result map[string]any
+	if err := (&smithyjson.Decoder{}).DecodeJSONInterface(fields, &result); err != nil {
+		return nil, fmt.Errorf("decode bedrock document: %w", err)
+	}
+	return result, nil
+}
+
+func bedrockGuardrailConfig(c *BedrockConfig) *types.GuardrailConfiguration {
+	if c.GuardrailIdentifier == "" {
+		return nil
+	}
+	return &types.GuardrailConfiguration{
+		GuardrailIdentifier: aws.String(c.GuardrailIdentifier),
+		GuardrailVersion:    aws.String(c.GuardrailVersion),
+		Trace:               types.GuardrailTrace(c.GuardrailTrace),
+	}
+}
+
+func bedrockGuardrailStreamConfig(c *BedrockConfig) *types.GuardrailStreamConfiguration {
+	if c.GuardrailIdentifier == "" {
+		return nil
+	}
+	return &types.GuardrailStreamConfiguration{
+		GuardrailIdentifier:  aws.String(c.GuardrailIdentifier),
+		GuardrailVersion:     aws.String(c.GuardrailVersion),
+		Trace:                types.GuardrailTrace(c.GuardrailTrace),
+		StreamProcessingMode: types.GuardrailStreamProcessingModeSync,
+	}
+}
+
+// bedrockCachePointBlock builds a Converse CachePoint marker honoring the
+// configured cache TTL.
+//
+// An empty or "5m" ttl leaves the SDK Ttl field unset: Bedrock then applies its
+// standard 5-minute sliding cache, which is supported by every prompt-caching
+// model. Only "1h" sets the Ttl explicitly, opting into extended-TTL caching —
+// supported on fewer models and billed at a higher cache-write rate, so it is
+// not a free upgrade over 5m.
+func bedrockCachePointBlock(cacheTTL string) types.CachePointBlock {
+	block := types.CachePointBlock{Type: types.CachePointTypeDefault}
+	if cacheTTL == string(types.CacheTTLOneHour) {
+		block.Ttl = types.CacheTTLOneHour
+	}
+	return block
+}
+
+// BedrockModel implements model.LLM for Amazon Bedrock using the Converse API.
+// This supports all Bedrock model families (Anthropic, Amazon, Mistral, Cohere, etc.)
+type BedrockModel struct {
+	Config *BedrockConfig
+	Client *bedrockruntime.Client
+	Logger *slog.Logger
+}
+
+// Name returns the model name.
+func (m *BedrockModel) Name() string {
+	return m.Config.Model
+}
+
+// NewBedrockModel creates a new Bedrock model instance using the Converse API.
+// Authentication uses AWS credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.)
+// or IAM roles via the standard AWS SDK credential chain.
+func NewBedrockModel(ctx context.Context, config *BedrockConfig) (*BedrockModel, error) {
+	logger := logging.FromContext(ctx)
+	if config.Model == "" {
+		return nil, fmt.Errorf("bedrock model name is required (e.g., global.anthropic.claude-sonnet-4-6)")
+	}
+
+	region := config.Region
+	if region == "" {
+		return nil, fmt.Errorf("AWS region is required for Bedrock")
+	}
+
+	// Load AWS SDK configuration
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithRegion(region),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	// Create HTTP client with TLS, passthrough, and header support
+	httpClient, err := BuildHTTPClient(config.TransportConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Bedrock HTTP client: %w", err)
+	}
+
+	// Create Bedrock runtime client
+	client := bedrockruntime.NewFromConfig(awsCfg, func(o *bedrockruntime.Options) {
+		o.HTTPClient = httpClient
+	})
+
+	logger.InfoContext(ctx, "initialized Bedrock Converse API model", "model", config.Model, "region", region)
+
+	return &BedrockModel{
+		Config: config,
+		Client: client,
+		Logger: logger,
+	}, nil
+}
+
+// GenerateContent implements model.LLM for Bedrock models using the Converse API.
+func (m *BedrockModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	return func(yield func(*model.LLMResponse, error) bool) {
+		// Get model name
+		modelName := m.Config.Model
+		if req.Model != "" {
+			modelName = req.Model
+		}
+
+		// Build tool configuration first so nameMap is available for message conversion.
+		// convertGenaiToolsToBedrock sanitizes tool names and returns the
+		// original->sanitized mapping so the same mapping can be applied to
+		// conversation history and reversed when restoring names from responses.
+		var toolConfig *types.ToolConfiguration
+		nameMap := make(map[string]string)
+		if req.Config != nil && len(req.Config.Tools) > 0 {
+			tools, nm := convertGenaiToolsToBedrock(req.Config.Tools, m.Config.PromptCaching, m.Config.CacheTTL)
+			nameMap = nm
+			if len(tools) > 0 {
+				toolConfig = &types.ToolConfiguration{
+					Tools: tools,
+				}
+			}
+		}
+
+		// Build reverse map for restoring original tool names from Bedrock responses.
+		reverseNameMap := make(map[string]string, len(nameMap))
+		for orig, sanitized := range nameMap {
+			reverseNameMap[sanitized] = orig
+		}
+
+		// Convert content to Bedrock messages.
+		// nameMap is passed so that any tool call recorded in conversation history
+		// is written with the sanitized name Bedrock already knows about.
+		messages, systemInstruction := convertGenaiContentsToBedrockMessages(req.Contents, nameMap, req.Config)
+
+		// temperature/top_p must not be sent when thinking is active. https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-extended-thinking.html
+		_, thinkingEnabled := m.Config.AdditionalModelRequestFields["thinking"]
+		inferenceConfig := buildInferenceConfig(m.Config, thinkingEnabled)
+
+		// Build system prompt
+		var systemPrompt []types.SystemContentBlock
+		if systemInstruction != "" {
+			systemPrompt = append(systemPrompt, &types.SystemContentBlockMemberText{
+				Value: systemInstruction,
+			})
+		}
+		// If prompt caching is enabled, mark the end of the system content
+		// as a cache breakpoint. Bedrock caches everything up to and including
+		// this point for ~5 minutes; subsequent requests with the same prefix
+		// hit the cache. Skipped for empty systems — caching nothing is a no-op
+		// that wastes a marker.
+		if m.Config.PromptCaching && len(systemPrompt) > 0 {
+			systemPrompt = append(systemPrompt, &types.SystemContentBlockMemberCachePoint{
+				Value: bedrockCachePointBlock(m.Config.CacheTTL),
+			})
+		}
+
+		additionalFields := m.buildAdditionalModelRequestFields()
+		outputConfig, err := bedrockOutputConfig(req.Config)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+
+		if stream {
+			m.generateStreaming(ctx, modelName, messages, systemPrompt, inferenceConfig, toolConfig, outputConfig, additionalFields, reverseNameMap, yield)
+		} else {
+			m.generateNonStreaming(ctx, modelName, messages, systemPrompt, inferenceConfig, toolConfig, outputConfig, additionalFields, reverseNameMap, yield)
+		}
+	}
+}
+
+// bedrockOutputConfig maps ADK's response schema to the Bedrock Converse
+// structured-output shape.
+func bedrockOutputConfig(config *genai.GenerateContentConfig) (*types.OutputConfig, error) {
+	schema, err := structuredOutputSchema(config)
+	if err != nil || schema == nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Bedrock output schema: %w", err)
+	}
+	return &types.OutputConfig{
+		TextFormat: &types.OutputFormat{
+			Type: types.OutputFormatTypeJsonSchema,
+			Structure: &types.OutputFormatStructureMemberJsonSchema{
+				Value: types.JsonSchemaDefinition{
+					Name:   aws.String(structuredOutputName),
+					Schema: aws.String(string(encoded)),
+				},
+			},
+		},
+	}, nil
+}
+
+// buildAdditionalModelRequestFields returns a document.Interface containing
+// model-specific parameters that are not part of InferenceConfiguration.
+// The raw map is forwarded as-is to the Bedrock Converse API.
+// Returns nil when no extra fields are configured.
+func (m *BedrockModel) buildAdditionalModelRequestFields() document.Interface {
+	if len(m.Config.AdditionalModelRequestFields) == 0 {
+		return nil
+	}
+	return document.NewLazyDocument(m.Config.AdditionalModelRequestFields)
+}
+
+// generateStreaming handles streaming responses from Bedrock ConverseStream.
+// It properly handles both text and tool use content blocks during streaming.
+// reverseNameMap maps sanitized Bedrock tool names back to their original names.
+func (m *BedrockModel) generateStreaming(ctx context.Context, modelId string, messages []types.Message, systemPrompt []types.SystemContentBlock, inferenceConfig *types.InferenceConfiguration, toolConfig *types.ToolConfiguration, outputConfig *types.OutputConfig, additionalFields document.Interface, reverseNameMap map[string]string, yield func(*model.LLMResponse, error) bool) {
+	output, err := m.Client.ConverseStream(ctx, &bedrockruntime.ConverseStreamInput{
+		ModelId:                      aws.String(modelId),
+		Messages:                     messages,
+		System:                       systemPrompt,
+		InferenceConfig:              inferenceConfig,
+		ToolConfig:                   toolConfig,
+		OutputConfig:                 outputConfig,
+		AdditionalModelRequestFields: additionalFields,
+		GuardrailConfig:              bedrockGuardrailStreamConfig(m.Config),
+	})
+
+	if err != nil {
+		yield(&model.LLMResponse{
+			ErrorCode:    "API_ERROR",
+			ErrorMessage: err.Error(),
+		}, nil)
+		return
+	}
+
+	var aggregatedText strings.Builder
+	var finishReason genai.FinishReason
+	var usageMetadata *genai.GenerateContentResponseUsageMetadata
+
+	// Track tool calls during streaming
+	// Map of content block index -> tool call being built
+	toolCalls := make(map[int32]*streamingToolCall)
+	var completedToolCalls []*genai.Part
+
+	// https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-extended-thinking.html
+	reasoningBlocks := make(map[int32]*streamingReasoningBlock)
+	var completedThinkingParts []*genai.Part
+
+	// Get the event stream and read events from the channel
+	stream := output.GetStream()
+	defer stream.Close()
+
+	// Read events from the channel
+	for event := range stream.Events() {
+		// Handle content block start (tool use start)
+		if start, ok := event.(*types.ConverseStreamOutputMemberContentBlockStart); ok {
+			if toolStart, ok := start.Value.Start.(*types.ContentBlockStartMemberToolUse); ok {
+				// A new tool use block is starting - initialize tracking
+				blockIdx := aws.ToInt32(start.Value.ContentBlockIndex)
+				toolCalls[blockIdx] = &streamingToolCall{
+					ID:   aws.ToString(toolStart.Value.ToolUseId),
+					Name: aws.ToString(toolStart.Value.Name),
+				}
+			}
+		}
+
+		// Handle content block delta (streaming text or tool input)
+		if chunk, ok := event.(*types.ConverseStreamOutputMemberContentBlockDelta); ok {
+			blockIdx := aws.ToInt32(chunk.Value.ContentBlockIndex)
+
+			switch delta := chunk.Value.Delta.(type) {
+			case *types.ContentBlockDeltaMemberText:
+				// Text content - yield immediately for streaming
+				text := delta.Value
+				aggregatedText.WriteString(text)
+
+				response := &model.LLMResponse{
+					Content: &genai.Content{
+						Role: "model",
+						Parts: []*genai.Part{
+							{Text: text},
+						},
+					},
+					Partial:      true,
+					TurnComplete: false,
+				}
+				if !yield(response, nil) {
+					return
+				}
+
+			case *types.ContentBlockDeltaMemberToolUse:
+				// Tool use delta - accumulate the input JSON
+				if tc, ok := toolCalls[blockIdx]; ok && delta.Value.Input != nil {
+					tc.InputJSON += aws.ToString(delta.Value.Input)
+				}
+
+			case *types.ContentBlockDeltaMemberReasoningContent:
+				if _, ok := reasoningBlocks[blockIdx]; !ok {
+					reasoningBlocks[blockIdx] = &streamingReasoningBlock{}
+				}
+				rb := reasoningBlocks[blockIdx]
+				switch inner := delta.Value.(type) {
+				case *types.ReasoningContentBlockDeltaMemberText:
+					rb.Text.WriteString(inner.Value)
+				case *types.ReasoningContentBlockDeltaMemberSignature:
+					rb.Signature = inner.Value
+				}
+			}
+		}
+
+		// Handle content block stop (tool use or thinking block complete)
+		if stop, ok := event.(*types.ConverseStreamOutputMemberContentBlockStop); ok {
+			blockIdx := aws.ToInt32(stop.Value.ContentBlockIndex)
+			if tc, ok := toolCalls[blockIdx]; ok {
+				// Tool use block completed - parse the accumulated JSON and create FunctionCall.
+				// Restore the original tool name from the reverse map so the ADK framework
+				// can dispatch to the correctly registered tool.
+				originalName := tc.Name
+				if orig, found := reverseNameMap[tc.Name]; found {
+					originalName = orig
+				}
+				args := tc.parseArgs()
+				functionCall := &genai.FunctionCall{
+					ID:   tc.ID,
+					Name: originalName,
+					Args: args,
+				}
+				completedToolCalls = append(completedToolCalls, &genai.Part{FunctionCall: functionCall})
+				delete(toolCalls, blockIdx)
+			}
+			if rb, ok := reasoningBlocks[blockIdx]; ok {
+				part := &genai.Part{
+					Thought: true,
+					Text:    rb.Text.String(),
+				}
+				if rb.Signature != "" {
+					part.ThoughtSignature = []byte(rb.Signature)
+				}
+				completedThinkingParts = append(completedThinkingParts, part)
+				delete(reasoningBlocks, blockIdx)
+			}
+		}
+
+		// Handle message stop (includes stop reason)
+		if stop, ok := event.(*types.ConverseStreamOutputMemberMessageStop); ok {
+			finishReason = bedrockStopReasonToGenai(stop.Value.StopReason)
+		}
+
+		// Handle metadata event (includes usage)
+		if meta, ok := event.(*types.ConverseStreamOutputMemberMetadata); ok {
+			if meta.Value.Usage != nil {
+				usageMetadata = &genai.GenerateContentResponseUsageMetadata{
+					PromptTokenCount:     aws.ToInt32(meta.Value.Usage.InputTokens),
+					CandidatesTokenCount: aws.ToInt32(meta.Value.Usage.OutputTokens),
+					TotalTokenCount:      aws.ToInt32(meta.Value.Usage.TotalTokens),
+				}
+			}
+		}
+	}
+
+	// thinking parts first; block order must match what Bedrock returned.
+	finalParts := []*genai.Part{}
+	finalParts = append(finalParts, completedThinkingParts...)
+	text := aggregatedText.String()
+	if text != "" {
+		finalParts = append(finalParts, &genai.Part{Text: text})
+	}
+	// Add completed tool calls
+	finalParts = append(finalParts, completedToolCalls...)
+
+	response := &model.LLMResponse{
+		Content: &genai.Content{
+			Role:  "model",
+			Parts: finalParts,
+		},
+		Partial:       false,
+		TurnComplete:  true,
+		FinishReason:  finishReason,
+		UsageMetadata: usageMetadata,
+	}
+	yield(response, nil)
+}
+
+// streamingToolCall tracks a tool call being built during streaming
+type streamingToolCall struct {
+	ID        string
+	Name      string
+	InputJSON string // Accumulated JSON input
+}
+
+type streamingReasoningBlock struct {
+	Text      strings.Builder
+	Signature string
+}
+
+// parseArgs parses the accumulated JSON input into a map
+func (tc *streamingToolCall) parseArgs() map[string]any {
+	if tc.InputJSON == "" {
+		return map[string]any{}
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(tc.InputJSON), &args); err != nil {
+		// If unmarshal fails, return raw string wrapped in map
+		return map[string]any{"_raw": tc.InputJSON}
+	}
+	return args
+}
+
+// generateNonStreaming handles non-streaming responses from Bedrock Converse.
+// reverseNameMap maps sanitized Bedrock tool names back to their original names.
+func (m *BedrockModel) generateNonStreaming(ctx context.Context, modelId string, messages []types.Message, systemPrompt []types.SystemContentBlock, inferenceConfig *types.InferenceConfiguration, toolConfig *types.ToolConfiguration, outputConfig *types.OutputConfig, additionalFields document.Interface, reverseNameMap map[string]string, yield func(*model.LLMResponse, error) bool) {
+	output, err := m.Client.Converse(ctx, &bedrockruntime.ConverseInput{
+		ModelId:                      aws.String(modelId),
+		Messages:                     messages,
+		System:                       systemPrompt,
+		InferenceConfig:              inferenceConfig,
+		ToolConfig:                   toolConfig,
+		OutputConfig:                 outputConfig,
+		AdditionalModelRequestFields: additionalFields,
+		GuardrailConfig:              bedrockGuardrailConfig(m.Config),
+	})
+
+	if err != nil {
+		yield(&model.LLMResponse{
+			ErrorCode:    "API_ERROR",
+			ErrorMessage: err.Error(),
+		}, nil)
+		return
+	}
+
+	// Extract content from output
+	parts := []*genai.Part{}
+	if message, ok := output.Output.(*types.ConverseOutputMemberMessage); ok {
+		for _, block := range message.Value.Content {
+			// https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-extended-thinking.html
+			if reasoningBlock, ok := block.(*types.ContentBlockMemberReasoningContent); ok {
+				if textBlock, ok := reasoningBlock.Value.(*types.ReasoningContentBlockMemberReasoningText); ok {
+					part := &genai.Part{
+						Thought: true,
+						Text:    aws.ToString(textBlock.Value.Text),
+					}
+					if textBlock.Value.Signature != nil {
+						part.ThoughtSignature = []byte(aws.ToString(textBlock.Value.Signature))
+					}
+					parts = append(parts, part)
+				}
+				continue
+			}
+			// Handle text content
+			if textBlock, ok := block.(*types.ContentBlockMemberText); ok {
+				parts = append(parts, &genai.Part{Text: textBlock.Value})
+			}
+			// Handle tool use content
+			if toolUseBlock, ok := block.(*types.ContentBlockMemberToolUse); ok {
+				// Restore the original tool name so the ADK framework can dispatch
+				// to the correctly registered tool.
+				toolName := aws.ToString(toolUseBlock.Value.Name)
+				if orig, found := reverseNameMap[toolName]; found {
+					toolName = orig
+				}
+				functionCall := &genai.FunctionCall{
+					ID:   aws.ToString(toolUseBlock.Value.ToolUseId),
+					Name: toolName,
+				}
+				// Convert document.Interface to map using the String() method and JSON parsing
+				// The document type in AWS SDK implements String() that returns JSON
+				if input := toolUseBlock.Value.Input; input != nil {
+					functionCall.Args = documentToMap(input)
+				}
+				parts = append(parts, &genai.Part{FunctionCall: functionCall})
+			}
+		}
+	}
+
+	// Build finish reason
+	finishReason := bedrockStopReasonToGenai(output.StopReason)
+
+	// Build usage metadata
+	var usageMetadata *genai.GenerateContentResponseUsageMetadata
+	if output.Usage != nil {
+		usageMetadata = &genai.GenerateContentResponseUsageMetadata{
+			PromptTokenCount:     aws.ToInt32(output.Usage.InputTokens),
+			CandidatesTokenCount: aws.ToInt32(output.Usage.OutputTokens),
+			TotalTokenCount:      aws.ToInt32(output.Usage.TotalTokens),
+		}
+	}
+
+	response := &model.LLMResponse{
+		Content: &genai.Content{
+			Role:  "model",
+			Parts: parts,
+		},
+		Partial:       false,
+		TurnComplete:  true,
+		FinishReason:  finishReason,
+		UsageMetadata: usageMetadata,
+	}
+	yield(response, nil)
+}
+
+// documentToMap converts an AWS document.Interface to a map[string]any.
+// The document.Interface is an abstraction that stores JSON data internally.
+func documentToMap(doc document.Interface) map[string]any {
+	if doc == nil {
+		return nil
+	}
+
+	// document.Interface provides UnmarshalSmithyDocument to decode JSON data
+	var result map[string]any
+	if err := doc.UnmarshalSmithyDocument(&result); err != nil {
+		// If unmarshal fails, return empty map to avoid nil pointer issues
+		return map[string]any{}
+	}
+
+	return result
+}
+
+const historyToolResultMaxLen = 2000
+
+func truncateToolResult(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + fmt.Sprintf("\n... [truncated, %d chars omitted]", len(s)-maxLen)
+}
+
+// convertGenaiContentsToBedrockMessages converts genai.Content to Bedrock Converse API message format.
+// nameMap is the original->sanitized tool name map produced by convertGenaiToolsToBedrock.
+// Any FunctionCall found in the conversation history is written with the sanitized name so
+// that Bedrock can correlate it with the tool spec it already received. A nil nameMap is safe.
+func convertGenaiContentsToBedrockMessages(contents []*genai.Content, nameMap map[string]string, config *genai.GenerateContentConfig) ([]types.Message, string) {
+	var messages []types.Message
+	var systemInstruction string
+
+	// Sanitize tool IDs: Bedrock requires toolUseId to match [a-zA-Z0-9_.:-]+ (non-empty).
+	// See https://github.com/kagent-dev/kagent/issues/1473
+	idMap := make(map[string]string)
+	idCounter := 0
+
+	// Bedrock only requires thinking blocks in the last assistant turn before tool results.
+	// Sending them in earlier turns causes token counts to compound across long sessions.
+	// Truncate tool results in all turns except the most recent one carrying them.
+	lastThinkingIdx, lastToolResultIdx := -1, -1
+	for i, c := range contents {
+		if c == nil {
+			continue
+		}
+		for _, p := range c.Parts {
+			if p == nil {
+				continue
+			}
+			if p.Thought && (c.Role == "model" || c.Role == "assistant") {
+				lastThinkingIdx = i
+			}
+			if p.FunctionResponse != nil && c.Role == "user" {
+				lastToolResultIdx = i
+			}
+		}
+	}
+
+	for i, content := range contents {
+		if content == nil || len(content.Parts) == 0 {
+			continue
+		}
+
+		role := types.ConversationRoleUser
+		if content.Role == "model" || content.Role == "assistant" {
+			role = types.ConversationRoleAssistant
+		}
+
+		emitThinking := i == lastThinkingIdx
+		truncateTools := i != lastToolResultIdx
+
+		var contentBlocks []types.ContentBlock
+
+		for _, part := range content.Parts {
+			if part == nil {
+				continue
+			}
+
+			// Thought parts also carry Text; check Thought first. https://docs.aws.amazon.com/bedrock/latest/userguide/claude-messages-extended-thinking.html
+			if part.Thought {
+				if !emitThinking {
+					continue
+				}
+				reasoningText := &types.ReasoningTextBlock{
+					Text: aws.String(part.Text),
+				}
+				if len(part.ThoughtSignature) > 0 {
+					reasoningText.Signature = aws.String(string(part.ThoughtSignature))
+				}
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberReasoningContent{
+					Value: &types.ReasoningContentBlockMemberReasoningText{
+						Value: *reasoningText,
+					},
+				})
+				continue
+			}
+
+			if part.Text != "" {
+				if content.Role == "system" {
+					systemInstruction = part.Text
+					continue
+				}
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberText{
+					Value: part.Text,
+				})
+				continue
+			}
+
+			if part.InlineData != nil && strings.HasPrefix(part.InlineData.MIMEType, "image/") {
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberText{Value: unsupportedImageNote(part.InlineData)})
+				continue
+			}
+
+			// Handle function call (tool use in Bedrock terminology).
+			// Use the sanitized name from nameMap so Bedrock can correlate the
+			// tool call with the tool spec sent in the same request.
+			if part.FunctionCall != nil {
+				callName := part.FunctionCall.Name
+				if sanitized, ok := nameMap[callName]; ok {
+					callName = sanitized
+				}
+				toolUse := types.ToolUseBlock{
+					ToolUseId: aws.String(sanitizeBedrockToolID(part.FunctionCall.ID, idMap, &idCounter)),
+					Name:      aws.String(callName),
+					Input:     document.NewLazyDocument(nonNilFunctionCallArgs(part.FunctionCall.Args)),
+				}
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberToolUse{
+					Value: toolUse,
+				})
+				continue
+			}
+
+			if part.FunctionResponse != nil {
+				result := extractFunctionResponseContent(part.FunctionResponse.Response)
+				if truncateTools {
+					result = truncateToolResult(result, historyToolResultMaxLen)
+				}
+				toolResult := types.ToolResultBlock{
+					ToolUseId: aws.String(sanitizeBedrockToolID(part.FunctionResponse.ID, idMap, &idCounter)),
+					Content: []types.ToolResultContentBlock{
+						&types.ToolResultContentBlockMemberText{
+							Value: result,
+						},
+					},
+					Status: types.ToolResultStatusSuccess,
+				}
+				contentBlocks = append(contentBlocks, &types.ContentBlockMemberToolResult{
+					Value: toolResult,
+				})
+				continue
+			}
+		}
+
+		if len(contentBlocks) > 0 {
+			messages = append(messages, types.Message{Role: role, Content: contentBlocks})
+		}
+	}
+
+	return messages, mergeSystemInstructionFromConfig(systemInstruction, config)
+}
+
+// convertGenaiToolsToBedrock converts genai.Tool to Bedrock Tool format.
+// It sanitizes tool names to satisfy Bedrock's [a-zA-Z0-9_-]+ constraint and
+// returns the original->sanitized name mapping so callers can apply it to
+// conversation history and reverse it when restoring names from responses.
+//
+// When promptCaching is true, a CachePoint marker is appended after the
+// last tool spec — Bedrock then caches the entire (typically large) tool
+// definitions array, billing the prefix at a reduced rate on cache hits. The
+// cacheTTL argument selects the retention window for that marker (see
+// bedrockCachePointBlock).
+func convertGenaiToolsToBedrock(tools []*genai.Tool, promptCaching bool, cacheTTL string) ([]types.Tool, map[string]string) {
+	if len(tools) == 0 {
+		return nil, nil
+	}
+
+	nameMap := make(map[string]string)
+	nameCounter := 0
+	var bedrockTools []types.Tool
+
+	for _, tool := range tools {
+		if tool == nil || tool.FunctionDeclarations == nil {
+			continue
+		}
+
+		for _, decl := range tool.FunctionDeclarations {
+			if decl == nil {
+				continue
+			}
+
+			// Build input schema as JSON document.
+			// MCP tools and built-in local toolsets set ParametersJsonSchema.
+			var schema map[string]any
+			if decl.ParametersJsonSchema != nil {
+				schema = parametersJsonSchemaToMap(decl.ParametersJsonSchema)
+			}
+			// Declaration-based tools set Parameters (genai.Schema with uppercase type names).
+			if schema == nil && decl.Parameters != nil {
+				// Marshal the full genai.Schema to JSON (preserves nested props, arrays, anyOf, etc.)
+				// then lowercase all type values to match JSON Schema standard.
+				schema = genaiSchemaToMap(decl.Parameters)
+			}
+			// Fallback to empty object if no schema is found.
+			if schema == nil {
+				schema = map[string]any{"type": "object", "properties": map[string]any{}}
+			}
+
+			inputSchema := &types.ToolInputSchemaMemberJson{
+				Value: document.NewLazyDocument(schema),
+			}
+
+			// Sanitize the tool name: MCP tool names often contain dots, colons,
+			// or spaces (e.g. "fetch.get_url") that Bedrock rejects.
+			sanitizedName := sanitizeBedrockToolName(decl.Name, nameMap, &nameCounter)
+
+			toolSpec := types.ToolSpecification{
+				Name:        aws.String(sanitizedName),
+				Description: aws.String(decl.Description),
+				InputSchema: inputSchema,
+			}
+
+			bedrockTool := &types.ToolMemberToolSpec{
+				Value: toolSpec,
+			}
+			bedrockTools = append(bedrockTools, bedrockTool)
+		}
+	}
+
+	// If prompt caching is enabled, append a CachePoint at the END of the
+	// tool list. Bedrock caches the entire tool definitions array up to
+	// this marker; this is usually the biggest single chunk of static
+	// prefix in an agent conversation and benefits most from caching.
+	// Skipped when there are no tools — a cache marker by itself is a no-op.
+	if promptCaching && len(bedrockTools) > 0 {
+		bedrockTools = append(bedrockTools, &types.ToolMemberCachePoint{
+			Value: bedrockCachePointBlock(cacheTTL),
+		})
+	}
+
+	return bedrockTools, nameMap
+}
+
+// bedrockStopReasonToGenai maps Bedrock stop reason to genai.FinishReason.
+func bedrockStopReasonToGenai(reason types.StopReason) genai.FinishReason {
+	switch reason {
+	case types.StopReasonMaxTokens:
+		return genai.FinishReasonMaxTokens
+	case types.StopReasonEndTurn, types.StopReasonStopSequence:
+		return genai.FinishReasonStop
+	case types.StopReasonToolUse:
+		return genai.FinishReasonStop // Tool use is handled separately in content
+	case types.StopReasonGuardrailIntervened, types.StopReasonContentFiltered:
+		return genai.FinishReasonSafety
+	default:
+		return genai.FinishReasonStop
+	}
+}
+
+// buildInferenceConfig constructs the Bedrock InferenceConfiguration from a
+// BedrockConfig. When thinking is enabled, temperature and top_p must be
+// omitted per the Bedrock extended-thinking API contract.
+func buildInferenceConfig(cfg *BedrockConfig, thinkingEnabled bool) *types.InferenceConfiguration {
+	if cfg.MaxTokens == nil && (thinkingEnabled || (cfg.Temperature == nil && cfg.TopP == nil)) {
+		return nil
+	}
+	ic := &types.InferenceConfiguration{}
+	if cfg.MaxTokens != nil {
+		ic.MaxTokens = cfg.MaxTokens
+	}
+	if !thinkingEnabled {
+		if cfg.Temperature != nil {
+			ic.Temperature = aws.Float32(float32(*cfg.Temperature))
+		}
+		if cfg.TopP != nil {
+			ic.TopP = aws.Float32(float32(*cfg.TopP))
+		}
+	}
+	return ic
+}

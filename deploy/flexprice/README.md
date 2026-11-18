@@ -1,10 +1,18 @@
 # FlexPrice, locally
 
 The Phase 0 billing spike's dependency: a real FlexPrice install, on this laptop,
-reachable at `http://127.0.0.1:18080`. Nothing here is deployed, and nothing here
-is merged into the root [`compose.yaml`](../../compose.yaml) — that file models the
-Cloud Run loopback topology and keeps `npm start` at zero containers. This is a
-separate compose project (`fleet-flexprice`) with its own volumes.
+reachable at `http://127.0.0.1:18080`. Nothing here is deployed — that path is
+[`../gcp/terraform-flexprice/`](../gcp/terraform-flexprice/README.md), which
+reconciles the same pinned chart from Terraform state — and nothing here is merged
+into the root [`compose.yaml`](../../compose.yaml): that file models the Cloud Run
+loopback topology and keeps `npm start` at zero containers. This is a separate
+compose project (`fleet-flexprice`) with its own volumes.
+
+**This directory stays the dev shape.** The compose stack and the kind install
+below are how the findings in [`docs/FLEXPRICE_FINDINGS.md`](../../docs/FLEXPRICE_FINDINGS.md)
+were measured and how they stay measurable: no project, no credentials, no state,
+reproducible by anyone with a checkout. A cloud root that can only be probed inside
+someone's GCP project is not a spike. Deploying does not retire either one.
 
 ## Bring it up
 

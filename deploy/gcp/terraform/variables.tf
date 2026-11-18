@@ -15,7 +15,7 @@ variable "region" {
 
 variable "firestore_location" {
   type        = string
-  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Kept at nam5 so an apply never tries to move the existing database in place."
+  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Pass the location the existing database actually lives in; the nam5 default is a placeholder, and prevent_destroy on the database blocks a plan that would move it."
   default     = "nam5"
 }
 
@@ -55,32 +55,9 @@ variable "gateway_image_tag" {
   default = ""
 }
 
-variable "planner_image_tag" {
-  type    = string
-  default = ""
-}
-
-variable "coder_image_tag" {
-  type        = string
-  description = "Tag for coder-control AND the coder-worker Job (they share one image)."
-  default     = ""
-}
-
 variable "orchestrator_image_tag" {
   type        = string
-  description = "Per-service image tag for the lightweight durable pipeline orchestrator."
-  default     = ""
-}
-
-variable "tester_image_tag" {
-  type        = string
-  description = "Per-service image tag for the brokered pipeline tester."
-  default     = ""
-}
-
-variable "deployer_image_tag" {
-  type        = string
-  description = "Per-service image tag for the brokered pipeline deployer."
+  description = "Per-service image tag for the orchestrator (agent surface + durable pipeline)."
   default     = ""
 }
 
@@ -115,29 +92,9 @@ variable "gateway_service_name" {
   default = "gateway"
 }
 
-variable "planner_service_name" {
-  type    = string
-  default = "planner"
-}
-
-variable "coder_service_name" {
-  type    = string
-  default = "coder-control"
-}
-
 variable "orchestrator_service_name" {
   type    = string
   default = "pipeline-orchestrator"
-}
-
-variable "tester_service_name" {
-  type    = string
-  default = "pipeline-tester"
-}
-
-variable "deployer_service_name" {
-  type    = string
-  default = "pipeline-deployer"
 }
 
 variable "org_service_name" {
@@ -320,12 +277,6 @@ variable "cashfree_base_url" {
   default     = "https://sandbox.cashfree.com"
 }
 
-variable "coder_job_name" {
-  type        = string
-  description = "Cloud Run Job name. MUST match the CODER_JOB_NAME env the coder-control service uses to launch it."
-  default     = "coder-worker"
-}
-
 # --- Mandatory egress proxy + stream-token broker ----------------------------
 
 variable "secret_vault_kms_enabled" {
@@ -472,16 +423,82 @@ variable "internal_api_token" {
 variable "internal_ingress" {
   type        = string
   description = <<-EOT
-    Ingress for the non-public services (planner, coder-control). Default is
+    Ingress for the non-public services (orchestrator, provisioner).
+    Default is
     INGRESS_TRAFFIC_ALL, but they remain IAM-gated (no allUsers invoker) — every
     caller MUST present an OIDC token for gateway-sa or pubsub-push-sa. This lets
     the gateway reverse-proxy its read endpoints over the run.app hostname with an
     OIDC ID token (see services/gateway/src/proxy.js) without a VPC.
     For network-layer isolation instead, set INGRESS_TRAFFIC_INTERNAL_ONLY and add
-    Direct VPC egress to the gateway (see the note in cloud_run.tf) — no paid
-    connector on Cloud Run gen2, but it needs a VPC subnet.
+    Direct VPC egress to the gateway (var.gateway_vpc_egress_enabled +
+    var.vpc_network + var.vpc_subnet) — no paid connector on Cloud Run gen2, but it
+    needs a VPC subnet.
   EOT
   default     = "INGRESS_TRAFFIC_ALL"
+}
+
+# --- Direct VPC egress -------------------------------------------------------
+# The connector-less way for a gen2 service to reach what `var.internal_ingress`'s
+# alternative locks it out of: the service takes source IPs from the named
+# subnetwork's PRIMARY range and puts private traffic on the VPC. Off by default
+# because turning it on changes the SOURCE IP of everything the service sends into
+# that range — the cluster's firewall rules have to know the range, and a plan
+# that succeeds is not evidence that a packet is answered.
+
+variable "vpc_network" {
+  type        = string
+  description = <<-EOT
+    VPC that Direct VPC egress puts private traffic on — the network the
+    substrate cluster lives on (`var.vpc_name` in
+    deploy/gcp/terraform-substrate-gke, `default` on the shared deployment).
+    A bare name or a full self-link both work. Empty is inert while
+    gateway_vpc_egress_enabled is false; with it true the plan refuses, because
+    an empty network here would leave the service exactly where it was while
+    reading as switched on.
+  EOT
+  default     = ""
+}
+
+variable "vpc_subnet" {
+  type        = string
+  description = <<-EOT
+    Regional subnetwork that supplies the Cloud Run instances' source IPs, so it
+    MUST be in var.region (`substrate-subnet`, 10.10.0.0/20, which is also what
+    the substrate nodes and their pods/services ranges hang off). It needs free
+    primary-range addresses: egress IPs come from the PRIMARY range, not from the
+    `pods`/`services` secondary ranges.
+  EOT
+  default     = ""
+}
+
+variable "vpc_egress_mode" {
+  type        = string
+  description = <<-EOT
+    How much traffic goes to the VPC. PRIVATE_RANGES_ONLY (default) routes RFC1918
+    and VPC ranges into the network and leaves public destinations (GitHub, Linear,
+    LLM hosts, the egress proxy) on Cloud Run's normal path — the safe setting for
+    a service that already works. ALL_TRAFFIC sends everything through the VPC, so
+    it additionally depends on the project's Cloud NAT for third-party calls.
+  EOT
+  default     = "PRIVATE_RANGES_ONLY"
+
+  validation {
+    condition     = contains(["PRIVATE_RANGES_ONLY", "ALL_TRAFFIC"], var.vpc_egress_mode)
+    error_message = "vpc_egress_mode must be PRIVATE_RANGES_ONLY or ALL_TRAFFIC."
+  }
+}
+
+variable "gateway_vpc_egress_enabled" {
+  type        = bool
+  description = <<-EOT
+    Attach Direct VPC egress to the public gateway service. This is plumbing, not
+    a feature: it gives the gateway a route INTO the VPC. It does not create a
+    VPC-reachable endpoint for the ateapi control plane — `Service api` in
+    ate-system is headless, so a ClusterIP cannot be dialled from outside the
+    cluster, and nothing in this repo provisions an internal load balancer for
+    it. See docs/SUBSTRATE_STATUS.md pending 2 (cause 9).
+  EOT
+  default     = false
 }
 
 variable "settings_ingress" {
@@ -583,7 +600,7 @@ variable "cloud_run_service_cpu" {
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for egress-proxy sidecars and the standalone stream-token broker on gen2 Cloud Run. Supported values are 1 or 2; Cloud Run Jobs use coder_job_proxy_cpu."
+  description = "vCPU limit for egress-proxy sidecars and the standalone stream-token broker on gen2 Cloud Run. Supported values are 1 or 2."
   default     = "1"
 
   validation {
@@ -595,18 +612,14 @@ variable "cloud_run_proxy_cpu" {
 # --- Pub/Sub topics -----------------------------------------------------------
 
 variable "planner_topic" {
-  type    = string
-  default = "planner-requests"
-}
-
-variable "coder_topic" {
-  type    = string
-  default = "coder-requests"
+  type        = string
+  description = "Legacy planner-queue topic — the gateway publishes, the orchestrator's /pubsub/planner push consumes."
+  default     = "planner-requests"
 }
 
 # Durable pipeline command/result topics are deliberately distinct from the
-# legacy planner/coder request topics. Reusing either legacy topic would fan a
-# typed StageCommand into the autonomous-label handlers.
+# legacy planner request topic. Reusing it would fan a typed StageCommand into
+# the autonomous-label handlers.
 variable "pipeline_plan_topic" {
   type    = string
   default = "pipeline-plan-commands"
@@ -620,11 +633,6 @@ variable "pipeline_code_topic" {
 variable "pipeline_test_topic" {
   type    = string
   default = "pipeline-test-commands"
-}
-
-variable "pipeline_deploy_topic" {
-  type    = string
-  default = "pipeline-deploy-commands"
 }
 
 variable "pipeline_plan_results_topic" {
@@ -642,20 +650,9 @@ variable "pipeline_test_results_topic" {
   default = "pipeline-test-results"
 }
 
-variable "pipeline_deploy_results_topic" {
-  type    = string
-  default = "pipeline-deploy-results"
-}
-
 variable "pipeline_orchestrator_enabled" {
   type        = bool
   description = "Create and enable the durable fixed-stage pipeline topology. False preserves the legacy autonomous label flow and creates no pipeline Cloud Run/Pub/Sub resources."
-  default     = false
-}
-
-variable "pipeline_deployment_enabled" {
-  type        = bool
-  description = "Allow the deploy stage after the full plan/code/test/deploy sequence. False is the fail-closed default."
   default     = false
 }
 
@@ -742,14 +739,8 @@ variable "ack_deadline_seconds" {
 
 variable "planner_schedule" {
   type        = string
-  description = "Planner cadence tick — POSTs to /pubsub/planner-tick."
+  description = "Planner-queue cadence tick — POSTs to the orchestrator's /pubsub/planner-tick."
   default     = "*/5 * * * *"
-}
-
-variable "coder_schedule" {
-  type        = string
-  description = "Coder board-poll tick — POSTs to /pubsub/coder-tick."
-  default     = "*/2 * * * *"
 }
 
 variable "billing_schedule" {
@@ -815,30 +806,53 @@ variable "flexprice_enabled" {
   default     = true
 }
 
+variable "flexprice_billing_cutover_enabled" {
+  # Two gates, deliberately separate. `flexprice_enabled` is the code-path switch
+  # the billing service reads; this one is the operator's permission to move a
+  # tenant's money. docs/FLEXPRICE_AGPL_MEMO.md is NOT CLEARED for production, so
+  # the self-hosted FlexPrice stack can be built, probed and even reachable while
+  # every deployment still bills the way it always did — and an apply that merely
+  # forgets to pass three endpoint variables can never be the thing that opts a
+  # tenant in. Flipping this true is a decision with a review behind it, not a
+  # missing `vars.` entry.
+  type        = bool
+  description = "Admit the FlexPrice cutover: only with this true does FLEXPRICE_ENABLED reach the billing service. Stays false until counsel clears the AGPL memo."
+  default     = false
+}
+
+# The three values below are optional by design: an unset repo variable arrives as
+# "" and must not abort the apply. They are format-validated only when supplied,
+# because a typo in a value you meant to use is worth failing on, while an absent
+# value on a gated-off deployment is not. `flexprice-config.js` refuses to boot
+# with any of them missing WHILE ENABLED, so the fail-closed half lives in the app
+# and the empty string here is honest rather than dangerous.
 variable "flexprice_base_url" {
   type        = string
-  description = "FlexPrice API base URL. Must be https://."
+  description = "FlexPrice API base URL. Empty until the cutover gate is open; must be https:// when set."
+  default     = ""
   validation {
-    condition     = can(regex("^https://[^\\s/]+", var.flexprice_base_url))
-    error_message = "flexprice_base_url must be an https:// URL."
+    condition     = var.flexprice_base_url == "" || can(regex("^https://[^\\s/]+", var.flexprice_base_url))
+    error_message = "flexprice_base_url must be empty or an https:// URL."
   }
 }
 
 variable "flexprice_environment_id" {
   type        = string
-  description = "FlexPrice environment id (UUID)."
+  description = "FlexPrice environment id (UUID). Empty until the cutover gate is open."
+  default     = ""
   validation {
-    condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.flexprice_environment_id))
-    error_message = "flexprice_environment_id must be a UUID."
+    condition     = var.flexprice_environment_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.flexprice_environment_id))
+    error_message = "flexprice_environment_id must be empty or a UUID."
   }
 }
 
 variable "flexprice_supplier_state_code" {
   type        = string
-  description = "Supplier GST state code, two digits 01-37."
+  description = "Supplier GST state code, two digits 01-37. Empty until the cutover gate is open."
+  default     = ""
   validation {
-    condition     = can(regex("^(0[1-9]|[12][0-9]|3[0-7])$", var.flexprice_supplier_state_code))
-    error_message = "flexprice_supplier_state_code must be a two-digit GST state code 01-37."
+    condition     = var.flexprice_supplier_state_code == "" || can(regex("^(0[1-9]|[12][0-9]|3[0-7])$", var.flexprice_supplier_state_code))
+    error_message = "flexprice_supplier_state_code must be empty or a two-digit GST state code 01-37."
   }
 }
 
@@ -848,34 +862,11 @@ variable "billing_job_dry_run" {
   default     = false
 }
 
-# --- Coder worker Job knobs ---------------------------------------------------
-
-variable "coder_job_task_timeout" {
-  type        = string
-  description = "Max wall-clock for one coder ticket (a worker runs one ticket to completion). Cloud Run Job task timeout maxes at 24h."
-  default     = "86400s"
-}
-
-variable "coder_job_cpu" {
-  type        = string
-  description = "vCPU limit for the coder-worker app container. Cloud Run Job containers require at least 1 vCPU."
-  default     = "1"
-}
-
-variable "coder_job_proxy_cpu" {
-  type        = string
-  description = "vCPU limit for the coder-worker egress-proxy sidecar. Kept independent so increasing worker CPU does not overprovision the proxy; Cloud Run Job containers require at least 1 vCPU."
-  default     = "1"
-}
-
-variable "coder_job_memory" {
-  type    = string
-  default = "4Gi"
-}
+# --- Optional default repo for the OpenSWE backend ----------------------------
 
 variable "coder_repo_url" {
   type        = string
-  description = "Optional default repo the coder clones (CODER_REPO_URL). Usually set per-project instead; leave empty to rely on per-project config."
+  description = "Optional default repo the OpenSWE backend clones (CODER_REPO_URL, read by packages/shared-core/src/config.js). Usually set per-project instead; leave empty to rely on per-project config."
   default     = ""
 }
 
@@ -930,8 +921,8 @@ variable "spa_origin" {
 
 # --- Skills registry (GCS bucket, gcsfuse mount) -----------------------------
 # See skills.tf. Terraform CREATES and OWNS the bucket. skills_enabled toggles the
-# whole feature (bucket + mounts + SKILLS_ROOT env); when off, planner/coder fall
-# back to the vendored skills baked into the image. The bucket name defaults to a
+# whole feature (bucket + mounts + SKILLS_ROOT env); when off, the orchestrator
+# falls back to the vendored skills baked into the image. The bucket name defaults to a
 # stable derived value ("<project_id>-aifleet-skills") — skills_bucket_name is an
 # OPTIONAL override, no longer a pre-existing bucket the operator must supply.
 
@@ -943,7 +934,7 @@ variable "skills_enabled" {
 
 variable "skills_mount_enabled" {
   type        = bool
-  description = "Mount the skills bucket read-only via gcsfuse (+ SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
+  description = "Mount the skills bucket read-only via gcsfuse (+ SKILLS_ROOT/SKILLS_VERSION env) on the orchestrator. Default OFF: the fuse mount under the gen2 execution environment previously failed the heavy dual-role startup probe and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → the service uses the vendored skills baked into the image."
   default     = false
 }
 
@@ -977,7 +968,7 @@ variable "attachments_bucket_force_destroy" {
 
 variable "skills_version" {
   type        = string
-  description = "Skills bundle version the runtime PINS (SKILLS_VERSION). The planner/coder read /skills/<skills_version>/<skill>/SKILL.md, so bumping the published bundle to a new version does NOT affect a deployment until this is bumped — older pinned versions keep working. Must match a published `<version>/` prefix in the bucket."
+  description = "Skills bundle version the runtime PINS (SKILLS_VERSION). The orchestrator reads /skills/<skills_version>/<skill>/SKILL.md, so bumping the published bundle to a new version does NOT affect a deployment until this is bumped — older pinned versions keep working. Must match a published `<version>/` prefix in the bucket."
   default     = "v1"
 }
 
@@ -1031,7 +1022,7 @@ variable "laya_models_publisher_member" {
 
 variable "memory_enabled" {
   type        = bool
-  description = "Create the Terraform-managed Cloud SQL for PostgreSQL memory instance (+ database/user/URL secret) and wire MEMORY_DATABASE_URL + the /cloudsql socket into planner/coder. false disables the feature entirely and keeps the stack at $0."
+  description = "Create the Terraform-managed Cloud SQL for PostgreSQL memory instance (+ database/user/URL secret) and wire the connection-string secret file + the /cloudsql socket into the orchestrator. false disables the feature entirely and keeps the stack at $0."
   default     = false
 }
 
@@ -1491,7 +1482,7 @@ variable "substrate_worker_pool" {
 
 variable "substrate_planner_image" {
   type        = string
-  description = "Container image an actor workspace is created from. Empty falls back to the per-run image a caller names, which the planner takes from org settings. It is NOT the Cloud Run planner image: an actor needs the agent toolchain in the image, while the Cloud Run service only serves HTTP."
+  description = "Container image an actor workspace is created from (built from deploy/gcp/Dockerfile.substrate-actor). Empty falls back to the per-run image a caller names, which the orchestrator takes from org settings. It is NOT the orchestrator's Cloud Run image: an actor needs the agent toolchain in the image, while the Cloud Run service only serves HTTP."
   default     = ""
 }
 
@@ -1519,25 +1510,25 @@ variable "substrate_actor_ttl_ms" {
 
 variable "substrate_jwks_url" {
   type        = string
-  description = "JWKS the planner uses to verify a substrate actor's own JWT at POST /internal/substrate/actor. Empty disables that endpoint (it stays closed unless BOTH substrate_actor_mode and this are set) — which is the safe half-state, since the endpoint accepts a prompt on behalf of an org."
+  description = "JWKS the orchestrator uses to verify a substrate actor's own JWT at POST /internal/plan/run. Empty disables that endpoint (it stays closed unless BOTH substrate_actor_mode and this are set) — which is the safe half-state, since the endpoint accepts a prompt on behalf of an org."
   default     = ""
 }
 
 variable "substrate_actor_mode" {
   type        = bool
-  description = "Accept actor-originated dispatches on the planner. Paired with substrate_jwks_url: the endpoint refuses to open for a deployment that cannot verify the token it would be trusting."
+  description = "Accept actor-originated dispatches on the orchestrator. Paired with substrate_jwks_url: the endpoint refuses to open for a deployment that cannot verify the token it would be trusting."
   default     = false
 }
 
 variable "substrate_actor_member" {
   type        = string
-  description = "The IAM member a substrate actor invokes the planner as — a Google service account email, or the Workload Identity Federation principal of the cluster identity the actors run under (the same identity SUBSTRATE_TRUST_DOMAIN describes). It is the receiving half of substrate_actor_mode: empty creates no invoker binding, so the router is mounted but nobody can reach it. You cannot open /internal/plan/run without naming WHO may call it."
+  description = "The IAM member a substrate actor invokes the orchestrator as — a Google service account email, or the Workload Identity Federation principal of the cluster identity the actors run under (the same identity SUBSTRATE_TRUST_DOMAIN describes). It is the receiving half of substrate_actor_mode: empty creates no invoker binding, so the router is mounted but nobody can reach it. You cannot open /internal/plan/run without naming WHO may call it."
   default     = ""
 }
 
 variable "substrate_actor_jwt_audience" {
   type        = string
-  description = "audience a substrate actor JWT must carry to be accepted by the planner's /internal/plan/run. It is whatever the control plane stamps, not a value invented here; the default matches substrate-runner's own default."
+  description = "audience a substrate actor JWT must carry to be accepted by the orchestrator's /internal/plan/run. It is whatever the control plane stamps, not a value invented here. One name serves both halves: packages/shared-core/src/agent/substrate-runner.js mints the data-plane token for this audience and packages/shared/src/agent/substrate-actor.js verifies against it, so changing it is a coordinated redeploy, not a per-service edit. Actor mode does not start without it - there is no longer a code-side default to fall back on."
   default     = "substrate-router"
 }
 
@@ -1545,6 +1536,47 @@ variable "substrate_trust_domain" {
   type        = string
   description = "SPIFFE trust domain an actor identity is issued under (the prefix of its JWT sub). The substrate root names it; a mismatch fails verification closed."
   default     = "cluster.local"
+}
+
+variable "kagent_enabled" {
+  type        = bool
+  description = "Admit the kagent backend: without it the gateway answers /api/workflows/kagent/capabilities with enabled:false and every kagent publish returns 503 kagent_not_configured, whatever kagent_api_url says. Two switches rather than one because kagent.js gates on the flag first and on the address second — and because an operator may want the address plumbed into the deployment without the platform writing CRDs to that cluster yet."
+  default     = false
+}
+
+variable "kagent_api_url" {
+  type        = string
+  description = "Base URL of the Kubernetes API server hosting the api.kagent.dev CRDs (https://kubernetes.default.svc in-cluster). Empty leaves the backend inert even when kagent_enabled is true; kagent.tf emits both names or neither."
+  default     = ""
+}
+
+variable "kagent_namespace" {
+  type        = string
+  description = "Namespace holding the kagent control plane and the agents this platform applies (the upstream install default is 'kagent'). It is a scope, not a per-tenant partition: the adapter's Role must reach only this namespace, or one tenant's publish writes into another's agents."
+  default     = "kagent"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.kagent_namespace))
+    error_message = "kagent_namespace must be a lowercase DNS-label-like name (letters, digits, interior hyphens)."
+  }
+}
+
+variable "kagent_token_file" {
+  type        = string
+  description = "Path to the Kubernetes service-account TOKEN, read from the file the cluster or a mounted Secret version puts there. A path only: the token itself never enters this root's plaintext env maps, a plan, or an agent container's environment. Leave empty inside a cluster, where kagent.js uses its own in-cluster mount."
+  default     = ""
+}
+
+variable "kagent_ca_file" {
+  type        = string
+  description = "Path to the PEM that verifies the API server's certificate. Out-of-cluster endpoints need it; an in-cluster deployment gets the same from the mounted SA ca.crt. A path, never the certificate body."
+  default     = ""
+}
+
+variable "kagent_timeout_ms" {
+  type        = number
+  description = "Per-request budget for a kagent API call. CRD applies are not slow, so a larger value is a hung cluster discovered late, and a smaller one turns a slow apiserver into a failed publish."
+  default     = 15000
 }
 
 variable "environment_init_enabled" {

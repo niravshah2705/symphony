@@ -85,8 +85,7 @@ locals {
   # what makes a disputed debit answerable after Firestore has pruned the rows.
   observability_sink_services = length(var.observability_log_services) > 0 ? var.observability_log_services : [
     var.gateway_service_name,
-    var.planner_service_name,
-    var.coder_service_name,
+    var.orchestrator_service_name,
     var.proxy_service_name,
     var.billing_service_name,
     var.provisioner_service_name,
@@ -104,9 +103,6 @@ locals {
     {
       "job-${var.billing_job_name}" = {
         filter = "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${var.billing_job_name}\""
-      }
-      "job-${var.coder_job_name}" = {
-        filter = "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${var.coder_job_name}\""
       }
     }
   ) : {}

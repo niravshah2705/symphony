@@ -123,10 +123,9 @@ function envNamesRead() {
   const dirs = [
     path.join(ROOT, 'packages', 'shared-core', 'src'),
     path.join(ROOT, 'packages', 'shared', 'src'),
-    path.join(ROOT, 'services', 'planner', 'src'),
+    path.join(ROOT, 'services', 'orchestrator', 'src'),
     path.join(ROOT, 'services', 'provisioner', 'src'),
     path.join(ROOT, 'services', 'gateway', 'src'),
-    path.join(ROOT, 'services', 'coder', 'src'),
   ];
   const names = new Set();
   const walk = (dir) => {
@@ -149,14 +148,14 @@ function envNamesEmitted() {
   return new Set([...code.matchAll(/\b(SUBSTRATE_[A-Z0-9_]+)\s*=/g)].map(([, n]) => n));
 }
 
-/** The body of a `NAME = merge(...) }` local inside cloud_run.tf's locals block. */
-function envLocal(name) {
-  const start = cloudRunTf.indexOf(`  ${name} = merge(`);
-  assert.notEqual(start, -1, `${name} local not found in cloud_run.tf`);
-  const ends = [cloudRunTf.indexOf('\n  )', start), cloudRunTf.indexOf('\n  }', start)]
+/** The body of a `NAME = merge(...) { ... }` local, closing at dedent. */
+function envLocal(name, text = cloudRunTf) {
+  const start = text.indexOf(`  ${name} = merge(`);
+  assert.notEqual(start, -1, `${name} local not found`);
+  const ends = [text.indexOf('\n  )', start), text.indexOf('\n  }', start)]
     .filter((i) => i > -1);
   assert.ok(ends.length, `${name} local does not close`);
-  return cloudRunTf.slice(start, Math.min(...ends));
+  return text.slice(start, Math.min(...ends));
 }
 
 /** A `variable "x" { ... }` block body, or null. */
@@ -191,7 +190,7 @@ test('every substrate setting the code can honor is reachable from Terraform', (
   const unsurfaced = [...envNamesRead()].filter((name) => !emitted.has(name));
   // SUBSTRATE_TOKEN is the ONE accepted gap: a bearer for the control plane is a
   // credential, and a credential inside these maps would be printed by an agent
-  // `env` and land on coder-control too. It gets Secret Manager or nothing.
+  // `env` and reach every dispatcher. It gets Secret Manager or nothing.
   assert.deepEqual(unsurfaced, ['SUBSTRATE_TOKEN'], 'substrate.tf must surface every non-credential SUBSTRATE_* name');
   assert.match(
     substrateTf,
@@ -205,35 +204,33 @@ test('no credential-shaped key is ever emitted into the substrate env maps', () 
     assert.doesNotMatch(
       name,
       /(TOKEN|SECRET|KEY|PASSWORD)$/,
-      `${name} looks like a credential; substrate_env is a plaintext env map that reaches coder-control`,
+      `${name} looks like a credential; substrate_env is a plaintext env map that reaches the dispatchers`,
     );
   }
 });
 
-test('substrate env reaches the dispatchers and never the worker', () => {
-  const planner = envLocal('planner_env');
-  const control = envLocal('coder_control_env');
-  assert.ok(planner && control, 'planner_env / coder_control_env locals not found in cloud_run.tf');
-  // The planner is the only service with the actor callback endpoint, so only it
-  // gets the pair; the others get the control-plane map.
-  assert.match(planner, /local\.substrate_env,/);
-  assert.match(control, /local\.substrate_control_env,/);
-  assert.doesNotMatch(control, /local\.substrate_env,/, 'coder-control does not verify actor JWTs');
+test('substrate env reaches the dispatchers and no other workload', () => {
+  const pipelineTf = tfFile('pipeline.tf');
+  const orchestrator = envLocal('orchestrator_env', pipelineTf);
+  // The orchestrator is the only service with the actor callback endpoint, so
+  // it is the only one that gets the verification pair; everything else that
+  // dispatches gets the control-plane map alone.
+  assert.match(orchestrator, /local\.substrate_env,/);
   assert.match(
     provisionerTf,
     /local\.substrate_control_env,/,
     'the provisioner answers the atespace step and cannot do it without the address',
   );
+  [...ACTOR_KEYS].forEach((k) => assert.doesNotMatch(
+    provisionerTf, new RegExp(k), `the provisioner must not carry ${k}`,
+  ));
 
-  // coder-worker is the container that executes model-generated code. It must
-  // not learn where the control plane is.
-  const worker = envLocal('coder_worker_env');
-  assert.doesNotMatch(worker, /local\.substrate/, 'substrate env reached the container that runs model code');
-  assert.match(
-    worker,
-    /Deliberately NO substrate env/,
-    'the omission needs a reason here, or the next person adds the merge line for symmetry',
-  );
+  // The retired deployer was the other in-boundary stage executor; the
+  // cloud_run.tf services never talk to the control plane. This is the promise
+  // substrate.tf makes — a workload that runs or ships code without confinement
+  // must not be handed the address that creates actors.
+  assert.doesNotMatch(pipelineTf, /deployer_env/, 'the retired deployer env must not return');
+  assert.doesNotMatch(cloudRunTf, /local\.substrate/, 'a cloud_run.tf service receives substrate env');
 });
 
 test('the actor callback opens only with an identity allowed to call it', () => {
@@ -254,24 +251,59 @@ test('the actor callback opens only with an identity allowed to call it', () => 
     ['SUBSTRATE_ACTOR_JWT_AUDIENCE', 'SUBSTRATE_ACTOR_MODE', 'SUBSTRATE_JWKS_URL', 'SUBSTRATE_TRUST_DOMAIN'],
     'the actor verification config travels as one unit',
   );
-  // Match the endpoint's own predicate, which requires both (a half-pair reads as
-  // "enabled" in Terraform and stays shut in the planner).
+  // Match the endpoint's own predicate: the router mounts only on all three names.
+  // The audience joined deliberately — a verifier with no declared audience silently
+  // accepts whatever token the router forwards, which is the shared-audience defect.
+  const actorRoute = read('packages', 'shared', 'src', 'agent', 'substrate-actor.js');
   assert.match(
-    read('services', 'planner', 'src', 'routes', 'substrate-actor.js'),
-    /process\.env\.SUBSTRATE_ACTOR_MODE === 'true' && !!process\.env\.SUBSTRATE_JWKS_URL/,
-    'the planner no longer opens the endpoint on both names — update the gate here',
+    actorRoute,
+    /process\.env\.SUBSTRATE_ACTOR_MODE === 'true'\s*&&\s*!!process\.env\.SUBSTRATE_JWKS_URL\s*&&\s*!!process\.env\.SUBSTRATE_ACTOR_JWT_AUDIENCE/,
+    'the orchestrator no longer opens the endpoint on those names — update the gate here',
+  );
+  // ...and actor mode with an incomplete pair is a startup failure, not a quiet 404.
+  assert.match(
+    actorRoute,
+    /function actorModeFault\(\)[\s\S]{0,600}SUBSTRATE_JWKS_URL', 'SUBSTRATE_ACTOR_JWT_AUDIENCE'/,
+    'actorModeFault must name both required declarations',
+  );
+  // The control-plane image boots through agent-server.js; the actor image through
+  // substrate-actor-entry.js, which mounts unconditionally. Both must refuse to start
+  // on half-configured actor mode — one of them staying quiet is how a misdeployed
+  // actor image came up serving a route that verifies nothing.
+  assert.match(
+    read('services', 'orchestrator', 'src', 'agent-server.js'),
+    /actorModeMisconfigured\(\)[\s\S]{0,300}throw new Error\(/,
+    'the agent service must refuse to start on half-configured actor mode, not mount nothing',
+  );
+  assert.match(
+    read('services', 'orchestrator', 'src', 'substrate-actor-entry.js'),
+    /actorModeFault\(\)[\s\S]{0,400}throw new Error\(/,
+    'the actor image entry mounts unconditionally, so its own startup refusal is the only gate',
+  );
+  // The dispatcher mints for the SAME declared audience the verifier checks. Two
+  // literals spelled alike on either side of the wire is how one token authenticated
+  // at every consumer.
+  assert.match(
+    read('packages', 'shared-core', 'src', 'agent', 'substrate-runner.js'),
+    /CONFIG\?\.SUBSTRATE\?\.actorJwtAudience/,
+    'substrate-runner must mint from the configured audience',
+  );
+  assert.match(
+    read('packages', 'shared-core', 'src', 'config.js'),
+    /actorJwtAudience: process\.env\.SUBSTRATE_ACTOR_JWT_AUDIENCE/,
+    'the audience has to be read from the name substrate.tf emits',
   );
 
   // The receiving half: Cloud Run answers 403 before that route's JWT check ever
-  // runs unless the actor identity holds run.invoker on the planner, so an
+  // runs unless the actor identity holds run.invoker on the orchestrator, so an
   // operator who sets the env without the binding gets a dead endpoint and no
   // error. Both switch on the same variable, which is the only thing making the
   // pairing enforceable.
-  const invoker = /resource "google_cloud_run_v2_service_iam_member" "substrate_actor_invokes_planner" \{([\s\S]*?)\n\}/.exec(iamTf);
-  assert.ok(invoker, 'no run.invoker binding for the substrate actor on the planner');
+  const invoker = /resource "google_cloud_run_v2_service_iam_member" "substrate_actor_invokes_orchestrator" \{([\s\S]*?)\n\}/.exec(iamTf);
+  assert.ok(invoker, 'no run.invoker binding for the substrate actor on the orchestrator');
   assert.match(invoker[1], /trimspace\(var\.substrate_actor_member\) != "" \? 1 : 0/);
   assert.match(invoker[1], /roles\/run\.invoker/);
-  assert.match(invoker[1], /google_cloud_run_v2_service\.planner\.name/);
+  assert.match(invoker[1], /google_cloud_run_v2_service\.orchestrator\.name/);
   assert.equal(varDefault('substrate_actor_member'), '""');
 
   // ...and the member it accepts must be a named workload identity, never an
@@ -529,10 +561,14 @@ test('atespace names Terraform accepts are names the app will not silently drop'
   // mirror asserts the same shape; a name that only one of them accepts is a
   // binding that refuses at run time with no trace of the typo.
   const slugLiteral = '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$';
-  // substrate_atespace, substrate_worker_pool, the list entries and the map values.
+  // substrate_atespace, substrate_worker_pool, the list entries, the map values,
+  // and kagent_namespace — the same DNS-label shape, validated identically, so it
+  // belongs in this count. A new slug-shaped variable that lands here without a
+  // validation fails on the number, which is the tripwire working: the name above
+  // the loop is where you decide whether it is atespace-shaped or not.
   assert.equal(
     variablesTf.split(slugLiteral).length - 1,
-    4,
+    5,
     'every atespace-shaped variable needs the slug validation',
   );
   const js = read('packages', 'shared-core', 'src', 'config.js');

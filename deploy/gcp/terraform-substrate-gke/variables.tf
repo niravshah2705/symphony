@@ -284,15 +284,30 @@ variable "substrate_ingress_hostname" {
 }
 
 variable "substrate_ateapi_service" {
-  description = "Name of the ateapi Control-plane Service created by `ate-setup deploy ate-system`, used as the control-plane route backend."
+  description = <<EOT
+    Name of the Control-plane Service created by `ate-setup deploy ate-system`,
+    used as the control-plane route backend. It is `api`, not `ateapi`: `ateapi`
+    is the proto package in the route's path match
+    (`/substrate.ateapi.v1.Control`) and the name of the token's Secret Manager
+    container, and neither is a Service name. The credential's audience is the
+    FQDN built from this name — `api.ate-system.svc`, per ConfigMap
+    ate-api-authentication and substrate-token-rotate.yml — so a wrong value here
+    does not merely misroute, it makes the token the cluster demands
+    unverifiable. `substrate-ingress-config.test.js` pins the three spellings
+    together.
+EOT
   type        = string
-  default     = "ateapi"
+  default     = "api"
 }
 
 variable "substrate_ateapi_port" {
-  description = "Port of the ateapi Control-plane Service, used as the control-plane route backend port."
+  description = <<EOT
+    Port of the Control-plane Service, used as the control-plane route backend
+    port. The `api` Service exposes 443 (`grpc`) and 8445 (`exchange`); 443 is
+    the Control API. There is no 8443 in ate-system.
+EOT
   type        = number
-  default     = 8443
+  default     = 443
 }
 
 variable "substrate_control_plane_public" {
@@ -301,11 +316,29 @@ variable "substrate_control_plane_public" {
     (path prefix /substrate.ateapi.v1.Control), so substrateUrl can be the same
     public host as substrateIngressUrl. Default false: the control plane creates
     and deletes actors and mints actor JWTs, and this config adds no caller
-    authentication in front of it. Leave false until the planner reaches ateapi
+    authentication in front of it. Leave false until the orchestrator reaches ateapi
     over VPC egress or an authN policy is attached to that route.
 EOT
   type        = bool
   default     = false
+}
+
+variable "substrate_token_creator_user" {
+  description = <<EOT
+    Kubernetes USER allowed to mint the ate-client token that
+    substrate-token-rotate.yml publishes. Empty derives the identity the
+    workflows federate as, gh-deployer@<project>.iam.gserviceaccount.com —
+    spelled from var.project_id rather than read through a data source,
+    because bootstrap.sh creates that service account outside this state.
+
+    Subject kind matters: a GCP service account reaching GKE through Workload
+    Identity Federation arrives with its email as its Kubernetes username, so
+    this names a User. Putting a `serviceAccount:` member there binds nothing
+    and the mint fails as a 403 on the `serviceaccounts/token` subresource,
+    which is easy to misread as a missing verb.
+EOT
+  type        = string
+  default     = ""
 }
 
 variable "substrate_snapshot_storage_class" {

@@ -56,20 +56,19 @@ async function openSettings(page) {
 }
 
 test.describe('substrate pattern toggle', () => {
-  test('both tiles render and cloudrun is active by default', async ({ page }) => {
+  test('substrate is the only pattern tile and is active by default', async ({ page }) => {
     await stubSettingsSurface(page);
     await openSettings(page);
 
     const tiles = page.locator('.sx-tiles[data-lock-key="agentPattern"]');
-    await expect(tiles.getByRole('button', { name: /Cloud Run \(in-process\)/ })).toBeVisible();
     await expect(tiles.getByRole('button', { name: /Agent Substrate/ })).toBeVisible();
-    await expect(tiles.locator('button')).toHaveCount(2);
+    await expect(tiles.locator('button')).toHaveCount(1);
 
-    // The active tile gets the `active` class; substrate config card is only
-    // rendered when the active pattern is substrate.
+    // The active tile gets the `active` class; substrate config card renders
+    // because substrate is the only execution substrate.
     const active = tiles.locator('button.active .sx-tile-name');
-    await expect(active).toHaveText('Cloud Run (in-process)');
-    await expect(page.getByRole('button', { name: 'Save substrate config' })).toHaveCount(0);
+    await expect(active).toHaveText('Agent Substrate');
+    await expect(page.getByRole('button', { name: 'Save substrate config' })).toBeVisible();
   });
 
   test('clicking Agent Substrate tile saves the pattern and reveals the config card', async ({ page }) => {
@@ -100,22 +99,6 @@ test.describe('substrate pattern toggle', () => {
 
     // And the shared guardrails card is always present, above or below.
     await expect(page.locator('.sx-card-title', { hasText: 'Security guardrails (shared)' })).toBeVisible();
-  });
-
-  test('toggling back to cloudrun hides the substrate config card', async ({ page }) => {
-    await stubSettingsSurface(page, { settings: { agentPattern: 'substrate', substrateUrl: 'https://ateapi.internal:8443' } });
-    await openSettings(page);
-
-    await expect(page.getByRole('button', { name: 'Save substrate config' })).toBeVisible();
-
-    await page.route('**/api/agent/substrate/pattern', (route) => json(route, {
-      ok: true, settings: { agentPattern: 'cloudrun' },
-    }));
-    await page.locator('.sx-tiles[data-lock-key="agentPattern"]')
-      .getByRole('button', { name: /Cloud Run/ })
-      .click();
-
-    await expect(page.getByRole('button', { name: 'Save substrate config' })).toHaveCount(0);
   });
 
   test('shared guardrails panel persists a spec edit via /api/agent/guardrail', async ({ page }) => {

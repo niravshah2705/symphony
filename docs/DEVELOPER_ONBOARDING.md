@@ -75,14 +75,16 @@ and their local infrastructure processes with prefixed output:
   receives only its loopback `STREAM_TOKEN_SERVICE_URL`; planner/coder and the
   gateway never receive the secret.
 - **gateway** (`services/gateway/src/index.js`) wires the user-facing routes,
-  serves the SPA, and **reverse-proxies** `/api/agent/*` → planner and
-  `/api/coder/*` → coder. It is the only browser-facing origin.
-- **planner** (`services/planner/src/index.js`) mounts `/api/agent` and
+  serves the SPA, and **reverse-proxies** `/api/agent/*` and
+  `/api/coder/*` → the orchestrator agent surface. It is the only browser-facing origin.
+- **orchestrator agent surface** (`services/orchestrator/src/agent-server.js`)
+  mounts `/api/agent` + `/api/coder` and
   **starts the enrichment scheduler** (`scheduler.startScheduler()`), which also
-  reconciles interrupted jobs.
-- **coder** (`services/coder/src/index.js`) mounts `/api/coder` and **starts the
-  board monitor** so `aiplanned` projects are picked up automatically (each poll
-  self-guards on missing keys).
+  reconciles interrupted jobs. The same surface is mounted inside the pipeline
+  orchestrator in the cloud, and inside every substrate actor.
+- Agent runs (planning, code-writing, testing) execute in **Agent Substrate
+  actors** — per-run gVisor sandboxes dispatched by the orchestrator; the
+  retired coder board monitor no longer polls (the durable pipeline owns dispatch).
 
 The application services import the same `@ai-fleet/shared` library, so there
 is exactly one copy of every module (config, store, Linear client, deep-agent
@@ -102,7 +104,7 @@ required for normal use. Secrets are validated and stored **server-side** in
    switch it on in the same section.)
 2. **Task Models** → assign a model to each task role ("models as tasks"):
    **Thinking** (planner), **Execution** (coder), **Testing** (tester), and
-   **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or
+   **Deployment** (retired deploy stage). Each role picks any provider — local (Ollama / LM Studio / OMLX) or
    hosted (OpenAI / Anthropic). Selecting a preset applies its model,
    context/output budgets, sampling, JSON mode, and native reasoning control
    together. Expand **Customize parameters** only for an override; **Reset to
@@ -146,8 +148,10 @@ The SPA (`public/js/app.js`) hash-routes between workspace views; the core plann
 
 ## 5. Agent stages and durable orchestration (developer mental model)
 
-Each execution stage runs in an isolated service (`services/planner`,
-`services/coder`, `services/tester`, `services/deployer`). They are built from
+Planning and code-writing are task *roles*, not services: the stage handlers run
+in the orchestrator (`services/orchestrator`) and each agent run executes inside
+an **Agent Substrate actor** (gVisor on GKE). The deploy stage was retired with
+the Cloud Run deployer (2026-11): runs end after test. Stages are built from
 the SAME **workflow-driven framework** that lives once in
 the shared library (`packages/shared/src/agent/framework.js`), configured by a
 declarative *workflow file* (`agent/workflows/*.workflow.js`). A workflow declares
@@ -155,8 +159,7 @@ its **skills**, **tools**, backend, and system prompt; the framework installs th
 skills, builds the `deepagents` agent (FilesystemBackend for the planner,
 LocalShellBackend for the coder), and runs it. Both share the LLM provider factory
 (`agent/llm.js` → `resolveLlm`), which resolves a model by **task role**: the
-planner runs on **`thinking`**, coder on **`execution`**, tester on **`testing`**,
-and deployer on **`deployment`**.
+planner runs on **`thinking`**, coder on **`execution`**, tester on **`testing`**.
 Each role independently names any provider — local (Ollama / LM Studio) or hosted
 (OpenAI / Anthropic) — and reuses that provider's shared config block. Repoint a
 role in **Settings → Task Models** to change which model runs that task.
@@ -175,7 +178,7 @@ role in **Settings → Task Models** to change which model runs that task.
   (`LINEAR_MCP_ENABLED`, `GITHUB_MCP_ENABLED`). In proxy mode their credentials
   are injected from the scope vault; both are off by default.
 
-The rollout-gated durable pipeline is **plan → code → test → deploy**. It uses
+The rollout-gated durable pipeline is **plan → code → test**. It uses
 versioned secret-free commands/results, Firestore PipelineRun/StageRun state, and
 a LangGraph checkpointer. Linear labels are visibility projections only. With
 the rollout flag off, the legacy scheduled planner/coder chain remains active.
@@ -251,13 +254,8 @@ packages/shared/              @ai-fleet/shared — ONE copy of all business logi
 services/                     isolated processes with explicit dependency boundaries
   gateway/src/                :4000 — SDK-free browser/domain API + pipeline admission
     index.js  proxy.js  routes/ (settings · projects · issues · businesses · roles · codex · claude)
-  planner/src/                :4010 — mounts /api/agent, boots scheduler
-    index.js  routes/agent.js
-  coder/src/                  :4020 — mounts /api/coder, boots board monitor
-    index.js  routes/coder.js
-  tester/src/                 :4050 — typed testing-stage consumer
-  deployer/src/               :4060 — approval/policy-gated deployment consumer
-  orchestrator/src/           :4070 — SDK-free durable LangGraph control plane
+  orchestrator/src/           :4010 agent surface + :4070 durable LangGraph
+                              control plane + substrate dispatch
 
 scripts/
   start-all.js                boot legacy services; adds pipeline services when rollout is enabled

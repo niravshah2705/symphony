@@ -22,42 +22,20 @@ output "stream_token_legacy_gateway_secret_access_enabled" {
   value       = var.stream_token_legacy_gateway_secret_access
 }
 
-output "planner_uri" {
-  description = "Planner URL — IAM-gated (no allUsers invoker); only gateway-sa and pubsub-push-sa can call it via OIDC."
-  value       = google_cloud_run_v2_service.planner.uri
-}
-
-output "coder_control_uri" {
-  description = "Coder-control URL — IAM-gated (no allUsers invoker); only gateway-sa and pubsub-push-sa can call it via OIDC."
-  value       = google_cloud_run_v2_service.coder_control.uri
-}
-
 output "pipeline_orchestrator_uri" {
-  description = "IAM-gated durable pipeline control-plane URL (null while the rollout flag is off)."
-  value       = one(google_cloud_run_v2_service.orchestrator[*].uri)
-}
-
-output "pipeline_tester_uri" {
-  description = "IAM-gated brokered tester URL (null while the rollout flag is off)."
-  value       = one(google_cloud_run_v2_service.tester[*].uri)
-}
-
-output "pipeline_deployer_uri" {
-  description = "IAM-gated brokered deployer URL (null while the rollout flag is off)."
-  value       = one(google_cloud_run_v2_service.deployer[*].uri)
+  description = "IAM-gated orchestrator URL — the browser agent surface, legacy planner queue, durable pipeline control plane, and substrate control plane all live on this one service."
+  value       = google_cloud_run_v2_service.orchestrator.uri
 }
 
 output "pipeline_topics" {
   description = "Dedicated durable pipeline topics. Empty while the rollout flag is off."
   value = var.pipeline_orchestrator_enabled ? {
-    plan           = google_pubsub_topic.pipeline_plan[0].name
-    code           = google_pubsub_topic.pipeline_code[0].name
-    test           = google_pubsub_topic.pipeline_test[0].name
-    deploy         = google_pubsub_topic.pipeline_deploy[0].name
-    plan_results   = google_pubsub_topic.pipeline_results["plan"].name
-    code_results   = google_pubsub_topic.pipeline_results["code"].name
-    test_results   = google_pubsub_topic.pipeline_results["test"].name
-    deploy_results = google_pubsub_topic.pipeline_results["deploy"].name
+    plan         = google_pubsub_topic.pipeline_plan[0].name
+    code         = google_pubsub_topic.pipeline_code[0].name
+    test         = google_pubsub_topic.pipeline_test[0].name
+    plan_results = google_pubsub_topic.pipeline_results["plan"].name
+    code_results = google_pubsub_topic.pipeline_results["code"].name
+    test_results = google_pubsub_topic.pipeline_results["test"].name
   } : {}
 }
 
@@ -96,11 +74,6 @@ output "email_topic_name" {
   value       = google_pubsub_topic.email.name
 }
 
-output "coder_worker_job" {
-  description = "Cloud Run Job name launched per ticket by coder-control."
-  value       = google_cloud_run_v2_job.coder_worker.name
-}
-
 output "spa_bucket" {
   description = "GCS bucket hosting the SPA."
   value       = google_storage_bucket.spa.name
@@ -117,12 +90,12 @@ output "spa_website_url" {
 }
 
 output "skills_bucket" {
-  description = "Terraform-created GCS bucket holding versioned agent-skill bundles (null when skills_enabled = false). Name defaults to '<project_id>-aifleet-skills'. Mounted read-only on planner + coder at /skills; the runtime pins var.skills_version. The CI publish workflow targets this same name."
+  description = "Terraform-created GCS bucket holding versioned agent-skill bundles (null when skills_enabled = false). Name defaults to '<project_id>-aifleet-skills'. Mounted read-only on the orchestrator at /skills; the runtime pins var.skills_version. The CI publish workflow targets this same name."
   value       = one(google_storage_bucket.skills[*].name)
 }
 
 output "skills_version_pinned" {
-  description = "Skills bundle version the planner/coder currently pin (SKILLS_VERSION). Bump var.skills_version after publishing a new bundle to roll the deployment forward."
+  description = "Skills bundle version the orchestrator currently pins (SKILLS_VERSION). Bump var.skills_version after publishing a new bundle to roll the deployment forward."
   value       = local.skills_enabled ? var.skills_version : null
 }
 
@@ -137,7 +110,7 @@ output "memory_db_instance" {
 }
 
 output "memory_db_connection_name" {
-  description = "Cloud SQL connection name (project:region:instance) the planner/coder mount as the /cloudsql unix socket."
+  description = "Cloud SQL connection name (project:region:instance) the orchestrator mounts as the /cloudsql unix socket."
   value       = one(google_sql_database_instance.memory[*].connection_name)
 }
 
@@ -179,7 +152,21 @@ output "substrate" {
     actor_endpoint    = length(local.substrate_actor_env) > 0
     actor_invoker     = var.substrate_actor_member
     env_keys          = sort(keys(local.substrate_env))
-    services          = local.substrate_enabled ? ["planner", "coder-control", "provisioner"] : []
+    services          = local.substrate_enabled ? ["orchestrator", "provisioner"] : []
+  }
+}
+
+output "kagent" {
+  description = "What this root told the gateway about the kagent runtime. configured=false means no KAGENT_* env was emitted and publish stays 503 kagent_not_configured — the default. The two halves are reported separately on purpose: kagent_enabled is the switch and kagent_api_url is the address, and kagent.js requires both, so enabled=true with an empty url is a deployment that plans clean and publishes nothing. token_file/ca_file are paths, never contents."
+  value = {
+    configured = local.kagent_enabled
+    switch     = var.kagent_enabled
+    api_url    = var.kagent_api_url
+    namespace  = var.kagent_namespace
+    token_file = var.kagent_token_file
+    ca_file    = var.kagent_ca_file
+    env_keys   = sort(keys(local.kagent_env))
+    services   = local.kagent_enabled ? ["gateway"] : []
   }
 }
 

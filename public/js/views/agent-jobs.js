@@ -16,6 +16,14 @@ function stopRefresh() {
   }
 }
 
+/** See views/agent.js: the stream and the expanded-job set belong to the
+ * organization that opened them, so a workspace switch clears both. */
+export function invalidate() {
+  renderGeneration += 1;
+  stopRefresh();
+  expandedJobs.clear();
+}
+
 function routeActive() {
   return location.hash === '#/agent-jobs' || location.hash.startsWith('#/agent-jobs/');
 }

@@ -11,6 +11,7 @@ const TRACKED_ROUTES = new Set([
   'workflows',
   'agent-jobs',
   'calls',
+  'actors',
   'business',
   'projects',
   'board',

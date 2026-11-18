@@ -1,12 +1,12 @@
 ---
 name: code-review-graph
-description: "Use before grep/read whenever a task in this repo requires locating or tracing code — including tasks that don't say \"search\" explicitly, like \"change/update/fix/bump <a setting or config value>\", \"remove this function\", \"add a field to X\", or any change whose first step is finding where something lives. Also covers direct lookups: \"where is X defined\", \"who calls X\", \"what imports/uses X\", \"what breaks if I change X\", \"tests for X\", \"blast radius of this change\". Wraps the code-review-graph (CRG) CLI/MCP: a SQLite structural graph (functions/classes/tests, CALLS/IMPORTS edges, full-text search) kept fresh by a pre-commit hook. Do NOT use for config values, log strings, comments, generic YAML, or Terraform variable *usage* lookups — those stay grep territory (see gap note below)."
+description: "Use before grep/read whenever a task in this repo requires locating or tracing code — including tasks that don't say \"search\" explicitly, like \"change/update/fix/bump <a setting or config value>\", \"remove this function\", \"add a field to X\", or any change whose first step is finding where something lives. Also covers direct lookups: \"where is X defined\", \"who calls X\", \"what imports/uses X\", \"what breaks if I change X\", \"tests for X\", \"blast radius of this change\". Wraps the code-review-graph (CRG) CLI/MCP: a SQLite structural graph (functions/classes/tests, CALLS/IMPORTS edges, full-text search) kept fresh by a post-commit hook. Do NOT use for config values, log strings, comments, generic YAML, or Terraform variable *usage* lookups — those stay grep territory (see gap note below)."
 ---
 
 # code-review-graph (CRG) — structural code search before grep
 
 CRG is already installed and its index (`.code-review-graph/graph.db`) is
-already built in this repo — kept in sync by `.githooks/pre-commit`. Don't
+already built in this repo — refreshed in the background by `.githooks/post-commit`. Don't
 spend a call checking `which code-review-graph` or `--help`; the full command
 surface is below, use it directly.
 

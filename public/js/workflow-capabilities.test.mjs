@@ -1,0 +1,105 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  createCapabilitiesReader,
+  harnessChoices,
+  modelConfigChoices,
+  mcpChoices,
+  modelConfigEmptyLabel,
+  capabilitiesSummary,
+} from './workflow-capabilities.mjs';
+
+function reader(responses) {
+  const calls = [];
+  const capabilities = createCapabilitiesReader({
+    read: async () => {
+      calls.push(1);
+      const next = responses.shift() ?? responses[0];
+      if (next instanceof Error) throw next;
+      return next;
+    },
+  });
+  return { capabilities, calls };
+}
+
+const ENABLED = Object.freeze({
+  enabled: true,
+  namespace: 'fleet-agents',
+  harnesses: ['my-first-harness', 'codex', 'my-first-harness', '  '],
+  modelConfigs: ['openrouter-model-config', 'default-model-config'],
+  remoteMcpServers: ['kagent-tool-server'],
+  agentTemplates: [],
+});
+
+test('the reader dedupes concurrent opens and caches only a real answer', async () => {
+  const { capabilities, calls } = reader([ENABLED]);
+  const [first, second] = await Promise.all([capabilities.load('org-a'), capabilities.load('org-a')]);
+  assert.equal(calls.length, 1, 'two node inspectors opened at once are one cluster read');
+  assert.deepEqual(first, second);
+  assert.equal(first.namespace, 'fleet-agents');
+  assert.deepEqual(first.harnesses, ['my-first-harness', 'codex'], 'a duplicated or blank name is not a second choice');
+
+  await capabilities.load('org-a');
+  assert.equal(calls.length, 1, 'an enabled read is cached for the next inspector');
+
+  capabilities.forget('org-a');
+  await capabilities.load('org-a');
+  assert.equal(calls.length, 2, 'forget is the seam a re-read after an operator changes the cluster uses');
+
+  await capabilities.load('org-b');
+  assert.equal(calls.length, 3, 'the cache is keyed per organization, not global');
+});
+
+test('a refused or failed read is remembered, and only an explicit re-read asks again', async () => {
+  const { capabilities, calls } = reader([
+    { enabled: false, reason: 'kagent_not_configured' },
+    new Error('gateway unavailable'),
+    ENABLED,
+  ]);
+  const off = await capabilities.load('org-a');
+  assert.equal(off.enabled, false);
+  assert.equal(off.reason, 'kagent_not_configured');
+  assert.deepEqual(off.modelConfigs, []);
+
+  await capabilities.load('org-a');
+  await capabilities.load('org-a');
+  assert.equal(calls.length, 1, 'the inspector redraws on every edit; a refusal must not turn that into a request per redraw');
+  assert.deepEqual(capabilities.peek('org-a'), off, 'a refusal is what the field shows, so the summary can name the reason');
+
+  const failed = await capabilities.load('org-a', { force: true });
+  assert.equal(failed.enabled, false, 'a thrown read degrades to no cluster names rather than rejecting the inspector');
+  assert.equal(failed.reason, 'read_failed');
+  assert.match(failed.error, /gateway unavailable/);
+
+  const on = await capabilities.load('org-a', { force: true });
+  assert.equal(on.enabled, true, 'force is how a designer picks up a cluster the operator just turned on');
+  assert.equal(calls.length, 3);
+  assert.equal(capabilities.peek('org-a').namespace, 'fleet-agents');
+});
+
+test('choices put what the namespace holds above what the platform ships', () => {
+  const { capabilities } = reader([ENABLED]);
+  return capabilities.load('org-a').then((caps) => {
+    const harnesses = harnessChoices(caps, ['claude-code', 'codex', 'otel']);
+    assert.deepEqual(harnesses.map((item) => item.value), ['my-first-harness', 'codex', 'claude-code', 'otel']);
+    assert.equal(harnesses[0].source, 'cluster');
+    assert.equal(harnesses[1].source, 'cluster');
+    assert.equal(harnesses[2].source, 'platform', 'a platform harness is offered but marked as not yet deployed');
+
+    assert.deepEqual(modelConfigChoices(caps).map((item) => item.value), ['openrouter-model-config', 'default-model-config']);
+    assert.deepEqual(mcpChoices(caps).map((item) => item.value), ['kagent-tool-server']);
+    assert.equal(modelConfigEmptyLabel(caps), 'Cluster default (from the Harness)');
+    assert.match(capabilitiesSummary(caps), /fleet-agents/);
+  });
+});
+
+test('an empty namespace and an unread one are described differently', () => {
+  const bare = { enabled: true, namespace: '', harnesses: [], modelConfigs: [], remoteMcpServers: [], agentTemplates: [] };
+  assert.equal(modelConfigEmptyLabel(null), 'Reading the cluster…');
+  assert.equal(modelConfigEmptyLabel(bare), 'No ModelConfig in this namespace');
+  assert.equal(modelConfigEmptyLabel({ enabled: false }), 'No ModelConfig names available (kagent not configured)');
+  assert.match(capabilitiesSummary(null), /Reading the cluster/);
+  assert.match(capabilitiesSummary({ enabled: false, reason: 'kagent_not_configured' }), /503/);
+  assert.deepEqual(harnessChoices(null, ['codex']), [{ value: 'codex', label: 'codex', source: 'platform' }]);
+});

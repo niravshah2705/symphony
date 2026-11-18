@@ -16,7 +16,7 @@ sequenceDiagram
   participant O as LangGraph orchestrator
   participant F as Firestore
   participant Q as Dedicated Pub/Sub topics
-  participant A as Planner / Coder / Tester / Deployer
+  participant A as Orchestrator / Substrate actor
   participant P as Egress proxy
 
   U->>G: POST /api/pipeline/runs
@@ -40,10 +40,10 @@ sequenceDiagram
 Each stage has a separate command topic and a separate result topic. Publisher
 IAM lets each worker publish only its own stage result, and the stage-bound
 orchestrator route rejects a body whose `result.stage` differs from the route.
-Legacy planner/coder topics are never reused for typed commands. Labels such as `aiplanned`, `aidone`, `aitested`, and
-`aideployed` are best-effort projections only. Deployment is separately
-default-off, production requires a server-side approval, and the deployer can
-invoke only repository-allowlisted CI/CD through its broker.
+Legacy planner/coder topics are never reused for typed commands. Labels such as `aiplanned`, `aidone`, and
+`aitested` are best-effort projections only. The deploy stage was retired with
+the Cloud Run deployer (2026-11): the loop above covers plan/code/test and the
+run closes as succeeded after test.
 
 ```mermaid
 flowchart TB

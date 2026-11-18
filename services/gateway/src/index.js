@@ -9,6 +9,7 @@ const log = require('@ai-fleet/shared-core/logger');
 const { requireBillingCaller, billingTrustedHeaders } = require('./billing-access');
 const eulaRoutes = require('./routes/eula');
 const { createPipelineRouter } = require('./routes/pipeline');
+const { createWorkflowsRouter } = require('./routes/workflows');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
 const { mountRemovedAgentRouteTombstones } = require('./removed-agent-routes');
@@ -21,6 +22,7 @@ const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared-core/bil
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
 const { initStore, getConversation } = require('@ai-fleet/shared-core/store');
+const kagent = require('@ai-fleet/shared-core/agent/kagent');
 const events = require('@ai-fleet/shared-core/messaging/events');
 const { createCompatibilityHandlers } = require('./publish');
 const sse = require('./sse');
@@ -47,8 +49,8 @@ const streamTokenHandlers = createStreamTokenHandlers({
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
  * the user-facing auth, billing, EULA, publishing, and SSE boundaries, and
  * reverse-proxies model/agent/domain APIs to their isolated services:
- *   /api/agent/*  → planner service (CONFIG.SERVICES.plannerUrl)
- *   /api/coder/*  → coder service   (CONFIG.SERVICES.coderUrl)
+ *   /api/agent/*  → agent surface (CONFIG.SERVICES.agentUrl)
+ *   /api/coder/*  → agent surface   (CONFIG.SERVICES.agentUrl)
  * The frontend keeps calling same-origin /api/* paths and is unaware of the
  * split.
  */
@@ -196,8 +198,8 @@ const gateIssueWrites = (() => {
   return (req, res, next) => (req.method === 'POST' ? gate(req, res, next) : next());
 })();
 
-const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
-const localeProxy = createProxy(CONFIG.SERVICES.plannerUrl, {
+const plannerProxy = createProxy(CONFIG.SERVICES.agentUrl);
+const localeProxy = createProxy(CONFIG.SERVICES.agentUrl, {
   // The planner otherwise sees the gateway socket and loses coarse locale
   // discovery. Only server-derived, bounded values are injected.
   injectHeaders: (req) => ({
@@ -255,6 +257,19 @@ app.use('/api/pipeline', requireAuthenticated(), requirePermission('workspace'),
   startMiddleware: requireEulaAccepted(),
 }));
 
+// Workflow designer (schema v2): Firestore-backed graphs, agent profiles,
+// persona grants, and the kagent/substrate publish surface. Persona gating is
+// enforced inside the router; tenant scope comes from the store context.
+// The kagent adapter is the module-level client, which resolves to `enabled:
+// false` unless KAGENT_ENABLED + KAGENT_API_URL are set, so an unconfigured
+// cluster keeps answering 503 kagent_not_configured rather than guessing at a
+// cluster. The substrate adapter is deliberately NOT passed: nothing implements
+// publishProfile over substrate.js yet, and the router's 503
+// substrate_not_configured is the honest answer until that half exists.
+app.use('/api/workflows', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createWorkflowsRouter({
+  kagentAdapter: kagent,
+}));
+
 // Compatibility starts retain their legacy publishers until the orchestrator
 // rollout switch is enabled, then use fixed plan-only/code-only admission.
 // Registered before the proxies so these exact paths win.
@@ -288,7 +303,7 @@ app.post('/api/agent/conversations/:id/attachments/ask', requirePermission('work
 mountGlobalQuestionsRoutes(app);
 app.use('/api/agent', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
 
-app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createProxy(CONFIG.SERVICES.coderUrl));
+app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
 
 // Identity verification service (DigiLocker / PAN / age proof / APAAR / NAD).
 // Browser calls stay same-origin and are scoped by authenticated user plus the
@@ -417,8 +432,7 @@ initStore()
   .then(() => {
     app.listen(CONFIG.SERVICES.gatewayPort, () => {
       log.info(`AI Fleet gateway running at http://localhost:${CONFIG.SERVICES.gatewayPort}`);
-      log.info(`  → proxying /api/agent to ${CONFIG.SERVICES.plannerUrl}`);
-      log.info(`  → proxying /api/coder to ${CONFIG.SERVICES.coderUrl}`);
+      log.info(`  → proxying /api/agent and /api/coder to ${CONFIG.SERVICES.agentUrl}`);
       // Which admission rule this process will apply, stated at boot. A named
       // `enforced` with no FlexPrice throws, and an uncaught throw in here stops
       // the service — which is the point: that combination is a gate that admits

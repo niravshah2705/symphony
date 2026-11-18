@@ -448,8 +448,7 @@ resource "google_cloud_run_v2_service" "litellm" {
 # spend against.
 resource "google_cloud_run_v2_service_iam_member" "litellm_invoker" {
   for_each = var.litellm_enabled ? toset([
-    google_service_account.planner.email,
-    google_service_account.coder.email,
+    google_service_account.orchestrator.email,
     google_service_account.gateway.email,
     google_service_account.litellm[0].email,
   ]) : toset([])

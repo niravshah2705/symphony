@@ -502,10 +502,15 @@ const OPENROUTER = Object.freeze({
 
 /**
  * Agent Substrate — zero-trust Kubernetes runtime (ateapi gRPC control plane +
- * atenet router/egress). Selected via agentPattern 'substrate'; runs the planner
- * OCI image as a per-run ephemeral sandboxed actor. Empty url by default so the
- * pattern is inert until an operator provisions an ate-system and sets
+ * atenet router/egress). Selected via agentPattern 'substrate'; runs the actor
+ * OCI image (deploy/gcp/Dockerfile.substrate-actor) as a per-run ephemeral
+ * sandboxed actor. Empty url by default so the pattern is inert until an
+ * operator provisions an ate-system and sets
  * SUBSTRATE_URL / SUBSTRATE_INGRESS_URL.
+ * JWT-verification names (SUBSTRATE_JWKS_URL, SUBSTRATE_ACTOR_JWT_AUDIENCE,
+ * SUBSTRATE_TRUST_DOMAIN) are NOT here on purpose: they are read at call time
+ * by the verifier (substrate-jwks.js) and forwarded by upsertActorTemplate
+ * straight from the environment Terraform rendered.
  */
 const SUBSTRATE = Object.freeze({
   url: process.env.SUBSTRATE_URL || '',
@@ -527,6 +532,39 @@ const SUBSTRATE = Object.freeze({
   atespaceByOrg: Object.freeze(parseOrgAtespaces(process.env.SUBSTRATE_ATESPACE_BY_ORG || '')),
   timeoutMs: Number(process.env.SUBSTRATE_TIMEOUT_MS || 60000),
   actorTtlMs: Number(process.env.SUBSTRATE_ACTOR_TTL_MS || 120000),
+  // The audience an actor JWT must carry. The dispatcher mints for this and the
+  // actor's run route verifies against it, so there is exactly one place that
+  // decides what "accepted here" means. Empty falls back to the router's own name
+  // (see agent/substrate-runner.js); a deployment running actor mode must set it —
+  // packages/shared/src/agent/substrate-actor.js refuses to start without it.
+  actorJwtAudience: process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE || '',
+});
+
+/**
+ * Kagent — the in-cluster Kubernetes agent runtime (CRDs in group
+ * api.kagent.dev, storage v1alpha3). Like SUBSTRATE this is a control-plane
+ * surface only: the client runs in the planner/provisioner, never in an agent
+ * container, and authenticates with a mounted service-account token (never a
+ * provider credential). `apiUrl` is empty by default so the backend is inert
+ * until an operator provisions kagent and points the adapter at the cluster:
+ * saves then still accept backend:'kagent', but publish/run report 503
+ * kagent_not_configured rather than guessing at a cluster.
+ */
+const KAGENT = Object.freeze({
+  enabled: /^(1|true|yes|on)$/i.test(process.env.KAGENT_ENABLED || ''),
+  apiUrl: process.env.KAGENT_API_URL || '',
+  namespace: process.env.KAGENT_NAMESPACE || 'kagent',
+  // Service-account token + CA, mounted by Kubernetes at the default in-cluster
+  // paths. Left unset when apiUrl points at an out-of-cluster API server that
+  // uses kubeconfig instead.
+  tokenFile: process.env.KAGENT_TOKEN_FILE || '',
+  caFile: process.env.KAGENT_CA_FILE || '',
+  // Out-of-cluster local development only: a kubeconfig path. Never mounted into
+  // an agent container.
+  kubeconfig: process.env.KAGENT_KUBECONFIG || '',
+  group: 'api.kagent.dev',
+  version: 'v1alpha3',
+  timeoutMs: Number(process.env.KAGENT_TIMEOUT_MS || 15000),
 });
 
 /**
@@ -653,15 +691,13 @@ const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'publ
 
 /**
  * Isolated agent-service topology. The gateway is the only browser-facing
- * origin (it also owns OAuth via CONFIG.PORT above); it proxies /api/agent to
- * the planner service and /api/coder to the coder service. Ports and internal
- * base URLs are env-overridable so the services can move hosts/containers
- * without a code change.
+ * origin (it also owns OAuth via CONFIG.PORT above); it proxies /api/agent and
+ * /api/coder to the agent surface (services/orchestrator/src/agent-server.js,
+ * the successor of the retired planner/coder/tester services). Ports and
+ * internal base URLs are env-overridable so the services can move
+ * hosts/containers without a code change.
  */
-const PLANNER_PORT = Number(process.env.PLANNER_PORT) || 4010;
-const CODER_SERVICE_PORT = Number(process.env.CODER_SERVICE_PORT) || 4020;
-const TESTER_SERVICE_PORT = Number(process.env.TESTER_SERVICE_PORT) || 4050;
-const DEPLOYER_SERVICE_PORT = Number(process.env.DEPLOYER_SERVICE_PORT) || 4060;
+const AGENT_SERVICE_PORT = Number(process.env.AGENT_SERVICE_PORT) || 4010;
 const ORCHESTRATOR_SERVICE_PORT = Number(process.env.ORCHESTRATOR_SERVICE_PORT) || 4070;
 const IDENTITY_SERVICE_PORT = Number(process.env.IDENTITY_SERVICE_PORT) || 4080;
 const EMAIL_SERVICE_PORT = Number(process.env.EMAIL_SERVICE_PORT) || 4040;
@@ -676,19 +712,13 @@ const SETTINGS_SERVICE_PORT = Number(process.env.SETTINGS_SERVICE_PORT) || 8100;
 const LITELLM_SERVICE_PORT = Number(process.env.LITELLM_SERVICE_PORT) || 4090;
 const SERVICES = Object.freeze({
   gatewayPort: PORT,
-  plannerPort: PLANNER_PORT,
-  coderPort: CODER_SERVICE_PORT,
-  testerPort: TESTER_SERVICE_PORT,
-  deployerPort: DEPLOYER_SERVICE_PORT,
+  agentPort: AGENT_SERVICE_PORT,
   orchestratorPort: ORCHESTRATOR_SERVICE_PORT,
   identityPort: IDENTITY_SERVICE_PORT,
   emailPort: EMAIL_SERVICE_PORT,
   billingPort: BILLING_SERVICE_PORT,
   settingsPort: SETTINGS_SERVICE_PORT,
-  plannerUrl: process.env.PLANNER_URL || `http://localhost:${PLANNER_PORT}`,
-  coderUrl: process.env.CODER_URL || `http://localhost:${CODER_SERVICE_PORT}`,
-  testerUrl: process.env.TESTER_URL || `http://localhost:${TESTER_SERVICE_PORT}`,
-  deployerUrl: process.env.DEPLOYER_URL || `http://localhost:${DEPLOYER_SERVICE_PORT}`,
+  agentUrl: process.env.AGENT_URL || `http://localhost:${AGENT_SERVICE_PORT}`,
   orchestratorUrl: process.env.ORCHESTRATOR_URL || `http://localhost:${ORCHESTRATOR_SERVICE_PORT}`,
   identityUrl: process.env.IDENTITY_URL || (process.env.NODE_ENV === 'production' ? '' : `http://localhost:${IDENTITY_SERVICE_PORT}`),
   // Shared transactional email service. Producers publish allow-listed jobs to
@@ -769,23 +799,17 @@ const GCP = Object.freeze({
   projectId: process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || '',
   region: process.env.GCP_REGION || 'us-central1',
   plannerTopic: process.env.PUBSUB_PLANNER_TOPIC || 'planner-requests',
-  coderTopic: process.env.PUBSUB_CODER_TOPIC || 'coder-requests',
   testerTopic: process.env.PUBSUB_TESTER_TOPIC || 'tester-requests',
-  deployerTopic: process.env.PUBSUB_DEPLOYER_TOPIC || 'deployer-requests',
   orchestratorTopic: process.env.PUBSUB_ORCHESTRATOR_TOPIC || 'orchestrator-requests',
   // StageCommandV1 uses dedicated topics. Never reuse the legacy planner/coder
   // request topics: those subscriptions expect different wire contracts.
   pipelinePlanTopic: process.env.PUBSUB_PIPELINE_PLAN_TOPIC || 'pipeline-plan-commands',
   pipelineCodeTopic: process.env.PUBSUB_PIPELINE_CODE_TOPIC || 'pipeline-code-commands',
   pipelineTestTopic: process.env.PUBSUB_PIPELINE_TEST_TOPIC || 'pipeline-test-commands',
-  pipelineDeployTopic: process.env.PUBSUB_PIPELINE_DEPLOY_TOPIC || 'pipeline-deploy-commands',
   pipelinePlanResultsTopic: process.env.PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC || 'pipeline-plan-results',
   pipelineCodeResultsTopic: process.env.PUBSUB_PIPELINE_CODE_RESULTS_TOPIC || 'pipeline-code-results',
   pipelineTestResultsTopic: process.env.PUBSUB_PIPELINE_TEST_RESULTS_TOPIC || 'pipeline-test-results',
-  pipelineDeployResultsTopic: process.env.PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC || 'pipeline-deploy-results',
   emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
-  // Cloud Run Job launched (by coder-control) to run one coder ticket to completion.
-  coderJobName: process.env.CODER_JOB_NAME || 'coder-worker',
   // Pub/Sub push OIDC verification (enforced only when MESSAGING_MODE=pubsub):
   //   pushAudience        expected `aud` of the push token (the push endpoint URL)
   //   pushServiceAccount  the SA email Pub/Sub is configured to sign push tokens as
@@ -808,7 +832,6 @@ const GCP = Object.freeze({
  */
 const PIPELINE = Object.freeze({
   orchestratorEnabled: boolEnv(process.env, 'PIPELINE_ORCHESTRATOR_ENABLED', false),
-  deploymentEnabled: boolEnv(process.env, 'PIPELINE_DEPLOYMENT_ENABLED', false),
 });
 
 /**
@@ -1029,6 +1052,7 @@ const CONFIG = Object.freeze({
   QODER,
   OPENROUTER,
   SUBSTRATE,
+  KAGENT,
   CODER,
   MCP,
   TOOLS,

@@ -5,7 +5,6 @@ const assert = require('node:assert');
 const {
   splitEnv,
   extractSourceService,
-  extractSourceJob,
   mergeServiceScaling,
   cloneContainers,
 } = require('./containers');
@@ -117,18 +116,16 @@ test('cloneContainers propagates the sidecar to the tenant stack', () => {
   assert.deepEqual(sidecar.livenessProbe, { httpGet: { path: '/healthz', port: 4030 } });
 });
 
-test('cloneContainers for a JOB gives the primary no ports', () => {
-  const jobContainers = SOURCE_SVC.template.containers.map((container, index) => ({
+test('cloneContainers with withPorts:false gives the primary no ports', () => {
+  const noPortContainers = SOURCE_SVC.template.containers.map((container, index) => ({
     ...container,
+    ports: undefined,
     resources: index === 0
       ? { limits: { cpu: '2', memory: '4Gi' } }
       : { limits: { cpu: '1', memory: '512Mi' } },
   }));
-  const jobSource = {
-    template: { template: { volumes: [], executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2', containers: jobContainers } },
-  };
-  const src = extractSourceJob(jobSource);
-  const containers = cloneContainers(src.containers, { image: 'registry/coder:sha', env: {}, sidecarEnv: {} }, { withPorts: false });
+  const src = extractSourceService({ template: { containers: noPortContainers } });
+  const containers = cloneContainers(src.containers, { image: 'registry/agent:sha', env: {}, sidecarEnv: {} }, { withPorts: false });
   assert.equal(containers.length, 2);
   assert.equal(containers[0].ports, undefined);
   assert.deepEqual(containers[0].resources, { limits: { cpu: '2', memory: '4Gi' } });

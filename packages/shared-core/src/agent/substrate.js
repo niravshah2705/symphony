@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 // ignored — only settings.substrateUrl ever reached the control plane.
 const { CONFIG } = require('../config');
 const { getSettings } = require('../store');
+const { fetchS2sSecrets } = require('../secrets/s2s-resolver');
 const {
   pbVarint,
   pbString,
@@ -44,6 +45,12 @@ const DEFAULT_ATESPACE = 'tenant-a';
 const ALLOWED_ATESPACES = [];
 const DEFAULT_WORKER_POOL = 'planner-pool';
 
+// The settings-service managed key holding the projected `ate-client`
+// service-account token the ateapi Control plane accepts as its only bearer
+// credential. Named here so the fail-closed error can tell the operator exactly
+// which secret to publish/rotate.
+const SUBSTRATE_TOKEN_SECRET_KEY = 'substrateApiToken';
+
 // ActorState enum (substrate.ateapi.v1.ActorState)
 const ACTOR_STATE = {
   0: 'UNSPECIFIED',
@@ -58,6 +65,7 @@ const ACTOR_STATE = {
 
 // gRPC status codes we surface (grpc.io spec).
 const GRPC_OK = 0;
+const GRPC_UNAUTHENTICATED = 16;
 const GRPC_NOT_FOUND = 5;
 const GRPC_ALREADY_EXISTS = 6;
 
@@ -174,13 +182,83 @@ function resolveSubstrateWorkerPool(explicit) {
 }
 
 /**
+ * Resolve the ateapi bearer credential for ONE caller/run.
+ *
+ * Deliberately async and uncached: the credential is a Kubernetes projected
+ * service-account token that rotates hourly, so a module-load or cross-request
+ * cache would hand the Control plane an expired token. `fetchS2sSecrets` has no
+ * cache either — resolving per run is the same discipline the rest of the S2S
+ * secret path uses. Order: caller-supplied (already-resolved secrets map) → the
+ * store / non-proxied managed overlay → the settings-service managed secret.
+ * Returns '' when nothing resolves; callers fail closed at the wire layer, where
+ * the error can name `substrateApiToken`. `SUBSTRATE_TOKEN` stays only as the
+ * `grpcCall` fallback for local dev and tests, never as a deployed source.
+ */
+async function resolveSubstrateApiToken(input = {}) {
+  const explicit = String(input.token || input.apiKey || '').trim();
+  if (explicit) return explicit;
+
+  try {
+    const fromStore = String(getSettings?.().substrateApiToken || '').trim();
+    if (fromStore) return fromStore;
+  } catch {
+    // ignore store read errors
+  }
+
+  const fetchSecrets = typeof input.fetchSecrets === 'function' ? input.fetchSecrets : fetchS2sSecrets;
+  let secrets = {};
+  try {
+    secrets = await fetchSecrets({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+      settingsBase: input.settingsBase,
+    });
+  } catch {
+    // Best-effort like every other S2S lookup; the wire-layer check reports it.
+    secrets = {};
+  }
+  return String(secrets?.[SUBSTRATE_TOKEN_SECRET_KEY] || '').trim();
+}
+
+function authorizationHeader(token) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+  return /^Bearer\s+/i.test(raw) ? raw : `Bearer ${raw}`;
+}
+
+/**
+ * A rejected-but-present credential means the hourly-rotating projected token
+ * landed late; say which managed secret to republish instead of leaving the
+ * operator a bare `16 UNAUTHENTICATED`.
+ */
+function withCredentialHint(res) {
+  if (!res || res.status !== GRPC_UNAUTHENTICATED) return res;
+  if (String(res.message || '').includes(SUBSTRATE_TOKEN_SECRET_KEY)) return res;
+  return {
+    ...res,
+    message: `${res.message} [credential rejected: refresh the settings-service managed secret '${SUBSTRATE_TOKEN_SECRET_KEY}']`,
+  };
+}
+
+/**
+ * The project token an ephemeral actor name embeds. Exported because the status
+ * route filters an atespace's actor list by it: names are the only project signal
+ * an Actor carries (metadata is atespace/name/uid/version — there is no project
+ * field), so the filter has to be computed from the same expression that writes the
+ * name or the two drift apart and the UI silently shows nobody.
+ */
+function actorProjectToken(projectId) {
+  return String(projectId || 'default').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 12);
+}
+
+/**
  * Normalize a per-run ephemeral actor name. Actors are scoped to an atespace, so
  * the name need not carry the tenant prefix; we still cap and sanitize it.
  */
 function normalizeActorName(explicitName, projectId, runId) {
   const base =
     (explicitName && String(explicitName).trim()) ||
-    `plan-${String(projectId || 'default').toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 12)}-${String(runId || crypto.randomBytes(4).toString('hex'))}`;
+    `plan-${actorProjectToken(projectId)}-${String(runId || crypto.randomBytes(4).toString('hex'))}`;
   const cleaned = base
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
@@ -204,8 +282,25 @@ async function grpcCall(method, requestPayload = Buffer.alloc(0), options = {}) 
   }
   const timeoutMs = options.timeoutMs || CONFIG?.SUBSTRATE?.timeoutMs || 60_000;
 
+  const token = options.token || options.apiKey || process.env.SUBSTRATE_TOKEN || '';
+
   if (typeof options.transport === 'function') {
-    return options.transport(method, requestPayload, { baseUrl, timeoutMs, ...options });
+    return withCredentialHint(await options.transport(method, requestPayload, {
+      baseUrl,
+      timeoutMs,
+      ...options,
+      authorization: authorizationHeader(token),
+    }));
+  }
+
+  // Fail closed before touching the socket: an unauthenticated call answers
+  // `16 UNAUTHENTICATED / missing bearer token`, which reads as a cluster
+  // problem rather than the missing managed secret it actually is.
+  if (!token) {
+    throw new Error(
+      `Substrate credential missing for ${method}: no bearer token. Publish/rotate the settings-service managed secret '${SUBSTRATE_TOKEN_SECRET_KEY}' ` +
+        `(projected ate-client service-account token, audience api.ate-system.svc), or set SUBSTRATE_TOKEN for local development.`,
+    );
   }
 
   return new Promise((resolve, reject) => {
@@ -250,7 +345,7 @@ async function grpcCall(method, requestPayload = Buffer.alloc(0), options = {}) 
       'user-agent': 'ai-fleet-substrate-client/1.0',
     };
     if (token) {
-      reqHeaders.authorization = /^Bearer\s+/i.test(String(token)) ? String(token) : `Bearer ${String(token).trim()}`;
+      reqHeaders.authorization = authorizationHeader(token);
     }
 
     const req = client.request(reqHeaders);
@@ -268,14 +363,14 @@ async function grpcCall(method, requestPayload = Buffer.alloc(0), options = {}) 
       const grpcStatus = Number(grpcStatusRaw);
       const grpcMessageRaw = responseTrailers['grpc-message'] ?? responseHeaders['grpc-message'] ?? '';
       const grpcMessage = grpcMessageRaw ? decodeURIComponent(String(grpcMessageRaw)) : '';
-      finish(resolve, {
+      finish(resolve, withCredentialHint({
         status: grpcStatus,
         message: grpcMessage,
         headers: responseHeaders,
         trailers: responseTrailers,
         frames,
         firstFrame: frames[0] || Buffer.alloc(0),
-      });
+      }));
     });
     req.end(frameGrpcMessage(requestPayload));
   });
@@ -527,7 +622,7 @@ async function ensureAtespace(input = {}) {
 }
 
 /**
- * Ensure the org's planner ActorTemplate exists (once per tenant). The planner
+ * Ensure the org's planner ActorTemplate exists (once per tenant). The actor
  * image MUST be pinned by digest (image@sha256:...) per the ActorTemplate schema.
  */
 async function upsertActorTemplate(input = {}) {
@@ -543,9 +638,31 @@ async function upsertActorTemplate(input = {}) {
     throw new Error('substratePlannerImage must be pinned by digest (name@sha256:...) for ActorTemplate.');
   }
   const workerPool = resolveSubstrateWorkerPool(input.workerPool || (await readSetting('substrateWorkerPool')));
+  // The actor container's env: only what it needs to verify the actor JWT that
+  // arrives on /internal/plan/run and to decide which tenant that JWT may serve.
+  // A signature alone cannot say the tenant — `body.organizationId` is caller-
+  // written — so the template hands the actor its OWN atespace, pinned to exactly
+  // one space, and the actor route refuses any organization that does not resolve
+  // to it. These are namespace identifiers, not credentials: an actor runs
+  // model-generated code that can read this map, so no key, token, or provider
+  // secret may cross it (see AGENTS.md egress invariants). Without SUBSTRATE_JWKS_URL
+  // the route fails closed 503 jwks_unconfigured, so the names substrate.tf renders
+  // onto the control plane are forwarded here too (audience/trust domain decide what
+  // "verified" MEANS; a mismatch between the two halves looks like a dead cluster,
+  // not a config error).
+  const actorEnv = {
+    SUBSTRATE_ACTOR_MODE: 'true',
+    SUBSTRATE_ATESPACE: atespace,
+    SUBSTRATE_ALLOWED_ATESPACES: atespace,
+    ...(input.organizationId ? { SUBSTRATE_ATESPACE_BY_ORG: `${input.organizationId}=${atespace}` } : {}),
+  };
+  if (String(process.env.SUBSTRATE_JWKS_URL || '').trim()) actorEnv.SUBSTRATE_JWKS_URL = String(process.env.SUBSTRATE_JWKS_URL).trim();
+  if (String(process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE || '').trim()) actorEnv.SUBSTRATE_ACTOR_JWT_AUDIENCE = String(process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE).trim();
+  if (String(process.env.SUBSTRATE_TRUST_DOMAIN || '').trim()) actorEnv.SUBSTRATE_TRUST_DOMAIN = String(process.env.SUBSTRATE_TRUST_DOMAIN).trim();
   const containers = [{
     name: 'planner',
     image,
+    env: actorEnv,
     wakeupProbe: input.wakeupProbe || { path: '/healthz', port: 8080, timeoutSeconds: 5 },
     resources,
   }];
@@ -679,12 +796,17 @@ module.exports = {
   SERVICE_PATH,
   ACTOR_STATE,
   GRPC_OK,
+  GRPC_UNAUTHENTICATED,
   GRPC_NOT_FOUND,
   GRPC_ALREADY_EXISTS,
+  SUBSTRATE_TOKEN_SECRET_KEY,
   resolveSubstrateUrl,
   resolveSubstrateIngressUrl,
   resolveSubstrateAtespace,
   resolveSubstrateWorkerPool,
+  resolveSubstrateApiToken,
+  authorizationHeader,
+  actorProjectToken,
   normalizeActorName,
   grpcCall,
   getControlPlaneStatus,

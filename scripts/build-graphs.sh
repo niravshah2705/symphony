@@ -7,9 +7,9 @@
 #   * code-review-graph  → .code-review-graph/graph.db  (SQLite, precise)
 #   * graphify           → graphify-out/                (AST graph, architectural)
 #
-# Unlike `npm run docs:code` (which regenerates the *committed* docs/code-graph
-# map and is drift-gated in pre-commit), this script only refreshes the local
-# indexes — nothing here is committed.
+# Unlike `npm run docs:code` (which regenerates the docs/code-graph map), this
+# script only refreshes the local indexes — nothing here is committed. Both
+# outputs are gitignored.
 #
 # By default the code-review-graph refresh is incremental when a DB already
 # exists. Force a full rebuild (drop the DB first) with --clean/-c or FORCE=1.

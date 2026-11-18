@@ -66,6 +66,7 @@ docs/flexprice-spike/results.json
 # subchart dependencies stripped (scripts/flexprice-helm.js). Derived from the
 # checkout on every run; committing it would fork 2000 lines of AGPL templates.
 deploy/flexprice/helm/build/
+docs/code-graph/
 
 # kagent plugin/skill artifact build scratch: the fetched upstream checkout at the
 # pinned commit, the composed bundle/ that becomes the docker context, the stamped

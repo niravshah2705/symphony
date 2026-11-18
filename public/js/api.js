@@ -7,6 +7,7 @@ import {
   createSingleFlight,
 } from './auth-retry.mjs';
 import { mintedStreamContextQuerySuffix } from './stream-context.mjs';
+import { readLlmGatewayFlag } from './llm-gateway.mjs';
 
 // Thin fetch wrapper around the backend API.
 
@@ -34,26 +35,13 @@ export function getRequestContext() {
   return requestContext;
 }
 
-/**
- * Per-request LLM gateway opt-in (feature flag). Stored in localStorage —
- * `localStorage.setItem('aiFleetLlmGateway', 'litellm')` — and read per
- * request so toggling applies immediately. The gateway honors the resulting
- * X-AI-Fleet-Llm-Gateway header only on deployments with THAT gateway
- * configured; everywhere else requests follow the standard route.
- * Must stay a subset of shared-core's CONFIG.LLM_GATEWAY_MODES (the browser
- * bundle cannot import it, so this list is deliberately duplicated — an unknown
- * value is dropped at ingestion anyway, never forwarded).
- */
-const LLM_GATEWAY_STORAGE_KEY = 'aiFleetLlmGateway';
-const LLM_GATEWAY_MODES = ['langsmith', 'litellm'];
-
+// Read per request (see llm-gateway.mjs for the storage contract), so toggling the
+// flag applies to the next call without a reload.
 function llmGatewayFlag() {
-  try {
-    const value = (window.localStorage.getItem(LLM_GATEWAY_STORAGE_KEY) || '').trim().toLowerCase();
-    return LLM_GATEWAY_MODES.includes(value) ? value : '';
-  } catch (_) {
-    return ''; /* storage unavailable (private mode) — flag off */
-  }
+  return readLlmGatewayFlag({
+    storage: typeof window === 'undefined' ? null : window.localStorage,
+    organizationId: requestContext.organizationId,
+  });
 }
 
 /** EventSource cannot send custom headers, so its short-lived token-bound context
@@ -209,6 +197,10 @@ async function request(path, options = {}) {
     const error = new Error(message || `Request failed (${res.status})`);
     error.status = res.status;
     error.code = errorCode(data);
+    // Some rejections carry the authoritative payload alongside the message -
+    // a workflow revision conflict returns the current server graph. Without
+    // this the caller could only re-fetch to discover what it overwrote.
+    error.payload = data;
     // Connected tools can also return 401. Lock the whole workspace only when
     // the gateway identified an application-auth failure (or while confirming
     // the current application identity), not for an unrelated provider key.
@@ -348,6 +340,29 @@ export const api = {
   // Settings
   getSettings: (options = {}) => request('/settings', options),
 
+  // Workflow designer (per-organization, schema v2). PUT carries the revision
+  // the server last returned, so a concurrent edit surfaces as a conflict
+  // carrying the server copy instead of silently overwriting it.
+  // `{ migrate: true }` asks the gateway to report an unseeded tenant as empty
+  // rather than handing back the platform examples, so a localStorage graph
+  // still has somewhere to be imported into. See /api/workflows?migrate=1.
+  getWorkflows: ({ migrate = false } = {}) => request(migrate ? '/workflows?migrate=1' : '/workflows'),
+  createWorkflow: (graph) => request('/workflows', { method: 'POST', body: JSON.stringify(graph) }),
+  putWorkflow: (id, graph, revision) => request(`/workflows/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    ...(revision == null ? {} : { headers: { 'If-Match': String(revision) } }),
+    body: JSON.stringify(graph),
+  }),
+  deleteWorkflow: (id) => request(`/workflows/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  importWorkflows: (workflows) => request('/workflows/import', { method: 'POST', body: JSON.stringify({ workflows }) }),
+  // Which Harness / ModelConfig / RemoteMCPServer names the kagent namespace
+  // actually holds. Read-only, and answered even when kagent is off.
+  kagentCapabilities: () => request('/workflows/kagent/capabilities'),
+  publishWorkflowNode: (workflowId, nodeId) => request(
+    `/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/publish`,
+    { method: 'POST' },
+  ),
+
   // Projects
   getProjects: () => request('/projects'),
   getTeams: () => request('/projects/teams'),
@@ -481,6 +496,17 @@ export const api = {
   },
   runSubstrateActor: (payload = {}) =>
     request('/agent/substrate/run', { method: 'POST', body: JSON.stringify(payload) }),
+  // Actor lifecycle behind the run cards. Only the actor NAME travels from the
+  // browser: the atespace every call is scoped to is resolved server-side from the
+  // pinned workspace context, so a name from another tenant reads as absent. The
+  // name is encoded into the path segment rather than a query, so it cannot widen
+  // the route it targets.
+  suspendSubstrateActor: (name) =>
+    request(`/agent/substrate/actors/${encodeURIComponent(name)}/suspend`, { method: 'POST' }),
+  resumeSubstrateActor: (name) =>
+    request(`/agent/substrate/actors/${encodeURIComponent(name)}/resume`, { method: 'POST' }),
+  deleteSubstrateActor: (name) =>
+    request(`/agent/substrate/actors/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   syncSubstrateSecrets: (payload = {}) =>
     request('/agent/substrate/secrets/sync', { method: 'PUT', body: JSON.stringify(payload) }),
   getGuardrail: () => request('/agent/guardrail'),

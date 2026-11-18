@@ -27,6 +27,7 @@ import { initThemeToggle } from './theme.js';
 import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
+import { dismissGuestBanner, guestBannerVisible } from './guest-banner.mjs';
 import { canAccessRoute, menuRouteVisible, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
@@ -69,13 +70,15 @@ function ensureStylesheet(href) {
 function route(loader, exportName, styles = []) {
   const routeStyles = [SHARED_STYLESHEET, ...styles];
   let rendererLoad = null;
+  let moduleLoad = null;
   return Object.freeze({
     styles: Object.freeze([...routeStyles]),
     load() {
       if (!rendererLoad) {
+        moduleLoad = loader();
         rendererLoad = Promise.all([
           ...routeStyles.map(ensureStylesheet),
-          loader(),
+          moduleLoad,
         ]).then((results) => {
           const renderer = results.at(-1)?.[exportName];
           if (typeof renderer !== 'function') throw new Error(`Route module is missing ${exportName}.`);
@@ -84,7 +87,42 @@ function route(loader, exportName, styles = []) {
       }
       return rendererLoad;
     },
+    // Views hold tenant-derived data at module scope, and navigating away does not
+    // unload a module. This is the only way to reach a view that is NOT on screen
+    // when the workspace changes underneath it.
+    async invalidate() {
+      if (!moduleLoad) return;
+      const mod = await moduleLoad.catch(() => null);
+      mod?.invalidate?.();
+    },
   });
+}
+
+/** Name the destination while a switch is in flight. The note normally reports
+ * where work is filed; during a switch it must not keep naming the old tenant. */
+function announceSwitch(panel, select) {
+  const note = panel.querySelector('.account-context-note');
+  const destination = select.selectedOptions?.[0]?.textContent || select.value;
+  if (note) note.textContent = `${t('switchingTo', 'Switching to')} ${destination}…`;
+}
+
+function invalidateWorkspaceViews() {
+  return Promise.all(Object.values(routes).map((entry) => entry.invalidate()));
+}
+
+// Clear the tenant caches, then reload — and reload even if a view never settles.
+// The reload is what actually completes a switch today; the clearing only closes the
+// window between the new context being applied and the page going away, and a stuck
+// view must not leave the switcher disabled with nothing on screen.
+function reloadWorkspace() {
+  let reloaded = false;
+  const reload = () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  };
+  window.setTimeout(reload, 500);
+  invalidateWorkspaceViews().catch(() => {}).then(reload);
 }
 
 const routes = Object.freeze({
@@ -92,6 +130,7 @@ const routes = Object.freeze({
   workflows: route(() => import('./views/workflows.js'), 'renderWorkflows', ['/styles/workflows.css']),
   'agent-jobs': route(() => import('./views/agent-jobs.js'), 'renderAgentJobs', ['/styles/operations.css']),
   calls: route(() => import('./views/calls.js'), 'renderCalls', ['/styles/immersive.css']),
+  actors: route(() => import('./views/actors.js'), 'renderActors', ['/styles/operations.css']),
   business: route(() => import('./views/business.js'), 'renderBusiness', ['/styles/planning.css']),
   projects: route(() => import('./views/projects.js'), 'renderProjects', ['/styles/planning.css']),
   board: route(() => import('./views/board.js'), 'renderBoard', ['/styles/planning.css']),
@@ -117,6 +156,7 @@ const routeMeta = {
   workflows: { titleKey: 'workflows', eyebrowKey: 'workspace' },
   'agent-jobs': { titleKey: 'agentJobs', eyebrowKey: 'workspace' },
   calls: { titleKey: 'callRecorder', eyebrowKey: 'workspace' },
+  actors: { titleKey: 'actors', eyebrowKey: 'workspace' },
   business: { titleKey: 'business', eyebrowKey: 'planning' },
   projects: { titleKey: 'projects', eyebrowKey: 'planning' },
   board: { titleKey: 'board', eyebrowKey: 'planning' },
@@ -551,6 +591,10 @@ async function beginSignOut() {
 }
 
 function renderAuthControl() {
+  // The topbar control and the guest banner answer the same question — what is
+  // this session — and every caller of this function is a moment where that
+  // changed. Painting them together is what keeps them from disagreeing.
+  renderGuestBanner();
   const host = document.getElementById('auth-control');
   if (!host) return;
   const languageHost = document.getElementById('language-control');
@@ -638,7 +682,14 @@ function renderAuthControl() {
       if (!changeWorkspaceOrganization(organizationSelect.value)) return;
       panel.setAttribute('aria-busy', 'true');
       organizationSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 0);
+      announceSwitch(panel, organizationSelect);
+      // The request context is ALREADY the new organization's — every header from
+      // here says so — while this page still holds the previous one's conversation,
+      // jobs, stream and filter. Clear those before the reload so a timer or SSE
+      // callback in that window cannot paint tenant A's data behind tenant B's
+      // headers. The reload stays: a view without an invalidate() keeps state no
+      // caller can reach, so in-place switching is not yet safe to rely on.
+      reloadWorkspace();
     });
 
     const projects = organization?.projects || [];
@@ -667,7 +718,10 @@ function renderAuthControl() {
       if (!changeWorkspaceProject(nextProjectId)) return;
       panel.setAttribute('aria-busy', 'true');
       projectSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 120);
+      announceSwitch(panel, projectSelect);
+      // Same reason as the organization switch: the headers moved to the new
+      // context first, so the caches have to go before the page does.
+      reloadWorkspace();
     });
 
     const orgTags = (organization?.tags || []).map((tag) =>
@@ -691,7 +745,14 @@ function renderAuthControl() {
           ...(projectTags.length ? [el('div', { class: 'account-context-tags' }, projectTags)] : []),
         ]),
         projectSelect,
-      ])
+      ]),
+      // Which tenant a mutation lands in has to be readable, not inferred: the
+      // selects show what is SELECTED, which after a rejected or half-applied
+      // switch is not necessarily what the next request will carry.
+      el('p', { class: 'account-context-note', role: 'status' },
+        t('contextAppliesTo', 'New work is filed under')
+        + ` ${organization?.name || t('contextNoOrganization', 'no organization')}`
+        + (project?.name ? ` / ${project.name}` : '')),
     );
   }
 
@@ -710,6 +771,52 @@ function renderAuthControl() {
   account.append(trigger, panel);
   host.append(account);
   renderLanguageControl();
+}
+
+function guestBannerStorage() {
+  try {
+    return window.sessionStorage;
+  } catch (_) {
+    // Private-mode storage cannot hold a dismissal, so the message stays up.
+    return null;
+  }
+}
+
+// A guest is already inside the workspace, not outside it: the gateway answers a
+// missing or invalid token with the public permissions rather than a 401, so
+// nothing refuses them and nothing tells them what they are missing. The toolbar
+// buttons say "Sign in"; this says why anyone would want to.
+function renderGuestBanner() {
+  const host = document.getElementById('guest-banner');
+  if (!host) return;
+  const session = getAuthenticationState();
+  const storage = guestBannerStorage();
+  if (!guestBannerVisible({ session, storage })) {
+    host.hidden = true;
+    host.replaceChildren();
+    return;
+  }
+  host.hidden = false;
+  host.replaceChildren(
+    el('p', { class: 'guest-banner-copy' }, [
+      el('strong', { dataset: { i18n: 'guestBannerTitle' } }, t('guestBannerTitle', "You're browsing as a guest")),
+      el('span', {
+        dataset: { i18n: 'guestBannerBody' },
+      }, t('guestBannerBody', 'This workspace is read-only and nothing is saved: the Agent answers without an organization behind it. Sign in to run work in your own organizations and projects.')),
+    ]),
+    el('div', { class: 'guest-banner-actions' }, [
+      ...authProviderButtons({ primary: true }),
+      el('button', {
+        class: 'guest-banner-dismiss',
+        type: 'button',
+        dataset: { i18n: 'guestBannerDismiss' },
+        onclick: () => {
+          dismissGuestBanner(storage);
+          renderGuestBanner();
+        },
+      }, t('guestBannerDismiss', 'Dismiss')),
+    ]),
+  );
 }
 
 function renderAuthenticationGate({ loading = false, error = '' } = {}) {

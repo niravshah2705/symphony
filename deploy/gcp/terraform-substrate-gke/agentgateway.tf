@@ -102,7 +102,11 @@ locals {
       spec = local.agentgateway_service_spec
       metadata = local.agentgateway_front ? {
         annotations = {
-          "networking.gke.io/load-balancer-ip-addresses" = google_compute_address.agentgateway_ip[0].address
+          # NAME here, value on the field above — see the same asymmetry documented
+          # in substrate.tf's `substrate_envoy_proxy`. An IP literal in this
+          # annotation is rejected by the forwarding-rule create, so the front
+          # silently never gets its reserved address.
+          "networking.gke.io/load-balancer-ip-addresses" = google_compute_address.agentgateway_ip[0].name
         }
       } : null
     } : key => value if value != null

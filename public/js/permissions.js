@@ -11,6 +11,10 @@ export const MENU_PERMISSIONS = Object.freeze({
   workflows: { domain: 'org', level: 'read' },
   'agent-jobs': { domain: 'workspace', level: 'read' },
   calls: { domain: 'workspace', level: 'write' },
+  // Actor cards: the list is workspace:read, but every verb on a card is a write
+  // and the gateway's /api/agent catch-all asks for write on POST/DELETE, so the
+  // nav entry appears for exactly the members who can use it.
+  actors: { domain: 'workspace', level: 'write' },
   business: { domain: 'planning', level: 'read' },
   projects: { domain: 'planning', level: 'read' },
   board: { domain: 'planning', level: 'read' },

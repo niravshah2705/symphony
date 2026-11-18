@@ -58,6 +58,29 @@ function stopGatePoll() {
   gateResult = null;
 }
 
+/**
+ * Drop every tenant-derived fact this view holds.
+ *
+ * The workspace stream is bound to the organization the token was minted for, and
+ * the conversation, jobs and coverage rail are that organization's data; a switch
+ * that does not reload the page must not repaint any of it from memory. Module-load
+ * promises (omnibox router, secret scanner) and the EULA cache stay: they are code
+ * and user-level acceptance, not tenant state.
+ */
+export function invalidate() {
+  renderGeneration += 1;
+  stopRefresh();
+  latestAgentStatus = null;
+  latestJobs = [];
+  latestCoderStatus = null;
+  conversation = [];
+  activeConversationId = null;
+  railState = { mode: 'setup', result: null };
+  coverageCache = null;
+  coverageInFlight = null;
+  coverageFilter = 'all';
+}
+
 function agentRouteActive() {
   return location.hash === '#/agent' || location.hash.startsWith('#/agent/');
 }

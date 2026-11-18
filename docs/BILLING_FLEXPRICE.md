@@ -456,6 +456,43 @@ for a documented DDL-lock incident. Concurrency safety is deploy orchestration, 
 in-repo advisory locks — which means **two app pods migrating at once is our
 problem to avoid**, and the compose file must run migration as a one-shot.
 
+### On GKE, from Terraform
+
+The same stack, reconciled from state instead of from a workstation script:
+`deploy/gcp/terraform-flexprice/` installs the identical upstream chart (same
+pinned commit, same in-cluster Postgres/Kafka/ClickHouse/Redis/Temporal, same
+object names) into the existing `substrate-multitenant` cluster, and the
+`flexprice_reconcile` job in `.github/workflows/deploy.yml` builds the image and
+stages the chart from `deploy/flexprice/VERSION`.
+
+Two things about it are worth knowing before reading that module:
+
+- **It is not the cutover.** `FLEXPRICE_ENABLED` on the billing service is
+  `flexprice_enabled && flexprice_billing_cutover_enabled`, and the second one
+  defaults to `false` (`deploy/gcp/terraform/variables.tf`). The stack can be
+  built, probed and even published on a hostname while every deployment still
+  bills the way it always did — §5's gate is unchanged by it, and
+  `docs/FLEXPRICE_AGPL_MEMO.md` is still NOT CLEARED.
+- **The chart we ship is patched**, in three documented ways (dependencies
+  stripped, infra probe timings widened, global placement injected), because the
+  probe timings have no values key and the node pool is tainted. The patched
+  tree's sha256 and version are recorded in `deploy/flexprice/VERSION`, so
+  "which templates ran" is a fact rather than a reconstruction.
+
+Nothing here replaces the local path. `npm run billing:flexprice:bootstrap`
+(compose) and `npm run billing:flexprice:helm` (kind) remain how the probes in
+`docs/FLEXPRICE_FINDINGS.md` and the spike's `results.json` were produced, and
+how they should be re-produced: they need no project, no credentials and no
+state, and a finding that can only be demonstrated on cloud infrastructure is a
+finding nobody can re-check.
+
+Provisioning the catalog is still an operator command on either path:
+`scripts/flexprice-provision.js` reads and writes
+`deploy/flexprice/.env`, so it runs from a checkout and not from CI. The
+`flexprice_reconcile` job therefore stops at `/health` plus the authenticated /
+unauthenticated pair on `/v1/meters`, and says so in its summary rather than
+minting keys nobody reviewed.
+
 ## 10. The catalog as provisioned
 
 `npm run billing:flexprice:provision` is what created this, and re-running it is
@@ -826,6 +863,12 @@ secret containers.
 
 1. **AGPL** — the memo's five options with a recommendation. Nothing else here is
    actionable until this is chosen; I am not treating "probably fine" as an answer.
+   The self-hosted platform now has a real staging deployment path
+   (`deploy/gcp/terraform-flexprice`, reconciled by the `flexprice_reconcile` job),
+   which changes what "waiting" costs — an environment can be built, probed and
+   broken without anyone's money moving, because
+   `flexprice_billing_cutover_enabled` is a separate switch and it is off. The
+   decision above is still the one that moves a tenant.
 2. **Negative balances** — pre-check and skip the platform charge for an org with
    no credits, or bill it and let the balance go negative (§5)?
 3. **Where the low-balance alert lives** — their `wallet.credit_balance.dropped`

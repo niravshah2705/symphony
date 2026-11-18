@@ -23,21 +23,20 @@ function resourceBlock(source, type, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-test('pipeline rollout and deployment are fail-closed Terraform defaults', () => {
+test('pipeline rollout is a fail-closed Terraform default', () => {
   const variables = read('deploy/gcp/terraform/variables.tf');
   assert.match(variableBlock(variables, 'pipeline_orchestrator_enabled'), /default\s*=\s*false/);
-  assert.match(variableBlock(variables, 'pipeline_deployment_enabled'), /default\s*=\s*false/);
 });
 
 test('all Cloud Run services use the gen2 execution environment', () => {
   const servicesByFile = new Map([
-    ['cloud_run.tf', ['gateway', 'planner', 'coder_control']],
+    ['cloud_run.tf', ['gateway']],
     ['billing_service.tf', ['billing']],
     ['org_service.tf', ['org']],
     ['settings_service.tf', ['settings']],
     ['email_service.tf', ['email']],
     ['identity_service.tf', ['identity']],
-    ['pipeline.tf', ['orchestrator', 'tester', 'deployer']],
+    ['pipeline.tf', ['orchestrator']],
     ['provisioner.tf', ['provisioner']],
     ['stream_token_service.tf', ['stream_token_broker']],
     ['laya_inference.tf', ['laya']],
@@ -49,7 +48,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 16);
+  assert.equal(expectedInventory.length, 12);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)
@@ -112,16 +111,16 @@ test('fixed-memory gen2 Cloud Run CPU variables reject incompatible allocations'
 });
 
 test('skills mounts preserve configured Cloud Run service and proxy CPUs', () => {
-  const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
+  const pipeline = read('deploy/gcp/terraform/pipeline.tf');
   const variables = read('deploy/gcp/terraform/variables.tf');
   assert.doesNotMatch(
-    cloudRun,
+    pipeline,
     /local\.agent_(?:service|proxy)_cpu|agent_(?:service|proxy)_cpu\s*=/,
     'skills mounts must not replace configured CPU values with local clamps',
   );
 
-  for (const service of ['planner', 'coder_control']) {
-    const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
+  for (const service of ['orchestrator']) {
+    const resource = resourceBlock(pipeline, 'google_cloud_run_v2_service', service);
     assert.match(resource, /cpu\s*=\s*var\.cloud_run_service_cpu/);
     assert.match(resource, /cpu\s*=\s*var\.cloud_run_proxy_cpu/);
   }
@@ -132,20 +131,14 @@ test('skills mounts preserve configured Cloud Run service and proxy CPUs', () =>
 test('every Cloud Run egress sidecar explicitly opts into the wildcard bind', () => {
   const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
   const pipeline = read('deploy/gcp/terraform/pipeline.tf');
-  const proxyEnvStart = cloudRun.indexOf('proxy_plain_env =');
-  const plannerEnvStart = cloudRun.indexOf('planner_env =', proxyEnvStart);
-  assert.ok(proxyEnvStart >= 0 && plannerEnvStart > proxyEnvStart);
   assert.match(
-    cloudRun.slice(proxyEnvStart, plannerEnvStart),
-    /PROXY_BIND_HOST\s*=\s*"0\.0\.0\.0"/,
+    cloudRun,
+    /proxy_plain_env[\s\S]{0,800}?PROXY_BIND_HOST\s*=\s*"0\.0\.0\.0"/,
+    'the shared sidecar env must carry the wildcard bind override',
   );
 
   const sidecars = [
-    [cloudRun, 'google_cloud_run_v2_service', 'planner'],
-    [cloudRun, 'google_cloud_run_v2_service', 'coder_control'],
-    [cloudRun, 'google_cloud_run_v2_job', 'coder_worker'],
-    [pipeline, 'google_cloud_run_v2_service', 'tester'],
-    [pipeline, 'google_cloud_run_v2_service', 'deployer'],
+    [pipeline, 'google_cloud_run_v2_service', 'orchestrator'],
   ];
   assert.equal(
     ((`${cloudRun}\n${pipeline}`).match(/name\s*=\s*"egress-proxy"/g) || []).length,
@@ -186,21 +179,16 @@ test('deploy workflow does not query disabled optional Cloud Run services', () =
   const end = workflow.indexOf('\n\n          {', start);
   const resolver = workflow.slice(start, end);
   assert.ok(start >= 0 && end > start);
-  assert.match(workflow, /PIPELINE_ENABLED: \$\{\{ vars\.PIPELINE_ORCHESTRATOR_ENABLED \|\| 'false' \}\}/);
   assert.match(workflow, /PROVISIONING_ENABLED: \$\{\{ vars\.PROVISIONING_ENABLED \|\| 'false' \}\}/);
   assert.match(resolver, /true\) live_tag "\$2"/);
   assert.match(resolver, /false\)[\s\S]*release_tag "\$GITHUB_SHA" "disabled optional service \$2"/);
   assert.match(resolver, /Invalid enablement flag for optional service/);
-  assert.match(workflow, /write_tag orchestrator resolve_optional orchestrator pipeline-orchestrator "\$PIPELINE_ENABLED"/);
-  assert.match(workflow, /write_tag tester resolve_optional tester pipeline-tester "\$PIPELINE_ENABLED"/);
-  assert.match(workflow, /write_tag deployer resolve_optional deployer pipeline-deployer "\$PIPELINE_ENABLED"/);
+  assert.match(workflow, /write_tag orchestrator resolve orchestrator pipeline-orchestrator/);
   assert.match(workflow, /write_tag provisioner resolve_optional provisioner provisioner "\$PROVISIONING_ENABLED"/);
   assert.match(workflow, /-var="provisioning_enabled=\$\{\{ vars\.PROVISIONING_ENABLED \|\| 'false' \}\}"/);
 
   for (const [id, service] of [
     ['gateway', 'gateway'],
-    ['planner', 'planner'],
-    ['coder', 'coder-control'],
     ['org', 'org-service'],
     ['settings', 'settings-service'],
     ['email', 'email-service'],
@@ -318,17 +306,17 @@ echo "resolver failure was masked" >&2
   assert.equal(failed.stdout, '');
 });
 
-test('pipeline topology enforces dedicated topics and brokered agent egress', () => {
+test('pipeline topology wires dedicated stage topics and enforces brokered agent egress', () => {
   const pipeline = read('deploy/gcp/terraform/pipeline.tf');
   const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
   const variables = read('deploy/gcp/terraform/variables.tf');
-  assert.match(pipeline, /check "pipeline_topics_are_dedicated"/);
-  assert.match(pipeline, /var\.planner_topic/);
-  assert.match(pipeline, /var\.coder_topic/);
-  for (const stage of ['plan', 'code', 'test', 'deploy', 'results']) {
+  assert.doesNotMatch(pipeline, /check "pipeline_topics_are_dedicated"/);
+  assert.doesNotMatch(pipeline, /var\.planner_topic/);
+  assert.doesNotMatch(`${pipeline}\n${variables}`, /var\.coder_topic\b/);
+  for (const stage of ['plan', 'code', 'test', 'results']) {
     assert.match(pipeline, new RegExp(`google_pubsub_topic" "pipeline_${stage}"`));
   }
-  for (const stage of ['plan', 'code', 'test', 'deploy']) {
+  for (const stage of ['plan', 'code', 'test']) {
     assert.match(variables, new RegExp(`variable "pipeline_${stage}_results_topic"`));
     assert.match(pipeline, new RegExp(`${stage}\\s*=\\s*var\\.pipeline_${stage}_results_topic`));
     assert.match(
@@ -338,36 +326,27 @@ test('pipeline topology enforces dedicated topics and brokered agent egress', ()
   }
   assert.match(pipeline, /resource "google_pubsub_topic_iam_member" "pipeline_result_publish"/);
   assert.match(pipeline, /topic\s*=\s*google_pubsub_topic\.pipeline_results\[each\.key\]\.name/);
-  assert.match(pipeline, /plan\s*=\s*google_service_account\.planner\.email/);
-  assert.match(pipeline, /code\s*=\s*google_service_account\.coder\.email/);
-  assert.match(pipeline, /test\s*=\s*google_service_account\.tester\[0\]\.email/);
-  assert.match(pipeline, /deploy\s*=\s*google_service_account\.deployer\[0\]\.email/);
+  // plan/code/test all execute inside the orchestrator (or its substrate actors),
+  // so one publisher identity covers the three. The brokered deployer was
+  // retired (2026-11): no deploy-stage wiring may reappear in pipeline.tf.
+  assert.equal((pipeline.match(/= google_service_account\.orchestrator\.email/g) || []).length >= 3, true);
+  assert.doesNotMatch(pipeline, /google_service_account\.deployer|google_cloud_run_v2_service\.deployer|pipeline_deploy_topic|pipeline-deployer/);
+  assert.doesNotMatch(pipeline, /google_service_account\.(planner|coder|tester)/);
   assert.doesNotMatch(`${pipeline}\n${cloudRun}`, /PIPELINE_RESULTS_TOPIC\s*=/);
-  assert.match(cloudRun, /PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC\s*=\s*var\.pipeline_plan_results_topic/);
-  assert.match(cloudRun, /PUBSUB_PIPELINE_CODE_RESULTS_TOPIC\s*=\s*var\.pipeline_code_results_topic/);
+  assert.match(pipeline, /PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC\s*=\s*var\.pipeline_plan_results_topic/);
+  assert.match(pipeline, /PUBSUB_PIPELINE_CODE_RESULTS_TOPIC\s*=\s*var\.pipeline_code_results_topic/);
   assert.match(pipeline, /PUBSUB_PIPELINE_TEST_RESULTS_TOPIC\s*=\s*var\.pipeline_test_results_topic/);
-  assert.match(pipeline, /PUBSUB_PIPELINE_DEPLOY_RESULTS_TOPIC\s*=\s*var\.pipeline_deploy_results_topic/);
-  assert.equal((pipeline.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
-  assert.equal((cloudRun.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 2);
+  assert.equal((pipeline.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 1);
+  assert.equal((cloudRun.match(/PIPELINE_STAGE_STORE_BACKEND\s*=\s*"firestore"/g) || []).length, 0);
   assert.match(pipeline, /check "pipeline_agent_egress_is_brokered"/);
   assert.match(pipeline, /trimspace\(nonsensitive\(var\.internal_api_token\)\) != ""/);
   assert.doesNotMatch(variables, /variable "egress_proxy_enabled"/);
-  assert.match(cloudRun, /!local\.pipeline_on \|\| var\.min_instances <= 1/);
+  assert.match(pipeline, /!local\.pipeline_on \|\| var\.min_instances <= 1/);
   assert.equal(
-    (cloudRun.match(/max_instance_count = local\.pipeline_on \? 1 : var\.max_instances/g) || []).length,
-    2,
+    (pipeline.match(/max_instance_count = local\.pipeline_on \? 1 : var\.max_instances/g) || []).length,
+    1,
   );
 
-  for (const service of ['tester', 'deployer']) {
-    const start = pipeline.indexOf(`resource "google_cloud_run_v2_service" "${service}"`);
-    const end = pipeline.indexOf('\nresource "google_cloud_run_v2_service"', start + 1);
-    const resource = pipeline.slice(start, end === -1 ? pipeline.length : end);
-    const appEnd = resource.indexOf('name  = "egress-proxy"');
-    assert.ok(appEnd > 0, `${service} must include the egress-proxy sidecar`);
-    assert.doesNotMatch(resource.slice(0, appEnd), /secret_key_ref/);
-    assert.match(resource, /local\.proxy_plain_env/);
-    assert.match(resource, /depends_on\s*=\s*\["egress-proxy"\]/);
-  }
 });
 
 test('stream-token broker owns the signing secret behind private IAM', () => {
@@ -455,8 +434,8 @@ test('stream-token broker owns the signing secret behind private IAM', () => {
   assert.equal(brokerIamBindings.length, 1, 'the broker must have one explicit invoker binding');
   assert.doesNotMatch(brokerIamBindings[0][2], /allUsers/, 'the broker must never be publicly invokable');
 
-  for (const service of ['planner', 'coder_control']) {
-    const resource = resourceBlock(cloudRun, 'google_cloud_run_v2_service', service);
+  for (const service of ['orchestrator']) {
+    const resource = resourceBlock(pipeline, 'google_cloud_run_v2_service', service);
     const proxy = resource.indexOf('name  = "egress-proxy"');
     assert.ok(proxy > 0);
     assert.doesNotMatch(resource.slice(0, proxy), /secret_key_ref|INTERNAL_API_TOKEN/);
@@ -484,26 +463,59 @@ test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
 
   const egressEnvStart = cloudRun.indexOf('egress_env =');
   const proxyEnvStart = cloudRun.indexOf('proxy_plain_env =', egressEnvStart);
-  const plannerEnvStart = cloudRun.indexOf('planner_env =', proxyEnvStart);
-  assert.ok(egressEnvStart >= 0 && proxyEnvStart > egressEnvStart && plannerEnvStart > proxyEnvStart);
+  assert.ok(egressEnvStart >= 0 && proxyEnvStart > egressEnvStart);
   assert.doesNotMatch(cloudRun.slice(egressEnvStart, proxyEnvStart), /OPENSWE_(?:URL|PROXY_UPSTREAM)/);
   assert.match(
-    cloudRun.slice(proxyEnvStart, plannerEnvStart),
+    cloudRun.slice(proxyEnvStart),
     /OPENSWE_PROXY_UPSTREAM\s*=\s*trimspace\(var\.openswe_proxy_upstream\)/,
   );
 });
 
-test('orchestrator image remains free of the heavy shared agent SDK workspace', () => {
+test('orchestrator image packages every workspace its own dependency list declares', () => {
+  // #283 moved the retired planner's HTTP surface into
+  // services/orchestrator/src/agent-surface.js and added @ai-fleet/shared to the
+  // service's dependencies, but left the image packaging only shared-core. The
+  // check that used to live here asserted that stale shape as if it were a
+  // preference, so the mismatch built green and died at boot with
+  // MODULE_NOT_FOUND — npm ci never resolves a local require, and Cloud Run had
+  // no earlier revision of a service Terraform was still creating. Pairing is
+  // the invariant now: whatever the package.json declares must be copied AND
+  // selected, so the Dockerfile cannot drift from the dependency list again.
+  const deps = JSON.parse(read('services/orchestrator/package.json')).dependencies || {};
   const dockerfile = read('deploy/gcp/Dockerfile.orchestrator');
-  assert.match(dockerfile, /COPY packages\/shared-core\//);
-  assert.doesNotMatch(dockerfile, /COPY packages\/shared\//);
-  assert.doesNotMatch(dockerfile, /COPY packages\/ \./);
+  for (const name of ['shared-core', 'shared']) {
+    const declared = deps[`@ai-fleet/${name}`] !== undefined;
+    assert.equal(
+      dockerfile.includes(`COPY packages/${name}/`),
+      declared,
+      `COPY packages/${name}/ must be present exactly when @ai-fleet/${name} is a dependency`,
+    );
+    assert.equal(
+      dockerfile.includes(`--workspace=@ai-fleet/${name}`),
+      declared,
+      `@ai-fleet/${name} must be an npm ci workspace exactly when it is a dependency, `
+      + 'otherwise the library ships with its own dependency tree missing',
+    );
+  }
   assert.match(dockerfile, /--workspace=@ai-fleet\/orchestrator/);
+
+  // The half of the old rule that still means something: this is the durable
+  // control plane, not the actor. Copying the whole workspace tree would turn it
+  // into Dockerfile.substrate-actor, and no provider credential belongs in the
+  // image or its environment — the egress sentinel is what the agents hold.
+  assert.doesNotMatch(dockerfile, /COPY packages\/ \./);
+  assert.doesNotMatch(dockerfile, /OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY/);
 });
 
-test('coder image installs the seccomp launcher for model-controlled commands', () => {
-  const dockerfile = read('deploy/gcp/Dockerfile.coder');
+test('actor image installs the seccomp launcher for model-controlled commands', () => {
+  // The retired deploy/gcp/Dockerfile.coder and Dockerfile.tester carried the
+  // launcher; the substrate actor image is where model-generated code runs now,
+  // so the guarantee moved with it.
+  assert.equal(fs.existsSync(path.join(ROOT, 'deploy/gcp/Dockerfile.coder')), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'deploy/gcp/Dockerfile.tester')), false);
+  const dockerfile = read('deploy/gcp/Dockerfile.substrate-actor');
   const harness = read('packages/shared/src/agent/harnesses/deepagent.js');
+  const runtime = read('packages/shared/src/agent/pipeline-stage-runtime.js');
   assert.match(dockerfile, /network-sandbox\.c/);
   assert.match(dockerfile, /-lseccomp/);
   assert.match(dockerfile, /apk add --no-cache git openssh-client ca-certificates bash libseccomp/);
@@ -511,16 +523,6 @@ test('coder image installs the seccomp launcher for model-controlled commands', 
   assert.match(harness, /NODE_ENV[\s\S]*production/);
   assert.match(harness, /EGRESS_PROXY_URL/);
   assert.match(harness, /exec[\s\S]*quoteShellArg\(launcher\)[\s\S]*quoteShellArg\(command\)/);
-});
-
-test('tester image installs the capability-free network sandbox for repository commands', () => {
-  const dockerfile = read('deploy/gcp/Dockerfile.tester');
-  const runtime = read('packages/shared/src/agent/pipeline-stage-runtime.js');
-  assert.match(dockerfile, /network-sandbox\.c/);
-  assert.match(dockerfile, /-lseccomp/);
-  assert.match(dockerfile, /apk add --no-cache git openssh-client ca-certificates bash libseccomp/);
-  assert.match(dockerfile, /\/usr\/local\/bin\/ai-fleet-network-sandbox/);
-  assert.doesNotMatch(dockerfile, /COPY --from=builder --chown=node:node \/app \/app/);
   assert.match(runtime, /isolateNetwork: process\.env\.NODE_ENV === 'production'/);
 });
 
