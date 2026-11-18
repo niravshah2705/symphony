@@ -145,6 +145,39 @@ test('unknown ids 404 and v1 import refuses to clobber existing graphs', async (
   } finally { server.close(); }
 });
 
+test('v1 import passes the same persona gate as a graph write', async () => {
+  // Import was the one graph write without the gate, and the browser can reach it
+  // with a persona the write routes refuse: `canWrite` comes from the org role,
+  // the gate reads the stored per-uid persona, and those are separate records.
+  const { app, state } = buildApp();
+  const { server, url } = await start(app);
+  const payload = {
+    workflows: [{
+      id: 'v1-gated', name: 'Old', edges: [],
+      nodes: [{ id: 'a', kind: 'agent', refId: 'coding', name: 'A', x: 0, y: 0 }],
+    }],
+  };
+  try {
+    await call(url, 'GET', '/api/workflows');
+    state.identity = IDENTITIES.designer;
+    assert.equal((await call(url, 'GET', '/api/workflows/me')).body.persona, 'builder', 'a fresh uid starts at the default persona');
+
+    await call(url, 'PUT', '/api/workflows/me/persona', { body: { persona: 'product-designer' } });
+    const denied = await call(url, 'POST', '/api/workflows/import', { body: payload });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.body.code, 'persona_denied');
+    assert.match(denied.body.violations[0], /Coding/);
+    assert.ok(!wfStore.listWorkflows().some((workflow) => workflow.id === 'v1-gated'), 'the refused graph reached the store anyway');
+
+    // Byte-identical payload, granted persona: the gate is persona-driven and not
+    // a blanket block on import. It then lands in the existing-graphs refusal.
+    await call(url, 'PUT', '/api/workflows/me/persona', { body: { persona: 'builder' } });
+    const allowed = await call(url, 'POST', '/api/workflows/import', { body: payload });
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.body.skipped, true);
+  } finally { server.close(); }
+});
+
 test('agent profile CRUD validates kagent specs and guards referenced deletes', async () => {
   const { app } = buildApp();
   const { server, url } = await start(app);
