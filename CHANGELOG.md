@@ -36,15 +36,17 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
   `networking.gke.io/load-balancer-ip-addresses` was fed the address **value**,
   but GKE forwards that string into the forwarding rule's `address` field, which
   validates against an address-*name* regex — an IP literal is a 400, so the rule
-  is never created. `Service envoy-substrate-ingress` stayed at
+  is never created. Envoy's data-plane Service
+  (`envoy-gateway-system/envoy-ate-system-substrate-ingress-…`) stayed at
   `EXTERNAL-IP <pending>` with `Gateway Programmed=False / AddressNotAssigned`
   while DNS, the issued certificate and both data-plane pods all read healthy, so
   every signal this repo had ever checked said "up". The annotation now takes
   `google_compute_address.*.name` (and keeps the deprecated `loadBalancerIP` on
   `.address`, because the two fields want different forms of the same address);
   `agentgateway.tf` carried the same latent bug and is fixed with it, dark.
-  Capacity was never the blocker — the `substrate-ip` address is EXTERNAL,
-  in use, and in `asia-south1`. New contract test
+  Capacity was never the blocker — the `substrate-ip` address is EXTERNAL and
+  `RESERVED` in `asia-south1` (unbound only because nothing could bind it), and
+  the A record already points at it, so no DNS step is involved. New contract test
   `deploy/gcp/substrate-ingress-config.test.js` pins name-vs-value in both files.
 - **The ateapi control-plane route points at a Service that exists.** The
   defaults were `substrate_ateapi_service = "ateapi"` and
