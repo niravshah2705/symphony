@@ -309,6 +309,13 @@ the committed four-CR kagent manifests and the OCI digests in them are all
 A pack's software requirement is a `RUN` line for the **harness runtime image**:
 the plugin artifact is `FROM scratch` data with no shell, and
 `requirements.appliedTo` naming a plugin image is rejected by the validator.
+A merge to main republishes **only the rows whose bytes moved** — bundle builds
+are not byte-reproducible, so rebuilding an unchanged pack would rewrite its
+committed manifest with a digest no source change produced.
+`deploy/kagent/select-published-rows.py` owns that decision for both tracks (a
+moved row, a change in that pack's own directory; a composer, the selector or the
+workflow rebuilds the whole track; docs, catalogs, generators and tests rebuild
+nothing). Never special-case it in a workflow.
 
 ## Keeping the code map fresh (pre-commit gate)
 

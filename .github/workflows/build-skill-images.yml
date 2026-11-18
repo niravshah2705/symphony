@@ -14,6 +14,13 @@ name: Build standalone agent skill artifacts
 #   - no :latest tag. A skill's version IS its pin, so a moving alias would be a
 #     second name for bytes no manifest names.
 #
+# A push to main publishes only the rows whose bytes moved — same rule and same
+# selector as build-plugin-images.yml: the artifact build is not byte-reproducible,
+# so republishing an unchanged skill would rewrite its committed manifest with a
+# digest nothing produced. A change to compose-skill-bundle.sh, skill-inputs.sh or
+# this workflow selects every row, because it changes the recipe for all of them;
+# a plugin-track change selects none.
+#
 # A standalone skill is mounted through AgentTemplate `spec.skills[].source.oci`
 # with a `path:`, not `spec.plugins[]`.
 
@@ -25,6 +32,8 @@ on:
       - "deploy/kagent/skills/**"
       - "deploy/kagent/compose-skill-bundle.sh"
       - "deploy/kagent/skill-inputs.sh"
+      - "deploy/kagent/build-skill-image.sh"
+      - "deploy/kagent/select-published-rows.py"
       - "packages/shared-core/src/agent/registry/**"
       - "scripts/verify-skill-artifacts.sh"
       - "scripts/stamp-plugin-digest.js"
@@ -37,6 +46,8 @@ on:
       - "deploy/kagent/skills/**"
       - "deploy/kagent/compose-skill-bundle.sh"
       - "deploy/kagent/skill-inputs.sh"
+      - "deploy/kagent/build-skill-image.sh"
+      - "deploy/kagent/select-published-rows.py"
       - "packages/shared-core/src/agent/registry/**"
       - "scripts/verify-skill-artifacts.sh"
       - "scripts/gen-kagent-manifests.js"
@@ -48,6 +59,14 @@ on:
         description: "Only build this skill (e.g. security-audit). Leave empty for all."
         required: false
         default: ""
+      rebuild:
+        description: "all = every manifest row (use after a composer change); changed = only rows whose bytes moved since the previous commit."
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - changed
 
 permissions:
   contents: read
@@ -68,55 +87,76 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.select-rows.outputs.matrix }}
+      reason: ${{ steps.select-rows.outputs.reason }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          # The selection diff needs the commit this run started from.
+          fetch-depth: 0
+
+      - name: Classify the change
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REBUILD: ${{ github.event.inputs.rebuild }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          case "$EVENT_NAME" in
+            # A PR publishes nothing, so it resolves every row and validates it:
+            # the diff would only weaken the one run that has to catch a bad row.
+            pull_request)
+              echo "mode=all" >> "$GITHUB_OUTPUT"
+              echo "reason=PR run validates every row" >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+            push)
+              # A force-push or a branch's first push reports an unusable `before`.
+              if [[ "$BEFORE_SHA" =~ ^[0-9a-f]+$ ]] && [ "${#BEFORE_SHA}" -eq 40 ] \
+                 && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+                base="$BEFORE_SHA"
+              else
+                base="$(git rev-parse "${HEAD_SHA}~1" 2>/dev/null || true)"
+              fi ;;
+            workflow_dispatch)
+              if [ "${REBUILD:-all}" != "changed" ]; then
+                echo "mode=all" >> "$GITHUB_OUTPUT"
+                echo "reason=dispatch rebuild=all" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              base="$(git rev-parse "${HEAD_SHA}~1" 2>/dev/null || true)" ;;
+          esac
+
+          if [ -z "$base" ] || ! git cat-file -e "$base:$MANIFEST" 2>/dev/null; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+            echo "reason=no usable baseline commit" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$base" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
+          git show "$base:$MANIFEST" > "$RUNNER_TEMP/base.csv"
+          echo "mode=changed" >> "$GITHUB_OUTPUT"
+          echo "reason=changed since ${base:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Select rows from the manifest
         id: select-rows
         env:
+          MODE: ${{ steps.scope.outputs.mode }}
           ONLY_SKILL: ${{ github.event.inputs.skill }}
+          BASE_CSV: ${{ runner.temp }}/base.csv
+          CHANGED: ${{ runner.temp }}/changed-paths.txt
           SELECTED: ${{ runner.temp }}/selected.txt
         run: |
           set -euo pipefail
-          python3 - "$ONLY_SKILL" "$MANIFEST" "$SELECTED" <<'PY' >> "$GITHUB_OUTPUT"
-          import csv, json, sys
-
-          only, manifest, selected_path = sys.argv[1:4]
-
-          with open(manifest, newline="") as fh:
-              rows = [{k: (v or "").strip() for k, v in r.items()} for r in csv.DictReader(fh)]
-          # An empty manifest is a mangled file, not a no-op.
-          if not rows:
-              sys.exit(f"{manifest} has no rows")
-
-          if only:
-              if only not in {r["skill"] for r in rows}:
-                  sys.exit(f"no manifest rows for skill {only!r}")
-              rows = [r for r in rows if r["skill"] == only]
-
-          matrix = []
-          for r in rows:
-              if not r["dockerfile"]:
-                  sys.exit(f"row {r['skill']} {r['version']}: empty dockerfile")
-              matrix.append({
-                  "skill": r["skill"],
-                  "repo": r["repo"],
-                  "commit": r["commit"],
-                  "version": r["version"],
-                  "skill_path": r["skill_path"],
-                  "image": r["image"],
-                  "dockerfile": r["dockerfile"],
-                  "tags": f"{r['image']}:{r['version']}",
-              })
-
-          with open(selected_path, "w") as selected:
-              for row in matrix:
-                  selected.write(f"{row['skill']} {row['version']}\n")
-          print("matrix=" + json.dumps(matrix))
-          print("count=" + str(len(matrix)))
-          PY
+          python3 deploy/kagent/select-published-rows.py \
+            --track skill \
+            --mode "$MODE" \
+            --manifest "$MANIFEST" \
+            --base-csv "$BASE_CSV" \
+            --paths "$CHANGED" \
+            --only "$ONLY_SKILL" \
+            --selected "$SELECTED" >> "$GITHUB_OUTPUT"
 
       - name: Preflight the manifest
         env:
@@ -141,14 +181,15 @@ jobs:
 
       - name: Report the selection
         env:
+          REASON: ${{ steps.select-rows.outputs.reason }}
           COUNT: ${{ steps.select-rows.outputs.count }}
         run: |
           set -euo pipefail
           {
-            echo "### Standalone skill artifacts"
+            echo "### Standalone skill artifacts: ${REASON:-full manifest}"
             echo
             if [ "${COUNT:-0}" = "0" ]; then
-              echo "No manifest row matched, so nothing will be published."
+              echo "No manifest row moved, so nothing will be published."
             else
               echo "Publishing ${COUNT} skill artifact(s):"
               echo

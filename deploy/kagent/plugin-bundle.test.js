@@ -147,6 +147,51 @@ test('every script a workflow runs by path is executable', () => {
   }
 });
 
+test('the selection is one shared table, not two hand-kept workflow scripts', () => {
+  const pluginCi = read('.github/workflows/build-plugin-images.yml');
+  const skillCi = read('.github/workflows/build-skill-images.yml');
+  for (const [wf, text, track] of [['build-plugin-images.yml', pluginCi, 'plugin'], ['build-skill-images.yml', skillCi, 'skill']]) {
+    const calls = [...text.matchAll(/python3 deploy\/kagent\/select-published-rows\.py/g)];
+    assert.equal(calls.length, 1, `${wf} must select rows through exactly one helper call`);
+    assert.ok(text.includes(`--track ${track} \\`), `${wf} must name its own track to the selector`);
+    assert.match(text, /--base-csv/, `${wf} must hand the selector the baseline manifest`);
+    assert.match(text, /--paths/, `${wf} must hand the selector the changed paths`);
+    // Without the full history there is no previous commit to diff, and the
+    // fallback is a republish of every pack on every merge.
+    assert.match(text, /fetch-depth: 0/, `${wf} cannot diff without the history`);
+    assert.match(text, /type: choice[\s\S]*options:\n\s+- all\n\s+- changed/, `${wf} needs the rebuild=all escape hatch`);
+    // A PR publishes nothing, so it must validate every row rather than the moved
+    // subset: the diff would only weaken the one run that catches a bad row.
+    const scope = text.split('name: Classify the change')[1].split('- name:')[0];
+    assert.match(scope, /pull_request\)\n\s+echo "mode=all"/, `${wf} must resolve every row on a PR run`);
+  }
+  // The fields the build steps interpolate; a rename in the selector would
+  // otherwise surface as an empty matrix entry on the merge path.
+  assert.match(pluginCi, /matrix\.dockerfile/);
+  assert.match(pluginCi, /matrix\.tags/);
+  assert.match(skillCi, /matrix\.skill_path/);
+});
+
+test("the selector's tables name paths that exist, and nothing that reaches a bundle is inert", () => {
+  const helper = read('deploy/kagent/select-published-rows.py');
+  const literals = [...helper.matchAll(/"((?:deploy|\.github|docs|public|packages|scripts|\.githooks)\/[^"]*)"/g)].map((m) => m[1]);
+  assert.ok(literals.length >= 12, 'the classification tables are the thing this test guards');
+  for (const rel of literals) {
+    assert.ok(exists(rel.replace(/\/$/, '')), `the selector classifies ${rel}, which is not in the repo`);
+  }
+  // INERT_PREFIX calls packages/ and scripts/ inert because the composers take
+  // every input from the environment the resolvers build. A catalog field that
+  // reached a bundle would have to join the row compare instead, and this is the
+  // assertion that would fail rather than a silently stale published artifact.
+  for (const rel of ['deploy/kagent/ecc-plugin/compose-bundle.sh', 'deploy/kagent/compose-skill-bundle.sh',
+    'deploy/kagent/pack-inputs.sh', 'deploy/kagent/skill-inputs.sh']) {
+    const text = read(rel);
+    for (const forbidden of ['plugin-catalog', 'skill-catalog', 'registry/', 'plugin-support.csv']) {
+      assert.equal(text.includes(forbidden), false, `${rel} reads ${forbidden}, so packages/ is no longer inert`);
+    }
+  }
+});
+
 test('no builder writes a committed manifest', () => {
   const builders = [
     'deploy/kagent/build-plugin-image.sh',

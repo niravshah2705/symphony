@@ -138,6 +138,7 @@ a reviewed file.
 |---|---|
 | `deploy/kagent/plugins.csv`, `skills.csv` | the publish manifests: pin, version, `version_source`, image, Dockerfile, `current` |
 | `deploy/kagent/plugin-support.csv` | the generated matrix |
+| `deploy/kagent/select-published-rows.py` | decides which rows a merge republishes, for both tracks |
 | `deploy/kagent/pack-inputs.sh`, `skill-inputs.sh` | resolve one CSV row + `bundle.env` into composer inputs; local builds and CI both source them |
 | `deploy/kagent/ecc-plugin/compose-bundle.sh` | fetch the pin, apply the skills allowlist + overlay, author root `plugin.json`/`mcp.json` |
 | `deploy/kagent/compose-skill-bundle.sh` | the skill-track equivalent: no `plugin.json`, no allowlist, entry-file and name checks |
@@ -168,7 +169,43 @@ a reviewed file.
    npm run plugins:manifests:check`, then `bash deploy/kagent/test-pack.sh <pack>
    --quick`.
 7. Open the PR: the plan job validates every row (no publish), the merge to main
-   publishes, stamps the digest into the catalog, and regenerates the manifests.
+   publishes the rows whose bytes moved, stamps the digest into the catalog, and
+   regenerates the manifests. See [Publishing](#publishing-only-the-rows-whose-bytes-moved).
+
+## Publishing: only the rows whose bytes moved
+
+A bundle build is **not byte-reproducible**: multi-arch, `provenance: mode=max`
+and the SBOM attach new timestamps on every run. So rebuilding a pack whose
+inputs did not change would push new bytes under a tag that already names them,
+and the stamp job would then rewrite that pack's committed manifest with a digest
+no source change produced — every manifest of churn for a one-line CSV edit, and
+no way to tell a real content change from a re-run. Both publish workflows
+therefore select rows through `deploy/kagent/select-published-rows.py`, which
+answers one question per merge: *which packs' bytes are different now?*
+
+| the diff shows | selected | why |
+|---|---|---|
+| a PR run, or no usable baseline commit | **every row** | a PR publishes nothing, so the diff would only weaken the run that has to catch a bad row |
+| a row whose fields differ (pin, version, `version_source`, image, `current`) | that row | the row *is* the input set: `pack-inputs.sh` reads nothing else from the CSV |
+| a file inside `deploy/kagent/<pack>/` | that pack | `bundle.env`, `skills.txt`, `overlay/`, `mcp.json` and the `Dockerfile` all reach the bytes |
+| a composer, `pack-inputs.sh`/`skill-inputs.sh`, a local builder, the selector, or the workflow itself | **every row** on that track | it changes the recipe for all of them at once |
+| the other track's manifest or pack directory | nothing | two tracks publish different images from different inputs |
+| `docs/`, `public/`, `packages/`, `scripts/`, `.githooks/`, `*.test.js`, `plugin-support.csv` | nothing | inert: the composers take every input from the environment the resolvers build, never from a catalog — `plugin-bundle.test.js` asserts that stays true |
+| anything unrecognized | **every row** | under-building leaves a manifest naming bytes no recipe ever produced; over-building costs one workflow run |
+
+Three consequences worth knowing before you debug a "why didn't it publish":
+
+- **A skipped build skips its stamp.** The stamp job reads the
+  `plugin-oci-ref-<pack>.txt` artifacts, and an unselected pack produces none, so
+  its committed manifest keeps the digest that was actually published.
+- **`workflow_dispatch` has `rebuild: all`** for the case the diff cannot see — a
+  newer upstream image under the buildx layer, or a selector fix you want applied
+  to every pack at once.
+- **The first merge after this rule landed republished everything,** on purpose:
+  the selector is itself a recipe file.
+
+`build-plugin-image.sh` / `build-skill-image.sh` are unaffected — they take one
+pack name and always build it.
 
 ## Commands
 
@@ -184,6 +221,13 @@ bash deploy/kagent/build-plugin-image.sh graphify        # kind: pin → bundle 
 bash deploy/kagent/build-skill-image.sh security-audit   # same, skill track (no :latest)
 bash deploy/kagent/test-pack.sh security-audit codex --quick
 node --test packages/shared-core/src/agent/registry/ public/js/icons.test.mjs
+node --test deploy/kagent/                                   # bundle + selection rules
+# Replay a merge's row selection without pushing anything:
+git diff --name-only HEAD~1 HEAD > /tmp/paths.txt
+git show HEAD~1:deploy/kagent/plugins.csv > /tmp/base.csv
+python3 deploy/kagent/select-published-rows.py --track plugin --mode changed \
+  --manifest deploy/kagent/plugins.csv --base-csv /tmp/base.csv --paths /tmp/paths.txt \
+  --selected /tmp/selected.txt
 ```
 
 ## Not in this track yet

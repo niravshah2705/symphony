@@ -7,6 +7,17 @@ name: Build agent plugin images
 # the rows, and the merge to main publishes. Flip `current` to move the :latest
 # tag; add a row to stage a version.
 #
+# A push to main publishes only the rows whose bytes moved, like
+# build-runtime-images.yml: a bundle build is not byte-reproducible (multi-arch,
+# provenance and SBOM attach new timestamps), so rebuilding an unchanged pack
+# would republish it under the same tag and rewrite its committed manifest with
+# a digest nothing produced. deploy/kagent/select-published-rows.py does the
+# compare: a moved row or a change inside that pack's own directory selects it,
+# a change to a composer or an input resolver selects every row because it
+# changes the recipe for all of them, and a skill-track change selects none.
+# Run this workflow manually with `rebuild: all` after landing a composer change
+# that the diff could not see, e.g. a newer upstream image for the buildx layer.
+#
 # Every row in the CSV is a matrix entry, so adding a pack is a CSV edit plus a
 # pack directory (bundle.env, skills.txt, Dockerfile) rather than a workflow edit.
 #
@@ -40,6 +51,14 @@ on:
         description: "Only build this plugin (e.g. ecc). Leave empty for all."
         required: false
         default: ""
+      rebuild:
+        description: "all = every manifest row (use after a composer change); changed = only rows whose bytes moved since the previous commit."
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - changed
 
 permissions:
   contents: read
@@ -60,58 +79,76 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.select-rows.outputs.matrix }}
+      reason: ${{ steps.select-rows.outputs.reason }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          # The selection diff needs the commit this run started from.
+          fetch-depth: 0
+
+      - name: Classify the change
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REBUILD: ${{ github.event.inputs.rebuild }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          case "$EVENT_NAME" in
+            # A PR publishes nothing, so it resolves every row and validates it:
+            # the diff would only weaken the one run that has to catch a bad row.
+            pull_request)
+              echo "mode=all" >> "$GITHUB_OUTPUT"
+              echo "reason=PR run validates every row" >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+            push)
+              # A force-push or a branch's first push reports an unusable `before`.
+              if [[ "$BEFORE_SHA" =~ ^[0-9a-f]+$ ]] && [ "${#BEFORE_SHA}" -eq 40 ] \
+                 && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+                base="$BEFORE_SHA"
+              else
+                base="$(git rev-parse "${HEAD_SHA}~1" 2>/dev/null || true)"
+              fi ;;
+            workflow_dispatch)
+              if [ "${REBUILD:-all}" != "changed" ]; then
+                echo "mode=all" >> "$GITHUB_OUTPUT"
+                echo "reason=dispatch rebuild=all" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              base="$(git rev-parse "${HEAD_SHA}~1" 2>/dev/null || true)" ;;
+          esac
+
+          if [ -z "$base" ] || ! git cat-file -e "$base:$MANIFEST" 2>/dev/null; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+            echo "reason=no usable baseline commit" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$base" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
+          git show "$base:$MANIFEST" > "$RUNNER_TEMP/base.csv"
+          echo "mode=changed" >> "$GITHUB_OUTPUT"
+          echo "reason=changed since ${base:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Select rows from the manifest
         id: select-rows
         env:
+          MODE: ${{ steps.scope.outputs.mode }}
           ONLY_PLUGIN: ${{ github.event.inputs.plugin }}
+          BASE_CSV: ${{ runner.temp }}/base.csv
+          CHANGED: ${{ runner.temp }}/changed-paths.txt
           SELECTED: ${{ runner.temp }}/selected.txt
         run: |
           set -euo pipefail
-          python3 - "$ONLY_PLUGIN" "$MANIFEST" "$SELECTED" <<'PY' >> "$GITHUB_OUTPUT"
-          import csv, json, sys
-
-          only, manifest, selected_path = sys.argv[1:4]
-
-          with open(manifest, newline="") as fh:
-              rows = [{k: (v or "").strip() for k, v in r.items()} for r in csv.DictReader(fh)]
-          # An empty manifest is a mangled file, not a no-op: every row was
-          # dropped. Fail rather than let it publish nothing and look green.
-          if not rows:
-              sys.exit(f"{manifest} has no rows")
-
-          if only:
-              if only not in {r["plugin"] for r in rows}:
-                  sys.exit(f"no manifest rows for plugin {only!r}")
-              rows = [r for r in rows if r["plugin"] == only]
-
-          matrix = []
-          for r in rows:
-              if not r["dockerfile"]:
-                  sys.exit(f"row {r['plugin']} {r['version']}: empty dockerfile")
-              tags = [f"{r['image']}:{r['version']}"]
-              if r["current"] == "true":
-                  tags.append(f"{r['image']}:latest")
-              matrix.append({
-                  "plugin": r["plugin"],
-                  "repo": r["repo"],
-                  "commit": r["commit"],
-                  "version": r["version"],
-                  "image": r["image"],
-                  "dockerfile": r["dockerfile"],
-                  "tags": ",".join(tags),
-              })
-
-          with open(selected_path, "w") as selected:
-              for row in matrix:
-                  selected.write(f"{row['plugin']} {row['version']}\n")
-          print("matrix=" + json.dumps(matrix))
-          print("count=" + str(len(matrix)))
-          PY
+          python3 deploy/kagent/select-published-rows.py \
+            --track plugin \
+            --mode "$MODE" \
+            --manifest "$MANIFEST" \
+            --base-csv "$BASE_CSV" \
+            --paths "$CHANGED" \
+            --only "$ONLY_PLUGIN" \
+            --selected "$SELECTED" >> "$GITHUB_OUTPUT"
 
       - name: Preflight the manifest
         env:
@@ -139,14 +176,15 @@ jobs:
 
       - name: Report the selection
         env:
+          REASON: ${{ steps.select-rows.outputs.reason }}
           COUNT: ${{ steps.select-rows.outputs.count }}
         run: |
           set -euo pipefail
           {
-            echo "### Agent plugin images"
+            echo "### Agent plugin images: ${REASON:-full manifest}"
             echo
             if [ "${COUNT:-0}" = "0" ]; then
-              echo "No manifest row matched, so nothing will be published."
+              echo "No manifest row moved, so nothing will be published."
             else
               echo "Publishing ${COUNT} plugin image(s):"
               echo
