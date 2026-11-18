@@ -23,6 +23,48 @@ export const AGENT_MODEL_PREFERENCES = Object.freeze([
   'economy',
 ]);
 
+// Schema v2 (agent substrate + kagent). The localStorage envelope keeps the v1
+// prefix; v2 widens node kinds and agent-node fields. These constants mirror
+// packages/shared-core/src/workflow/model.js — workflow-designer-model.parity.test.mjs pins them.
+export const WORKFLOW_SCHEMA_VERSION_V2 = 2;
+export const WORKFLOW_NODE_KINDS_V2 = Object.freeze(['agent', 'approval', 'environment', 'gate']);
+export const WORKFLOW_NODE_BACKENDS = Object.freeze(['substrate', 'kagent']);
+export const TASK_TIERS = Object.freeze(['complex', 'medium', 'easy']);
+export const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'byok']);
+export const HARNESS_OPTIONS = Object.freeze(['claude-code', 'codex', 'deepagent', 'opencode', 'openspec', 'github-actions', 'otel']);
+export const GATE_CARD_MAX = 6;
+export const GATE_ITEM_MAX = 3;
+export const PERSONAS = Object.freeze(['product-designer', 'builder', 'sre', 'org-admin']);
+export const PERSONA_LABELS = Object.freeze({
+  'product-designer': 'Product Designer',
+  builder: 'Builder',
+  sre: 'SRE',
+  'org-admin': 'Org Admin',
+});
+export const DEFAULT_PERSONA_GRANTS = deepFreeze({
+  'product-designer': ['Requirements', 'Research', 'Source verification', 'Planning', 'Commercial strategy', 'Pricing', 'Ideation', 'Knowledge publishing'],
+  builder: ['Planning', 'Coding', 'Testing', 'Security', 'Data sanitation', 'Engineering', 'Quality'],
+  sre: ['DevOps / deployment', 'Observability', 'Incident triage', 'Compliance', 'Launch', 'Deployment', 'Monitoring', 'Support'],
+  'org-admin': null,
+});
+
+const CONNECTOR_MAX = 20;
+const KAGENT_ENV_MAX = 40;
+const KAGENT_SKILL_MAX = 50;
+const KAGENT_PLUGIN_MAX = 20;
+const KAGENT_TOOL_MAX = 50;
+const KAGENT_OCI_VOLUME_MAX = 29;
+const RESERVED_ENV_NAMES = Object.freeze(['PLUGIN_ROOT', 'PLUGIN_DATA']);
+const K8S_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
+const K8S_NS = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const OCI_PINNED = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
+const GIT_COMMIT = /^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/;
+const HTTP_URL = /^https?:\/\/\S+$/;
+// Credential-shaped values must never be typed into env rows: they belong to
+// ModelConfig apiKeySecret / RemoteMCPServer headersFrom references instead.
+const SECRETISH = /(api[_-]?key|secret|passw(or)?d|private[_-]?key|access[_-]?token|akia[0-9a-z]{12,}|bearer\s+[a-z0-9._-]{16,}|ghp_[a-z0-9]{20,}|sk-[a-z0-9]{20,})/i;
+
 const MAX_COORDINATE = 100_000;
 const MAX_WORKFLOWS = 100;
 const MAX_NODES = 500;
@@ -423,15 +465,250 @@ function normalizeCustomContext(input, { strict = false } = {}) {
   };
 }
 
+// ------------------------------------------------------------- kagent spec (v2)
+
+function normalizeArtifactSource(source) {
+  if (!isRecord(source)) return null;
+  const path = typeof source.path === 'string' ? source.path.slice(0, 1024) : '';
+  if (path.startsWith('/') || path.split('/').includes('..')) return null;
+  const kinds = [source.oci != null, source.git != null, source.bucket != null].filter(Boolean).length;
+  if (kinds !== 1) return null;
+  if (source.oci != null) {
+    const oci = plainText(source.oci, 512);
+    if (!OCI_PINNED.test(oci)) return null;
+    return { oci, ...(path ? { path } : {}) };
+  }
+  if (source.git != null) {
+    const git = isRecord(source.git) ? source.git : {};
+    const url = plainText(git.url, 512);
+    const commit = plainText(git.commit, 64);
+    if (!HTTP_URL.test(url) || !GIT_COMMIT.test(commit)) return null;
+    return { git: { url, commit }, ...(path ? { path } : {}) };
+  }
+  const bucket = isRecord(source.bucket) && isRecord(source.bucket.s3) ? source.bucket.s3 : null;
+  if (!bucket) return null;
+  const s3 = {
+    bucket: plainText(bucket.bucket, 200),
+    endpoint: plainText(bucket.endpoint, 512),
+    key: plainText(bucket.key, 1024),
+    versionId: plainText(bucket.versionId, 200),
+  };
+  if (!s3.bucket || !s3.key || !s3.versionId || !HTTP_URL.test(s3.endpoint)) return null;
+  const region = plainText(bucket.region, 64);
+  if (region) s3.region = region;
+  return { bucket: { s3 }, ...(path ? { path } : {}) };
+}
+
+function normalizeSkillName(value) {
+  const name = plainText(value, 64);
+  if (!name || name.includes('/') || name === '.' || name === '..') return '';
+  return name;
+}
+
+function normalizeKagentEnv(rows) {
+  const result = [];
+  for (const row of Array.isArray(rows) ? rows.slice(0, KAGENT_ENV_MAX) : []) {
+    if (!isRecord(row)) continue;
+    const name = plainText(row.name, 128);
+    if (!ENV_NAME.test(name) || RESERVED_ENV_NAMES.includes(name)) continue;
+    const value = typeof row.value === 'string' ? row.value.slice(0, 2048) : '';
+    if (unsafeText(value) || SECRETISH.test(`${name} ${value}`)) continue;
+    if (result.some((item) => item.name === name)) continue;
+    result.push({ name, value });
+  }
+  return result;
+}
+
+function normalizeConnectorList(value) {
+  const source = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\s*,\s*/) : [];
+  const result = [];
+  for (const item of source) {
+    const id = stableId(String(item ?? '').toLowerCase());
+    if (!id || result.includes(id)) continue;
+    result.push(id);
+    if (result.length >= CONNECTOR_MAX) break;
+  }
+  return result;
+}
+
+function normalizeKagentSpec(input) {
+  if (!isRecord(input)) return { spec: null, errors: ['kagentSpec must be an object.'] };
+  const errors = [];
+  const spec = {
+    modelConfig: null,
+    skills: [],
+    plugins: [],
+    tools: [],
+    env: normalizeKagentEnv(input.env),
+    egressPolicyRefs: normalizeTextList(input.egressPolicyRefs, { maxItems: 10, maxLength: 253 })
+      .filter((name) => K8S_NAME.test(name)),
+  };
+  if (isRecord(input.modelConfig)) {
+    const name = plainText(input.modelConfig.name, 253);
+    const namespace = plainText(input.modelConfig.namespace, 63);
+    if (K8S_NAME.test(name) && (!namespace || K8S_NS.test(namespace))) {
+      spec.modelConfig = { name, ...(namespace ? { namespace } : {}) };
+    } else errors.push('kagentSpec.modelConfig must name a ModelConfig (DNS subdomain).');
+  } else if (input.modelConfig != null) {
+    errors.push('kagentSpec.modelConfig must be an object with a name.');
+  }
+  const seenSkills = new Set();
+  for (const skill of Array.isArray(input.skills) ? input.skills.slice(0, KAGENT_SKILL_MAX) : []) {
+    if (!isRecord(skill)) continue;
+    const name = normalizeSkillName(skill.name);
+    const source = normalizeArtifactSource(skill.source);
+    if (!name || !source || seenSkills.has(name)) {
+      errors.push(`kagentSpec.skills entry invalid or duplicated: ${String(skill.name).slice(0, 64)}`);
+      continue;
+    }
+    seenSkills.add(name);
+    const promptAppend = plainText(skill.promptAppend, 4000);
+    spec.skills.push({ name, source, ...(promptAppend ? { promptAppend } : {}) });
+  }
+  if (Array.isArray(input.skills) && input.skills.length > KAGENT_SKILL_MAX) {
+    errors.push(`kagentSpec.skills exceeds ${KAGENT_SKILL_MAX}.`);
+  }
+  const pluginSources = new Set();
+  for (const plugin of Array.isArray(input.plugins) ? input.plugins.slice(0, KAGENT_PLUGIN_MAX) : []) {
+    if (!isRecord(plugin)) continue;
+    const source = normalizeArtifactSource(plugin.source);
+    if (!source) { errors.push('kagentSpec.plugins entry needs a valid immutable source.'); continue; }
+    const serialized = JSON.stringify(source);
+    if (pluginSources.has(serialized)) { errors.push('kagentSpec.plugins sources must be unique.'); continue; }
+    pluginSources.add(serialized);
+    const allowlist = normalizeTextList(plugin.skills, { maxItems: KAGENT_SKILL_MAX, maxLength: 64 })
+      .map(normalizeSkillName).filter(Boolean);
+    const promptAppend = plainText(plugin.promptAppend, 4000);
+    spec.plugins.push({ source, skills: allowlist, ...(promptAppend ? { promptAppend } : {}) });
+  }
+  if (Array.isArray(input.plugins) && input.plugins.length > KAGENT_PLUGIN_MAX) {
+    errors.push(`kagentSpec.plugins exceeds ${KAGENT_PLUGIN_MAX}.`);
+  }
+  const seenTools = new Set();
+  for (const tool of Array.isArray(input.tools) ? input.tools.slice(0, KAGENT_TOOL_MAX) : []) {
+    if (!isRecord(tool)) continue;
+    if (tool.kind === 'mcp') {
+      const server = plainText(tool.server, 253);
+      if (!K8S_NAME.test(server)) { errors.push('kagentSpec.tools mcp binding needs a RemoteMCPServer name.'); continue; }
+      const entry = {
+        kind: 'mcp',
+        server,
+        tools: normalizeTextList(tool.tools, { maxItems: 50, maxLength: 128 }),
+        ...(tool.requireApproval === true ? { requireApproval: true } : {}),
+      };
+      const promptAppend = plainText(tool.promptAppend, 4000);
+      if (promptAppend) entry.promptAppend = promptAppend;
+      const key = `mcp:${server}`;
+      if (seenTools.has(key)) { errors.push(`Duplicate MCP binding ${server}.`); continue; }
+      seenTools.add(key);
+      spec.tools.push(entry);
+    } else if (tool.kind === 'subAgent') {
+      const name = normalizeSkillName(tool.name);
+      const templateRef = plainText(tool.templateRef, 253);
+      const description = plainText(tool.description, 600);
+      if (!name || !K8S_NAME.test(templateRef) || !description) {
+        errors.push('kagentSpec.tools subAgent binding needs name, templateRef and description.');
+        continue;
+      }
+      const key = `subAgent:${name}`;
+      if (seenTools.has(key)) { errors.push(`Duplicate subAgent binding ${name}.`); continue; }
+      seenTools.add(key);
+      spec.tools.push({ kind: 'subAgent', name, templateRef, description });
+    } else {
+      errors.push('kagentSpec.tools entries must be kind mcp or subAgent.');
+    }
+  }
+  if (Array.isArray(input.tools) && input.tools.length > KAGENT_TOOL_MAX) {
+    errors.push(`kagentSpec.tools exceeds ${KAGENT_TOOL_MAX}.`);
+  }
+  const ociImages = new Set();
+  for (const skill of spec.skills) if (skill.source.oci) ociImages.add(skill.source.oci);
+  for (const plugin of spec.plugins) if (plugin.source.oci) ociImages.add(plugin.source.oci);
+  if (ociImages.size > KAGENT_OCI_VOLUME_MAX) {
+    errors.push(`kagentSpec uses ${ociImages.size} distinct OCI images; the runtime supports at most ${KAGENT_OCI_VOLUME_MAX}.`);
+  }
+  const unavailableSources = [];
+  for (const skill of spec.skills) if (!skill.source.oci) unavailableSources.push(`skill:${skill.name}`);
+  for (const plugin of spec.plugins) if (!plugin.source.oci) unavailableSources.push('plugin');
+  return { spec, errors, ociImages: ociImages.size, unavailableSources };
+}
+
+function kagentSpecWarnings(result) {
+  const warnings = [];
+  if (result.spec) {
+    for (const item of result.unavailableSources || []) {
+      warnings.push(`${item} uses a git/bucket source; kagent actors with non-OCI sources do not become Ready yet.`);
+    }
+  }
+  return warnings;
+}
+
+function composeKagentSystemPrompt(node) {
+  if (!isRecord(node)) return '';
+  const parts = [];
+  const base = plainText(node.systemPrompt, 16000);
+  if (base) parts.push(base);
+  const spec = isRecord(node.kagentSpec) ? node.kagentSpec : {};
+  for (const skill of Array.isArray(spec.skills) ? spec.skills : []) {
+    const append = skill && plainText(skill.promptAppend, 4000);
+    if (append) parts.push(append);
+  }
+  for (const plugin of Array.isArray(spec.plugins) ? spec.plugins : []) {
+    const append = plugin && plainText(plugin.promptAppend, 4000);
+    if (append) parts.push(append);
+  }
+  for (const tool of Array.isArray(spec.tools) ? spec.tools : []) {
+    if (tool && tool.kind === 'mcp') {
+      const append = plainText(tool.promptAppend, 4000);
+      if (append) parts.push(append);
+    }
+  }
+  return parts.join('\n\n');
+}
+
+// --------------------------------------------------------------- gate config (v2)
+
+function normalizeGateConfig(input) {
+  if (!isRecord(input)) return null;
+  const cards = [];
+  for (const raw of Array.isArray(input.cards) ? input.cards.slice(0, GATE_CARD_MAX) : []) {
+    if (!isRecord(raw)) continue;
+    const title = plainText(raw.title, 120);
+    if (!title) continue;
+    const items = normalizeTextList(raw.items, { maxItems: GATE_ITEM_MAX, maxLength: 300 });
+    const card = {
+      id: stableId(raw.id) || `gate-card-${cards.length + 1}`,
+      title,
+      items,
+      threshold: Math.round(finiteNumber(raw.threshold, 80, 0, 100)),
+    };
+    if (raw.passRate != null) card.passRate = Math.round(finiteNumber(raw.passRate, 0, 0, 100));
+    cards.push(card);
+  }
+  if (!cards.length) return null;
+  return {
+    id: stableId(input.id) || 'gate-template',
+    title: plainText(input.title, 160) || 'Decision gate review',
+    cards,
+  };
+}
+
+function validateGateConfig(input) {
+  const config = normalizeGateConfig(input);
+  if (!config) return { ok: false, error: 'A gate needs at least one assessment card.' };
+  return { ok: true, config };
+}
+
 function normalizeNode(input, { usedIds = new Set(), deps = {}, allowedAgentIds, allowedContextIds } = {}) {
-  if (!isRecord(input) || !WORKFLOW_NODE_KINDS.includes(input.kind)) return null;
+  if (!isRecord(input) || !WORKFLOW_NODE_KINDS_V2.includes(input.kind)) return null;
   const id = stableId(input.id) || nextId('node', usedIds, deps);
   if (usedIds.has(id)) return null;
   const kind = input.kind;
-  const refId = kind === 'approval' ? null : stableId(input.refId);
-  if (kind !== 'approval' && !refId) return null;
+  const refId = kind === 'approval' || kind === 'gate' ? null : stableId(input.refId);
+  if (kind !== 'approval' && kind !== 'gate' && !refId) return null;
   if (kind === 'agent' && allowedAgentIds && !allowedAgentIds.has(refId)) return null;
   if (kind === 'environment' && allowedContextIds && !allowedContextIds.has(refId)) return null;
+  if (unsafeText(input.name) || unsafeText(input.description)) return null;
   const node = {
     id,
     kind,
@@ -446,6 +723,26 @@ function normalizeNode(input, { usedIds = new Set(), deps = {}, allowedAgentIds,
     node.reviewCriteria = normalizeTextList(input.reviewCriteria, { maxItems: 20, maxLength: 240 });
     node.instructions = plainText(input.instructions, 1_000);
     node.rejectionHandling = plainText(input.rejectionHandling, 1_000);
+  }
+  if (kind === 'gate') {
+    const gateConfig = normalizeGateConfig(input.gateConfig);
+    if (!gateConfig) return null;
+    node.gateConfig = gateConfig;
+    const gateRef = stableId(input.gateRef);
+    if (gateRef) node.gateRef = gateRef;
+  }
+  if (kind === 'agent') {
+    node.backend = WORKFLOW_NODE_BACKENDS.includes(input.backend) ? input.backend : 'substrate';
+    node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness : '';
+    node.modelFamily = MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '';
+    node.taskTier = TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium';
+    node.systemPrompt = plainText(input.systemPrompt, 16_000);
+    node.connectors = normalizeConnectorList(input.connectors);
+    if (isRecord(input.kagentSpec)) {
+      const result = normalizeKagentSpec(input.kagentSpec);
+      if (result.errors.length) node.kagentErrors = result.errors;
+      node.kagentSpec = result.spec || undefined;
+    }
   }
   return node;
 }
@@ -541,12 +838,14 @@ export function normalizeWorkflow(input, deps = {}) {
   return normalizeWorkflowInternal(input, { deps });
 }
 
-function seededWorkflowClones() {
-  return clone(SEEDED_WORKFLOWS);
+function seededWorkflowClones(deps = {}) {
+  return clone(SEEDED_WORKFLOWS)
+    .map((workflow) => normalizeWorkflowInternal(workflow, { deps }))
+    .filter(Boolean);
 }
 
-export function createInitialState() {
-  const workflows = seededWorkflowClones();
+export function createInitialState(deps = {}) {
+  const workflows = seededWorkflowClones(deps);
   return {
     schemaVersion: WORKFLOW_SCHEMA_VERSION,
     activeWorkflowId: workflows[0].id,
@@ -557,7 +856,7 @@ export function createInitialState() {
 }
 
 function normalizeStateWithRecovery(raw, deps = {}) {
-  if (!isRecord(raw) || raw.schemaVersion !== WORKFLOW_SCHEMA_VERSION) {
+  if (!isRecord(raw) || ![WORKFLOW_SCHEMA_VERSION, WORKFLOW_SCHEMA_VERSION_V2].includes(raw.schemaVersion)) {
     return { state: createInitialState(), recovered: true };
   }
   const curatedAgentIds = new Set(CURATED_AGENT_CATALOG.map((item) => item.id));
@@ -1116,4 +1415,44 @@ export function deleteCustomContext(state, contextId, deps = {}) {
   }
   const [context] = safeState.customContexts.splice(index, 1);
   return { ok: true, state: safeState, context, error: null };
+}
+
+// --------------------------------------------------------------- v2 public API
+
+export {
+  normalizeKagentSpec,
+  kagentSpecWarnings,
+  composeKagentSystemPrompt,
+  normalizeGateConfig,
+  validateGateConfig,
+  normalizeConnectorList,
+  // The canvas disables "Add variable" at this count; the model drops the 41st
+  // row silently, so the two have to read one number or the editor promises rows
+  // that vanish on save.
+  KAGENT_ENV_MAX,
+};
+
+/** Convert a v1 workflow graph into the v2 shape (substrate defaults backfilled). */
+export function migrateV1ToV2(v1, deps = {}) {
+  if (!isRecord(v1)) return null;
+  return normalizeWorkflowInternal({
+    ...v1,
+    nodes: (Array.isArray(v1.nodes) ? v1.nodes : []).map((node) => (
+      isRecord(node) && node.kind === 'agent'
+        ? { backend: 'substrate', taskTier: 'medium', ...node }
+        : node
+    )),
+  }, { deps });
+}
+
+export function allowedCategoriesForPersona(persona, grants = DEFAULT_PERSONA_GRANTS) {
+  if (persona === 'org-admin') return null;
+  const list = grants && grants[persona];
+  return Array.isArray(list) ? [...list] : [...(DEFAULT_PERSONA_GRANTS[persona] || [])];
+}
+
+export function personaAllowsCategory(persona, category, grants = DEFAULT_PERSONA_GRANTS) {
+  const allowed = allowedCategoriesForPersona(persona, grants);
+  if (allowed == null) return true;
+  return allowed.includes(String(category || 'Custom'));
 }

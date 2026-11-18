@@ -4,6 +4,12 @@ import {
   activeWorkspaceOrganization,
   getWorkspaceContext,
 } from '../workspace-context.js';
+import { api } from '../api.js';
+import { createWorkflowSync } from '../workflow-sync.mjs';
+import * as workflowCaps from '../workflow-capabilities.mjs';
+import { gateConfigFrom, gateSummaryText, gateVerdict } from '../workflow-gate.mjs';
+import { openGateReview } from './workflow-gate-modal.mjs';
+import * as designerModel from '../workflow-designer-model.mjs';
 import {
   addEdge,
   addNode,
@@ -22,15 +28,35 @@ import {
   getContextCatalog,
   graphSummary,
   moveNode,
-  readStateFromStorage,
+  personaAllowsCategory,
   resetSeededWorkflows,
   updateCustomAgent,
   updateCustomContext,
   updateEdge,
   updateNode,
   upsertWorkflow,
-  writeStateToStorage,
 } from '../workflow-designer-model.mjs';
+
+// One reader for the module: the namespace does not change while the tab is
+// open, and forty agent nodes must not cost forty reads.
+const kagentCapabilities = workflowCaps.createCapabilitiesReader({
+  read: () => api.kagentCapabilities(),
+});
+
+let activeGateReview = null;
+
+function describePublishFailure(error) {
+  const payload = (error && error.payload) || {};
+  if (payload.error === 'kagent_not_configured' || payload.error === 'substrate_not_configured') {
+    return 'This deployment has no runtime configured, so nothing was rendered. An operator turns the switch on (docs/GCP_DEPLOY.md); the binding you saved stays saved.';
+  }
+  if (payload.code === 'persona_denied') {
+    return `Your persona is not granted this agent: ${(payload.violations || []).join(' ') || (error && error.message) || ''}`;
+  }
+  const detail = payload.detail
+    || (Array.isArray(payload.errors) ? payload.errors.join(' ') : '');
+  return `${(error && error.message) || 'The publish failed.'}${detail ? ` — ${detail}` : ''}`;
+}
 
 const CANVAS_WIDTH = 2500;
 const CANVAS_HEIGHT = 1040;
@@ -60,6 +86,7 @@ const AGENT_CATEGORIES = Object.freeze([
 
 let fieldSequence = 0;
 let flushPendingDesignerSave = null;
+let onDesignerReconnect = null;
 let persistenceEventsBound = false;
 
 function bindPersistenceEvents() {
@@ -70,6 +97,9 @@ function bindPersistenceEvents() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
   });
+  // A reconnect is the only retry: keystrokes must not re-open a request while
+  // the browser still knows it is offline.
+  window.addEventListener('online', () => onDesignerReconnect?.());
 }
 
 function browserStorage() {
@@ -138,6 +168,29 @@ function safeId(value) {
   return String(value || '').replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 100);
 }
 
+/**
+ * The env rows a publish would actually carry. Everything else is already gone:
+ * the model drops unnamed rows, reserved names and credential-shaped pairs on
+ * normalize, so the editor must not offer back what the CRD will refuse.
+ */
+function envRowsOf(node) {
+  const rows = node && node.kagentSpec && Array.isArray(node.kagentSpec.env) ? node.kagentSpec.env : [];
+  return rows.filter((row) => row && typeof row.name === 'string' && row.name);
+}
+
+/**
+ * Card footer: which runtime a publish of this node would target. A node says
+ * "Agent profile" without that and the canvas then looks identical whether it
+ * will render kagent CRDs or a substrate actor — which is the one thing an
+ * operator needs before clicking publish.
+ */
+function agentRuntimeSummary(node) {
+  const parts = [node.backend === 'kagent' ? 'kagent' : 'substrate'];
+  if (node.backend === 'kagent' && node.harness) parts.push(node.harness);
+  parts.push(node.taskTier || 'medium');
+  return parts.join(' · ');
+}
+
 function nodeLabel(node, state) {
   if (node.name) return node.name;
   if (node.kind === 'agent') return findAgentProfile(node.refId, state)?.name || 'Agent';
@@ -152,19 +205,32 @@ function nodeDescription(node, state) {
     return profile?.description || profile?.purpose || 'Organization agent';
   }
   if (node.kind === 'environment') return findContextProfile(node.refId, state)?.description || 'Execution context';
+  if (node.kind === 'gate') return gateSummaryText(node.gateConfig?.cards);
   return Array.isArray(node.reviewCriteria) && node.reviewCriteria.length
     ? node.reviewCriteria.join(' · ')
     : 'Review evidence before downstream work continues.';
 }
 
+/** The card footer: how close this gate is to letting the lane continue. */
+function gateBadge(node) {
+  const verdict = gateVerdict(node.gateConfig?.cards);
+  if (!verdict.total) return 'No assessment cards';
+  if (verdict.unassessed) return `${verdict.total} cards · ${verdict.unassessed} not assessed`;
+  return verdict.passed
+    ? `${verdict.total} cards met · ${verdict.overall}% overall`
+    : `${verdict.met}/${verdict.total} cards met`;
+}
+
 function nodeKindLabel(node, state) {
   if (node.kind === 'approval') return 'Human gate';
+  if (node.kind === 'gate') return 'Decision gate';
   if (node.kind === 'environment') return 'Environment';
   return findAgentProfile(node.refId, state)?.category || 'Agent';
 }
 
 function nodeIconName(node) {
   if (node.kind === 'approval') return 'check';
+  if (node.kind === 'gate') return 'board';
   if (node.kind === 'environment') return 'sliders';
   return 'spark';
 }
@@ -174,13 +240,18 @@ function workflowById(state, id) {
 }
 
 /**
- * Frontend-only organization workflow designer. It deliberately performs no API
- * calls: drafts live under an organization-keyed localStorage record and the UI
- * calls out that graphs are non-executable prototypes.
+ * Organization workflow designer. Graphs persist per organization through
+ * /api/workflows; localStorage keeps the draft that lets an offline or closed
+ * tab pick up where it left off. Graphs stay design drafts — saving never
+ * starts an agent run.
  */
 export async function renderWorkflows(view) {
+  // A dialog is not part of the next view: navigating away closes it, and an
+  // un-answered review must not linger over a different page.
+  activeGateReview?.close();
   flushPendingDesignerSave?.();
   flushPendingDesignerSave = null;
+  onDesignerReconnect = null;
   const workspace = getWorkspaceContext();
   const organization = activeWorkspaceOrganization(workspace);
   if (!organization) {
@@ -197,8 +268,19 @@ export async function renderWorkflows(view) {
 
   const canEdit = String(organization.role || '').toUpperCase() === 'ORG_ADMIN';
   const storage = browserStorage();
-  const loaded = readStateFromStorage(storage, organization.id);
+  const sync = createWorkflowSync({
+    client: api, model: designerModel, storage, organizationId: organization.id, canWrite: canEdit,
+  });
+  const loaded = await sync.load();
   let state = loaded.state;
+  // Grants only filter the palette; the gateway is what refuses a write the
+  // persona may not make, so nothing here is a security boundary.
+  const persona = loaded.context.persona;
+  const grants = loaded.context.grants;
+  // The tenant's assessment-card template: what a new gate node is seeded with,
+  // so the org's review criteria are the starting point rather than a blank form.
+  const gateTemplate = loaded.context.gateTemplate;
+  let syncedWithServer = loaded.source === 'server' || loaded.source === 'imported';
   let selected = { kind: 'workflow', id: state.activeWorkflowId };
   let connectSource = '';
   let paletteQuery = '';
@@ -223,22 +305,108 @@ export async function renderWorkflows(view) {
     statusHost.dataset.state = tone === 'ok' ? 'saved' : tone === 'error' ? 'error' : 'dirty';
   }
 
+  function applySyncStatus(result) {
+    syncedWithServer = result.status === 'saved' || syncedWithServer;
+    if (result.status === 'saved') {
+      setSaveStatus(`Saved · shared with your organization${persona ? ` · ${persona}` : ''}`, 'ok');
+      return;
+    }
+    if (result.status === 'readonly') {
+      setSaveStatus('Read-only view · changes not saved');
+      return;
+    }
+    if (result.status === 'conflict') {
+      setSaveStatus('Someone saved a newer copy · reload to compare', 'error');
+      toast('This workflow changed on the server since you loaded it. Your draft is kept on this device; reload the page to compare before saving again.', 'err');
+      return;
+    }
+    if (result.status === 'offline') {
+      setSaveStatus('Offline · saved on this device', 'error');
+      return;
+    }
+    setSaveStatus('Could not save · draft kept on this device', 'error');
+  }
+
+  let pushing = false;
+  let pushAgain = false;
+
+  async function pushToServer() {
+    if (pushing) {
+      pushAgain = true;
+      return;
+    }
+    pushing = true;
+    do {
+      pushAgain = false;
+      try {
+        applySyncStatus(await sync.flush(state));
+      } catch (error) {
+        // An auth refusal is the session handler's problem, not a save failure.
+        if (error && (error.status === 401 || error.status === 403)) {
+          setSaveStatus(error.status === 403 ? 'Not allowed to save this workflow' : 'Sign in again to save', 'error');
+        } else {
+          setSaveStatus('Could not reach the server · draft kept', 'error');
+        }
+      }
+    } while (pushAgain);
+    pushing = false;
+  }
+
   function persistNow({ silent = false } = {}) {
     if (persistTimer) window.clearTimeout(persistTimer);
     persistTimer = null;
-    const result = writeStateToStorage(storage, organization.id, state);
-    if (result.ok) setSaveStatus('Saved locally · not shared', 'ok');
-    else {
+    // Draft first, always: a failed request must never cost the user the edit.
+    const result = sync.writeDraft(state);
+    if (!result.ok) {
       setSaveStatus('Could not save · session copy retained', 'error');
       if (!silent) toast(result.error || 'Browser storage is unavailable. Your current session is still usable.', 'err');
+      return result;
     }
+    if (!syncedWithServer && !sync.isOffline()) setSaveStatus('Saving…');
+    pushToServer();
     return result;
   }
 
   function schedulePersist() {
-    setSaveStatus('Saving locally…');
+    setSaveStatus(syncedWithServer ? 'Saving…' : 'Saving locally…');
     if (persistTimer) window.clearTimeout(persistTimer);
     persistTimer = window.setTimeout(() => persistNow(), SAVE_DELAY_MS);
+  }
+
+  const capabilities = kagentCapabilities;
+
+  /**
+   * Publish one agent node. The graph is saved first and the save has to
+   * settle: the gateway renders the graph it has, so publishing an unsaved
+   * binding would answer 200 about a CR that is not what is on the screen.
+   */
+  async function publishNode(node, graphId, host) {
+    const show = (lines, tone) => {
+      const list = el('ul', { class: `workflow-publish-lines workflow-publish-lines--${tone}` });
+      for (const line of lines) list.append(el('li', {}, line));
+      host.replaceChildren(list);
+    };
+    try {
+      persistPendingViewport();
+      if (persistTimer) persistNow({ silent: true });
+      await pushToServer();
+      if (!syncedWithServer) {
+        show(['The graph could not be saved, so nothing was published. The runtime renders the saved copy, not this tab.'], 'err');
+        return;
+      }
+      const outcome = await api.publishWorkflowNode(graphId, node.id);
+      const lines = [`${outcome.created ? 'Created' : 'Updated'} ${outcome.namespace || 'kagent'}/${outcome.name}.`];
+      for (const warning of outcome.warnings || []) lines.push(`Warning: ${warning}`);
+      if (outcome.harnessWarning) {
+        lines.push(outcome.harnessWarning);
+        for (const row of outcome.harnessEnv || []) lines.push(`${row.name}=${row.value}`);
+      }
+      show(lines, 'ok');
+      toast(`Published ${outcome.name} to ${outcome.namespace || 'the kagent namespace'}.`, 'ok');
+    } catch (error) {
+      show([describePublishFailure(error)], 'err');
+      toast('The publish did not complete.', 'err');
+    }
   }
 
   function persistPendingViewport() {
@@ -253,6 +421,11 @@ export async function renderWorkflows(view) {
   flushPendingDesignerSave = () => {
     persistPendingViewport();
     if (persistTimer) persistNow({ silent: true });
+  };
+  onDesignerReconnect = async () => {
+    sync.setOnline();
+    if (syncedWithServer && !persistTimer) return;
+    await pushToServer();
   };
   bindPersistenceEvents();
 
@@ -270,8 +443,10 @@ export async function renderWorkflows(view) {
     const workflow = currentWorkflow();
     const summary = graphSummary(workflow);
     const agents = workflow.nodes.filter((node) => node.kind === 'agent').length;
-    const gates = workflow.nodes.filter((node) => node.kind === 'approval').length;
-    summaryHost.textContent = `${agents} agents · ${gates} approvals · ${summary.componentCount} ${summary.componentCount === 1 ? 'lane' : 'independent lanes'}`;
+    const approvals = workflow.nodes.filter((node) => node.kind === 'approval').length;
+    const gates = workflow.nodes.filter((node) => node.kind === 'gate').length;
+    summaryHost.textContent = `${agents} agents · ${approvals} approvals · ${gates} gates · `
+      + `${summary.componentCount} ${summary.componentCount === 1 ? 'lane' : 'independent lanes'}`;
   }
 
   function acceptState(nextState, {
@@ -315,6 +490,11 @@ export async function renderWorkflows(view) {
   }
 
   function selectItem(kind, id) {
+    // Re-selecting the node under the cursor must not rebuild the canvas: the
+    // replacement element is a different node in the DOM, and Chrome dispatches
+    // dblclick on the common ancestor when a click pair lands on two different
+    // elements — so a click-then-redraw eats the gate review's double-click.
+    if (kind === 'node' && selected.kind === 'node' && selected.id === id) return;
     selected = { kind, id };
     renderCanvas();
     renderInspector();
@@ -334,6 +514,27 @@ export async function renderWorkflows(view) {
     });
   }
 
+  function openGateReviewFor(node) {
+    activeGateReview?.close();
+    activeGateReview = openGateReview({
+      node,
+      gateTemplate,
+      canEdit,
+      onApply: (config) => {
+        const result = updateNode(currentWorkflow(), node.id, { gateConfig: config });
+        if (!result.ok) return toast(result.error || 'The gate cards could not be saved.', 'err');
+        acceptWorkflow(result.workflow, { inspector: false, controls: false });
+        schedulePersist();
+        return undefined;
+      },
+      onClose: () => {
+        activeGateReview = null;
+        renderInspector();
+        renderCanvas();
+      },
+    });
+  }
+
   function addNodeFromPalette(kind, refId, position = null) {
     if (!canEdit) return;
     const viewport = canvasHost?.querySelector('.workflow-canvas-viewport');
@@ -350,6 +551,12 @@ export async function renderWorkflows(view) {
     } else if (kind === 'environment') {
       const context = findContextProfile(refId, state);
       input = { kind, refId, x: suggested.x, y: suggested.y, name: context?.name, description: context?.description };
+    } else if (kind === 'gate') {
+      input = {
+        kind: 'gate', x: suggested.x, y: suggested.y, name: 'Decision gate',
+        description: 'Advance this lane only when every assessment card reaches its threshold.',
+        gateConfig: gateConfigFrom(gateTemplate), gateRef: gateTemplate?.id || '',
+      };
     } else {
       input = {
         kind: 'approval', x: suggested.x, y: suggested.y, name: 'Human approval',
@@ -410,7 +617,7 @@ export async function renderWorkflows(view) {
       class: 'workflow-palette-item', draggable: canEdit ? 'true' : 'false',
       dataset: { paletteKind: kind, paletteId: id },
     }, [
-      el('span', { class: `workflow-palette-icon workflow-palette-icon--${kind}` }, icon(kind === 'environment' ? 'sliders' : 'spark', { size: 16 })),
+      el('span', { class: `workflow-palette-icon workflow-palette-icon--${kind}` }, icon(kind === 'environment' ? 'sliders' : kind === 'gate' ? 'board' : 'spark', { size: 16 })),
       el('div', { class: 'workflow-palette-copy' }, [
         el('strong', {}, name),
         el('small', {}, description || 'Available organization resource'),
@@ -446,7 +653,12 @@ export async function renderWorkflows(view) {
     const query = paletteQuery.trim().toLowerCase();
     const matches = (item) => !query || [item.name, item.description, item.purpose, item.category]
       .filter(Boolean).join(' ').toLowerCase().includes(query);
-    const agents = getAgentCatalog(state).filter(matches);
+    // Grants filter this list for convenience only — the gateway is what actually
+    // refuses a save the persona may not make.
+    const allowedByPersona = (profile) => !grants || personaAllowsCategory(persona, profile.category, grants);
+    const searchableAgents = getAgentCatalog(state).filter(matches);
+    const agents = searchableAgents.filter(allowedByPersona);
+    const withheld = searchableAgents.length - agents.length;
     const contexts = getContextCatalog(state).filter(matches);
     const search = el('input', {
       type: 'search', value: paletteQuery, placeholder: 'Search agents and contexts',
@@ -475,12 +687,19 @@ export async function renderWorkflows(view) {
       ]),
       el('div', { class: 'workflow-palette-tools' }, [search, el('div', { class: 'workflow-palette-create' }, [newAgent, newContext])]),
       el('div', { class: 'workflow-panel-body' }, [
+        withheld ? el('p', { class: 'muted workflow-palette-note' }, `${withheld} agent${withheld === 1 ? '' : 's'} outside the ${persona || 'default'} persona ${withheld === 1 ? 'is' : 'are'} hidden; the organization can grant them.`) : null,
         paletteSection('Agents', agents.map((profile) => paletteItem({ kind: 'agent', ...profile, custom: profile.source === 'custom' || state.customAgents.some((item) => item.id === profile.id) }))),
         paletteSection('Execution contexts', contexts.map((context) => paletteItem({ kind: 'environment', ...context, category: 'Context', custom: context.source === 'custom' || state.customContexts.some((item) => item.id === context.id) }))),
-        paletteSection('Control', query && !'human approval role gate review'.includes(query) ? [] : [paletteItem({
-          kind: 'approval', id: '', name: 'Human approval', category: 'Control',
-          description: 'Pause a designed lane for a role-based approve or reject decision.',
-        })]),
+        paletteSection('Control', query && !'human approval role gate review decision criteria threshold card pass rate'.includes(query) ? [] : [
+          paletteItem({
+            kind: 'approval', id: '', name: 'Human approval', category: 'Control',
+            description: 'Pause a designed lane for a role-based approve or reject decision.',
+          }),
+          paletteItem({
+            kind: 'gate', id: '', name: 'Decision gate', category: 'Control',
+            description: 'Assessment cards with thresholds: a lane continues when every card passes.',
+          }),
+        ]),
       ]),
     );
   }
@@ -597,6 +816,7 @@ export async function renderWorkflows(view) {
     const article = el('article', {
       class: `workflow-node workflow-node--${node.kind}${active ? ' is-selected' : ''}${standalone ? ' is-standalone' : ''}${canEdit ? '' : ' is-readonly'}`,
       style: `left:${node.x}px;top:${node.y}px`, tabindex: '0', role: 'group',
+      title: node.kind === 'gate' ? 'Double-click to review the assessment cards' : undefined,
       'aria-label': `${nodeLabel(node, state)}, ${nodeKindLabel(node, state)}${standalone ? ', standalone' : ''}`,
       dataset: {
         nodeId: node.id,
@@ -618,8 +838,9 @@ export async function renderWorkflows(view) {
       el('p', { class: 'workflow-node-body' }, nodeDescription(node, state)),
       el('footer', { class: 'workflow-node-footer' }, [
         node.kind === 'approval' ? el('span', {}, node.requiredRole || 'Human reviewer') : null,
+        node.kind === 'gate' ? el('span', {}, gateBadge(node)) : null,
         node.kind === 'environment' ? el('span', {}, 'Execution context') : null,
-        node.kind === 'agent' ? el('span', {}, 'Agent profile') : null,
+        node.kind === 'agent' ? el('span', {}, agentRuntimeSummary(node)) : null,
       ]),
       outputPort,
     ]);
@@ -627,6 +848,15 @@ export async function renderWorkflows(view) {
       if (event.target.closest('button')) return;
       selectItem('node', node.id);
     });
+    if (node.kind === 'gate') {
+      // A single click selects, like every other node; the review is a
+      // deliberate second act, so it is double-click or the inspector button.
+      article.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openGateReviewFor(node);
+      });
+    }
     article.addEventListener('keydown', (event) => {
       if (event.target !== article) return;
       const directions = { ArrowLeft: [-GRID_SIZE, 0], ArrowRight: [GRID_SIZE, 0], ArrowUp: [0, -GRID_SIZE], ArrowDown: [0, GRID_SIZE] };
@@ -795,7 +1025,7 @@ export async function renderWorkflows(view) {
     const deleteButton = el('button', { type: 'button', class: 'danger', disabled: !canEdit || state.workflows.length < 2 }, 'Delete workflow');
     deleteButton.addEventListener('click', () => { selected = { kind: 'confirm-workflow-delete', id: workflow.id }; renderInspector(); });
     return [
-      inspectorHeader('Workflow', workflow.exampleId ? 'Seeded ADLC example' : 'Browser-local draft'),
+      inspectorHeader('Workflow', workflow.exampleId ? 'Seeded ADLC example' : 'Organization draft'),
       el('div', { class: 'workflow-panel-body' }, [
         field('Name', name),
         field('Description', description),
@@ -806,6 +1036,292 @@ export async function renderWorkflows(view) {
         deleteButton,
       ]),
     ];
+  }
+
+  /**
+   * Runtime binding for an agent node. These live on the NODE rather than the
+   * profile because one curated agent can run on either backend, and a publish
+   * reads exactly these four names. The env editor appears only under kagent
+   * because a substrate run ignores those bindings — but the state keeps
+   * `kagentSpec` when the backend changes, so switching over to compare patterns
+   * and back does not quietly delete a teammate's harness configuration.
+   */
+  function agentRuntimeSection(node) {
+    const live = () => (currentWorkflow().nodes.find((candidate) => candidate.id === node.id) || node);
+    const patch = (next, { redraw = false } = {}) => updateSelectedNode(next, { redrawInspector: redraw });
+    const patchEnv = (rows) => {
+      const spec = { ...deepClone(live().kagentSpec || {}), env: rows };
+      patch({ kagentSpec: spec });
+    };
+
+    const segmented = el('div', { class: 'workflow-segmented', role: 'group', 'aria-label': 'Execution backend' });
+    for (const value of designerModel.WORKFLOW_NODE_BACKENDS) {
+      const button = el('button', {
+        type: 'button',
+        disabled: !canEdit,
+        'aria-pressed': String(value === (node.backend || 'substrate')),
+      }, value === 'kagent' ? 'Kagent (in-cluster CRDs)' : 'Substrate (sandbox actors)');
+      button.addEventListener('click', () => {
+        if (!canEdit || value === live().backend) return;
+        patch({ backend: value }, { redraw: true });
+      });
+      segmented.append(button);
+    }
+
+    const choice = (label, values, current, key, emptyLabel) => {
+      const items = values.map((item) => (typeof item === 'string' ? { value: item, label: item, source: 'platform' } : item));
+      const select = el('select', { disabled: !canEdit }, [
+        ...(emptyLabel ? [option('', emptyLabel, !current)] : []),
+        ...items.map((item) => option(
+          item.value,
+          item.source === 'cluster' ? `${item.label} · in the namespace` : item.label,
+          item.value === current,
+        )),
+      ]);
+      select.addEventListener('change', () => patch({ [key]: select.value }));
+      return field(label, select);
+    };
+
+    // Env rows commit on `change`, not on every keystroke. The editor keeps the
+    // list it has already written rather than re-reading the node, because the
+    // save normalizes asynchronously: a row checked against state immediately
+    // after a write reads as "not saved", and the next write then sends the same
+    // name twice — and the model keeps the first entry, so the value the user
+    // just typed would be dropped. `normalizeKagentSpec` is the same function
+    // the save path runs, so the editor's list and the saved list cannot diverge.
+    const rows = el('div', { class: 'workflow-env-rows' });
+    const dropped = el('p', { class: 'workflow-env-dropped', role: 'status' }, '');
+    const envCountNote = el('small', { class: 'muted' }, '');
+    const accepted = (next) => (designerModel.normalizeKagentSpec({ env: next }).spec || {}).env || [];
+    let envDraft = accepted(envRowsOf(live()));
+
+    const envRow = (row) => {
+      const name = textInput(row.name, {
+        maxlength: '128', placeholder: 'NAME', disabled: !canEdit, 'aria-label': 'Environment variable name',
+      });
+      const value = textInput(row.value, {
+        maxlength: '2048', placeholder: 'literal value', disabled: !canEdit, 'aria-label': `Value for ${row.name}`,
+      });
+      const commit = () => {
+        const index = envDraft.findIndex((item) => item.name === name.dataset.committed);
+        if (index < 0) return renderRows();
+        const next = [...envDraft];
+        next[index] = { name: name.value.trim(), value: value.value };
+        writeEnv(next);
+        renderRows();
+      };
+      name.dataset.committed = row.name;
+      name.addEventListener('change', commit);
+      value.addEventListener('change', commit);
+      const remove = el('button', {
+        type: 'button', class: 'workflow-icon-button', disabled: !canEdit,
+        'aria-label': `Remove ${row.name}`,
+      }, icon('close', { size: 13 }));
+      remove.addEventListener('click', () => {
+        writeEnv(envDraft.filter((item) => item.name !== name.dataset.committed));
+        renderRows();
+      });
+      return el('div', { class: 'workflow-env-row' }, [name, value, remove]);
+    };
+
+    // The row you are adding to is a fixed element with its own commit, not a
+    // `change` handler: a name change and a value change are two separate blurs,
+    // and committing on the first would clear the row before the value is typed
+    // while committing on the second would send a nameless row the model drops.
+    const scratchName = textInput('', {
+      maxlength: '128', placeholder: 'NAME', disabled: !canEdit, 'aria-label': 'New environment variable name',
+    });
+    const scratchValue = textInput('', {
+      maxlength: '2048', placeholder: 'literal value', disabled: !canEdit, 'aria-label': 'New environment variable value',
+    });
+    const addVar = el('button', {
+      type: 'button', class: 'workflow-env-add', disabled: !canEdit,
+    }, 'Add variable');
+    const scratch = el('div', { class: 'workflow-env-row workflow-env-row--new' }, [
+      scratchName, scratchValue, addVar,
+    ]);
+    rows.append(scratch);
+    const commitScratch = () => {
+      const updated = { name: scratchName.value.trim(), value: scratchValue.value };
+      addVar.blur();
+      if (!updated.name) return;
+      writeEnv([...envDraft, updated]);
+      const saved = envDraft.find((item) => item.name === updated.name);
+      if (!saved) {
+        dropped.textContent = `"${updated.name}" was not saved: the name or the value reads like a credential, or the name is not a valid environment variable. Keys belong in a ModelConfig apiKeySecret or a RemoteMCPServer header reference.`;
+      } else if (saved.value !== updated.value) {
+        dropped.textContent = `"${updated.name}" already has a value. Edit that row instead of adding a second one.`;
+      } else {
+        scratchName.value = '';
+        scratchValue.value = '';
+        dropped.textContent = '';
+      }
+      renderRows();
+    };
+    addVar.addEventListener('click', commitScratch);
+    for (const input of [scratchName, scratchValue]) {
+      input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        commitScratch();
+      });
+    }
+
+    const writeEnv = (next) => {
+      envDraft = accepted(next);
+      patchEnv(envDraft);
+    };
+
+    function renderRows() {
+      const onScreen = Array.from(rows.children).filter((child) => child !== scratch);
+      const agrees = onScreen.length === envDraft.length
+        && onScreen.every((row, i) => row.children[0].value.trim() === envDraft[i].name);
+      if (agrees) {
+        // Only values moved: patch them in place so the caret stays where the
+        // user put it. A row the model rewrote (truncated or refused) is the
+        // only input this touches.
+        onScreen.forEach((row, i) => {
+          if (row.children[1].value !== envDraft[i].value) row.children[1].value = envDraft[i].value;
+          row.children[0].dataset.committed = envDraft[i].name;
+        });
+      } else {
+        // Rebuilt around the scratch row rather than into it: replacing the
+        // container's children would detach the input being typed into.
+        onScreen.forEach((row) => row.remove());
+        for (const row of envDraft.map(envRow)) rows.insertBefore(row, scratch);
+      }
+      scratch.hidden = !canEdit || envDraft.length >= designerModel.KAGENT_ENV_MAX;
+      envCountNote.textContent = `${envDraft.length} of ${designerModel.KAGENT_ENV_MAX} variables. PLUGIN_ROOT and PLUGIN_DATA are reserved by the runtime; a name that reads like a credential is refused.`;
+    }
+    renderRows();
+
+    const caps = capabilities.peek(organization.id);
+    if (!caps) {
+      capabilities.load(organization.id).then((value) => {
+        // A refusal is not a redraw: it changes one sentence, and the section
+        // already says it. Redrawing on every refusal would replace the
+        // inspector while the operator is typing into it.
+        if (!value.enabled) return;
+        if (selected.kind !== 'node' || selected.id !== node.id) return;
+        // The read answers when the cluster feels like it, not when the operator
+        // is done typing, and this redraw replaces the whole inspector: never
+        // pull the field out from under the caret for a list of names.
+        const active = document.activeElement;
+        if (active && active.closest && active.closest('.workflow-env-rows')) return;
+        renderInspector();
+      });
+    }
+    const reread = el('button', { type: 'button', class: 'workflow-caps-reread' }, 'Read the cluster again');
+    reread.addEventListener('click', () => {
+      reread.disabled = true;
+      capabilities.load(organization.id, { force: true }).finally(() => {
+        reread.disabled = false;
+        if (selected.kind === 'node' && selected.id === node.id) renderInspector();
+      });
+    });
+
+    const specOf = () => {
+      const spec = live().kagentSpec;
+      return spec && typeof spec === 'object' ? spec : {};
+    };
+    const patchSpec = (changes) => patch({ kagentSpec: { ...deepClone(specOf()), ...changes } });
+    const boundServers = () => (Array.isArray(specOf().tools) ? specOf().tools : [])
+      .filter((tool) => tool && tool.kind === 'mcp').map((tool) => tool.server);
+
+    const modelConfig = el('select', { disabled: !canEdit }, [
+      option('', workflowCaps.modelConfigEmptyLabel(caps), !specOf().modelConfig),
+      ...workflowCaps.modelConfigChoices(caps)
+        .map((item) => option(item.value, item.value, specOf().modelConfig && specOf().modelConfig.name === item.value)),
+    ]);
+    modelConfig.addEventListener('change', () => patchSpec({ modelConfig: modelConfig.value ? { name: modelConfig.value } : null }));
+
+    const mcpList = el('div', { class: 'workflow-check-list' });
+    const mcpChoices = workflowCaps.mcpChoices(caps);
+    for (const item of mcpChoices) {
+      const box = el('input', { type: 'checkbox', disabled: !canEdit });
+      box.checked = boundServers().includes(item.value);
+      box.addEventListener('change', () => {
+        const kept = (Array.isArray(specOf().tools) ? specOf().tools : [])
+          .filter((tool) => !(tool && tool.kind === 'mcp' && tool.server === item.value));
+        patchSpec({ tools: box.checked ? [...kept, { kind: 'mcp', server: item.value, tools: [] }] : kept });
+      });
+      mcpList.append(el('label', { class: 'workflow-check' }, [box, el('span', {}, item.value)]));
+    }
+    if (!mcpChoices.length) {
+      mcpList.append(el('p', { class: 'muted' }, caps && caps.enabled
+        ? 'This namespace has no RemoteMCPServer, so an MCP binding has nothing to point at.'
+        : 'Server names appear once the namespace has been read.'));
+    }
+
+    const publishResult = el('div', { class: 'workflow-publish-result', role: 'status' }, '');
+    const publishButton = el('button', {
+      type: 'button', class: 'btn primary', disabled: !canEdit,
+      title: node.backend === 'kagent'
+        ? 'Render this node as an Agent CR in the kagent namespace'
+        : 'Publish the profile behind this node as a substrate actor',
+    }, node.backend === 'kagent' ? 'Publish this node to kagent' : 'Publish this profile to substrate');
+    publishButton.addEventListener('click', () => {
+      publishButton.disabled = true;
+      publishResult.textContent = 'Saving the graph, then rendering…';
+      publishNode(node, currentWorkflow().id, publishResult).finally(() => {
+        publishButton.disabled = !canEdit;
+      });
+    });
+
+    const sections = [
+      el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Runtime binding'),
+        field('Execution backend', segmented),
+        choice('Harness', workflowCaps.harnessChoices(caps, designerModel.HARNESS_OPTIONS), node.harness, 'harness', 'Platform default'),
+        choice('Model family', designerModel.MODEL_FAMILIES, node.modelFamily, 'modelFamily', 'Inherit from the profile'),
+        choice('Task tier', designerModel.TASK_TIERS, node.taskTier || 'medium', 'taskTier', ''),
+        el('p', { class: 'muted' }, 'A kagent publish renders from this node. Substrate runs the curated profile as an actor, so its kagent bindings are ignored.'),
+        // Not field(): a <label for> would rename the button to "Runtime" and
+        // the only thing saying what the click does would be its own title.
+        el('div', { class: 'workflow-field' }, [
+          el('div', { class: 'workflow-field-label' }, 'Publish to runtime'),
+          publishButton,
+        ]),
+        publishResult,
+      ]),
+    ];
+
+    if (node.backend === 'kagent') {
+      sections.push(el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Cluster bindings'),
+        el('p', { class: 'workflow-kagent-caps' }, workflowCaps.capabilitiesSummary(caps)),
+        caps && caps.enabled ? null : reread,
+        field('ModelConfig', modelConfig),
+        field('Remote MCP servers', mcpList),
+        el('p', { class: 'muted' }, 'Names here are the ones this namespace holds. A name typed anywhere else saves, and then fails to resolve when the Agent is applied.'),
+      ]));
+      sections.push(el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Harness environment'),
+        rows,
+        dropped,
+        el('p', { class: 'workflow-secret-warning' }, 'Literal values only. A name or value that looks like a credential is dropped here — keys belong in a ModelConfig apiKeySecret or a RemoteMCPServer header reference.'),
+        envCountNote,
+      ]));
+    }
+    return sections;
+  }
+
+  /**
+   * A gate is configured in its own dialog, not in the inspector: six cards of
+   * criteria do not fit a side panel, and the verdict is what the approver
+   * reads. The inspector therefore reports the state and opens the review.
+   */
+  function gateInspectorSection(node) {
+    const open = el('button', { type: 'button', class: 'btn primary', disabled: !canEdit }, 'Open gate review');
+    open.addEventListener('click', () => openGateReviewFor(node));
+    return [el('section', { class: 'workflow-inspector-section' }, [
+      el('h3', {}, 'Assessment cards'),
+      el('p', { class: 'workflow-gate-verdict', role: 'status' }, gateSummaryText(node.gateConfig?.cards)),
+      el('small', { class: 'muted' }, node.gateRef
+        ? `Seeded from the platform template ${node.gateRef}; edits here apply to this gate only.`
+        : 'Cards and thresholds belong to this gate, so editing them changes no other workflow.'),
+      open,
+    ])];
   }
 
   function nodeInspector(node) {
@@ -826,6 +1342,8 @@ export async function renderWorkflows(view) {
       const rejection = textArea(node.rejectionHandling, { maxlength: '1000', rows: '3', disabled: !canEdit });
       rejection.addEventListener('input', () => updateSelectedNode({ rejectionHandling: rejection.value }));
       body.push(field('Approver role', role), field('Review criteria', criteria), field('Approval instructions', instructions), field('On rejection', rejection));
+    } else if (node.kind === 'gate') {
+      body.push(...gateInspectorSection(node));
     } else {
       const profile = node.kind === 'agent' ? findAgentProfile(node.refId, state) : findContextProfile(node.refId, state);
       body.push(el('section', { class: 'workflow-inspector-section' }, [
@@ -841,6 +1359,7 @@ export async function renderWorkflows(view) {
         });
         body.push(edit);
       }
+      if (node.kind === 'agent') body.push(...agentRuntimeSection(node));
     }
 
     const dependency = el('select', { disabled: !canEdit }, [
@@ -1026,11 +1545,12 @@ export async function renderWorkflows(view) {
     }
     if (selected.kind === 'confirm-workflow-delete') {
       return [inspectorHeader('Delete workflow'), el('div', { class: 'workflow-panel-body' }, [inlineConfirm({
-        title: `Delete ${workflow.name}?`, body: 'This browser-local draft and all of its nodes will be removed.', confirmLabel: 'Delete workflow',
+        title: `Delete ${workflow.name}?`, body: 'This removes the workflow for everyone in your organization, along with all of its nodes.', confirmLabel: 'Delete workflow',
         onCancel: () => { selected = { kind: 'workflow', id: workflow.id }; renderInspector(); },
         onConfirm: () => {
           const result = deleteWorkflow(state, workflow.id);
           if (!result.ok) return toast(result.error || 'The workflow could not be deleted.', 'err');
+          sync.forget(workflow.id);
           selected = { kind: 'workflow', id: result.state.activeWorkflowId };
           acceptState(result.state, { palette: false, canvas: true, inspector: true });
         },
@@ -1111,7 +1631,7 @@ export async function renderWorkflows(view) {
       designer?.classList.remove('is-palette-open');
       designer?.classList.add('is-inspector-open');
     });
-    statusHost = el('span', { class: 'workflow-toolbar-status', role: 'status', 'aria-live': 'polite' }, 'Saved locally · not shared');
+    statusHost = el('span', { class: 'workflow-toolbar-status', role: 'status', 'aria-live': 'polite' }, 'Loading…');
     summaryHost = el('span', { class: 'workflow-summary' });
     paletteHost = el('aside', { class: 'workflow-panel workflow-palette', 'aria-label': 'Agent palette' });
     canvasHost = el('section', { class: 'workflow-canvas-shell', 'aria-label': 'Workflow canvas' });
@@ -1136,12 +1656,16 @@ export async function renderWorkflows(view) {
     }, [
       header,
       !canEdit ? el('div', { class: 'workflow-readonly-banner', role: 'note' }, [
-        icon('info', { size: 16 }), el('span', {}, 'Read-only organization view. An organization admin can edit this browser-local copy.'),
+        icon('info', { size: 16 }), el('span', {}, 'Read-only organization view. An organization admin can edit these workflows.'),
       ]) : null,
-      loaded.error ? el('div', { class: 'workflow-recovery-banner', role: 'status' },
-        /storage/i.test(loaded.error)
-          ? `${loaded.error} Changes will last only for this session.`
-          : 'A damaged or outdated local draft was replaced with safe examples.') : null,
+      loaded.source === 'offline' ? el('div', { class: 'workflow-recovery-banner', role: 'status' }, [
+        icon('info', { size: 16 }),
+        el('span', {}, 'Working offline — showing the draft saved on this device. Edits resume syncing when the connection returns.'),
+      ]) : null,
+      !storage ? el('div', { class: 'workflow-recovery-banner', role: 'status' }, [
+        icon('info', { size: 16 }),
+        el('span', {}, 'This browser will not store a local draft, so unsaved edits are lost if the tab closes.'),
+      ]) : null,
       designer,
     ]));
     renderWorkflowOptions();
@@ -1149,7 +1673,10 @@ export async function renderWorkflows(view) {
     renderCanvas();
     renderInspector();
     updateSummary();
-    if (loaded.error && /storage/i.test(loaded.error)) setSaveStatus('Session only · storage unavailable', 'error');
+    if (loaded.sync) applySyncStatus(loaded.sync);
+    else if (loaded.source === 'offline') setSaveStatus('Offline · saved on this device', 'error');
+    else if (loaded.source === 'seed') setSaveStatus('Example workflow · not saved yet');
+    else setSaveStatus(`Shared with your organization${persona ? ` · ${persona}` : ''}`, 'ok');
   }
 
   mount();

@@ -1538,6 +1538,47 @@ variable "substrate_trust_domain" {
   default     = "cluster.local"
 }
 
+variable "kagent_enabled" {
+  type        = bool
+  description = "Admit the kagent backend: without it the gateway answers /api/workflows/kagent/capabilities with enabled:false and every kagent publish returns 503 kagent_not_configured, whatever kagent_api_url says. Two switches rather than one because kagent.js gates on the flag first and on the address second — and because an operator may want the address plumbed into the deployment without the platform writing CRDs to that cluster yet."
+  default     = false
+}
+
+variable "kagent_api_url" {
+  type        = string
+  description = "Base URL of the Kubernetes API server hosting the api.kagent.dev CRDs (https://kubernetes.default.svc in-cluster). Empty leaves the backend inert even when kagent_enabled is true; kagent.tf emits both names or neither."
+  default     = ""
+}
+
+variable "kagent_namespace" {
+  type        = string
+  description = "Namespace holding the kagent control plane and the agents this platform applies (the upstream install default is 'kagent'). It is a scope, not a per-tenant partition: the adapter's Role must reach only this namespace, or one tenant's publish writes into another's agents."
+  default     = "kagent"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.kagent_namespace))
+    error_message = "kagent_namespace must be a lowercase DNS-label-like name (letters, digits, interior hyphens)."
+  }
+}
+
+variable "kagent_token_file" {
+  type        = string
+  description = "Path to the Kubernetes service-account TOKEN, read from the file the cluster or a mounted Secret version puts there. A path only: the token itself never enters this root's plaintext env maps, a plan, or an agent container's environment. Leave empty inside a cluster, where kagent.js uses its own in-cluster mount."
+  default     = ""
+}
+
+variable "kagent_ca_file" {
+  type        = string
+  description = "Path to the PEM that verifies the API server's certificate. Out-of-cluster endpoints need it; an in-cluster deployment gets the same from the mounted SA ca.crt. A path, never the certificate body."
+  default     = ""
+}
+
+variable "kagent_timeout_ms" {
+  type        = number
+  description = "Per-request budget for a kagent API call. CRD applies are not slow, so a larger value is a hung cluster discovered late, and a smaller one turns a slow apiserver into a failed publish."
+  default     = 15000
+}
+
 variable "environment_init_enabled" {
   type        = bool
   description = "Sign-in opens a durable environment-init run for the caller's org and walks its steps in the background (bind the org's atespace, ask the cluster for it, ensure the dedicated stack). OFF keeps a login free of infrastructure side effects. It is a separate switch from provisioning_enabled because the atespace step is useful on a substrate deployment that is not standing up a whole per-tenant stack — see substrate.tf for why the topic + provisioner must then exist anyway."

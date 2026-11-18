@@ -443,3 +443,100 @@ test('rejects workflow and profile mutations before durable collection limits ar
     description: 'A non-secret execution context.',
   }, deps).error, /limit/);
 });
+
+// ------------------------------------------------------------------- schema v2
+
+const serverModel = await import('../../packages/shared-core/src/workflow/model.js').then((m) => m.default ?? m);
+const v2 = await import('./workflow-designer-model.mjs');
+
+const OCI_REF = `registry.example.com/skills/triage@sha256:${'a'.repeat(64)}`;
+
+test('v2 normalizes gate nodes and widens agent nodes with backend defaults', () => {
+  const state = v2.normalizeState({
+    schemaVersion: v2.WORKFLOW_SCHEMA_VERSION_V2,
+    activeWorkflowId: 'g',
+    customAgents: [],
+    customContexts: [],
+    workflows: [{
+      id: 'g', name: 'Gate flow',
+      nodes: [
+        { id: 'a', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0 },
+        { id: 'gate', kind: 'gate', name: 'Specs gate', x: 120, y: 0, gateConfig: { cards: [{ title: 'Cost Analysis', items: ['unit costs', 'margin', 'TCO'], threshold: 90 }] } },
+      ],
+      edges: [{ id: 'e', source: 'a', target: 'gate' }],
+    }],
+  });
+  const [agent, gate] = state.workflows[0].nodes;
+  assert.equal(agent.backend, 'substrate');
+  assert.equal(agent.taskTier, 'medium');
+  assert.deepEqual(agent.connectors, []);
+  assert.equal(gate.kind, 'gate');
+  assert.equal(gate.gateConfig.cards[0].title, 'Cost Analysis');
+});
+
+test('v2 kagentSpec mirrors the server validation results exactly', () => {
+  const fixtures = [
+    { modelConfig: { name: 'default-model-config' }, skills: [{ name: 'triage', source: { oci: OCI_REF }, promptAppend: 'Cite the runbook.' }] },
+    { skills: [{ name: 'g', source: { git: { url: 'https://x.example/r.git', commit: 'deadbeef' } } }] },
+    { skills: [{ name: 'dup', source: { oci: OCI_REF } }, { name: 'dup', source: { oci: OCI_REF } }] },
+    { plugins: [{ source: { oci: OCI_REF, path: '../etc' } }] },
+    { tools: [{ kind: 'mcp', server: 'kagent-tool-server', requireApproval: true }, { kind: 'subAgent', name: 'rev', templateRef: 'code-review', description: 'd' }, { kind: 'x' }] },
+    { env: [{ name: 'LOG_LEVEL', value: 'debug' }, { name: 'PLUGIN_DATA', value: '/x' }, { name: 'LINEAR_API_KEY', value: 'Bearer abcdefghijklmnopqrstuvwx' }] },
+    { modelConfig: { name: 'BAD NAME' } },
+  ];
+  for (const fixture of fixtures) {
+    const browser = v2.normalizeKagentSpec(fixture);
+    const server = serverModel.normalizeKagentSpec(fixture);
+    assert.deepEqual(JSON.parse(JSON.stringify(browser)), JSON.parse(JSON.stringify(server)), JSON.stringify(fixture));
+  }
+});
+
+test('v2 gate, prompt-append, connector and persona helpers agree with the server model', () => {
+  const gateInput = { id: 'gate-template-v1', title: 'Specs gate', cards: Array.from({ length: 8 }, (_, i) => ({ id: `c${i}`, title: `Card ${i}`, items: ['1', '2', '3', '4'], threshold: 130 })) };
+  assert.deepEqual(JSON.parse(JSON.stringify(v2.normalizeGateConfig(gateInput))), JSON.parse(JSON.stringify(serverModel.normalizeGateConfig(gateInput))));
+  assert.deepEqual(v2.normalizeConnectorList(['GitHub', 'figma', '<script>evil</script>', 'github']), serverModel.normalizeWorkflowV2({
+    id: 'w', name: 'n', nodes: [{ id: 'a', kind: 'agent', refId: 'coding', name: 'C', connectors: ['GitHub', 'figma', '<script>evil</script>', 'github'] }], edges: [],
+  }).nodes[0].connectors);
+  const node = {
+    systemPrompt: 'Base.',
+    kagentSpec: {
+      skills: [{ name: 'a', source: { oci: OCI_REF }, promptAppend: 'S1.' }, { name: 'b', source: { oci: OCI_REF } }],
+      plugins: [{ source: { oci: OCI_REF }, skills: [], promptAppend: 'P1.' }],
+      tools: [{ kind: 'mcp', server: 's', promptAppend: 'M1.' }],
+    },
+  };
+  assert.equal(v2.composeKagentSystemPrompt(node), serverModel.composeKagentSystemPrompt(node));
+  for (const persona of v2.PERSONAS) {
+    for (const category of ['Planning', 'Coding', 'Observability', 'Pricing', 'Custom']) {
+      assert.equal(v2.personaAllowsCategory(persona, category), serverModel.personaAllowsCategory(persona, category), `${persona}/${category}`);
+    }
+  }
+  assert.deepEqual([...v2.WORKFLOW_NODE_KINDS_V2], [...serverModel.WORKFLOW_NODE_KINDS_V2]);
+  assert.deepEqual([...v2.WORKFLOW_NODE_BACKENDS], [...serverModel.WORKFLOW_NODE_BACKENDS]);
+  assert.deepEqual([...v2.TASK_TIERS], [...serverModel.TASK_TIERS]);
+  assert.deepEqual([...v2.MODEL_FAMILIES], [...serverModel.MODEL_FAMILIES]);
+  assert.deepEqual([...v2.HARNESS_OPTIONS], [...serverModel.HARNESS_OPTIONS]);
+  assert.equal(v2.GATE_CARD_MAX, serverModel.GATE_CARD_MAX);
+  assert.equal(v2.GATE_ITEM_MAX, serverModel.GATE_ITEM_MAX);
+});
+
+test('v2 migrate backfills substrate defaults identically on both models', () => {
+  const v1 = {
+    id: 'wf1', name: 'Legacy', createdAt: '2026-08-12T00:00:00.000Z', updatedAt: '2026-08-12T00:00:00.000Z',
+    nodes: [
+      { id: 'a', kind: 'agent', refId: 'coding', name: 'Coding', x: 5, y: 10 },
+      { id: 'b', kind: 'approval', name: 'Sign-off', x: 0, y: 0, requiredRole: 'Release Manager' },
+    ],
+    edges: [{ id: 'e', source: 'a', target: 'b' }],
+  };
+  const browser = v2.migrateV1ToV2(v1);
+  const server = serverModel.migrateV1ToV2(v1);
+  assert.equal(browser.nodes[0].backend, 'substrate');
+  assert.deepEqual(JSON.parse(JSON.stringify(browser)), JSON.parse(JSON.stringify(server)));
+});
+
+test('v2 git sources pass validation but warn about readiness on both models', () => {
+  const input = { skills: [{ name: 'from-git', source: { git: { url: 'https://x.example/r.git', commit: 'b'.repeat(40) } } }] };
+  assert.deepEqual(v2.kagentSpecWarnings(v2.normalizeKagentSpec(input)), serverModel.kagentSpecWarnings(serverModel.normalizeKagentSpec(input)));
+  assert.equal(v2.kagentSpecWarnings(v2.normalizeKagentSpec(input)).length, 1);
+});

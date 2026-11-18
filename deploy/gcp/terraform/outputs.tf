@@ -156,6 +156,20 @@ output "substrate" {
   }
 }
 
+output "kagent" {
+  description = "What this root told the gateway about the kagent runtime. configured=false means no KAGENT_* env was emitted and publish stays 503 kagent_not_configured — the default. The two halves are reported separately on purpose: kagent_enabled is the switch and kagent_api_url is the address, and kagent.js requires both, so enabled=true with an empty url is a deployment that plans clean and publishes nothing. token_file/ca_file are paths, never contents."
+  value = {
+    configured = local.kagent_enabled
+    switch     = var.kagent_enabled
+    api_url    = var.kagent_api_url
+    namespace  = var.kagent_namespace
+    token_file = var.kagent_token_file
+    ca_file    = var.kagent_ca_file
+    env_keys   = sort(keys(local.kagent_env))
+    services   = local.kagent_enabled ? ["gateway"] : []
+  }
+}
+
 output "environment_init" {
   description = "The login-triggered environment-initialization switch as the org service will see it, plus the split that makes it safe to turn on: the receiver (topic, push subscription, provisioner service) exists for init, provisioner_enabled or provisioning_enabled, while the project-wide tenant-stack roles exist only for provisioning_enabled. receiver_exists and stack_roles_granted differ by design; equal means someone switched on more than they meant to."
   value = {
