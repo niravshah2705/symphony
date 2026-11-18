@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 194 nodes
+Community of 198 nodes
 
-- **Size**: 194 nodes
-- **Cohesion**: 0.1904
+- **Size**: 198 nodes
+- **Cohesion**: 0.1919
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 194 nodes
 | generateState | Function | ./packages/shared-core/src/agent/pkce.js | 27-29 |
 | sendBrowser | Function | ./packages/shared-core/src/billing/notify.js | 20-41 |
 
-*... and 144 more members.*
+*... and 148 more members.*
 
 ## Execution Flows
 
@@ -86,24 +86,24 @@ Community of 194 nodes
 ### Outgoing
 
 - `equal` (53 edge(s))
-- `isArray` (27 edge(s))
-- `filter` (23 edge(s))
+- `isArray` (28 edge(s))
+- `filter` (24 edge(s))
 - `String` (22 edge(s))
 - `includes` (22 edge(s))
 - `slice` (21 edge(s))
 - `trim` (21 edge(s))
 - `set` (19 edge(s))
 - `deepEqual` (19 edge(s))
-- `toISOString` (16 edge(s))
+- `toISOString` (17 edge(s))
+- `find` (16 edge(s))
 - `call` (16 edge(s))
-- `find` (15 edge(s))
 - `push` (15 edge(s))
+- `map` (14 edge(s))
 - `isFinite` (13 edge(s))
-- `map` (13 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/store.js` (147 edge(s))
+- `./packages/shared-core/src/store.js` (154 edge(s))
 - `equal` (53 edge(s))
 - `./packages/shared-core/src/agent/model-presets.js` (38 edge(s))
 - `./packages/shared-core/src/messaging/events.js` (25 edge(s))

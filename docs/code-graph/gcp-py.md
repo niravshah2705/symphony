@@ -19,7 +19,7 @@ Community of 6 nodes
 | pyDict | Function | ./deploy/gcp/agentgateway-config.test.js | 36-42 |
 | test:the dark state is real: no client-side module names the gateway@L60 | Test | ./deploy/gcp/agentgateway-config.test.js | 60-76 |
 | test:agentgateway has a vault key and the platform never holds one@L78 | Test | ./deploy/gcp/agentgateway-config.test.js | 78-96 |
-| test:the a2a seam is closed by admission, not by a policy@L239 | Test | ./deploy/gcp/agentgateway-config.test.js | 239-259 |
+| test:the a2a seam is closed by admission, not by a policy@L235 | Test | ./deploy/gcp/agentgateway-config.test.js | 235-255 |
 
 ## Execution Flows
 

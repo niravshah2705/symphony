@@ -14,8 +14,8 @@ Community of 2 nodes
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| test:the worker namespace is one name across the scripts and the workflows@L245 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 245-257 |
-| ns | Function | ./deploy/gcp/substrate-workflow-config.test.js | 249-251 |
+| test:the worker namespace is one name across the scripts and the workflows@L226 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 226-238 |
+| ns | Function | ./deploy/gcp/substrate-workflow-config.test.js | 230-232 |
 
 ## Execution Flows
 

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 8 nodes
+Community of 7 nodes
 
-- **Size**: 8 nodes
-- **Cohesion**: 0.4231
+- **Size**: 7 nodes
+- **Cohesion**: 0.4615
 - **Dominant Language**: javascript
 
 ## Members
@@ -21,7 +21,6 @@ Community of 8 nodes
 | test:workflow fallbacks are the module defaults they reconcile@L75 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 75-104 |
 | test:the two vars with no module default are named exactly@L106 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 106-114 |
 | test@L159 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 159-159 |
-| test:each front binds its static IP by address name, never by IP@L183 | Test | ./deploy/gcp/substrate-workflow-config.test.js | 183-196 |
 
 ## Execution Flows
 
@@ -31,20 +30,18 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `equal` (8 edge(s))
-- `match` (8 edge(s))
+- `equal` (7 edge(s))
+- `match` (6 edge(s))
 - `ok` (2 edge(s))
 - `./deploy/gcp/substrate-workflow-config.test.js::test:the power workflow waits only on namespaces the module still creates@L138` (2 edge(s))
-- `doesNotMatch` (2 edge(s))
 - `readFileSync` (1 edge(s))
 - `join` (1 edge(s))
 - `./deploy/gcp/substrate-workflow-config.test.js::test:the static-IP grant lists the addresses the module owns@L162` (1 edge(s))
 
 ### Incoming
 
-- `./deploy/gcp/substrate-workflow-config.test.js` (17 edge(s))
-- `equal` (7 edge(s))
-- `match` (5 edge(s))
+- `./deploy/gcp/substrate-workflow-config.test.js` (16 edge(s))
+- `equal` (6 edge(s))
 - `./deploy/gcp/substrate-workflow-config.test.js::test:the power workflow waits only on namespaces the module still creates@L138` (3 edge(s))
-- `doesNotMatch` (2 edge(s))
+- `match` (3 edge(s))
 - `./deploy/gcp/substrate-workflow-config.test.js::test:the static-IP grant lists the addresses the module owns@L162` (1 edge(s))
