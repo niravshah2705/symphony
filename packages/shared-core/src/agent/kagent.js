@@ -4,12 +4,12 @@
 // CRDs (group api.kagent.dev, storage v1alpha3: agents, agenttemplates,
 // harnesses, modelconfigs, remotemcpservers, egresspolicies).
 //
-// Placement follows the repo egress rules: this client lives in the
-// planner/provisioner control plane, NEVER in an agent container. It
-// authenticates with a mounted Kubernetes service-account token; provider
-// credentials stay behind ModelConfig apiKeySecret / RemoteMCPServer
-// headersFrom references inside the cluster, so nothing here reads or writes
-// Fleet secrets.
+// Placement follows the repo egress rules: this client lives in the gateway
+// control plane, NEVER in an agent container or in the orchestrator that
+// dispatches them. It authenticates with a mounted Kubernetes service-account
+// token; provider credentials stay behind ModelConfig apiKeySecret /
+// RemoteMCPServer headersFrom references inside the cluster, so nothing here
+// reads or writes Fleet secrets.
 //
 // Unconfigured cluster (the default) is inert: renders and saves still work,
 // publish/list/report kagent_not_configured (HTTP 503 territory).

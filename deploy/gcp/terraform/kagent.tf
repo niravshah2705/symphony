@@ -23,12 +23,12 @@
 #   - The map goes on the gateway ONLY, because that is the only service that
 #     imports kagent.js today. It is a control-plane surface: it holds a
 #     Kubernetes identity that can create and delete agent CRDs.
-#   - It never goes on coder-worker, and it does not go on coder-control or the
-#     planner either. Those containers execute or dispatch model-generated code;
-#     handing them a cluster address plus a bearer converts a workload into a
-#     caller of the Kubernetes API. When planner /runtime/kagent/run lands, the
-#     merge moves to the planner deliberately and the test moves with it — a
-#     second recipient has to be a decision, not symmetry.
+#   - It never goes on an actor container, and it does not go on the orchestrator
+#     or the provisioner either. Those workloads execute or dispatch
+#     model-generated code; handing them a cluster address plus a bearer converts
+#     a workload into a caller of the Kubernetes API. When an orchestrator run
+#     endpoint needs kagent, the merge moves there deliberately and the test
+#     moves with it — a second recipient has to be a decision, not symmetry.
 #   - No credential lives in this map. The API token is read from the file named
 #     by KAGENT_TOKEN_FILE (mounted as a secret the same way
 #     MEMORY_DATABASE_URL_FILE mounts /secrets/memory-db/url), so the env carries

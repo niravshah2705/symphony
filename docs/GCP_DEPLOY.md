@@ -516,9 +516,9 @@ Three things to know before turning it on:
   in-cluster mount that kagent.js falls back to and land in the same silent
   dark state as never opting in.
 - **The gateway is the only recipient.** It hosts the publish endpoint and runs
-  no model-generated code. The substrate map does reach planner and
-  coder-control; kagent must not follow it there until something in those
-  services imports the adapter, and it never reaches `coder_worker_env`. On the
+  no model-generated code. The substrate map does reach the orchestrator and the
+  provisioner; kagent must not follow it there until something in those services
+  imports the adapter, and it never reaches an actor container. On the
   cluster side that means a namespaced Role granting the gateway's identity
   get/list/create/update/patch/delete on `*.api.kagent.dev` in `kagent_namespace`
   and on the ConfigMaps it composes there. `get` and `update` are not extras:

@@ -36,6 +36,7 @@ const kagentTf = tfFile('kagent.tf');
 const variablesTf = tfFile('variables.tf');
 const cloudRunTf = tfFile('cloud_run.tf');
 const provisionerTf = tfFile('provisioner.tf');
+const pipelineTf = tfFile('pipeline.tf');
 const outputsTf = tfFile('outputs.tf');
 const deployDoc = read('docs', 'GCP_DEPLOY.md');
 const configJs = read('packages', 'shared-core', 'src', 'config.js');
@@ -130,7 +131,7 @@ function envNamesRead() {
   const dirs = [
     path.join(ROOT, 'packages', 'shared-core', 'src'),
     path.join(ROOT, 'services', 'gateway', 'src'),
-    path.join(ROOT, 'services', 'planner', 'src'),
+    path.join(ROOT, 'services', 'orchestrator', 'src'),
     path.join(ROOT, 'services', 'provisioner', 'src'),
   ];
   const names = new Set();
@@ -154,14 +155,14 @@ function envNamesEmitted() {
   return new Set([...code.matchAll(/\b(KAGENT_[A-Z0-9_]+)\s*=/g)].map(([, n]) => n));
 }
 
-/** The body of a `NAME = merge(...) }` local inside cloud_run.tf's locals block. */
-function envLocal(name) {
-  const start = cloudRunTf.indexOf(`  ${name} = merge(`);
-  assert.notEqual(start, -1, `${name} local not found in cloud_run.tf`);
-  const ends = [cloudRunTf.indexOf('\n  )', start), cloudRunTf.indexOf('\n  }', start)]
+/** The body of a `NAME = merge(...) }` env local, in the root file that declares it. */
+function envLocal(name, text = cloudRunTf) {
+  const start = text.indexOf(`  ${name} = merge(`);
+  assert.notEqual(start, -1, `${name} local not found`);
+  const ends = [text.indexOf('\n  )', start), text.indexOf('\n  }', start)]
     .filter((i) => i > -1);
   assert.ok(ends.length, `${name} local does not close`);
-  return cloudRunTf.slice(start, Math.min(...ends));
+  return text.slice(start, Math.min(...ends));
 }
 
 function varBlock(name) {
@@ -228,23 +229,22 @@ test('no credential-shaped key is ever emitted into the kagent env map', () => {
 
 test('the kagent env reaches the gateway and nothing that runs model code', () => {
   assert.match(envLocal('gateway_env'), /local\.kagent_env,/);
-  // The substrate pair does reach the planner and coder-control; kagent must not
-  // follow it there until something in those services imports the adapter, or a
-  // cluster identity silently widens the blast radius of a service that only
-  // dispatches runs.
-  for (const local of ['planner_env', 'coder_control_env', 'coder_worker_env']) {
-    assert.doesNotMatch(
-      envLocal(local),
-      /local\.kagent_env,/,
-      `${local} gained kagent env — no code in that service imports agent/kagent.js`,
-    );
-  }
-  assert.doesNotMatch(provisionerTf, /local\.kagent_env,/, 'the provisioner does not publish agent CRDs');
+  // The substrate pair does reach the orchestrator and the provisioner; kagent
+  // must not follow it there until something in those services imports the
+  // adapter, or a cluster identity silently widens the blast radius of a service
+  // that only dispatches runs.
+  const orchestrator = envLocal('orchestrator_env', pipelineTf);
   assert.match(
-    envLocal('coder_worker_env'),
-    /Deliberately NO substrate env/,
-    'the worker keeps its documented reason for holding no control-plane address',
+    orchestrator,
+    /local\.substrate_env,/,
+    'the orchestrator stopped carrying substrate env, so the doesNotMatch below is vacuous — retarget it at whatever map does run model code',
   );
+  assert.doesNotMatch(
+    orchestrator,
+    /local\.kagent_env,/,
+    'orchestrator_env gained kagent env — nothing in that service imports agent/kagent.js',
+  );
+  assert.doesNotMatch(provisionerTf, /local\.kagent_env,/, 'the provisioner does not publish agent CRDs');
 });
 
 test('an address and a switch are one gate, never a half-pair', () => {
@@ -354,7 +354,6 @@ test('the operator doc names the gates that exist', () => {
     'kagent_enabled',
     'kagent_token_file',
     'KAGENT_KUBECONFIG',
-    'coder_worker_env',
     'namespaced Role',
   ]) {
     assert.match(
@@ -363,9 +362,22 @@ test('the operator doc names the gates that exist', () => {
       `docs/GCP_DEPLOY.md no longer explains ${claim}`,
     );
   }
+  // The placement claim has to live IN the kagent section: "orchestrator" appears
+  // throughout this doc for other reasons, so a whole-file match would pass even
+  // if the section went back to naming a recipient that no longer exists.
+  const section = /^## Kagent runtime backend[\s\S]*?(?=^## )/m.exec(deployDoc);
+  assert.ok(section, 'docs/GCP_DEPLOY.md lost its "Kagent runtime backend" section');
+  assert.match(
+    section[0],
+    /orchestrator/,
+    'the kagent section no longer names the workload the substrate map reaches and kagent must not',
+  );
+  // The Cloud Run agent harness was retired, so its per-service env locals no
+  // longer exist to name. A doc that still points at one places the kagent
+  // boundary on a workload nobody deploys, which reads as permission to widen it.
   assert.doesNotMatch(
-    deployDoc,
-    /kagent env reaches (the )?planner/,
-    'the doc still claims a service imports the adapter that does not',
+    section[0],
+    /planner_env|coder_control_env|coder_worker_env/,
+    'the kagent section names a retired Cloud Run harness local as if it were still a recipient',
   );
 });

@@ -86,9 +86,10 @@ locals {
     # that is the service hosting /api/workflows/kagent/capabilities and the
     # agent publish endpoint — and the gateway runs no model-generated code, so
     # it is the one workload a cluster identity can sit behind safely. It is NOT
-    # merged into planner_env / coder_control_env / coder_worker_env the way
-    # substrate_env is: nothing there imports the adapter yet, and a container
-    # that executes model output must not learn where the agent CRDs live.
+    # merged into orchestrator_env (pipeline.tf) the way substrate_env is: the
+    # orchestrator is the agent workload now, nothing in it imports the adapter
+    # yet, and a container that dispatches model output must not learn where the
+    # agent CRDs live.
     local.kagent_env,
   )
 
