@@ -31,6 +31,23 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
 
 ### Fixed
 
+- **The deploy workflow publishes the two FlexPrice key versions instead of only
+  demanding them.** `flexprice-api-key-ingest` existed in Secret Manager with
+  **zero versions**, and `billing_service.tf` binds both planes into the billing
+  container unconditionally, so the run that got past #295 died in
+  `Verify FlexPrice secret versions` — correctly, since the alternative was
+  Cloud Run refusing the revision mid-apply after other resources had already
+  changed. The two names are now converged by `seed_secret` in the staging step
+  from the `FLEXPRICE_API_KEY_INGEST` / `FLEXPRICE_API_KEY_MONEY` repository
+  secrets, like `CASHFREE_APP_ID` before them: an unset secret with no published
+  version still fails closed (a minted-random third-party key is permanently
+  invalid, so there is no `allow-random` here), an existing matching version is
+  left alone, and the pre-apply check remains as the last gate for a version an
+  operator published by hand or later disabled.
+  - **Release note:** set `FLEXPRICE_API_KEY_INGEST` once
+    (`gh secret set FLEXPRICE_API_KEY_INGEST`) with the ingest-plane key minted in
+    the FlexPrice environment. The money plane already has an enabled version, so
+    nothing changes for it.
 - **`local.billing_flexprice_secrets` names the two FlexPrice secret containers
   instead of indexing them through state.** It read
   `google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id`,
