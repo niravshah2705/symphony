@@ -503,15 +503,40 @@ jobs:
           # A pending `moved` block is the one case this step cannot plan past: while
           # a move's SOURCE address is still in state, terraform refuses ANY targeted
           # plan — "Moved resource instances excluded by targeting" — even one
-          # targeting unrelated resources. Only an APPLY records a move, and that is
-          # deliberately not this job's job anymore, so hand the operator the exact
-          # command instead of retrying it here.
+          # targeting unrelated resources. Recording a move needs an apply, and
+          # `apply -refresh-only` is the only apply that cannot touch infrastructure:
+          # it rewrites state (relabels the moved addresses, refreshes them from the
+          # API) and creates, changes or deletes no remote object. So the addresses
+          # terraform itself names get recorded here and the read-only plan is
+          # retried; anything that still fails stays the operator's call.
           plan_log=/tmp/secret-stage-plan.log
-          if ! terraform plan -no-color -input=false \
-               "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$plan_log"; then
+          stage_plan() {
+            terraform plan -no-color -input=false "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$plan_log"
+          }
+          if ! stage_plan; then
             grep -q 'Moved resource instances excluded by targeting' "$plan_log" || exit 1
-            echo "::error::Pending state moves block even a targeted plan. Record them with 'terraform apply -refresh-only' in $TF_DIR, then re-run this workflow."
-            exit 1
+            # Take the addresses from the message rather than a list here that goes
+            # stale the moment the next `moved` block lands.
+            move_targets=()
+            while IFS= read -r moved; do
+              move_targets+=("$moved")
+            done < <(grep -oE '\-target="[^"]+"' "$plan_log" | sed -e 's/^-target="//' -e 's/"$//')
+            if [ "${#move_targets[@]}" -eq 0 ]; then
+              echo "::error::Pending state moves were reported without any -target suggestion. Record them with 'terraform apply -refresh-only' in $TF_DIR, then re-run this workflow."
+              exit 1
+            fi
+            target_args=( "${move_targets[@]/#/-target=}" )
+            echo "Recording pending state moves (state addresses only, no infrastructure changes):"
+            printf '  %s\n' "${move_targets[@]}"
+            if ! terraform apply -refresh-only -auto-approve -input=false -no-color \
+                 "${tf_vars[@]}" "${target_args[@]}"; then
+              echo "::error::Could not record the pending state moves. Run 'terraform apply -refresh-only ${target_args[*]}' in $TF_DIR, then re-run this workflow."
+              exit 1
+            fi
+            if ! stage_plan; then
+              echo "::error::Still blocked after recording the moves; see the plan output above."
+              exit 1
+            fi
           fi
 
           enabled_value() {

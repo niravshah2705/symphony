@@ -41,8 +41,13 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
   hosting domain. None of it was the deployment plan: the six repository
   variables involved all hold the correct values. The step is now a **targeted
   plan** of the six secret addresses, so a merge cannot mutate production from
-  there; an operator applies. A pending `moved` block, which only an apply can
-  record, now fails with the command to run rather than being retried inline.
+  there; an operator applies. A `moved` block that has never been recorded — the
+  billing Cloud Run Job / scheduler rename from #278, pending ever since because
+  every deploy died in this step before reaching the apply — blocks even a
+  targeted plan, so the step records it with `terraform apply -refresh-only`,
+  the one apply that rewrites state addresses and cannot create, change or
+  delete a resource, then retries the plan once. If that still fails, the step
+  stops with the command an operator has to run.
 - **Three production resources now refuse a destroy planned by a cleared repo
   variable** (`prevent_destroy`): `google_firestore_database.default` (an
   immutable `location_id` mismatch would drop the database from state),

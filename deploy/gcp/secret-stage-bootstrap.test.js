@@ -7,7 +7,8 @@
 // google_one_tap_client_id (empty → count 0) and custom_domain (empty → the
 // for_each drops the live hosting domain). These tests keep the step to a
 // targeted, read-only plan, keep destroy guards on the resources a cleared repo
-// variable would otherwise remove, and keep any apply out of this step.
+// variable would otherwise remove, and keep the one apply it may run to
+// `-refresh-only` — recording state addresses, never touching infrastructure.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -45,7 +46,7 @@ function stagedTerraformCommands(step) {
     }));
 }
 
-test('secret staging step plans, never applies, and only for the secret containers', () => {
+test('secret staging step plans, and its only apply can touch nothing but state', () => {
   const step = secretStageStep(read('.github/workflows/deploy.yml'));
 
   for (const target of [
@@ -60,21 +61,36 @@ test('secret staging step plans, never applies, and only for the secret containe
   }
 
   const commands = stagedTerraformCommands(step);
-  assert.equal(commands.length, 1, `expected one staged terraform call, got ${commands.length}`);
+  assert.equal(commands.length, 2, `expected the targeted plan and its post-move retry, got ${commands.length}`);
   for (const { verb, line } of commands) {
-    assert.equal(verb, 'plan', `staging step must not mutate: ${line}`);
-    assert.ok(
-      line.includes('-target') || line.includes('secret_targets[@]'),
-      `un-targeted plan would evaluate the whole stack on a partial var set: ${line}`,
+    if (verb === 'plan') {
+      assert.ok(
+        line.includes('-target') || line.includes('secret_targets[@]'),
+        `un-targeted plan would evaluate the whole stack on a partial var set: ${line}`,
+      );
+      continue;
+    }
+    assert.match(
+      line,
+      /-refresh-only/,
+      `an apply that is not -refresh-only can create, change or delete real infrastructure: ${line}`,
     );
   }
 });
 
-test('a pending state move is handed to the operator instead of applied', () => {
+test('a pending state move is recorded state-only, then the plan is retried', () => {
   const step = secretStageStep(read('.github/workflows/deploy.yml'));
   assert.match(step, /Moved resource instances excluded by targeting/);
-  assert.match(step, /::error::Pending state moves block/);
-  assert.match(step, /echo.*terraform apply -refresh-only/, 'the message must carry the command');
+  assert.ok(
+    step.includes('grep -oE') && step.includes('-target="[^"]+"'),
+    'the addresses to record come from terraform, not a list here that goes stale',
+  );
+  assert.match(step, /terraform apply -refresh-only -auto-approve/);
+  assert.match(step, /::error::Could not record the pending state moves/, 'a failed record hands off the command');
+  assert.ok(
+    step.indexOf('terraform apply -refresh-only') < step.indexOf('seed_secret stream-token-secret'),
+    'secrets are only seeded once the targeted plan actually ran',
+  );
 });
 
 test('flexprice secret references fail loud instead of mounting a placeholder', () => {
