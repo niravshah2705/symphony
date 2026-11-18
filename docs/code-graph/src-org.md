@@ -18,7 +18,7 @@ Community of 159 nodes
 | runtimeAccepts | Function | ./deploy/gcp/agentgateway-config.test.js | 107-114 |
 | test@L122 | Test | ./deploy/gcp/agentgateway-config.test.js | 122-122 |
 | test@L137 | Test | ./deploy/gcp/agentgateway-config.test.js | 137-137 |
-| test:the substrate root can hand the sidecar an origin it will accept@L257 | Test | ./deploy/gcp/agentgateway-config.test.js | 257-272 |
+| test:the substrate root can hand the sidecar an origin it will accept@L261 | Test | ./deploy/gcp/agentgateway-config.test.js | 261-276 |
 | configuredProxyOrgId | Function | ./services/proxy/src/credentials.js | 17-24 |
 | proxyOrgId | Function | ./services/proxy/src/credentials.js | 40-44 |
 | resolveSecrets | Function | ./services/proxy/src/credentials.js | 46-69 |

@@ -1,0 +1,315 @@
+# ECC-plugin agent, for the local kind cluster (context kind-kind, namespace kagent).
+#
+# Four resources, every field the CRDs define listed here -- set to its effective
+# value, or commented out with the reason it stays unset. Verified against the schemas
+# live in the cluster:
+#
+#   kubectl get crd agents.api.kagent.dev -o jsonpath='{.spec.versions[0].schema}'
+#
+# Apply order matters only for the plugin image: build-ecc-plugin-image.sh must have
+# pushed the bundle and stamped spec.plugins[].source.oci below before this applies,
+# or the Agent stalls on ResolvedRefs.
+#
+#   bash deploy/kagent/ecc-plugin/build-ecc-plugin-image.sh
+#   bash deploy/kagent/ecc-plugin/patch-litellm-gemini.sh      # model + context params
+#   kubectl --context kind-kind apply -f deploy/kagent/ecc-plugin/ecc-agent.yaml
+#   kubectl --context kind-kind wait agent/ecc-agent -n kagent --for=condition=Ready --timeout=10m
+---
+# ---------------------------------------------------------------------------
+# ModelConfig -- what model to call, with which credential.
+#
+# Reaches OpenRouter through the in-cluster LiteLLM proxy, which already holds the
+# OPENROUTER_API_KEY, so no third-party key ever lands in the Actor's environment.
+# provider stays OpenAI because that is the only provider the codex Harness accepts
+# besides Bedrock (harness contract: "codex with OpenAI requires
+# openAI.apiFormat: responses").
+# ---------------------------------------------------------------------------
+apiVersion: api.kagent.dev/v1alpha3
+kind: ModelConfig
+metadata:
+  name: ecc-gemini-model
+  namespace: kagent
+spec:
+  # Enum: Anthropic | OpenAI | AzureOpenAI | Ollama | Gemini | GeminiVertexAI |
+  #       AnthropicVertexAI | Bedrock | SAPAICore | Foundry | Mistral. Default OpenAI.
+  # Gemini is NOT usable here: the codex Harness rejects it; it would need the kagent
+  # or byo Harness instead.
+  provider: OpenAI
+
+  # Served by the explicit alias that patch-litellm-gemini.sh adds. Without that alias
+  # the same request works through LiteLLM's existing `openrouter/*` wildcard, so this
+  # line can be switched to openrouter/google/gemini-3.6-flash if you would rather not
+  # touch the proxy config.
+  model: gemini-3.6-flash
+
+  # Must name a Secret in THIS namespace. litellm-secrets/kagent holds LITELLM_MASTER_KEY
+  # and OPENROUTER_API_KEY.
+  apiKeySecret: litellm-secrets
+  apiKeySecretKey: LITELLM_MASTER_KEY
+
+  # The provider-specific block has to match `provider`, i.e. `openAI` here. Every other
+  # block (anthropic, gemini, bedrock, foundry, mistral, azureOpenAI, ollama, ...) is
+  # rejected by the compatibility check when provider is OpenAI.
+  openAI:
+    # ClusterIP DNS, plain HTTP: egress goes through the Substrate gateway, and the
+    # gateway holds the credential header injection for the model call.
+    baseUrl: http://litellm.litellm.svc.cluster.local:4000/v1
+
+    # Required value for the codex Harness. chatCompletions (the CRD default) makes Codex
+    # post to /v1/chat/completions, which its own runtime does not use; responses posts to
+    # /v1/responses.
+    apiFormat: responses
+
+    # ---- model context parameters ----------------------------------------------------
+    # These are the CRD-legal sampling and budget fields. The codex Harness accepts
+    # `baseUrl` and `apiFormat` and NOTHING ELSE inside `openAI`: setting any of them on
+    # this ModelConfig makes every Agent on the Harness report Compatible=False. They are
+    # therefore commented out, and the same knobs live on the LiteLLM alias instead, where
+    # drop_params forwards only what Google's Gemini endpoint honors.
+    #
+    #   maxCompletionTokens: 16384   # openAI max_completion_tokens; caps one reply
+    #   maxTokens: 16384             # deprecated `max_tokens`; rejected by /v1/responses
+    #   temperature: "0.2"           # STRING, not float -- the schema says so
+    #   topP: "0.95"                 # string
+    #   frequencyPenalty: "0.0"      # string
+    #   presencePenalty: "0.0"       # string
+    #   seed: 42                     # integer
+    #   n: 1                         # integer, min 1
+    #   reasoningEffort: medium      # none|minimal|low|medium|high|xhigh
+    #   timeout: 120                 # integer seconds, provider HTTP client timeout
+    #   organization: ""             # OpenAI org id, meaningless behind OpenRouter
+    #
+    # On the kagent or byo Harness all of the above are live and belong here; that is the
+    # one functional reason to prefer harness `kagent` for a model you want tuned.
+  # Streams tokens back over A2A. Default true; set false only for endpoints that break
+  # on streaming. Accepted by every Harness.
+  stream: true
+
+  # Namespace admission policy for this model and its credential. Default from: Same.
+  # All | Same | Selector; Selector requires `selector` (matchLabels / matchExpressions).
+  allowedNamespaces:
+    from: Same
+  # from: Selector
+  # selector:
+  #   matchLabels:
+  #     kagent.io/tenancy: adlc-dev
+  # actorJwt:
+  #   audiences: ["substrate-gateway"]
+  #   expirationSeconds: 900          # 300..3600, default 900
+  # Rejected on codex/claude outright -- "Neither harness accepts a ModelConfig that sets
+  # defaultHeaders, tls, or tokenPassthrough":
+  # defaultHeaders: {}
+  # tls: { disableVerify: false }
+  # tokenPassthrough: false
+---
+# ---------------------------------------------------------------------------
+# Harness -- how the agent is allowed to run: which engine, which image, which
+# Substrate capacity and snapshot store. Exactly one harness block is required.
+# ---------------------------------------------------------------------------
+apiVersion: api.kagent.dev/v1alpha3
+kind: Harness
+metadata:
+  name: ecc-codex
+  namespace: kagent
+spec:
+  # One of kagent | codex | claude | byo. The block is empty; the type alone selects the
+  # runtime adapter. `kagent: {}` would unlock model context params on the ModelConfig and
+  # plugin-declared MCP servers, at the cost of not being Codex.
+  codex: {}
+
+  workload:
+    # Digest-pinned, exactly what the installed release resolves to today
+    # (kubectl get agent kagent-codex -n kagent -o jsonpath='{.status.workloadImage}').
+    # Omit this whole block to follow the release default after a kagent upgrade; pin it,
+    # as here, to freeze the runtime. A tag without a digest is rejected.
+    image: ghcr.io/kagent-dev/kagent/codex-harness@sha256:7da600c1bc342b31bccb281dd9a48c6bdbf33d80a20f89e69128f052858fe9f3
+    # Overrides the image entrypoint, up to 32 entries. Required only for `byo`.
+    # command: ["/codex-harness"]
+    # Overrides image arguments, up to 64 entries. An omitted entry stays unset rather
+    # than taking a default, so there is nothing to inherit here.
+    # args: []
+
+  # Literal env for the agent process. `value` is required and may be empty; there is no
+  # secret-backed source here -- a credentialRef entry is rejected as an unknown field, so
+  # credentials belong on the ModelConfig or a RemoteMCPServer.
+  # Substrate caps an Actor at 32 variables and each value at 32768 characters, and these
+  # names are reserved: SSL_CERT_FILE, SSL_CERT_DIR, REQUESTS_CA_BUNDLE, AWS_CA_BUNDLE,
+  # CURL_CA_BUNDLE, NODE_EXTRA_CA_CERTS, GIT_SSL_CAINFO, plus for codex CODEX_HOME,
+  # OPENAI_API_KEY, AWS_REGION, AWS_BEARER_TOKEN_BEDROCK and the AWS key triple.
+  env:
+    - name: OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT
+      value: SPAN_ONLY
+  # - name: OTEL_PROPAGATORS
+  #   value: tracecontext,baggage
+
+  substrate:
+    workerPoolRef:
+      # Must exist before any Agent can run; the most common Ready failure is
+      # ResolvedRefs/WorkerPoolNotFound. kagent-default is the Helm-installed pool
+      # (1 replica, gvisor class, ate.dev/v1).
+      name: kagent-default
+    snapshotPolicy:
+      # Object storage for Actor snapshots. rustfs serves this bucket in kind and
+      # rustfs-bucket-init created it; the pattern is ^[^[:space:]]+$ .
+      location: s3://ate-snapshots/kagent/
+---
+# ---------------------------------------------------------------------------
+# AgentTemplate -- what the agent does: model, prompt, tools, skills, plugins.
+# Paired with a Harness only by an Agent; the two never reference each other.
+# ---------------------------------------------------------------------------
+apiVersion: api.kagent.dev/v1alpha3
+kind: AgentTemplate
+metadata:
+  name: ecc-template
+  namespace: kagent
+spec:
+  description: >-
+    Codex agent carrying the ECC skill bundle (github.com/affaan-m/ECC), mounted
+    read-only from a digest-pinned OCI artifact.
+
+  modelConfig:
+    name: ecc-gemini-model
+    # namespace defaults to this template's own namespace; only set it for a
+    # cross-namespace model that the ModelConfig's allowedNamespaces admits.
+    # namespace: kagent
+
+  systemPrompt: >-
+    You are an engineering agent running inside Agent Substrate. The ECC plugin is
+    mounted read-only and its enabled skills are available to you as tools: reach for
+    tdd-workflow before writing an implementation, security-review before shipping a
+    change, and verification-loop before you claim anything is done. Say which skill you
+    are using. Never write a credential into a file or a command you echo.
+
+  # ---- the ECC plugin ---------------------------------------------------------
+  # Agent Plugins 1.0.0 format: plugin.json at the artifact root, one directory per
+  # skill under skills/, each with a SKILL.md. ECC's own manifests sit at
+  # .codex-plugin/ and .claude-plugin/, which kagent reads only for the Claude Harness
+  # and fails everywhere else, so the bundle carries a root manifest.
+  #
+  # `oci` is the only source that reaches Ready on Substrate: the golden-snapshot Actor
+  # fetches a git or bucket source itself, has no egress policy, and crashes with
+  # GoldenActorCrashed. Digest-pinned; a tag alone is rejected.
+  plugins:
+    - source:
+        oci: 172.20.0.3:5000/ecc-plugin@sha256:31c51d2ea9c77ade5ebd4eff7337996f874dd8ac9c59dcf788ca8d011d0869f2
+        # Selects a subdirectory of the artifact when the manifest is not at its root.
+        # Relative, and `..` segments are rejected. Unused: the bundle IS the root.
+        # path: bundles/ecc
+        # git:
+        #   url: https://github.com/affaan-m/ECC
+        #   commit: <full 40-hex commit id>   # short ids, branches and tags are rejected
+        # bucket:
+        #   s3:
+        #     endpoint: https://s3.us-east-1.amazonaws.com
+        #     bucket: plugin-artifacts
+        #     key: ecc/2.2.3.tar.zst
+        #     versionId: <exact object version>
+        #     region: us-east-1
+      # Allowlist of skill directory names to enable, up to 50. Attaching the plugin does
+      # NOT enable its skills: an omitted or empty list starts the agent with none of them.
+      # Being explicit also stops a later image from adding skills to this agent silently.
+      skills:
+        - configure-ecc
+        - agentic-engineering
+        - coding-standards
+        - tdd-workflow
+        - verification-loop
+        - security-review
+        - security-scan
+        - agent-security-hardening
+        - api-design
+        - backend-patterns
+        - context-budget
+        - context-and-decisions
+        - codebase-onboarding
+        - agent-architecture-audit
+        - conventional-commit-review
+        - issue-review
+        - e2e-testing
+        - python-testing
+        - git-workflow
+        - continuous-agent-loop
+        - blueprint
+        - browser-qa
+
+  # Standalone skills, attached without a plugin: up to 50, each entry names one SKILL.md
+  # directory. A name has to be unique across standalone and plugin skills, because both
+  # mount into the same place.
+  # skills:
+  #   - name: incident-triage
+  #     source:
+  #       oci: kind-registry:5000/incident-triage@sha256:<digest>
+  #       # path: skills/incident-triage
+
+  # MCP tools and subagents. A plugin's own mcp.json is read ONLY by the kagent Harness,
+  # so nothing here comes from ECC on codex; bind servers explicitly instead, and note
+  # that codex demands protocol STREAMABLE_HTTP (SSE is rejected) and refuses
+  # tokenPassthrough.
+  # tools:
+  #   - mcp:
+  #       server:
+  #         kind: RemoteMCPServer
+  #         apiGroup: api.kagent.dev
+  #         name: linear
+  #         namespace: kagent
+  #       tools: [list_issues]        # omitted = every tool the server offers
+  #       requireApproval: true
+  #   - subAgent:
+  #       name: planner
+  #       description: Plans the work before the coder runs it
+  #       templateRef:
+  #         name: planner-template
+  # Subagents on codex/claude may not themselves carry tools, skills, plugins or nested
+  # agents, and must use the same provider and credentials as the agent that binds them.
+
+  # Pulls the system prompt from a ConfigMap key instead of setting it inline. Mutually
+  # redundant with systemPrompt; inline wins for a prompt this short.
+  # systemPromptFrom:
+  #   name: ecc-prompts
+  #   key: system
+  #   optional: false
+
+  # Prompt templating: aliases a PodTemplate's containers as data sources that the runtime
+  # renders into the prompt. Needs a v1 PodTemplate object in the cluster; unused here.
+  # promptTemplate:
+  #   dataSources:
+  #     - name: app-container
+  #       alias: target
+
+  # Structured output. REJECTED on this Harness -- "Harness runtime codex does not support
+  # structured output". Available on the kagent Harness only (not byo, not codex/claude).
+  # outputSchemaStrict: true
+  # outputSchema: {}
+  # outputSchemaFrom:
+  #   name: report-schema
+  #   key: openapi.json
+---
+# ---------------------------------------------------------------------------
+# Agent -- binds the template to the harness. This is the object that runs.
+# ---------------------------------------------------------------------------
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: ecc-agent
+  namespace: kagent
+  annotations:
+    # Annotation, not a label: label values may not contain spaces.
+    kagent.dev/display-name: ECC Codex Agent
+spec:
+  template:
+    ref:
+      name: ecc-template
+      # `inline` is the alternative: the whole AgentTemplate written out here instead of
+      # referenced. Either ref or inline, never both -- the Ready reason "Agent explicitly
+      # selects its template and harness" is the accepted path.
+      # inline:
+      #   modelConfig: { name: ecc-gemini-model }
+      #   systemPrompt: ...
+      #   plugins: [...]
+  harnessRef:
+    name: ecc-codex
+  # Sessions-only egress grants. Does NOT cover the golden-snapshot Actor, which is why an
+  # out-of-cluster plugin source has to be OCI. None needed: the model call goes to a
+  # cluster-local LiteLLM and the plugin image is mounted by the worker, not by the agent.
+  egressPolicyRefs: []
+  # - name: allow-openrouter
