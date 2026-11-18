@@ -93,8 +93,8 @@ locals {
   }
 
   billing_flexprice_secrets = {
-    FLEXPRICE_API_KEY_INGEST = try(google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id,"dummy")
-    FLEXPRICE_API_KEY_MONEY  = try(google_secret_manager_secret.flexprice["flexprice-api-key-money"].secret_id,"dummy")
+    FLEXPRICE_API_KEY_INGEST = try(google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id, "dummy")
+    FLEXPRICE_API_KEY_MONEY  = try(google_secret_manager_secret.flexprice["flexprice-api-key-money"].secret_id, "dummy")
   }
 }
 
