@@ -148,7 +148,7 @@
       .mobile-nav-button, .sidebar-backdrop { display: none; }
       .app-frame { height: calc(100vh - var(--topbar-height)); height: calc(100dvh - var(--topbar-height)); display: grid; grid-template-columns: var(--sidebar-width) minmax(0,1fr); overflow: hidden; }
       .app-sidebar { min-width: 0; display: flex; flex-direction: column; padding: 14px 12px 16px; overflow: hidden auto; border-inline-end: 1px solid var(--border-strong); background: var(--sidebar); }
-      .content-column { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0,1fr) auto; overflow: hidden; }
+      .content-column { min-width: 0; min-height: 0; height: 100%; display: grid; grid-template-rows: auto minmax(0,1fr) auto; overflow: hidden; }
       .workspace-picker { min-height: 51px; border-bottom: 1px solid var(--border); }
       .sidebar-nav { display: flex; flex: 1; flex-direction: column; gap: 14px; padding-top: 16px; }
       .nav-section { display: flex; flex-direction: column; gap: 2px; } .nav-section-system { margin-top: auto; }
@@ -388,6 +388,9 @@
       </aside>
 
       <div class="content-column">
+      <!-- Hidden until a session proves the visitor is a guest, so the agent scaffold
+           below stays the LCP candidate and a signed-in user never pays for this row. -->
+      <div class="guest-banner" id="guest-banner" role="note" hidden></div>
       <main
         id="view"
         class="view view-immersive"

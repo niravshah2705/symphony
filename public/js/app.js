@@ -27,6 +27,7 @@ import { initThemeToggle } from './theme.js';
 import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
+import { dismissGuestBanner, guestBannerVisible } from './guest-banner.mjs';
 import { canAccessRoute, menuRouteVisible, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
@@ -590,6 +591,10 @@ async function beginSignOut() {
 }
 
 function renderAuthControl() {
+  // The topbar control and the guest banner answer the same question — what is
+  // this session — and every caller of this function is a moment where that
+  // changed. Painting them together is what keeps them from disagreeing.
+  renderGuestBanner();
   const host = document.getElementById('auth-control');
   if (!host) return;
   const languageHost = document.getElementById('language-control');
@@ -766,6 +771,52 @@ function renderAuthControl() {
   account.append(trigger, panel);
   host.append(account);
   renderLanguageControl();
+}
+
+function guestBannerStorage() {
+  try {
+    return window.sessionStorage;
+  } catch (_) {
+    // Private-mode storage cannot hold a dismissal, so the message stays up.
+    return null;
+  }
+}
+
+// A guest is already inside the workspace, not outside it: the gateway answers a
+// missing or invalid token with the public permissions rather than a 401, so
+// nothing refuses them and nothing tells them what they are missing. The toolbar
+// buttons say "Sign in"; this says why anyone would want to.
+function renderGuestBanner() {
+  const host = document.getElementById('guest-banner');
+  if (!host) return;
+  const session = getAuthenticationState();
+  const storage = guestBannerStorage();
+  if (!guestBannerVisible({ session, storage })) {
+    host.hidden = true;
+    host.replaceChildren();
+    return;
+  }
+  host.hidden = false;
+  host.replaceChildren(
+    el('p', { class: 'guest-banner-copy' }, [
+      el('strong', { dataset: { i18n: 'guestBannerTitle' } }, t('guestBannerTitle', "You're browsing as a guest")),
+      el('span', {
+        dataset: { i18n: 'guestBannerBody' },
+      }, t('guestBannerBody', 'This workspace is read-only and nothing is saved: the Agent answers without an organization behind it. Sign in to run work in your own organizations and projects.')),
+    ]),
+    el('div', { class: 'guest-banner-actions' }, [
+      ...authProviderButtons({ primary: true }),
+      el('button', {
+        class: 'guest-banner-dismiss',
+        type: 'button',
+        dataset: { i18n: 'guestBannerDismiss' },
+        onclick: () => {
+          dismissGuestBanner(storage);
+          renderGuestBanner();
+        },
+      }, t('guestBannerDismiss', 'Dismiss')),
+    ]),
+  );
 }
 
 function renderAuthenticationGate({ loading = false, error = '' } = {}) {
