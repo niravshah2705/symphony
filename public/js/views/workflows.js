@@ -385,6 +385,11 @@ export async function renderWorkflows(view) {
   });
   const loaded = await sync.load();
   let state = loaded.state;
+  // A step whose agent profile the canvas model refuses is dropped in silence,
+  // but the server still holds it — so the first saved edit would write it away.
+  // Say which profiles are missing before anything else on the page can save.
+  const hiddenProfiles = loaded.hiddenProfiles || [];
+  let hiddenSyncWarned = false;
   // Grants only filter the palette; the gateway is what refuses a write the
   // persona may not make, so nothing here is a security boundary.
   const persona = loaded.context.persona;
@@ -475,6 +480,16 @@ export async function renderWorkflows(view) {
       return result;
     }
     if (!syncedWithServer && !sync.isOffline()) setSaveStatus('Saving…');
+    if (hiddenProfiles.length) {
+      // The canvas cannot see every step the server holds, so a push here would
+      // rewrite the graph without the hidden ones. The draft stays on this device.
+      setSaveStatus('Draft saved on this device · hidden steps block syncing', 'error');
+      if (!hiddenSyncWarned) {
+        hiddenSyncWarned = true;
+        if (!silent) toast('Some steps use an agent profile this canvas does not know, so changes are not synced to your organization yet.', 'err');
+      }
+      return result;
+    }
     pushToServer();
     return result;
   }
@@ -1885,6 +1900,10 @@ export async function renderWorkflows(view) {
       loaded.source === 'offline' ? el('div', { class: 'workflow-recovery-banner', role: 'status' }, [
         icon('info', { size: 16 }),
         el('span', {}, 'Working offline — showing the draft saved on this device. Edits resume syncing when the connection returns.'),
+      ]) : null,
+      hiddenProfiles.length ? el('div', { class: 'workflow-recovery-banner', role: 'alert' }, [
+        icon('info', { size: 16 }),
+        el('span', {}, `${hiddenProfiles.length} step${hiddenProfiles.length === 1 ? '' : 's'} reference${hiddenProfiles.length === 1 ? 's' : ''} an agent profile this canvas does not know (${hiddenProfiles.join(', ')}) and ${hiddenProfiles.length === 1 ? 'is' : 'are'} hidden. Saving rewrites the graph without ${hiddenProfiles.length === 1 ? 'it' : 'them'} — have an administrator publish the missing profile first.`),
       ]) : null,
       !storage ? el('div', { class: 'workflow-recovery-banner', role: 'status' }, [
         icon('info', { size: 16 }),

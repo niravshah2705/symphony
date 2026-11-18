@@ -213,6 +213,16 @@ export const CURATED_AGENT_CATALOG = deepFreeze([
   agent('compliance', 'Compliance Agent', 'Compliance', 'Checks a proposed change or launch against applicable policies.', ['Proposal', 'Policy scope'], ['Compliance checklist', 'Exceptions'], ['Escalate unresolved obligations', 'Do not provide final legal approval'], ['policy-library'], ['compliance-review']),
   agent('launch', 'Launch Agent', 'Launch', 'Coordinates approved release communication and rollout tasks.', ['Approved launch plan', 'Audience'], ['Launch checklist', 'Communication package'], ['Use approved claims only', 'Honor rollout gates'], ['release-calendar'], ['launch-coordination']),
   agent('knowledge-publishing', 'Knowledge Publishing Agent', 'Knowledge publishing', 'Turns verified findings into durable organization knowledge.', ['Approved synthesis', 'Publishing policy'], ['Knowledge article', 'Source index'], ['Preserve attribution', 'Do not publish restricted material'], ['knowledge-base'], ['knowledge-management']),
+  // The five ADLC delivery roles. The gateway merges the same ids from
+  // packages/shared-core/src/workflow-defaults.js into the tenant's profile
+  // list, and a saved graph may reference them; an id missing here is refused
+  // by normalizeNode, which drops that node from the canvas without an error.
+  // workflow-designer-model.parity.test.mjs holds the two lists in step.
+  agent('ideation', 'Ideation Agent', 'Ideation', 'Explores problem spaces and drafts candidate directions for the Specs gate.', ['Market signal', 'Customer feedback'], ['Opportunity brief', 'Candidate directions'], ['Label speculation', 'Keep options decision-ready'], ['web-search'], []),
+  agent('engineering', 'Engineering Agent', 'Engineering', 'Owns the Phase 1 build lane: scaffolds modules, wires services, keeps the repo green.', ['Execution plan', 'Service catalogue'], ['Change set', 'Build report'], ['Never push to protected branches', 'Keep changes reversible'], ['repository', 'ci-runner'], []),
+  agent('quality', 'Quality Review Agent', 'Quality', 'Reviews change sets for correctness, maintainability, and gate readiness.', ['Change set', 'Quality bar'], ['Review verdict', 'Actionable findings'], ['Block on security regressions', 'One reviewer cannot approve own work'], ['repository'], []),
+  agent('deployment', 'Deploy Agent', 'Deployment', 'Runs the release pipeline: artifact promotion, rollout, and rollback drills.', ['Approved release', 'Environment matrix'], ['Rollout record', 'Rollback plan'], ['Never deploy without gate approval', 'Honor canary thresholds'], ['deployment-runner'], []),
+  agent('monitoring', 'Monitoring Agent', 'Monitoring', 'Maintains telemetry listeners, scheduled health checks, and alerting.', ['Service inventory', 'Alert policy'], ['Health report', 'Paged incident'], ['Do not silence alerts autonomously', 'Escalate uncertain severity'], ['metrics', 'alerts'], []),
 ]);
 
 export const BUILT_IN_CONTEXT_CATALOG = deepFreeze([
