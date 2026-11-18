@@ -7,6 +7,7 @@ import {
   selectWorkspaceOrganization,
   selectWorkspaceProject,
 } from './workspace-context.mjs';
+import { clearOrganizationScope, setCurrentProject, setOrganizationScope } from './state.js';
 
 let snapshot = Object.freeze({
   status: 'idle',
@@ -41,6 +42,17 @@ function applySelection(context, selection, { persist = true } = {}) {
     organizationId: snapshot.organizationId,
     projectId: snapshot.projectId,
   });
+  // Device-local choices that are really per-organization — the last project worked
+  // in is what the agent view puts on the wire — follow this selection rather than
+  // a flat key, otherwise a tenant switch restores the previous organization's
+  // project into the new one.
+  const remembered = setOrganizationScope(snapshot.organizationId);
+  const project = activeWorkspaceProject(snapshot);
+  if (snapshot.projectId && snapshot.projectId !== remembered) {
+    // Nothing recorded for this organization, or a record the server no longer
+    // honors: take the project this selection actually resolved.
+    setCurrentProject(snapshot.projectId, project?.name || '');
+  }
   if (persist && snapshot.user?.id) {
     persistUserContextPreference(storage(), snapshot.user.id, snapshot);
   }
@@ -108,6 +120,7 @@ export function changeWorkspaceProject(projectId) {
 
 export function clearWorkspaceContext() {
   setRequestContext(null);
+  clearOrganizationScope();
   snapshot = Object.freeze({
     status: 'idle',
     user: null,

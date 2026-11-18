@@ -1,0 +1,80 @@
+# syntax=docker/dockerfile:1
+#
+# Substrate actor image (gVisor actor on GKE — the ONLY workload that runs
+# agent code). Built by the cloudbuild "substrate-actor" step and pinned into
+# Terraform as substrate_planner_image; ate-controller instantiates it as the
+# ActorTemplate container (packages/shared-core/src/agent/substrate.js
+# upsertActorTemplate), which forwards only the actor-JWT verification names
+# from the control plane's environment — everything else the agent needs lives
+# in this image.
+#
+# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+#   docker build -f deploy/gcp/Dockerfile.substrate-actor -t <tag> .
+#
+# Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
+# multi-arch index digest for node:22-alpine.
+# VERIFY / UPDATE with: docker buildx imagetools inspect node:22-alpine
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+# Build the capability-free seccomp launcher used around model-controlled
+# shell/developer-tool commands. gVisor is the actor's first isolation layer;
+# the launcher is kept from the retired coder image because
+# packages/shared/src/agent/harnesses/deepagent.js wraps EVERY production shell
+# command in it unconditionally — without the binary in the image, agent
+# commands fail at runtime.
+FROM ${NODE_IMAGE} AS sandbox-builder
+RUN apk add --no-cache gcc musl-dev libseccomp-dev
+COPY packages/shared/src/agent/tools/network-sandbox.c /src/network-sandbox.c
+RUN mkdir -p /out \
+    && cc -Os -fPIE -pie -Wall -Wextra -Werror \
+      /src/network-sandbox.c -lseccomp -o /out/ai-fleet-network-sandbox
+
+# ---------------------------------------------------------------------------
+# Stage 1 — install production dependencies at the workspace root.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/ ./packages/
+COPY services/ ./services/
+
+# This image installs the FULL workspace closure (COPY packages/ + services/
+# above) on purpose: the actor RUNS the agent runtime, invoking the native
+# codex-sdk / claude-agent-sdk factory (packages/shared/src/agent/runtimes.js).
+# Do NOT scope the copy to @ai-fleet/shared-core the way the proxy &
+# provisioner images do — that would surface as a runtime MODULE_NOT_FOUND when
+# a specific SDK runtime is selected.
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+# Stage 2 — minimal runtime.
+# ---------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+# The actor clones, builds, and tests repositories, so it needs git + a shell +
+# SSH/TLS trust roots + libseccomp for the launcher. Add further language
+# toolchains here (python3, make, g++, openjdk, etc.) as the target repos
+# require — keep the set minimal to limit the image's attack surface.
+RUN apk add --no-cache git openssh-client ca-certificates bash libseccomp
+
+# SUBSTRATE_ACTOR_MODE makes the image self-describing: the actor entry mounts
+# only the /internal/plan/run router + /healthz and never the pipeline
+# controller. The actor is not a Cloud Run service, so it honors PORT like any
+# plain Node process; 8080 is what both the ActorTemplate wakeupProbe and the
+# atenet-router backend expect.
+ENV NODE_ENV=production \
+    AI_FLEET_DATA_DIR=/tmp \
+    SUBSTRATE_ACTOR_MODE=true
+
+COPY --from=builder --chown=node:node /app /app
+COPY --from=sandbox-builder /out/ai-fleet-network-sandbox /usr/local/bin/ai-fleet-network-sandbox
+
+# Non-root (infra-misconfig checklist).
+USER node
+
+EXPOSE 8080
+
+CMD ["node", "services/orchestrator/src/substrate-actor-entry.js"]

@@ -169,3 +169,38 @@
   .job-history-step-list .job-step { align-items: flex-start; flex-direction: column; gap: 3px; }
   .job-history-step-list .job-step time { min-width: 0; }
 }
+
+/* Actor runs (#/actors): one card per substrate actor, grouped by what the
+   operator can do about it. Reuses .metric-card and the shared button styles. */
+.actors-header { margin-bottom: 14px; }
+.actors-header h2 { margin: 0; font-family: var(--font-serif); font-size: 22px; letter-spacing: -.025em; }
+.actors-header p { margin: 5px 0 0; }
+.actors-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+}
+.actors-context { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
+.actors-atespace { font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.actors-pattern { color: var(--muted); font-family: var(--font-mono); font-size: 10px; }
+.actors-project-filter {
+  min-width: 0; max-width: 260px; padding: 7px 9px; border: 1px solid var(--border);
+  border-radius: 9px; background: var(--panel); color: var(--text); font-size: 12px;
+}
+.actors-summary { display: flex; gap: 6px; }
+.actors-pill {
+  padding: 4px 9px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  letter-spacing: .03em; text-transform: uppercase; border: 1px solid var(--border);
+}
+.actors-pill-running { color: var(--green); background: var(--green-soft); }
+.actors-pill-paused { color: var(--muted); background: var(--accent-soft); }
+.actors-pill-attention { color: var(--amber); background: var(--amber-soft); }
+.actors-grid { display: flex; flex-direction: column; gap: 18px; }
+.actors-bucket { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; align-content: start; }
+.actors-bucket h3 { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.actors-card-attention { border-color: color-mix(in srgb, var(--amber) 38%, var(--border)); }
+.actors-card-name { overflow: hidden; font-family: var(--font-mono); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.actors-card-state { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.actors-card-reason { margin: 0; color: var(--amber); font-size: 11px; }
+.actors-card-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+.actors-filter-note, .actors-empty { margin: 0; font-size: 12px; }
+.actors-error { margin: 0; color: var(--red); font-size: 12px; }

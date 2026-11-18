@@ -12,7 +12,6 @@ const { SnapshotPreflight } = require('./preflight');
 const { createPipelineCheckpointer } = require('./checkpointer');
 const { createApp } = require('./app');
 const { loadConfig } = require('./config');
-const { SettingsDeploymentApproval } = require('./deployment-approval');
 
 function createStageBus(config, options = {}) {
   const stageValue = (values, stage) => values[stage] || '';
@@ -53,25 +52,12 @@ function createService(options = {}) {
     firestoreFactory: options.firestoreFactory,
   });
   const bus = options.bus || createStageBus(config, options);
-  const preflight = options.preflight || new SnapshotPreflight({
-    deploymentEnabled: config.deploymentEnabled,
-  });
-  const deploymentApproval = options.deploymentApproval || (
-    (config.deploymentEnabled || config.requireDeploymentApproval)
-      ? new SettingsDeploymentApproval({
-          settingsUrl: config.settingsUrl,
-          internalToken: config.internalApiToken,
-          cloud: config.messagingMode === 'pubsub',
-        })
-      : null
-  );
+  const preflight = options.preflight || new SnapshotPreflight();
   const orchestrator = options.orchestrator || new PipelineOrchestrator({
     repository,
     checkpointer,
     bus,
     preflight,
-    deploymentApproval,
-    requireDeploymentApproval: config.requireDeploymentApproval,
     log: options.logger || log,
   });
   const app = createApp({

@@ -5,7 +5,7 @@
 # -----------------------------------------------------------------------------
 # Why this needs writing down at all: every consumer of these names
 # (packages/shared-core/src/config.js SUBSTRATE, agent/substrate.js,
-# services/planner/src/jwks.js) falls back to an inert default when the variable
+# packages/shared-core/src/agent/substrate-jwks.js) falls back to an inert default when the variable
 # is absent, so a deployment with the substrate root applied and this root
 # unchanged does not fail — it just keeps running the shared pattern and reports
 # "Substrate is not configured" in a status field nobody reads. Stage C's
@@ -15,19 +15,19 @@
 #
 # Placement rules, in order of how much they cost to get wrong:
 #   - The control-plane address goes on the services that DISPATCH a run
-#     (planner, coder-control) and the one that CREATES spaces (provisioner).
-#   - It never goes on coder-worker on the SHARED stack: that container
-#     executes model-generated code, and this deployment's own identity reaches
-#     every tenant's namespace, so the address converts a workload into a caller
-#     that can create, assign and delete actors it does not own. A per-tenant
+#     (orchestrator) and the one that CREATES spaces (provisioner).
+#   - It never goes on a workload that executes model-generated code without
+#     confinement: on the SHARED stack the orchestrator's own identity reaches
+#     every tenant's namespace, so SUBSTRATE_ALLOWED_ATESPACES and the in-cluster
+#     Role are what keep a dispatch inside the caller's space. A per-tenant
 #     stack may pass it down (see packages/shared-core/src/provisioning/plan.js)
 #     because there SUBSTRATE_ALLOWED_ATESPACES pins one nameable space and the
 #     in-cluster Role reaches only that namespace — the same allowance with
 #     different confinement.
 #   - The actor-callback group (mode + JWKS + audience + trust domain) goes on the
-#     planner ONLY, because that is the one service with the endpoint that
+#     orchestrator ONLY, because that is the one service with the endpoint that
 #     verifies an actor's JWT. It opens only when substrate_actor_member names the
-#     identity allowed to invoke the planner too (the run.invoker binding in
+#     identity allowed to invoke the orchestrator too (the run.invoker binding in
 #     iam.tf) — a router mounted with no invoker is a refused call, and an invoker
 #     without verification is an open prompt endpoint on behalf of any org.
 #   - No credential lives in these maps. substrate.js also honours a
@@ -75,7 +75,7 @@ locals {
   # prompt on behalf of an organization, so it opens only when the deployment can
   # say WHO is calling AND someone has said that caller may call at all. All four
   # names are emitted together or none, because
-  # services/planner/src/routes/substrate-actor.js:118 mounts the router on
+  # packages/shared/src/agent/substrate-actor.js mounts the router on
   # SUBSTRATE_ACTOR_MODE=true + SUBSTRATE_JWKS_URL while the run.invoker binding in
   # iam.tf is gated by substrate_actor_member. Splitting those is how an operator
   # ends up with a 200-or-403 that depends on which half they remembered, so the

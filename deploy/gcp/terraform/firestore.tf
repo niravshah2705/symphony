@@ -7,8 +7,10 @@
 
 # NOTE: location_id is IMMUTABLE. When moving the stack to another region (e.g.
 # India), the database does NOT move with it — see docs/GCP_REGION_MIGRATION.md
-# for the export→import (or recreate) runbook. var.firestore_location stays nam5
-# by default so `terraform apply` never attempts an (impossible) in-place move.
+# for the export→import (or recreate) runbook. The nam5 default is only a
+# placeholder: a deploy must pass firestore_location matching the database that
+# already exists, and the prevent_destroy below is what stops a missing value
+# from planning an (impossible) in-place move.
 resource "google_firestore_database" "default" {
   project     = var.project_id
   name        = "(default)"
@@ -18,6 +20,17 @@ resource "google_firestore_database" "default" {
   # Guard against accidental data loss on destroy — flip to DELETE only when you
   # deliberately want `terraform destroy` to remove the database.
   deletion_policy = "ABANDON"
+
+  # location_id is immutable, so any mismatch (a missing FIRESTORE_LOCATION repo
+  # variable falls back to nam5) plans a REPLACE. ABANDON keeps the database
+  # itself, but the replace still drops it from state and the follow-up create
+  # then fails against the existing "(default)" database — every dependent
+  # service loses its backend. Refuse the plan instead. A real relocation is the
+  # export → import runbook in docs/GCP_REGION_MIGRATION.md, done with this flag
+  # flipped off (or the resource removed from state) as a deliberate step.
+  lifecycle {
+    prevent_destroy = true
+  }
 
   depends_on = [google_project_service.services]
 }

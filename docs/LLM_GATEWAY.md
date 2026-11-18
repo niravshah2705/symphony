@@ -14,8 +14,10 @@ standard route, byte-for-byte.
 ## How a request opts in
 
 1. The browser sets `X-AI-Fleet-Llm-Gateway: langsmith|litellm`. The SPA sends it
-   from `localStorage.aiFleetLlmGateway` (`public/js/api.js`); any value outside
-   that list is dropped.
+   from `localStorage.aiFleetLlmGateway` — or, to pin a single customer,
+   `localStorage['aiFleetLlmGateway:<organizationId>']`, which wins for that
+   organization alone (`public/js/llm-gateway.mjs`); any value outside that list is
+   dropped.
 2. The gateway service honors the header only when the matching server gate is
    on — `LLM_GATEWAY_ENABLED` for `langsmith`, `LITELLM_GATEWAY_ENABLED` for
    `litellm` (`services/gateway/src/request-context.js`, mode table
@@ -204,6 +206,61 @@ scheduled `pg_dump` to GCS — restores history but does not fix key identity, a
    on the wire. `deploy/gcp/litellm-config.test.js` diffs the file against the live
    harness catalog in CI; a missing entry is rejected with 403
    `key_model_access_denied` on that run, not a fallback.
+
+## Deploy a sample kagent harness in a tenant with LiteLLM (GKE)
+
+The end-to-end example wires a per-tenant kagent `Harness`/`Agent` whose LLM egress
+flows through this gateway: the agent holds only the sentinel, the co-located
+egress-proxy sidecar rewrites `/litellm` to `LITELLM_PROXY_UPSTREAM`, and the real
+per-org `litellmApiKey` is resolved from that org's vault (S2S) — never from the
+agent's env. The manifest lives at
+[`deploy/gcp/terraform-substrate-gke/examples/kagent-litellm-harness.yaml`](./../deploy/gcp/terraform-substrate-gke/examples/kagent-litellm-harness.yaml):
+a `Namespace` (tenant atespace), a `kind: Harness` (`spec.claude: {}` + the tainted
+gVisor `workerPoolRef`), a `ModelConfig` bound to the **bare** model id served by
+LiteLLM, and an `Agent` with `harnessRef` + `egressPolicyRefs`.
+
+Prerequisites (do these first):
+
+1. Infra up with `LITELLM_ENABLED=true`, and steps 2–5 above completed: the master/salt
+   secrets seeded, a per-org model-scoped `litellmApiKey` minted into **that org's**
+   vault, and `LITELLM_GATEWAY_ENABLED=true` on the gateway + agent containers.
+2. `KAGENT_*` set on the gateway (`KAGENT_ENABLED=true`, `KAGENT_API_URL`, the tenant
+   namespace). Note `deploy/gcp/deploy.yml` currently forwards the substrate + litellm
+   tfvars but **no `kagent_*` apply args**, so the kagent control-plane inputs are
+   supplied out-of-band to `terraform apply` in `deploy/gcp/terraform/`.
+3. The tenant atespace namespace exists (`terraform-substrate-gke/namespaces.tf`) and
+   the worker pool / snapshot RBAC is applied (`substrate.tf`).
+
+Deploy and smoke-test a single turn through the gateway:
+
+```bash
+kubectl apply -n tenant-acme \
+  -f deploy/gcp/terraform-substrate-gke/examples/kagent-litellm-harness.yaml
+kubectl get agents.api.kagent.dev -n tenant-acme          # acme-coding present
+
+# One turn, flagged to route its LLM calls through LiteLLM:
+curl -sS -X POST "$GATEWAY_URL/api/agent/run" \
+  -H "Authorization: Bearer $GATEWAY_TOKEN" \
+  -H 'X-AI-Fleet-Llm-Gateway: litellm' \
+  -H "X-Fleet-Org-Id: $ORG_ID" \
+  -d '{"agentId":"acme-coding","prompt":"Reply with the single word: pong"}'
+```
+
+The wire model must stay the **bare** id (LiteLLM matches `model_name` verbatim — a
+`provider/` prefix 403s). The `AGENT_MODEL` env row on the sample is what the agent
+reads; the sidecar's injected `litellmApiKey` is what authenticates the call.
+
+Honest caveats:
+- Only an **already-published** runtime (`claude` / `deepagent`) runs this sample today.
+  The six new `go/harness/*` scaffolds are dark — no upstream kagent CRD `spec.<runtime>`
+  key, no controller translator, no image row — so they cannot execute a turn yet.
+- A `502` from the proxy after an ephemeral-Postgres wipe means the virtual key was
+  invalidated: re-mint `litellmApiKey` (step 4) and retry. The run fails closed by design.
+- Qoder-backed agents fail closed under the egress proxy by design (see the matrix).
+
+An opt-in Playwright spec mirroring these steps lives at
+[`e2e-live/kagent-litellm-tenant.spec.js`](./../e2e-live/kagent-litellm-tenant.spec.js)
+(skipped unless `KAGENT_LIVE=1` + the cluster/gateway env + `LITELLM_API_KEY_MINTED=1`).
 
 ## Reading the traces
 

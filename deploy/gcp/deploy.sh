@@ -69,7 +69,6 @@ EMAIL_SMTP_PASSWORD="${EMAIL_SMTP_PASSWORD:-}"
 EMAIL_FROM="${EMAIL_FROM:-}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://storage.googleapis.com/${SPA_BUCKET}/index.html}"
 PIPELINE_ORCHESTRATOR_ENABLED="${PIPELINE_ORCHESTRATOR_ENABLED:-false}"
-PIPELINE_DEPLOYMENT_ENABLED="${PIPELINE_DEPLOYMENT_ENABLED:-false}"
 SETTINGS_OPERATOR_INVOKER="${SETTINGS_OPERATOR_INVOKER:-}"
 OMLX_PROXY_UPSTREAM="${OMLX_PROXY_UPSTREAM:-}"
 OLLAMA_PROXY_UPSTREAM="${OLLAMA_PROXY_UPSTREAM:-}"
@@ -141,7 +140,6 @@ TFVARS=(
   -var="email_from=${EMAIL_FROM}"
   -var="email_public_app_url=${EMAIL_PUBLIC_APP_URL}"
   -var="pipeline_orchestrator_enabled=${PIPELINE_ORCHESTRATOR_ENABLED}"
-  -var="pipeline_deployment_enabled=${PIPELINE_DEPLOYMENT_ENABLED}"
   -var="settings_operator_invoker=${SETTINGS_OPERATOR_INVOKER}"
   -var="omlx_proxy_upstream=${OMLX_PROXY_UPSTREAM}"
   -var="ollama_proxy_upstream=${OLLAMA_PROXY_UPSTREAM}"
@@ -294,11 +292,8 @@ else
     docker push "${IMAGE_BASE}/$1:${IMAGE_TAG}"
   }
   build_push gateway       Dockerfile.gateway
-  build_push planner       Dockerfile.planner
-  build_push coder-control Dockerfile.coder   # dual-role image; also runs the worker Job
+  build_push substrate-actor Dockerfile.substrate-actor  # gVisor actor image; digest-pinned into substrate_planner_image at deploy time
   build_push pipeline-orchestrator Dockerfile.orchestrator
-  build_push pipeline-tester       Dockerfile.tester
-  build_push pipeline-deployer     Dockerfile.deployer
   build_push proxy Dockerfile.proxy
   build_push email-service Dockerfile.email
   build_push identity-verification Dockerfile.identity-verification
@@ -325,7 +320,7 @@ gsutil setmeta -h "Cache-Control:no-store" "gs://${SPA_BUCKET}/config.js"
 gsutil -m setmeta -h "Content-Type:text/javascript" "gs://${SPA_BUCKET}/**/*.mjs" >/dev/null 2>&1 || true
 
 # --- 8. Full apply ----------------------------------------------------------
-log "Full apply (Cloud Run services + job, Pub/Sub, Scheduler, Firestore, IAM)"
+log "Full apply (Cloud Run services, Pub/Sub, Scheduler, Firestore, IAM)"
 
 # Idempotently import pre-existing Firestore composite indexes if missing from state
 chunks_idx_addr="google_firestore_index.attachment_chunks_by_conversation_and_embedding"

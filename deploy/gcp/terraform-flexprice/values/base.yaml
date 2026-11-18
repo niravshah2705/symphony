@@ -1,0 +1,497 @@
+# =============================================================================
+# FlexPrice on GKE — the shared Helm values for all three releases.
+#
+# This is the cloud twin of deploy/flexprice/helm/values-kind.yaml, and it is
+# deliberately the same shape rather than a tidied-up one: the kind file is what
+# Phases 0-5 were actually probed against, so every key below is that file's key
+# unless the cloud requires a different value. `helm template` of the two is the
+# diff that proves the port changed no behaviour (APPLY.md, "Verify before
+# apply"). Where a value IS different, the reason is in the comment on it.
+#
+# Three releases consume this file with one per-release overlay each, written
+# inline in each release's `values` list (helm_infra.tf, helm_migration.tf,
+# helm_app.tf). Release-level enablement plus the var-driven registry,
+# storage-class, size and placement scalars are the
+# only things the overlays carry — so this file stays the one place to read what
+# the stack IS, and each overlay is short enough to review in a diff.
+#
+# No credential VALUE appears anywhere in this file or its overlays. Everything
+# sensitive is a key inside the pre-created Kubernetes Secret `flexprice-secrets`
+# (built by CI out of Secret Manager, never by Helm — see secrets.tf), reached
+# through `secrets.existingSecret` + `secretEnv` below.
+# =============================================================================
+
+nameOverride: ""
+# fullnameOverride, exactly as the kind values file does: `<fullname>-postgres`
+# must be the literal `flexprice-postgres` that the `env` block below names.
+# The three releases have different NAMES (flexprice-infra/-migration/-app) but
+# the same fullname, so the in-cluster addresses are identical to the local
+# stack's and the release split is invisible to anything talking to the API.
+fullnameOverride: flexprice
+
+image:
+  # Overridden by the Terraform overlay to the Artifact Registry path built from
+  # the pinned checkout. ghcr.io/flexprice/flexprice is a private package, so a
+  # pulled image is not an option (deploy/flexprice/VERSION records the probe).
+  repository: flexprice-app
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# --------------------------------------------------------------------- shape
+# Two mutually exclusive configuration shapes exist in this chart
+# (templates/_helpers.tpl `flexprice.env`): the legacy structured values, which
+# render a config.yaml ConfigMap, or the generic `.Values.env` map below.
+# The generic map is the only correct choice at this pin, for the reasons
+# values-kind.yaml records in full — the legacy shape emits no
+# FLEXPRICE_KAFKA_TOPICS (so `migrate kafka` asks a one-broker cluster for
+# replication_factor 3, a hard failure), and it derives every service address
+# from Bitnami subchart Service names that do not exist here. With `.Values.env`
+# nothing is derived: the literals below are the Service names the hand-rolled
+# infra templates create.
+#
+# Consequence: `redisExtended.*`, `eventProcessing.*`, `kafka.topics`,
+# `billing.*`, `auth.*`, `logging.*`, `otel.*` are consulted only by the legacy
+# shape and are inert. They stay at chart defaults so a `helm diff` against an
+# upstream-values deployment remains quiet. The live switches are the
+# corresponding FLEXPRICE_* entries in `env`.
+
+# ── Applications ─────────────────────────────────────────────────────────────
+# Off in the shared file. The overlay in helm_app.tf flips them on for the
+# application release only, which is what keeps the three releases' object sets
+# disjoint:
+# two Helm releases in one namespace both rendering `flexprice-api` is a
+# conflicting-ownership failure, not a warning.
+api:
+  enabled: false
+  replicaCount: 1
+  autoscaling:
+    # HPA needs metrics-server; the cluster has none installed for this pool.
+    # Scaling the three apps is a replicaCount change, made deliberately.
+    enabled: false
+  podDisruptionBudget:
+    # A PDB on one replica blocks drain, and the node pool auto-repair drains.
+    enabled: false
+  resources:
+    requests:
+      cpu: 150m
+      memory: 512Mi
+    limits:
+      cpu: 750m
+      memory: 1Gi
+
+consumer:
+  enabled: false
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+
+worker:
+  enabled: false
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podDisruptionBudget:
+    enabled: false
+  resources:
+    requests:
+      cpu: 75m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+frontend:
+  # Separate image (flexprice-front), separate question. The billing service
+  # talks to the API only, and nothing here builds a UI.
+  enabled: false
+
+admin:
+  enabled: false
+
+bento:
+  enabled: false
+
+e2eprobe:
+  enabled: false
+
+# ── Networking ───────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  # The chart's ingress templates are Ingress/GCE-shaped. This stack is fronted
+  # by Gateway API on Envoy Gateway, which front.tf builds and pins to its own
+  # static address — so the chart renders nothing here rather than a second,
+  # unmanaged front for the same hostname.
+  enabled: false
+
+networkPolicy:
+  # Off, as in the kind file. The chart's policy is ingress-only and would
+  # restrict nothing that is not already restricted by namespace + VPC.
+  enabled: false
+
+# ── Storage ──────────────────────────────────────────────────────────────────
+# False in the shared file, true only in the infra release. `provisioner` empty
+# makes templates/storage/storageclass-retain.yaml render nothing at all, which
+# is what keeps three releases from each claiming one cluster-scoped
+# StorageClass. The infra overlay sets both, and it is the only release that
+# renders PersistentVolumeClaims.
+dataProtection:
+  retainStorage: false
+  storageClass:
+    name: ""
+    provisioner: ""
+    parameters: {}
+    # Retained PVs are zonal, so binding must wait for the pod that consumes
+    # them; Immediate would provision in an arbitrary zone and leave the pod
+    # unschedulable next to a volume it cannot attach.
+    volumeBindingMode: WaitForFirstConsumer
+    allowVolumeExpansion: true
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
+secrets:
+  # Created out-of-band by CI from Secret Manager (secrets.tf holds the
+  # containers, no values). Keys: postgres-password, clickhouse-password,
+  # auth-secret, encryption-key, api-key-keys.
+  existingSecret: flexprice-secrets
+
+# ── PostgreSQL (hand-rolled in-cluster) ──────────────────────────────────────
+postgres:
+  external:
+    enabled: false
+  user: flexprice
+  dbname: flexprice
+  # Empty by design: `flexprice.postgresPassword` falls through to the Secret key
+  # `postgres-password`.
+  password: ""
+  sslmode: disable
+  internal:
+    image:
+      repository: postgres
+      tag: "15.3"
+    persistence:
+      enabled: true
+      size: 5Gi
+      # Empty = the chart's Retain class via `flexprice.componentStorageClass`.
+      # A literal here would bypass it and lose the Retain reclaim policy.
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 2
+        memory: 1Gi
+      # The CPU limit is a survival knob, not fairness. templates/infra/postgres.yaml
+      # hardcodes a `pg_isready` liveness probe at timeoutSeconds 5 /
+      # failureThreshold 3 with no values key, and an exec probe that is
+      # CPU-throttled does not answer in 5s — a killed postgres mid-migration then
+      # fails the whole install with `connection reset by peer` at backoffLimit 0.
+      # The staged chart widens those timings (see README "What we patch and
+      # why"); this limit is the belt to that brace.
+
+# ── ClickHouse (hand-rolled standalone) ──────────────────────────────────────
+clickhouse:
+  # `standalone`, not `altinity`: mode altinity renders a ClickHouseInstallation
+  # and requires the Altinity operator CRDs, which nothing in this repo installs.
+  # The chart's own comment about an operator applies only to that mode.
+  mode: standalone
+  namespace: ""
+  username: flexprice
+  database: flexprice
+  password: "" # -> Secret key `clickhouse-password`
+  tls: false
+  # Per-QUERY client ceiling, bounded by the server's max_memory_usage. The chart
+  # default (90 GB) is a cloud-size number that on this pool is not a limit at
+  # all: a runaway analytics query takes the pod down with it.
+  maxMemoryUsageGB: 1
+  standalone:
+    image:
+      repository: clickhouse/clickhouse-server
+      # 24.9-alpine: what compose ran. Chart default is 24.8.
+      tag: "24.9-alpine"
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: 2
+        memory: 2Gi
+
+# ── Kafka (hand-rolled KRaft, single broker) ─────────────────────────────────
+kafkaConfig:
+  external:
+    enabled: false
+  useSASL: false
+  internal:
+    replicas: 1
+    image:
+      repository: confluentinc/cp-kafka
+      tag: "7.7.1"
+    # KRaft stores the cluster id in the volume, so changing it after the first
+    # install orphans the existing data. This is the id this stack was created
+    # with, carried forward on purpose rather than regenerated per apply.
+    clusterId: "6d3e4a51-9f0b-4f8e-9c2a-0f3b7d1e5a21"
+    brokerId: 0
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 200m
+        memory: 768Mi
+      limits:
+        cpu: 1500m
+        memory: 1536Mi
+
+# ── Redis (hand-rolled, single node, no auth) ────────────────────────────────
+redisConfig:
+  external:
+    enabled: false
+  # No AUTH, matching compose and the kind file. The host is set in `env`,
+  # because `flexprice.redisHost` would name the Bitnami subchart's Service.
+  password: ""
+  internal:
+    image:
+      repository: redis
+      tag: "7.2-alpine"
+    persistence:
+      enabled: true
+      size: 1Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+# ── Temporal ─────────────────────────────────────────────────────────────────
+temporal:
+  # The official subchart: four server Deployments plus web and admin-tools, and
+  # a dependency that must be vendored to install at all. Disabled, as locally.
+  enabled: false
+
+temporalConfig:
+  # `enabled: true` keeps Temporal as part of the system (it gates the namespace
+  # bootstrap Job below). `external.enabled: true` suppresses
+  # templates/infra/temporal.yaml's hand-rolled server, which is what the kind
+  # file does and what extras.tf reproduces in Terraform — that template's
+  # Service is `<fullname>-temporal` with no schema bootstrap, and it assumes the
+  # `temporal` database already exists.
+  enabled: true
+  external:
+    enabled: true
+  # The address the chart's `flexprice.temporalAddress` helper returns when
+  # external, and the only thing the bootstrap Job below talks to. It is the
+  # Service extras.tf creates, named the way the helper names it. Left at the
+  # chart default (`temporal-service:7233`) the bootstrap Job retries 60 times
+  # against an address nothing provides, and the `default` namespace never gets
+  # registered.
+  address: "flexprice-temporal-frontend:7233"
+  namespace: "default"
+  taskQueue: "billing-task-queue"
+  # Empty in the shared file so only one release runs the bootstrap Job;
+  # helm_migration.tf's overlay carries the list. Registering `default` is not
+  # optional: the worker crash-loops on
+  #   ensure temporal server schedules: describe temporal schedule
+  #   "credit-grants-processing": Namespace default is not found.
+  # which is the furthest possible place from the cause.
+  bootstrapNamespaces: []
+
+# ── Migration Job ────────────────────────────────────────────────────────────
+migration:
+  # Off in the shared file; helm_migration.tf's overlay turns it on for that release.
+  enabled: false
+  command: "/app/migrate"
+  # `asHook: false` is the Terraform-shaped choice, and upstream chose it for
+  # exactly this delivery model (values.yaml: "for delivery models where the Job
+  # is applied by something else, as its own terraform unit ordered before the
+  # release"). As a release resource rather than a pre-install hook it is owned
+  # by this release, its name still embeds a hash of the rendered environment and
+  # the image, and a failure leaves the Job and its logs in place for a human to
+  # read instead of deleting them at the moment of failure.
+  asHook: false
+  steps:
+    postgresSetup: true
+    clickhouse: true
+    kafka: true
+    # false: the versioned dbmate path replaced Ent AutoMigrate at this commit;
+    # running both fights over the schema.
+    ent: false
+    # Required. Without the seeded tenant row no key in FLEXPRICE_AUTH_API_KEY_KEYS
+    # authenticates and every call 401s looking like a bad key.
+    seed: true
+    # false, and load-bearing: the verify step curls /v1/environments with the
+    # structured `flexprice.auth.apiKey.keys` value, which the generic-env shape
+    # never emits, so it presents a key the server was never configured to accept
+    # and fails a migration that succeeded. CI verifies honestly instead, with the
+    # two plane keys the billing service actually uses.
+    verify: false
+  # 0 = never retry a failed Job. A migration KILLED mid `CREATE INDEX
+  # CONCURRENTLY` leaves an INVALID index, and `IF NOT EXISTS` skips it, so a
+  # retry would report success and record the migration as applied over a broken
+  # index. `migrate postgres up` now refuses to start while one exists.
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 2
+      memory: 1Gi
+
+# ── Observability (inert on this shape — see the note at the top) ────────────
+logging:
+  level: info
+  format: json
+  otel:
+    enabled: false
+
+otel:
+  enabled: false
+
+# ── Service accounts ─────────────────────────────────────────────────────────
+serviceAccount:
+  # Created once, by the infra release. The other two set create=false with the
+  # same explicit name, because `flexprice.serviceAccountName` returns
+  # `.Values.serviceAccount.name` in both branches — an empty name there is how a
+  # pod silently ends up on `default`.
+  create: false
+  name: flexprice
+  annotations: {}
+  # No per-component Google service accounts: nothing in this stack reaches GCP
+  # APIs (no S3/GCS event storage, no SES), so there is no workload identity to
+  # bind. Only the node's own identity pulls images.
+  perComponent: false
+
+# ══════════════════════════════════════════════════════════════════════════════
+# env: the plaintext configuration surface. Source of truth is
+# deploy/flexprice/compose.yaml `x-app` — the set Phases 0-5 were verified
+# against — with in-cluster Service names. FLEXPRICE_DEPLOYMENT_MODE is absent
+# on purpose: each Deployment template hardcodes it, and a duplicate key in this
+# shared map would make the consumer and worker boot as api.
+#
+# Sum of requests across every pod here is roughly 1.2 CPU / 3.5 GiB, which fits
+# one e2-standard-4. The sum of LIMITS does not (≈7.3 CPU), and that is
+# intentional: limits are the ceiling a container may burst to under contention,
+# not a scheduling claim. Do not read the pool's max nodes as headroom for the
+# limits — the stores are single-replica and only one node can hold their PDs.
+# ══════════════════════════════════════════════════════════════════════════════
+env:
+  FLEXPRICE_SERVER_ADDRESS: ":8080"
+
+  # ── Postgres ──
+  FLEXPRICE_POSTGRES_HOST: flexprice-postgres
+  FLEXPRICE_POSTGRES_PORT: "5432"
+  FLEXPRICE_POSTGRES_READER_HOST: flexprice-postgres
+  FLEXPRICE_POSTGRES_USER: flexprice
+  FLEXPRICE_POSTGRES_DBNAME: flexprice
+  FLEXPRICE_POSTGRES_SSLMODE: disable
+
+  # ── Kafka: brokers + ONE flat topic namespace, asserted three ways ──
+  # Producer keys (kafka.topic*), consumer keys (event_processing.topic,
+  # meter_usage_tracking.topic, bulk/backfill/webhook/activity) and the created
+  # set (kafka.topics JSON) must all name the same unprefixed topics. Leaving
+  # them to the image defaults splits the conventions: the producer publishes to
+  # `staging_events` while the consumers subscribe to `events`, auto-create is
+  # off, and ClickHouse stays at zero rows forever with HTTP 202 on every ingest
+  # — usage that bills nobody, invisible to anything but a read-back.
+  FLEXPRICE_KAFKA_BROKERS: flexprice-kafka:9092
+  FLEXPRICE_KAFKA_TOPICS_DEFAULTS_REPLICATION_FACTOR: "1"
+  FLEXPRICE_KAFKA_TOPIC: events
+  FLEXPRICE_KAFKA_TOPIC_LAZY: events_lazy
+  FLEXPRICE_KAFKA_TOPIC_BULK: events_bulk
+  FLEXPRICE_KAFKA_TOPIC_DLQ: events_dlq
+  FLEXPRICE_WEBHOOK_TOPIC: system_events
+  FLEXPRICE_RAW_EVENTS_REPROCESSING_OUTPUT_TOPIC: events
+  FLEXPRICE_RAW_EVENT_CONSUMPTION_TOPIC: events_backfill
+  FLEXPRICE_RAW_EVENT_CONSUMPTION_OUTPUT_TOPIC: events
+  FLEXPRICE_BULK_EVENT_CONSUMPTION_TOPIC: events_bulk
+  FLEXPRICE_BULK_EVENT_CONSUMPTION_TOPIC_DLQ: events_dlq
+  FLEXPRICE_BULK_METER_USAGE_TRACKING_TOPIC: events_bulk
+  FLEXPRICE_BULK_METER_USAGE_TRACKING_TOPIC_DLQ: events_dlq
+  # Full replacement for the image's kafka.topics block: the 11 upstream topics,
+  # the per-consumer-group DLQs those groups name, the two activity topics (the
+  # publisher retries `activity_logs` even when the consumer is idle, and a
+  # missing topic there is a permanent error loop in the API log) and the dotted
+  # analytics sink. Partition counts are upstream's.
+  FLEXPRICE_KAFKA_TOPICS: '{"defaults":{"replicationFactor":1,"retentionMs":604800000},"topics":{"events":{"partitions":6},"events_lazy":{"partitions":6},"events_bulk":{"partitions":6},"events_dlq":{"partitions":3},"events_backfill":{"partitions":6},"events_post_processing":{"partitions":6},"events_post_processing_backfill":{"partitions":6},"system_events":{"partitions":3},"wallet_alert":{"partitions":3},"onboarding_events":{"partitions":3},"analytics.meter_usage.sink.realtime":{"partitions":6},"activity_logs":{"partitions":3},"activity_logs_dlq":{"partitions":3},"event_processing_dlq":{"partitions":3},"event_processing_lazy_dlq":{"partitions":3},"meter_usage_tracking_service_dlq":{"partitions":3},"meter_usage_tracking_service_lazy_dlq":{"partitions":3}}}'
+
+  # ── ClickHouse (native protocol, port 9000) ──
+  FLEXPRICE_CLICKHOUSE_ADDRESS: flexprice-clickhouse:9000
+  FLEXPRICE_CLICKHOUSE_DATABASE: flexprice
+  FLEXPRICE_CLICKHOUSE_USER: flexprice
+
+  # ── Temporal ──
+  FLEXPRICE_TEMPORAL_ADDRESS: flexprice-temporal-frontend:7233
+  FLEXPRICE_TEMPORAL_NAMESPACE: default
+
+  # ── Redis / cache ──
+  # cluster_mode defaults TRUE in the image (ElastiCache/MemoryDB). Against a
+  # single-node Redis it fails every cache call and the app silently drops to the
+  # DB path only.
+  FLEXPRICE_REDIS_HOST: flexprice-redis
+  FLEXPRICE_REDIS_PORT: "6379"
+  FLEXPRICE_REDIS_CLUSTER_MODE: "false"
+  FLEXPRICE_CACHE_ENABLED: "true"
+  FLEXPRICE_CACHE_REDIS_ENABLED: "true"
+
+  # ── Auth: production boot path ──
+  # Upstream's own compose sets this true and ships a public dev key; the check
+  # the flag bypasses exists precisely to reject that key. False is the
+  # difference between a stack that validates like production and one that merely
+  # looks like it — and it is what our billing client's boot validation expects.
+  FLEXPRICE_ALLOW_INSECURE_DEFAULTS: "false"
+  FLEXPRICE_AUTH_PROVIDER: api_key
+  FLEXPRICE_AUTH_API_KEY_HEADER: x-api-key
+  # RBAC roles file: the image bakes internal/config -> /app/config, and the
+  # source-relative default only resolves when a checkout is mounted at /app
+  # (which this design refuses to do). Wrong here and api/consumer/worker each
+  # crashloop before listening with
+  # "open internal/config/rbac/roles.json: no such file or directory".
+  FLEXPRICE_RBAC_ROLES_CONFIG_PATH: /app/config/rbac/roles.json
+  # The activity publisher is armed unconditionally at this commit; its topics are
+  # in the created set above, so enable it rather than log against a missing topic.
+  FLEXPRICE_ACTIVITY_ENABLED: "true"
+
+  # ── Not in compose, but shape-correct and cheap to state ──
+  FLEXPRICE_LOGGING_LEVEL: info
+  FLEXPRICE_LOGGING_FORMAT: json
+  # SIGTERM drain window; the baked default is 25s and the api Deployment's
+  # terminationGracePeriodSeconds leaves room for it.
+  FLEXPRICE_SERVER_SHUTDOWN_TIMEOUT: 25s
+
+secretEnv:
+  # name -> key inside flexprice-secrets. Values never appear in this file, in
+  # git, in a Helm release record, or in `helm get values` output.
+  FLEXPRICE_POSTGRES_PASSWORD: postgres-password
+  FLEXPRICE_CLICKHOUSE_PASSWORD: clickhouse-password
+  FLEXPRICE_AUTH_SECRET: auth-secret
+  FLEXPRICE_SECRETS_ENCRYPTION_KEY: encryption-key
+  # sha256(raw key) -> {tenant_id, user_id, name, is_active}, read as raw JSON
+  # straight from the environment (the config layer's map decode panics on this
+  # shape, so the binder special-cases the string). The api.confgmap.key entry in
+  # it must be the stack's config-map key, and the tenant id must be the seeded
+  # default tenant below — see README "Where the keys come from".
+  FLEXPRICE_AUTH_API_KEY_KEYS: api-key-keys

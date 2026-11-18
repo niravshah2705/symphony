@@ -4,8 +4,8 @@
 # The deep-agent skills (packages/shared-core/src/agent/skills/<skill>/SKILL.md) are
 # published as VERSIONED bundles to this bucket by .github/workflows/publish-skills.yml
 # (objects laid out as `<version>/<skill>/SKILL.md` plus a `skills-manifest.json`).
-# The planner + coder Cloud Run services mount it read-only via a gen2 GCS volume
-# at /skills and PIN a version with SKILLS_VERSION (see cloud_run.tf), so the
+# The orchestrator Cloud Run service mounts it read-only via a gen2 GCS volume
+# at /skills and PINs a version with SKILLS_VERSION (see cloud_run.tf), so the
 # runtime reads /skills/<version>/<skill>/SKILL.md. Multiple versions coexist, so
 # an older pinned deployment keeps working while a new version is published.
 #
@@ -27,7 +27,7 @@ resource "google_storage_bucket" "skills" {
   # Uniform bucket-level access — no per-object ACLs (infra checklist).
   uniform_bucket_level_access = true
 
-  # This registry is internal (read by planner/coder SAs, written by the CI
+  # This registry is internal (read by the orchestrator SA, written by the CI
   # deployer). Enforce no-public-access at the bucket level so an accidental
   # allUsers/allAuthenticatedUsers grant can never expose the skill bundles.
   public_access_prevention = "enforced"
@@ -44,21 +44,13 @@ resource "google_storage_bucket" "skills" {
   depends_on = [google_project_service.services]
 }
 
-# --- Read-only access for the planner + coder service accounts ----------------
-# coder-sa is shared by coder-control AND the coder-worker Job, so this single
-# grant covers the worker that actually installs the skills.
-resource "google_storage_bucket_iam_member" "planner_skills_read" {
+# --- Read-only access for the orchestrator service account ---------------------
+# The orchestrator is the only workload that mounts the /skills volume.
+resource "google_storage_bucket_iam_member" "orchestrator_skills_read" {
   count  = var.skills_enabled ? 1 : 0
   bucket = google_storage_bucket.skills[0].name
   role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.planner.email}"
-}
-
-resource "google_storage_bucket_iam_member" "coder_skills_read" {
-  count  = var.skills_enabled ? 1 : 0
-  bucket = google_storage_bucket.skills[0].name
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.coder.email}"
+  member = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
 # --- Optional publisher (CI) --------------------------------------------------

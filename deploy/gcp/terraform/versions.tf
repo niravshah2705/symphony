@@ -17,7 +17,8 @@
 # SECURITY POSTURE (tribal-knowledge infra / ingress / oauth-oidc checklists):
 #   - Least-privilege, per-resource IAM. No wildcard roles, no allUsers on the
 #     internal services.
-#   - planner + coder-control use INTERNAL-only ingress; only the gateway is
+#   - the orchestrator (the single agent workload) and the other internal
+#     services are IAM-gated; only the gateway is
 #     public (and it is guarded by app-level Firebase auth — AUTH_MODE=firebase).
 #   - Every Pub/Sub push and every Cloud Scheduler call carries an OIDC token.
 #   - Secrets live in Secret Manager and are injected as secret env, never baked

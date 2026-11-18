@@ -8,6 +8,18 @@ For the design and the operator-facing tables see
 [`SUBSTRATE_INTEGRATION.md`](./SUBSTRATE_INTEGRATION.md); this file is only the
 progress ledger and the by-hand path.
 
+> **Superseded 2026-11 (harness migration completed).** The custom Cloud Run
+> harness is retired: Agent Substrate is now the only execution pattern, and the
+> planner/coder/tester Cloud Run services no longer exist. Where this ledger says
+> "the planner deployment", read **the orchestrator** — the agent surface and the
+> substrate control env moved there. Cause 5's plumbing half is now closed (the
+> deploy workflow passes every `substrate_*` variable and refuses the harness
+> cutover while `SUBSTRATE_URL` is unset); what remains open is cause 9 — the
+> orchestrator has a switch but no control plane it is allowed to dial. The
+> "silently keeps using the Cloud Run pattern" symptom in cause 5 no longer
+> applies — with the fallback gone, a missing `SUBSTRATE_*` env fails loudly
+> instead.
+
 ## Bottom line
 
 **Sandbox capacity is live.** A `WorkerPool` exists, its 2 workers are Ready and
@@ -19,7 +31,10 @@ cause 9 below, which does not affect sandbox capacity.
 
 **Not yet proven:** an actor created by *this app* reaching `ACTIVE`. The planner
 deployment still has no `SUBSTRATE_*` environment (see cause 5 below), so the
-application-side path is dark even though the substrate is able to serve one.
+application-side path is dark even though the substrate is able to serve one. Neither
+is the credential that path would send: the rotating bearer exists in code on this
+branch and nothing has applied it — no secret, no grants, no mint permission on the
+cluster.
 
 Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 
@@ -40,6 +55,8 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | The by-hand cluster state and the Terraform module agree | PR #271, verified by the merge-triggered apply | run [42684395694](https://github.com/niravshah2705/symphony/actions/runs/42684395694) job `reconcile substrate gke`: **"No changes. Your infrastructure matches the configuration"**, `Plan: 0 create, 0 update, 0 delete` — so the node GKE is running is the node the module describes, not just the node someone typed into `gcloud` |
 | Backup, force-teardown and restore as two scripts | `deploy/gcp/substrate-cleanup.sh`, `deploy/gcp/substrate-recreate.sh` | the restore ran end-to-end on 2026-11-10: 6 Ready nodes, `postgres-0 2/2`, `planner-pool` `2/2 Ready`, `atelet` on every worker node; the backup ran into `gs://adlc-9e72f-substrate-backup/` with 7/7 objects verified |
 | Both scripts as manual CI, with the permissions they need reported from the live policy | `.github/workflows/substrate-nodepools.yml`, pinned by `substrate-workflow-config.test.js` | `workflow_dispatch` only; `dry_run` default true plus a typed `confirm`; the authorization step fails a `--with-disk-snapshot` run because `compute.snapshots.create` is granted to the deployer SA nowhere in this project |
+| Gateway Direct VPC egress plumbing (dark) | PR #280 (**open**), `deploy/gcp/terraform/cloud_run.tf` + `gateway-vpc-egress.test.js` | `gateway_vpc_egress_enabled` defaults false and renders `vpc_access { network_interfaces {…} }` with `PRIVATE_RANGES_ONLY`; no traffic changes until the variable and a `vpc_network`/`vpc_subnet` pair are set. **Does not yet reach ateapi** — see pending 2, "private" |
+| The rotating control-plane bearer and everything it needs to be minted, stored and read (this branch, unmerged) | `substrate-token-rotate.yml`, `terraform/substrate_token.tf`, `substrate_ate_client_token_role`, `services/settings/app/core/secret_manager.py`, §5.4 of the integration doc | Recovered from the branch that never merged, and pinned by `substrate-workflow-config.test.js`: the rotator drives the same cluster/zone variables as the power workflow, mints one verb on one service account, publishes with `--data-file` and never echoes the token, and the client fails closed with a hint instead of dialling anonymously. **Not applied yet** — the secret, the grants and the Role all need a run |
 
 ## Teardown and restore
 
@@ -130,38 +147,83 @@ from asking it to, which is why it is the one still open.
 | 2 | The worker pool was tainted `substrate.ate.dev/workers=true:NoSchedule`, which nothing tolerates — not `atelet`, not worker pods. | nodes existed but stayed empty; the only clue is a Pending pod's `had taint(s) that did not match the tolerations` | fixed by #269 (taint) + the apply |
 | 3 | `substrate-worker-pool` had 0 nodes despite `minNodeCount=1` — nothing demanded capacity. | the autoscaler logs `No scaling options were found … Skip simulation` | fixed: pending worker pods pulled the first node up |
 | 4 | `SSD_TOTAL_GB` 500/500 exhausted by the 500Gi claim, so no new disk could provision. Also why the historic `rollout status statefulset/postgres` timed out. | quota exhaustion does not fail fast; the node simply never appears | fixed by the 50Gi rewrite |
-| 5 | The deployed planner has **no `SUBSTRATE_*` env**: `substrate_url` defaults to `""`, so `substrate_control_env = {}` in the platform root. | the app silently keeps using the Cloud Run pattern; `GET /api/agent/substrate/status` answers `401` to the CI identity, so it cannot be confirmed from outside | **open** |
+| 5 | The deployed planner has **no `SUBSTRATE_*` env**: `substrate_url` defaults to `""`, so `substrate_control_env = {}` in the platform root — and no CI path could set it, because the deploy workflow passed none of the `substrate_*` variables. | the app silently kept using the Cloud Run pattern; now that the fallback is retired the run is refused instead, and the deploy itself stayed green | **plumbing fixed** (the apply step threads every `substrate_*` variable and stops a plan that destroys the last harness with `SUBSTRATE_URL` unset); the address itself is cause 9 |
 | 6 | `ate-api-server` applies Postgres migrations only at startup, so recreating the claim left a healthy-looking control plane on an empty schema. | every pod `Running`; every RPC erroring `relation "workers" does not exist`; workers stuck `Running` but not Ready | fixed by #271 |
 | 7 | The substrate GKE apply was gated behind a `terraform fmt` drift. | plan never ran, so no error surfaced | fixed by #268 |
 | 8 | #270 gave the worker pool a `pd-balanced` boot disk, and **N4 supports no Persistent Disk type at all** — the pool could not provision a node. | `terraform apply` planned clean, GKE accepted the pool config, and only the MIG's instance creation failed: `[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by n4-standard-4 machine type`. The pool stayed on its old template, so capacity kept working and nothing looked broken | fixed: `boot_disk { disk_type = "hyperdisk-balanced" }` |
-| 9 | The public ateapi route sends to `Service ate-system/ateapi:8443`, but `ate-setup` v1.0.0 creates that Service as **`api` on port 443 (`grpc`)** — the backend the control-plane front routes to has never existed, so `substrateUrl` cannot be that host. | Every signal the old check read is green: Gateway `Programmed=True`, Route `Accepted=True`, DNS resolves, certificate issued. Only `ResolvedRefs=False / BackendNotFound` says otherwise, and nothing looked at that condition until #272 | **open** — the name and port are wrong in the module defaults, but correcting them switches on an *unauthenticated* public actor control plane; see pending 2 |
+| 9 | The public ateapi route sends to `Service ate-system/ateapi:8443`, but `ate-setup` v1.0.0 creates that Service as **`api` on port 443 (`grpc`)** — the backend the control-plane front routes to has never existed, so `substrateUrl` cannot be that host. | Every signal the old check read is green: Gateway `Programmed=True`, Route `Accepted=True`, DNS resolves, certificate issued. Only `ResolvedRefs=False / BackendNotFound` says otherwise, and nothing looked at that condition until #272 | **defaults corrected** — `substrate_ingress_gateway` also terminates TLS on 443 (`tls.mode: Terminate`, cert `substrate-server-external-tls`), so the hostname is a real HTTPS front once cause 10 is applied. Routing is fixed; reachability is not: `api` serves TLS from `/run/servicedns.podcert.ate.dev/credential-bundle.pem` and no `BackendTLSPolicy` exists in this repo, so the corrected route resolves and then fails the cleartext dial. See pending 2 for what still has to land before the front is usable *and* authenticated. |
+| 10 | The Envoy `Service` annotation `networking.gke.io/load-balancer-ip-addresses` was fed the static address's **value**. GKE forwards that string into the forwarding rule's `address` field, which validates against an address-*name* regex, so the rule create 400s and no front ever gets its IP. | `Service envoy-ate-system-substrate-ingress-…` in `envoy-gateway-system` at `EXTERNAL-IP <pending>` since the day it was created; Gateway `Programmed=False / AddressNotAssigned` with `status.addresses` empty; and every *other* signal read healthy — DNS pointed at `34.14.188.214`, the certificate was Ready, both Envoy pods were up — which is why the earlier diagnosis was "no free regional IP". The address is EXTERNAL and `status=RESERVED` in `asia-south1` (unbound, because nothing could bind it; capacity was never the problem), and the A record already points at it, so the fix needs no DNS step. `gcloud compute addresses describe substrate-ip --region=asia-south1` answers it in one call. | fixed: the annotation takes `google_compute_address.*.name`, `loadBalancerIP` keeps `.address` (the two fields want different forms), and `agentgateway.tf` — same latent bug, still dark — with it. Pinned by `deploy/gcp/substrate-ingress-config.test.js` |
 
 ## Still pending
 
-1. **Cause 5 — turn the app-side path on.** Decide between setting `substrate_url` in
-   the platform Terraform root (all stacks, one value) or writing `substrateUrl` (plus
-   `substrateIngressUrl`, `substrateAtespace`, `substrateWorkerPool`, a
-   digest-pinned `substratePlannerImage`) into the organization's settings, which is
-   the per-tenant path the pattern router reads. Then trigger a planner run with
-   `agentPattern=substrate` and watch the actor reach `ACTIVE`.
+1. **Cause 5 — turn the app-side path on.** The plumbing half is done: the deploy
+   workflow passes `substrate_url` (and the other thirteen `substrate_*` names) from
+   repo variables, so `gh variable set SUBSTRATE_URL --body "<address>"` now reaches
+   the orchestrator's env, and a plan that removes the last Cloud Run harness with the
+   variable unset fails instead of shipping. The per-tenant alternative — `substrateUrl`
+   (plus `substrateIngressUrl`, `substrateAtespace`, `substrateWorkerPool`, a
+   digest-pinned `substratePlannerImage`) in the organization's settings — is unchanged
+   and still wins for one org. What is left is picking an address that works, which is
+   cause 9, then triggering a planner run with `agentPattern=substrate` and watching the
+   actor reach `ACTIVE`.
 2. **Cause 9 — give the planner a control plane it is allowed to dial.** Setting
    `substrate_url` is only half of it; the address has to actually reach ateapi, and
    the two ways to do that differ in what they expose:
    - **Private**: Cloud Run Direct VPC egress (or a Serverless VPC Connector) to the
      `api` Service, and `substrate_control_plane_public = false`. Nothing new is
      reachable from the internet, at the cost of a connector on every stack that runs
-     agents, and a cluster whose internal LB the connector can actually see.
+     agents, and a cluster whose internal LB the connector can actually see. The
+     egress half is now mergeable (PR #280, dark); the reach half is not — `api` is
+     headless (`ClusterIP: None`), so there is no address for VPC egress to dial until
+     an internal L4 Service for it exists. None does in this repo.
    - **Public**: keep the existing route, fix its backend to `api:443`, and put an
      authN policy in front of it — an Envoy `SecurityPolicy`/JWT check, or the
      `SUBSTRATE_TOKEN` bearer the client already supports, enforced server-side. This
      is the branch `substrate_control_plane_public`'s own description asks for ("leave
      false until the planner reaches ateapi over VPC egress or an authN policy is
-     attached to that route").
-   Today the flag is on **and** the route is dead, which fails closed by accident: the
-   hostname is published, so whoever fixes the backend name without adding authN
-   exposes an unauthenticated API that creates actors, deletes them and mints actor
-   JWTs. `substrate_ateapi_service` / `substrate_ateapi_port` therefore should not be
-   corrected on their own — they are one change with the authN decision.
+     attached to that route"). The **bearer** half of this option is what the current
+     branch recovers (§5.4 of the integration doc): a 12 h credential minted by CI,
+     stored in Secret Manager, read per request by the settings service, refused
+     client-side when absent. Three things still stand between it and a usable route:
+     the backend name/port (corrected), a TLS hop for the backend (no
+     `BackendTLSPolicy` exists anywhere in this repo, and the `api` backend serves
+     TLS from `/run/servicedns.podcert.ate.dev/credential-bundle.pem`, so a
+     cleartext dial to `api:443` resolves and then fails at the transport), and the
+     anonymous `grpc-status` probe that must answer 16 and never 0 before the front
+     is treated as authenticated.
+   Today the flag is on. It used to be dead in two independent ways — the front
+   never got a forwarding rule (cause 10) and the backend named a Service that does
+   not exist (cause 9) — so it failed closed by accident: the hostname was published
+   and nothing behind it could answer. Both halves are now corrected, and the order
+   this note used to prescribe ("CA + `BackendTLSPolicy` + corrected backend, then
+   the anonymous probe from outside, then the two variables") is deliberately **not**
+   followed. The variables go first because the failure mode they close is the
+   quieter one: with the front reaching `Programmed=True` after cause 10, a
+   `BackendNotFound` route is the only thing standing between a published hostname
+   and an API that creates actors, deletes them and mints actor JWTs. A route that
+   resolves to a TLS-only backend is the safe place to leave it in the meantime —
+   the dial fails before any credential is examined, and the cluster still demands
+   its one jwtProvider (`ate-api-authentication`), though that has only been observed
+   on the cluster network and never through the Gateway. What is left is the CA +
+   `BackendTLSPolicy`, then the anonymous probe from outside.
+   `substrate_control_plane_public`'s own description still asks for false until that
+   is settled, and the CI repo variable — currently true — is what decides it, not
+   this module's default.
+
+   > **Half of the private branch now exists, dark.** The gateway service carries an
+   > optional `vpc_access` block (`gateway_vpc_egress_enabled` + `vpc_network` +
+   > `vpc_subnet` + `vpc_egress_mode`, all off/inert by default — see
+   > `deploy/gcp/gateway-vpc-egress.test.js`). It is deliberately only the egress
+   > half: switching it on gives the gateway a *route onto* the VPC and changes its
+   > source IPs to the subnetwork's primary range. It does **not** create anything to
+   > dial, because `Service api` in `ate-system` is **headless** (`ClusterIP: None`),
+   > so its 443 is per-pod and not answerable from outside the cluster, and nothing in
+   > this repo provisions an internal LB for it (every front here is a public
+   > `type: LoadBalancer` with a public static IP). The remaining work, in order:
+   > an internal L4 front for `api:443`; a firewall/NetworkPolicy rule that admits the
+   > subnet's primary range; and the client's `ca` + TLS server-name, since the
+   > listener serves a cluster-issued certificate rather than the public hostname.
+   > Do not enable the switch expecting a working control plane before those three.
 3. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
    `ate-system`, so it needs `gke_allow_destroy=true` and a re-run of the install
    afterwards. Separate PR, deliberate.

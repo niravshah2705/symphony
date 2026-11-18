@@ -93,6 +93,37 @@ test('FlexPrice keys are readable by billing-sa only and never reach an agent se
   assert.doesNotMatch(svc, /BILLING_JOB_NAME/);
 });
 
+test('the FlexPrice env names the containers instead of indexing them through state', () => {
+  // `google_secret_manager_secret.flexprice["..."].secret_id` in the local is a
+  // state read for any plan that leaves the containers out of scope. While #278
+  // had never been applied they were absent, so the collection rendered as
+  // "object with no attributes" and both the CI secret-staging plan and the
+  // `-refresh-only` record of billing's `moved` blocks died on Invalid index —
+  // before the apply step that would have created them. That is a deadlock, not
+  // a guard: a secret name is a constant, so spell it.
+  const secrets = /billing_flexprice_secrets\s*=\s*\{([\s\S]*?)\n  \}/.exec(serviceTf);
+  assert.ok(secrets, 'local.billing_flexprice_secrets is gone');
+  assert.doesNotMatch(secrets[1], /google_secret_manager_secret\.flexprice/, 'the local must not index the resource collection');
+  assert.doesNotMatch(secrets[1], /\btry\(/, 'nor hide a missing container behind try()');
+  assert.doesNotMatch(secrets[1], /"dummy"/, 'a placeholder mounts a nonexistent secret into the revision');
+  for (const name of ['flexprice-api-key-ingest', 'flexprice-api-key-money']) {
+    assert.ok(secrets[1].includes(`"${name}"`), `${name} must equal the container's own secret_id`);
+  }
+
+  // What keeps the containers from becoming an afterthought: the accessor
+  // iterates the real collection, and both workloads depend on that accessor,
+  // so creation still orders before the revision and the values stay
+  // operator-minted (the workflow refuses to proceed without an enabled version).
+  const accessor = block(serviceTf, 'resource "google_secret_manager_secret_iam_member" "billing_flexprice_accessor"');
+  assert.match(accessor, /for_each\s*=\s*google_secret_manager_secret\.flexprice\b/);
+  for (const [src, header] of [
+    [serviceTf, 'resource "google_cloud_run_v2_service" "billing"'],
+    [jobTf, 'resource "google_cloud_run_v2_job" "billing"'],
+  ]) {
+    assert.match(block(src, header), /depends_on\s*=\s*\[[\s\S]*google_secret_manager_secret_iam_member\.billing_flexprice_accessor/);
+  }
+});
+
 test('FlexPrice env uses the names the code reads, and production posture', () => {
   const locals = block(serviceTf, 'locals {');
   const cfg = read('packages', 'shared-core', 'src', 'billing', 'flexprice-config.js');

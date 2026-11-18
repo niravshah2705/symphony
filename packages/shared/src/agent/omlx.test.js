@@ -165,7 +165,7 @@ test('OMLX diagnostics probe the configured endpoint without exposing its API ke
     planningProvider: 'linear',
     repositoryProvider: 'github',
   }), {
-    services: { plannerUrl: 'http://planner.internal:4010', coderUrl: 'http://coder.internal:4020' },
+    services: { agentUrl: 'http://agent-surface.internal:4010' },
     fetch: async (url, options) => {
       requests.push({ url, options });
       return jsonResponse({});

@@ -1,0 +1,99 @@
+# Sample: a kagent Harness + Agent running in ONE tenant's atespace on GKE,
+# with the agent's LLM egress routed through the self-hosted LiteLLM gateway.
+#
+# WHAT IS REAL vs ILLUSTRATIVE
+#   - The `Harness`/`Agent` shape mirrors the working Claude example in
+#     go/harness/claude/README.md (kind Harness, api.kagent.dev/v1alpha3).
+#   - The runtime used here is `claude` (native-full), so this is a runnable
+#     pattern, not a scaffold. Swap `harnessRef`/`spec` for any published
+#     runtime (deepagent, codex).
+#   - CRDs owned by the UPSTREAM substrate/kagent install (Harness, Agent,
+#     ModelConfig) must exist in the cluster first; the fleet does not vendor
+#     those CRD definitions. `spec.claude` exists upstream; the six new
+#     experimental runtimes do NOT yet have an upstream `spec.<runtime>` key.
+#
+# HOW LITELLM REACHES THE AGENT (per-request flag, not per-deployment)
+#   agent container  ->  EGRESS_PROXY_URL http://127.0.0.1:4030/litellm  (sentinel token only)
+#   egress-proxy sidecar  ->  strips sentinel, resolves the ORG's `litellmApiKey`
+#                             virtual key from the settings vault (S2S) and injects it,
+#                             re-originates TLS to LITELLM_PROXY_UPSTREAM (sidecar-only env).
+#   The provider key NEVER sits in the agent container. See services/proxy/AGENTS.md.
+#
+# OUT-OF-BAND CONFIG THIS SAMPLE ASSUMES (set by Terraform / operator, not in this file):
+#   - infra:   LITELLM_ENABLED=true                       (deploy.yml -> terraform, litellm.tf)
+#   - gateway + agent services: LITELLM_GATEWAY_ENABLED=true
+#   - gateway: KAGENT_ENABLED=true, KAGENT_API_URL, KAGENT_NAMESPACE, KAGENT_TOKEN_FILE
+#   - org vault doc organizations/<org-id>/secrets/vault: an operator-MINTED, model-scoped
+#              `litellmApiKey` virtual key (there is no seeder; re-mint after a Postgres wipe
+#              or litellm runs fail closed with proxy 502 — see deploy/gcp/terraform/litellm.tf).
+#   - the request that selects this path carries header:  X-AI-Fleet-Llm-Gateway: litellm
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-acme                      # per-tenant atespace (see terraform-substrate-gke/namespaces.tf)
+  labels:
+    substrate.ate.dev/atespace: "true"
+  annotations:
+    ai-fleet.internal/organization-id: "00000000-0000-0000-0000-000000000000"  # replace with the org UUID
+---
+# The platform-managed Harness selects the runtime and the Substrate execution shape.
+apiVersion: api.kagent.dev/v1alpha3
+kind: Harness
+metadata:
+  name: acme-claude
+  namespace: tenant-acme
+spec:
+  claude: {}
+  substrate:
+    workerPoolRef:
+      name: kagent-default              # the tainted gVisor worker pool (substrate.tf)
+    snapshotPolicy:
+      location: s3://ate-snapshots/tenant-acme/
+---
+# A ModelConfig the LiteLLM proxy serves by its BARE model id (LiteLLM matches
+# model_name verbatim — never the provider-qualified form on the wire).
+# REQUIRES the upstream kagent ModelConfig CRD; the api_base points at the
+# per-org LiteLLM virtual model, which the sidecar fronts via /litellm.
+apiVersion: api.kagent.dev/v1alpha3
+kind: ModelConfig
+metadata:
+  name: acme-litellm-claude
+  namespace: tenant-acme
+spec:
+  # BARE id must equal a model_name entry in deploy/litellm/config.yaml.
+  model: claude-sonnet-4-5
+  provider: litellm
+  # The agent reaches this through the egress proxy sentinel path, not a raw key:
+  #   http://127.0.0.1:4030/litellm/v1
+  api_base: http://127.0.0.1:4030/litellm/v1
+---
+# The Agent references the Harness and defines behavior inline. renderAgentCrd
+# (packages/shared-core/src/agent/kagent.js) produces this shape; it renders the
+# Agent + a harnessRef reference only — it never emits the Harness CR itself, and
+# it reports (does not silently write) shared-Harness env rows.
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: acme-coding
+  namespace: tenant-acme
+spec:
+  harnessRef:
+    name: acme-claude
+  template:
+    inline:
+      description: Acme tenant coding agent, LLM egress via LiteLLM gateway.
+      modelConfig:
+        name: acme-litellm-claude
+      systemPrompt: |
+        Implement the approved change in the isolated workspace. Never handle
+        raw credentials; route all model calls through the configured gateway.
+      env:
+        - name: LOG_LEVEL
+          value: info
+        - name: AGENT_MODEL
+          value: claude-sonnet-4-5
+        # NO provider key here: the sentinel is injected via EGRESS_PROXY_URL by
+        # the platform; the real litellmApiKey lives only in the org vault.
+      egressPolicyRefs:
+        - acme-deny-external          # default-deny + DNS-only egress from tenant_config.tf

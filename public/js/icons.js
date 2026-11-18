@@ -35,6 +35,7 @@ const ICON_PATHS = Object.freeze({
   play: '<path d="m8 5 11 7-11 7V5Z"/>',
   pause: '<path d="M9 5v14M15 5v14"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
 });
 
 // Filled brand/marker glyphs for provider / harness / tool pickers. These are
