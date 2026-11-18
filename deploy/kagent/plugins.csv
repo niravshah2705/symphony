@@ -1,2 +1,8 @@
-plugin,repo,commit,version,image,dockerfile,current
-ecc,https://github.com/affaan-m/ECC.git,3f14a103a8694e51c1df9a806217a6d0b5f7a6f7,2.2.3,ghcr.io/niravshah2705/symphony/ecc-plugin,deploy/kagent/ecc-plugin/Dockerfile.ecc-plugin,true
+plugin,repo,commit,version,version_source,image,dockerfile,current
+ecc,https://github.com/affaan-m/ECC.git,3f14a103a8694e51c1df9a806217a6d0b5f7a6f7,2.2.3,VERSION,ghcr.io/niravshah2705/symphony/ecc-plugin,deploy/kagent/ecc-plugin/Dockerfile.ecc-plugin,true
+agent-skills,https://github.com/addyosmani/agent-skills.git,39b723ceebf81474d0557c1fecd01eddab585563,0.6.16,plugin.json,ghcr.io/niravshah2705/symphony/agent-skills-plugin,deploy/kagent/agent-skills/Dockerfile.agent-skills-plugin,true
+superpowers,https://github.com/obra/superpowers.git,22f0b463e7a5e579904dd6211a520321035526f7,7.0.2,package.json,ghcr.io/niravshah2705/symphony/superpowers-plugin,deploy/kagent/superpowers/Dockerfile.superpowers-plugin,true
+spec-kit,https://github.com/github/spec-kit.git,1e421b58805e33507258d917a16e4d2a403e8358,1.4.2,pyproject.toml,ghcr.io/niravshah2705/symphony/spec-kit-plugin,deploy/kagent/spec-kit/Dockerfile.spec-kit-plugin,true
+graphify,https://github.com/Graphify-Labs/graphify.git,340268a70a83588d6b3c6de1fffb05326350ef1d,0.9.112,pyproject.toml,ghcr.io/niravshah2705/symphony/graphify-plugin,deploy/kagent/graphify/Dockerfile.graphify-plugin,true
+code-review-graph,https://github.com/tirth8205/code-review-graph.git,b3f1285965a1337b3821e4423da03b65d70ee423,2.4.0,pyproject.toml,ghcr.io/niravshah2705/symphony/code-review-graph-plugin,deploy/kagent/code-review-graph/Dockerfile.code-review-graph-plugin,true
+hallmark,https://github.com/Nutlope/hallmark.git,04977e15f3dfd6ee4b74c887dac3eb52665d6c92,2.0.0,.claude-plugin/plugin.json,ghcr.io/niravshah2705/symphony/hallmark-plugin,deploy/kagent/hallmark/Dockerfile.hallmark-plugin,true

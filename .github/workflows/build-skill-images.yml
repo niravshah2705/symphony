@@ -1,0 +1,271 @@
+name: Build standalone agent skill artifacts
+
+# Publishes the kagent standalone-skill OCI artifacts to ghcr.io, driven by
+# deploy/kagent/skills.csv — the sibling of build-plugin-images.yml for packs that
+# are ONE skill directory rather than an Agent Plugins 1.0.0 bundle.
+#
+# They share the shape of the pipeline (plan from CSV, validate on PR, publish on
+# merge, stamp the digest back) and differ in three ways that matter:
+#   - the preflight is scripts/verify-skill-artifacts.sh, which checks that
+#     <skill_path>/SKILL.md exists at the pin and names itself after the row,
+#     because an unversioned upstream has no version string to compare against;
+#   - the artifact is composed by deploy/kagent/compose-skill-bundle.sh, which
+#     authors no plugin.json and takes no skills allowlist;
+#   - no :latest tag. A skill's version IS its pin, so a moving alias would be a
+#     second name for bytes no manifest names.
+#
+# A standalone skill is mounted through AgentTemplate `spec.skills[].source.oci`
+# with a `path:`, not `spec.plugins[]`.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "deploy/kagent/skills.csv"
+      - "deploy/kagent/skills/**"
+      - "deploy/kagent/compose-skill-bundle.sh"
+      - "deploy/kagent/skill-inputs.sh"
+      - "packages/shared-core/src/agent/registry/**"
+      - "scripts/verify-skill-artifacts.sh"
+      - "scripts/stamp-plugin-digest.js"
+      - "scripts/gen-kagent-manifests.js"
+      - "scripts/seed-plugin-catalog.js"
+      - ".github/workflows/build-skill-images.yml"
+  pull_request:
+    paths:
+      - "deploy/kagent/skills.csv"
+      - "deploy/kagent/skills/**"
+      - "deploy/kagent/compose-skill-bundle.sh"
+      - "deploy/kagent/skill-inputs.sh"
+      - "packages/shared-core/src/agent/registry/**"
+      - "scripts/verify-skill-artifacts.sh"
+      - "scripts/gen-kagent-manifests.js"
+      - "scripts/seed-plugin-catalog.js"
+      - ".github/workflows/build-skill-images.yml"
+  workflow_dispatch:
+    inputs:
+      skill:
+        description: "Only build this skill (e.g. security-audit). Leave empty for all."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: skill-artifacts-${{ github.ref }}
+  # Mid-push cancellation can leave a manifest list pointing at a partially
+  # uploaded set, and the digest is what the manifests pin.
+  cancel-in-progress: false
+
+env:
+  MANIFEST: deploy/kagent/skills.csv
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.select-rows.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Select rows from the manifest
+        id: select-rows
+        env:
+          ONLY_SKILL: ${{ github.event.inputs.skill }}
+          SELECTED: ${{ runner.temp }}/selected.txt
+        run: |
+          set -euo pipefail
+          python3 - "$ONLY_SKILL" "$MANIFEST" "$SELECTED" <<'PY' >> "$GITHUB_OUTPUT"
+          import csv, json, sys
+
+          only, manifest, selected_path = sys.argv[1:4]
+
+          with open(manifest, newline="") as fh:
+              rows = [{k: (v or "").strip() for k, v in r.items()} for r in csv.DictReader(fh)]
+          # An empty manifest is a mangled file, not a no-op.
+          if not rows:
+              sys.exit(f"{manifest} has no rows")
+
+          if only:
+              if only not in {r["skill"] for r in rows}:
+                  sys.exit(f"no manifest rows for skill {only!r}")
+              rows = [r for r in rows if r["skill"] == only]
+
+          matrix = []
+          for r in rows:
+              if not r["dockerfile"]:
+                  sys.exit(f"row {r['skill']} {r['version']}: empty dockerfile")
+              matrix.append({
+                  "skill": r["skill"],
+                  "repo": r["repo"],
+                  "commit": r["commit"],
+                  "version": r["version"],
+                  "skill_path": r["skill_path"],
+                  "image": r["image"],
+                  "dockerfile": r["dockerfile"],
+                  "tags": f"{r['image']}:{r['version']}",
+              })
+
+          with open(selected_path, "w") as selected:
+              for row in matrix:
+                  selected.write(f"{row['skill']} {row['version']}\n")
+          print("matrix=" + json.dumps(matrix))
+          print("count=" + str(len(matrix)))
+          PY
+
+      - name: Preflight the manifest
+        env:
+          SELECTED: ${{ runner.temp }}/selected.txt
+          COUNT: ${{ steps.select-rows.outputs.count }}
+        run: |
+          set -euo pipefail
+          if [ "$COUNT" = "0" ]; then
+            echo "No skill rows selected; skipping preflight."
+            exit 0
+          fi
+          scripts/verify-skill-artifacts.sh --selected "$SELECTED"
+
+      - name: Check the catalog, matrix and manifests are in date
+        # Both workflows gate on the same two checks: the matrix and the
+        # manifests are generated from BOTH catalogs, so a skill-only PR has to
+        # prove it regenerated them too, not just the plugin workflow.
+        run: |
+          set -euo pipefail
+          node scripts/seed-plugin-catalog.js --check
+          node scripts/gen-kagent-manifests.js --check
+
+      - name: Report the selection
+        env:
+          COUNT: ${{ steps.select-rows.outputs.count }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Standalone skill artifacts"
+            echo
+            if [ "${COUNT:-0}" = "0" ]; then
+              echo "No manifest row matched, so nothing will be published."
+            else
+              echo "Publishing ${COUNT} skill artifact(s):"
+              echo
+              while read -r skill version; do
+                echo "- \`$skill@$version\`"
+              done < "$RUNNER_TEMP/selected.txt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    if: ${{ github.event_name != 'pull_request' && needs.plan.outputs.matrix != '[]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.skill }} ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same resolver the local kind build sources, so the published artifact is
+      # the tested one.
+      - name: Compose the skill artifact
+        env:
+          REPO_ROOT: ${{ github.workspace }}
+          SKILL: ${{ matrix.skill }}
+        run: |
+          set -euo pipefail
+          . deploy/kagent/skill-inputs.sh
+          bundle="$(bash deploy/kagent/compose-skill-bundle.sh "$RUNNER_TEMP/$SKILL")"
+          mkdir -p "$RUNNER_TEMP/ctx-$SKILL"
+          cp -R "$bundle" "$RUNNER_TEMP/ctx-$SKILL/bundle"
+
+      - name: Build and push ${{ matrix.skill }}:${{ matrix.version }}
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/ctx-${{ matrix.skill }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ matrix.tags }}
+
+      - name: Write the immutable OCI ref
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE: ${{ matrix.image }}
+          SKILL: ${{ matrix.skill }}
+          VERSION: ${{ matrix.version }}
+        run: |
+          set -euo pipefail
+          [ -n "$DIGEST" ] || { echo "build-push-action returned no digest" >&2; exit 1; }
+          ref="${IMAGE}@${DIGEST}"
+          printf '%s\n' "$ref" > "$RUNNER_TEMP/skill-oci-ref-${SKILL}.txt"
+          {
+            echo "### \`${SKILL}@${VERSION}\` published"
+            echo
+            echo '```'
+            echo "$ref"
+            echo '```'
+            echo
+            echo "Use as the AgentTemplate \`spec.skills[].source.oci\` value, with"
+            echo "\`spec.skills[].source.path\` set to \`${{ matrix.skill_path }}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: skill-oci-ref-${{ matrix.skill }}
+          path: ${{ runner.temp }}/skill-oci-ref-${{ matrix.skill }}.txt
+
+  stamp:
+    needs: build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: skill-oci-ref-*
+          path: oci-refs
+          merge-multiple: true
+
+      - name: Record the digests and regenerate the manifests
+        run: |
+          set -euo pipefail
+          ls oci-refs >/dev/null 2>&1 || { echo "no oci-ref artifacts; nothing to stamp" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          node scripts/stamp-plugin-digest.js --refs-dir oci-refs
+          node scripts/gen-kagent-manifests.js
+
+      - name: Commit the stamped digests
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- packages/shared-core/src/agent/registry deploy/kagent; then
+            echo "no digest changed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/shared-core/src/agent/registry deploy/kagent
+          git commit -m "chore(kagent): record published skill artifact digests [skip ci]"
+          git push

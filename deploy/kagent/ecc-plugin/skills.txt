@@ -1,0 +1,25 @@
+# The 22 skills of ECC's 327 that the manifest enables. The bundle carries
+# exactly this list: a mounted-but-disabled skill is dead weight in a read-only
+# mount, and an enabled-but-unmounted skill is a silent no-op.
+configure-ecc
+agentic-engineering
+coding-standards
+tdd-workflow
+verification-loop
+security-review
+security-scan
+agent-security-hardening
+api-design
+backend-patterns
+context-budget
+context-and-decisions
+codebase-onboarding
+agent-architecture-audit
+conventional-commit-review
+issue-review
+e2e-testing
+python-testing
+git-workflow
+continuous-agent-loop
+blueprint
+browser-qa

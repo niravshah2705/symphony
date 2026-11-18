@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "skill-catalog/v1",
+  "mountContract": "AgentTemplate.spec.skills[].source.oci + path",
+  "note": "A standalone skill is one SKILL.md directory mounted without a plugin bundle: no plugin.json, no skills allowlist, no mcp.json. Upstream packs that ship exactly one skill and no manifest of their own are attached this way, which is why this track is separate from plugin-catalog.json.",
+  "skills": [
+    {
+      "id": "security-audit",
+      "label": "Security Audit",
+      "upstream": {
+        "repository": "cloudflare/security-audit-skill",
+        "url": "https://github.com/cloudflare/security-audit-skill.git",
+        "commit": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8",
+        "pinnedAt": "2026-11-19",
+        "license": "MIT",
+        "versionSource": "none",
+        "releases": false,
+        "tags": false
+      },
+      "artifact": {
+        "version": "c1c8a8c14710",
+        "image": "ghcr.io/niravshah2705/symphony/security-audit-skill",
+        "dockerfile": "deploy/kagent/skills/security-audit/Dockerfile.security-audit-skill",
+        "compose": "deploy/kagent/compose-skill-bundle.sh",
+        "skillPath": "skills/security-audit",
+        "entryFile": "SKILL.md",
+        "excludes": ["*.test.cjs"],
+        "digest": null,
+        "manifests": {
+          "codex": "deploy/kagent/skills/security-audit/security-audit-codex.yaml",
+          "claude": "deploy/kagent/skills/security-audit/security-audit-claude.yaml",
+          "kagent": "deploy/kagent/skills/security-audit/security-audit-kagent.yaml"
+        }
+      },
+      "icon": {
+        "file": "public/icons/skills/security-audit.svg",
+        "href": "/icons/skills/security-audit.svg"
+      },
+      "references": [
+        "RECONNAISSANCE.md",
+        "HUNTING.md",
+        "ATTACK-CLASSES.md",
+        "VALIDATION-AND-REPORTING.md",
+        "WEB-PROTOCOL-AND-AUTH.md",
+        "CLIENT-SIDE.md",
+        "CLOUD-AND-DEPLOYMENT.md",
+        "DATA-ISOLATION-AND-LIFECYCLE.md",
+        "DESKTOP-MOBILE-AND-LOCAL-IPC.md",
+        "MEMORY-SAFETY-AND-BINARY.md",
+        "PROTOCOLS-RPC-AND-MESSAGING.md",
+        "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md",
+        "SUPPLY-CHAIN-AND-RELEASE.md",
+        "AI-AND-LLM.md",
+        "report-schema.json",
+        "validate-findings.cjs",
+        "validate-coverage-ledger.cjs"
+      ],
+      "requirements": {
+        "packages": ["git", "node>=20"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": ["scratch/", "artifacts/"],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the skill artifact (the artifact is FROM scratch)"
+      },
+      "promptAppend": "Treat security-audit as guidance by default: answer the question at hand and do not start the six-phase audit workflow or write artifacts unless the request is an explicit full review. A candidate without an affected principal and a concrete outcome is not a finding.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "c1c8a8c14710",
+          "cliKey": "codex"
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "c1c8a8c14710",
+          "cliKey": "claude"
+        },
+        "kagent": {
+          "status": "declared",
+          "engine": "kagent",
+          "version": "c1c8a8c14710",
+          "cliKey": "kagent"
+        }
+      }
+    }
+  ]
+}

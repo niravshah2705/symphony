@@ -67,6 +67,9 @@ docs/flexprice-spike/results.json
 # checkout on every run; committing it would fork 2000 lines of AGPL templates.
 deploy/flexprice/helm/build/
 
-# ECC plugin build scratch: fetched upstream checkout + composed bundle + stamped ref
-# Regenerate with deploy/kagent/ecc-plugin/build-ecc-plugin-image.sh
-deploy/kagent/ecc-plugin/build/
+# kagent plugin/skill artifact build scratch: the fetched upstream checkout at the
+# pinned commit, the composed bundle/ that becomes the docker context, the stamped
+# *.local.yaml, and the oci-ref files. Every pack regenerates it from its CSV row:
+# deploy/kagent/build-plugin-image.sh <plugin>, deploy/kagent/build-skill-image.sh <skill>
+deploy/kagent/*/build/
+deploy/kagent/skills/*/build/

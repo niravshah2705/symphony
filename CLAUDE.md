@@ -289,11 +289,26 @@ npm test               # node --test unit suites
 npm run test:e2e       # Playwright end-to-end
 npm run docs:code      # regenerate the code-graph docs (docs/code-graph/)
 npm run hooks:install  # enable the repo git hooks (core.hooksPath=.githooks)
+npm run plugins:seed   # regenerate deploy/kagent/plugin-support.csv from the catalogs
+npm run plugins:check  # matrix + plugins.csv/skills.csv vs the catalogs (also plugins:manifests:check)
 ```
 
 Per-service guides live alongside the service (e.g.
 [`services/org/CLAUDE.md`](./services/org/CLAUDE.md)) — read the relevant one
 before changing that service.
+
+Third-party agent-skill packs (Agent Plugins 1.0.0 bundles and standalone
+skills) are tracked in
+[`docs/PLUGIN_SUPPORT_MATRIX.md`](./docs/PLUGIN_SUPPORT_MATRIX.md). The reviewed
+source of truth is
+`packages/shared-core/src/agent/registry/{plugin,skill}-catalog.json`; the
+publish manifests are `deploy/kagent/{plugins,skills}.csv`. The support matrix,
+the committed four-CR kagent manifests and the OCI digests in them are all
+**generated** — edit the catalog (or let CI stamp the digest), then run
+`npm run plugins:seed && npm run plugins:manifests`, never the CSV or the YAML.
+A pack's software requirement is a `RUN` line for the **harness runtime image**:
+the plugin artifact is `FROM scratch` data with no shell, and
+`requirements.appliedTo` naming a plugin image is rejected by the validator.
 
 ## Keeping the code map fresh (pre-commit gate)
 

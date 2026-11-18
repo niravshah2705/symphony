@@ -1,0 +1,575 @@
+{
+  "schemaVersion": "plugin-catalog/v1",
+  "bundleSpec": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "sourceOfTruth": "deploy/kagent/plugins.csv",
+  "plugins": [
+    {
+      "id": "ecc",
+      "label": "Everything Claude Code",
+      "upstream": {
+        "repository": "affaan-m/ECC",
+        "url": "https://github.com/affaan-m/ECC.git",
+        "release": "2.2.3",
+        "releasedAt": "2026-11-17",
+        "commit": "3f14a103a8694e51c1df9a806217a6d0b5f7a6f7",
+        "license": "MIT",
+        "versionSource": "VERSION"
+      },
+      "bundle": {
+        "version": "2.2.3",
+        "image": "ghcr.io/niravshah2705/symphony/ecc-plugin",
+        "dockerfile": "deploy/kagent/ecc-plugin/Dockerfile.ecc-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/ecc-plugin/ecc-codex.yaml",
+          "claude": "deploy/kagent/ecc-plugin/ecc-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": null
+      },
+      "versions": [
+        { "version": "2.2.3", "releasedAt": "2026-11-17", "commit": "3f14a103a8694e51c1df9a806217a6d0b5f7a6f7" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/ecc.svg",
+        "href": "/icons/plugins/ecc.svg"
+      },
+      "skills": [
+        { "name": "configure-ecc", "enabled": true },
+        { "name": "agentic-engineering", "enabled": true },
+        { "name": "coding-standards", "enabled": true },
+        { "name": "tdd-workflow", "enabled": true },
+        { "name": "verification-loop", "enabled": true },
+        { "name": "security-review", "enabled": true },
+        { "name": "security-scan", "enabled": true },
+        { "name": "agent-security-hardening", "enabled": true },
+        { "name": "api-design", "enabled": true },
+        { "name": "backend-patterns", "enabled": true },
+        { "name": "context-budget", "enabled": true },
+        { "name": "context-and-decisions", "enabled": true },
+        { "name": "codebase-onboarding", "enabled": true },
+        { "name": "agent-architecture-audit", "enabled": true },
+        { "name": "conventional-commit-review", "enabled": true },
+        { "name": "issue-review", "enabled": true },
+        { "name": "e2e-testing", "enabled": true },
+        { "name": "python-testing", "enabled": true },
+        { "name": "git-workflow", "enabled": true },
+        { "name": "continuous-agent-loop", "enabled": true },
+        { "name": "blueprint", "enabled": true },
+        { "name": "browser-qa", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["git"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": [],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Reach for tdd-workflow before writing an implementation and verification-loop before claiming a task is done. Never write a credential into a file or a command you echo.",
+      "harnesses": {
+        "codex": {
+          "status": "bundled",
+          "engine": "codex",
+          "version": "2.2.3",
+          "cliKey": "codex",
+          "mcp": false,
+          "limitations": [
+            "The plugin bundle is published by PR #307/#308 to the kind registry; the ghcr digest write-back is tracked separately."
+          ]
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "2.2.3",
+          "cliKey": "claude",
+          "mcp": false
+        }
+      }
+    },
+    {
+      "id": "agent-skills",
+      "label": "Agent Skills (Addy Osmani)",
+      "upstream": {
+        "repository": "addyosmani/agent-skills",
+        "url": "https://github.com/addyosmani/agent-skills.git",
+        "release": "0.6.16",
+        "releasedAt": "2026-11-14",
+        "commit": "39b723ceebf81474d0557c1fecd01eddab585563",
+        "license": "MIT",
+        "versionSource": "plugin.json"
+      },
+      "bundle": {
+        "version": "0.6.16",
+        "image": "ghcr.io/niravshah2705/symphony/agent-skills-plugin",
+        "dockerfile": "deploy/kagent/agent-skills/Dockerfile.agent-skills-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/agent-skills/agent-skills-codex.yaml",
+          "claude": "deploy/kagent/agent-skills/agent-skills-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": null
+      },
+      "versions": [
+        { "version": "0.6.16", "releasedAt": "2026-11-14", "commit": "39b723ceebf81474d0557c1fecd01eddab585563" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/agent-skills.svg",
+        "href": "/icons/plugins/agent-skills.svg"
+      },
+      "skills": [
+        { "name": "api-and-interface-design", "enabled": true },
+        { "name": "browser-testing-with-devtools", "enabled": true },
+        { "name": "ci-cd-and-automation", "enabled": true },
+        { "name": "code-review-and-quality", "enabled": true },
+        { "name": "code-simplification", "enabled": true },
+        { "name": "constraint-driven-development", "enabled": true },
+        { "name": "context-engineering", "enabled": true },
+        { "name": "debugging-and-error-recovery", "enabled": true },
+        { "name": "deprecation-and-migration", "enabled": true },
+        { "name": "documentation-and-adrs", "enabled": true },
+        { "name": "doubt-driven-development", "enabled": true },
+        { "name": "frontend-ui-engineering", "enabled": true },
+        { "name": "git-workflow-and-versioning", "enabled": true },
+        { "name": "idea-refine", "enabled": true },
+        { "name": "incremental-implementation", "enabled": true },
+        { "name": "interview-me", "enabled": true },
+        { "name": "observability-and-instrumentation", "enabled": true },
+        { "name": "performance-optimization", "enabled": true },
+        { "name": "planning-and-task-breakdown", "enabled": true },
+        { "name": "security-and-hardening", "enabled": true },
+        { "name": "shipping-and-launch", "enabled": true },
+        { "name": "source-driven-development", "enabled": true },
+        { "name": "spec-driven-development", "enabled": true },
+        { "name": "test-driven-development", "enabled": true },
+        { "name": "using-agent-skills", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["git"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": [],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Pick the one skill that fits the current lifecycle stage and read it before acting; spec-driven-development before planning, test-driven-development before implementing, code-review-and-quality before shipping.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "0.6.16",
+          "cliKey": "codex",
+          "mcp": false
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "0.6.16",
+          "cliKey": "claude",
+          "mcp": false
+        }
+      }
+    },
+    {
+      "id": "superpowers",
+      "label": "Superpowers",
+      "upstream": {
+        "repository": "obra/superpowers",
+        "url": "https://github.com/obra/superpowers.git",
+        "release": "7.0.2",
+        "releasedAt": "2026-11-03",
+        "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+        "license": "MIT",
+        "versionSource": "package.json"
+      },
+      "bundle": {
+        "version": "7.0.2",
+        "image": "ghcr.io/niravshah2705/symphony/superpowers-plugin",
+        "dockerfile": "deploy/kagent/superpowers/Dockerfile.superpowers-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/superpowers/superpowers-codex.yaml",
+          "claude": "deploy/kagent/superpowers/superpowers-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": null
+      },
+      "versions": [
+        { "version": "7.0.2", "releasedAt": "2026-11-03", "commit": "22f0b463e7a5e579904dd6211a520321035526f7" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/superpowers.svg",
+        "href": "/icons/plugins/superpowers.svg"
+      },
+      "skills": [
+        { "name": "brainstorming", "enabled": true },
+        { "name": "diagnosing-superpowers", "enabled": false },
+        { "name": "dispatching-parallel-agents", "enabled": true },
+        { "name": "executing-plans", "enabled": true },
+        { "name": "finishing-a-development-branch", "enabled": true },
+        { "name": "receiving-code-review", "enabled": true },
+        { "name": "requesting-code-review", "enabled": true },
+        { "name": "subagent-driven-development", "enabled": true },
+        { "name": "systematic-debugging", "enabled": true },
+        { "name": "test-driven-development", "enabled": true },
+        { "name": "using-git-worktrees", "enabled": true },
+        { "name": "using-superpowers", "enabled": true },
+        { "name": "verification-before-completion", "enabled": true },
+        { "name": "writing-plans", "enabled": true },
+        { "name": "writing-skills", "enabled": false }
+      ],
+      "requirements": {
+        "packages": ["git", "node>=20"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": [],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Before writing code, run brainstorming then writing-plans; execute only with executing-plans, and gate completion on verification-before-completion.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "7.0.2",
+          "cliKey": "codex",
+          "mcp": false
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "7.0.2",
+          "cliKey": "claude",
+          "mcp": false
+        }
+      }
+    },
+    {
+      "id": "spec-kit",
+      "label": "Spec Kit",
+      "upstream": {
+        "repository": "github/spec-kit",
+        "url": "https://github.com/github/spec-kit.git",
+        "release": "1.4.2",
+        "releasedAt": "2026-11-17",
+        "commit": "1e421b58805e33507258d917a16e4d2a403e8358",
+        "license": "MIT",
+        "versionSource": "pyproject.toml"
+      },
+      "bundle": {
+        "version": "1.4.2",
+        "image": "ghcr.io/niravshah2705/symphony/spec-kit-plugin",
+        "dockerfile": "deploy/kagent/spec-kit/Dockerfile.spec-kit-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/spec-kit/spec-kit-codex.yaml",
+          "claude": "deploy/kagent/spec-kit/spec-kit-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": null,
+        "synthesized": true
+      },
+      "versions": [
+        { "version": "1.4.2", "releasedAt": "2026-11-17", "commit": "1e421b58805e33507258d917a16e4d2a403e8358" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/spec-kit.svg",
+        "href": "/icons/plugins/spec-kit.svg"
+      },
+      "skills": [
+        { "name": "spec-kit", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["python>=3.11", "uv", "git"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*",
+          "RUN pip install --no-cache-dir uv && uv tool install specify-cli==1.4.2",
+          "ENV PATH=\"/root/.local/bin:${PATH}\""
+        ],
+        "writablePaths": [".specify/"],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Drive the spec-kit sequence in order - constitution, specify, plan, tasks, implement - and do not start an implementation until tasks.md exists and is reviewed.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "1.4.2",
+          "cliKey": "codex",
+          "mcp": false,
+          "limitations": [
+            "spec-kit ships no skills/ tree; the bundle synthesizes one SKILL.md from templates/commands."
+          ]
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "1.4.2",
+          "cliKey": "claude",
+          "mcp": false,
+          "limitations": [
+            "spec-kit ships no skills/ tree; the bundle synthesizes one SKILL.md from templates/commands."
+          ]
+        }
+      }
+    },
+    {
+      "id": "graphify",
+      "label": "Graphify",
+      "upstream": {
+        "repository": "Graphify-Labs/graphify",
+        "url": "https://github.com/Graphify-Labs/graphify.git",
+        "release": "0.9.112",
+        "releasedAt": "2026-11-17",
+        "commit": "340268a70a83588d6b3c6de1fffb05326350ef1d",
+        "license": "Apache-2.0",
+        "versionSource": "pyproject.toml"
+      },
+      "bundle": {
+        "version": "0.9.112",
+        "image": "ghcr.io/niravshah2705/symphony/graphify-plugin",
+        "dockerfile": "deploy/kagent/graphify/Dockerfile.graphify-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/graphify/graphify-codex.yaml",
+          "claude": "deploy/kagent/graphify/graphify-claude.yaml",
+          "kagent": "deploy/kagent/graphify/graphify-kagent.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": true,
+        "digest": null,
+        "synthesized": true
+      },
+      "versions": [
+        { "version": "0.9.112", "releasedAt": "2026-11-17", "commit": "340268a70a83588d6b3c6de1fffb05326350ef1d" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/graphify.svg",
+        "href": "/icons/plugins/graphify.svg"
+      },
+      "skills": [
+        { "name": "graphify", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["python>=3.10", "uv", "git"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*",
+          "RUN pip install --no-cache-dir uv && uv tool install \"graphifyy[terraform]==0.9.112\"",
+          "ENV PATH=\"/root/.local/bin:${PATH}\""
+        ],
+        "writablePaths": ["graphify-out/"],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Answer architectural questions with graphify query, path and explain before reading files, and treat graphify-out/ as generated, not source.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "0.9.112",
+          "cliKey": "codex",
+          "mcp": false,
+          "limitations": [
+            "Plugin-declared mcp.json binds only on the kagent engine, so the graphify MCP server is unavailable on codex."
+          ]
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "0.9.112",
+          "cliKey": "claude",
+          "mcp": false,
+          "limitations": [
+            "Plugin-declared mcp.json binds only on the kagent engine, so the graphify MCP server is unavailable on claude."
+          ]
+        },
+        "kagent": {
+          "status": "declared",
+          "engine": "kagent",
+          "version": "0.9.112",
+          "cliKey": "kagent",
+          "mcp": true
+        }
+      }
+    },
+    {
+      "id": "code-review-graph",
+      "label": "Code Review Graph",
+      "upstream": {
+        "repository": "tirth8205/code-review-graph",
+        "url": "https://github.com/tirth8205/code-review-graph.git",
+        "release": "2.4.0",
+        "releasedAt": "2026-11-11",
+        "commit": "b3f1285965a1337b3821e4423da03b65d70ee423",
+        "license": "MIT",
+        "versionSource": "pyproject.toml"
+      },
+      "bundle": {
+        "version": "2.4.0",
+        "image": "ghcr.io/niravshah2705/symphony/code-review-graph-plugin",
+        "dockerfile": "deploy/kagent/code-review-graph/Dockerfile.code-review-graph-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/code-review-graph/code-review-graph-codex.yaml",
+          "claude": "deploy/kagent/code-review-graph/code-review-graph-claude.yaml",
+          "kagent": "deploy/kagent/code-review-graph/code-review-graph-kagent.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": true,
+        "digest": null
+      },
+      "versions": [
+        { "version": "2.4.0", "releasedAt": "2026-11-11", "commit": "b3f1285965a1337b3821e4423da03b65d70ee423" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/code-review-graph.svg",
+        "href": "/icons/plugins/code-review-graph.svg"
+      },
+      "skills": [
+        { "name": "build-graph", "enabled": true },
+        { "name": "debug-issue", "enabled": true },
+        { "name": "explore-codebase", "enabled": true },
+        { "name": "refactor-safely", "enabled": true },
+        { "name": "review-changes", "enabled": true },
+        { "name": "review-delta", "enabled": true },
+        { "name": "review-pr", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["python>=3.10", "uv", "git", "sqlite"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*",
+          "RUN pip install --no-cache-dir uv && uv tool install code-review-graph==2.4.0",
+          "ENV PATH=\"/root/.local/bin:${PATH}\"",
+          "ENV GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/workspace"
+        ],
+        "writablePaths": [".code-review-graph/"],
+        "appliedTo": "go/harness/dsh/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Query the code graphs before grep, sed or read; fall back to grep only for what the graphs do not index, then refresh the graph after the change lands.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "2.4.0",
+          "cliKey": "codex",
+          "mcp": false,
+          "limitations": [
+            "Plugin-declared mcp.json binds only on the kagent engine, so the code-review-graph MCP server is unavailable on codex."
+          ]
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "2.4.0",
+          "cliKey": "claude",
+          "mcp": false,
+          "limitations": [
+            "Plugin-declared mcp.json binds only on the kagent engine, so the code-review-graph MCP server is unavailable on claude."
+          ]
+        },
+        "kagent": {
+          "status": "declared",
+          "engine": "kagent",
+          "version": "2.4.0",
+          "cliKey": "kagent",
+          "mcp": true,
+          "limitations": [
+            "The kagent engine is not one of the CLI matrix columns; it is where this pack's mcp.json server binds, which is the half of its value the codex and claude columns cannot carry."
+          ]
+        },
+        "dsh": {
+          "status": "unsupported",
+          "engine": "byo",
+          "cliKey": "dsh",
+          "mcp": false,
+          "blockedOn": "go/harness/dsh/Dockerfile",
+          "limitations": [
+            "kagent Harness.spec.engine is the enum kagent|codex|claude|byo, so dsh is reachable only through a byo runtime image."
+          ]
+        }
+      }
+    },
+    {
+      "id": "hallmark",
+      "label": "Hallmark",
+      "upstream": {
+        "repository": "Nutlope/hallmark",
+        "url": "https://github.com/Nutlope/hallmark.git",
+        "release": "2.0.0",
+        "releasedAt": "2026-11-11",
+        "commit": "04977e15f3dfd6ee4b74c887dac3eb52665d6c92",
+        "license": "MIT",
+        "versionSource": ".claude-plugin/plugin.json"
+      },
+      "bundle": {
+        "version": "2.0.0",
+        "image": "ghcr.io/niravshah2705/symphony/hallmark-plugin",
+        "dockerfile": "deploy/kagent/hallmark/Dockerfile.hallmark-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/hallmark/hallmark-codex.yaml",
+          "claude": "deploy/kagent/hallmark/hallmark-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": null
+      },
+      "versions": [
+        { "version": "2.0.0", "releasedAt": "2026-11-11", "commit": "04977e15f3dfd6ee4b74c887dac3eb52665d6c92" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/hallmark.svg",
+        "href": "/icons/plugins/hallmark.svg"
+      },
+      "skills": [
+        { "name": "hallmark", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["git", "node>=20"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": [],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "For new UI work, read the Floor in skills/hallmark/SKILL.md and hold it without waiving it; run its sloplint script before handing back, and fix or waive every reflex finding on the record.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "2.0.0",
+          "cliKey": "codex",
+          "mcp": false
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "2.0.0",
+          "cliKey": "claude",
+          "mcp": false
+        },
+        "opencode": {
+          "status": "unsupported",
+          "engine": "byo",
+          "cliKey": "opencode",
+          "mcp": false,
+          "blockedOn": "go/harness/opencode/Dockerfile",
+          "limitations": [
+            "Hallmark declares opencode support upstream, but the kagent engine enum has no opencode, so it needs a byo runtime image."
+          ]
+        }
+      }
+    }
+  ]
+}

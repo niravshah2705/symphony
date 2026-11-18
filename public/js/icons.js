@@ -126,3 +126,26 @@ export function hydrateIcons(root = document) {
     if (!label) host.setAttribute('aria-hidden', 'true');
   });
 }
+
+// Pack icons are committed static files, not inline markup: an Agent Plugins
+// bundle carries a directory of skills, and a 24-glyph inline path per pack would
+// be a ninth place to keep in sync with the catalog. Same-origin by construction
+// (CSP-safe) — nothing here ever becomes a remote URL.
+const PACK_ICON_ROOTS = Object.freeze({ plugin: '/icons/plugins/', skill: '/icons/skills/' });
+
+// The Agent Plugins 1.0.0 name rule, so an id arriving from the plugins
+// collection cannot escape its directory with `..` or a slash.
+const PACK_ICON_ID = /^[a-z0-9][a-z0-9._-]{0,62}$/;
+
+/**
+ * Same-origin href for a pack's icon, or null when the id is not addressable.
+ * Callers render the neutral `file` glyph on null rather than requesting a path
+ * that 404s — a catalog record with a malformed id is a bug to surface, not a
+ * broken image tag to ship.
+ */
+export function pluginIconHref(id, kind = 'plugin') {
+  const root = PACK_ICON_ROOTS[kind];
+  if (!root || typeof id !== 'string' || !PACK_ICON_ID.test(id)) return null;
+  return `${root}${id}.svg`;
+}
+

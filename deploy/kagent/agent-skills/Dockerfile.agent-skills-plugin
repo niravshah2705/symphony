@@ -1,0 +1,14 @@
+# Agent Plugins 1.0.0 bundle for the agent-skills row of ../plugins.csv.
+#
+# Data only: Substrate mounts this image read-only and kagent reads plugin.json
+# and skills/ out of it, so there is nothing to run and no base layer to carry.
+# A pack's software requirement therefore belongs in the harness runtime image
+# (go/harness/<cli>/Dockerfile), never here.
+FROM scratch
+
+COPY bundle/. /
+
+LABEL org.opencontainers.image.title="agent-skills-plugin" \
+      org.opencontainers.image.description="kagent plugin bundle: agent-skills skills, repackaged from upstream at a pinned commit" \
+      org.opencontainers.image.source="https://github.com/niravshah2705/symphony/tree/main/deploy/kagent/agent-skills" \
+      org.opencontainers.image.licenses="MIT"
