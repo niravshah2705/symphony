@@ -31,6 +31,42 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
 
 ### Fixed
 
+- **The substrate front binds its reserved static IP instead of sitting at
+  `<pending>` forever.** The GKE L4 annotation
+  `networking.gke.io/load-balancer-ip-addresses` was fed the address **value**,
+  but GKE forwards that string into the forwarding rule's `address` field, which
+  validates against an address-*name* regex — an IP literal is a 400, so the rule
+  is never created. Envoy's data-plane Service
+  (`envoy-gateway-system/envoy-ate-system-substrate-ingress-…`) stayed at
+  `EXTERNAL-IP <pending>` with `Gateway Programmed=False / AddressNotAssigned`
+  while DNS, the issued certificate and both data-plane pods all read healthy, so
+  every signal this repo had ever checked said "up". The annotation now takes
+  `google_compute_address.*.name` (and keeps the deprecated `loadBalancerIP` on
+  `.address`, because the two fields want different forms of the same address);
+  `agentgateway.tf` carried the same latent bug and is fixed with it, dark.
+  Capacity was never the blocker — the `substrate-ip` address is EXTERNAL and
+  `RESERVED` in `asia-south1` (unbound only because nothing could bind it), and
+  the A record already points at it, so no DNS step is involved. New contract test
+  `deploy/gcp/substrate-ingress-config.test.js` pins name-vs-value in both files.
+- **The ateapi control-plane route points at a Service that exists.** The
+  defaults were `substrate_ateapi_service = "ateapi"` and
+  `substrate_ateapi_port = 8443`; `ate-setup` v1.0.0 creates `api` with `grpc`
+  on 443 and `exchange` on 8445, and there is no 8443 in the namespace. So the
+  published `substrate-ingress.…` hostname has never been able to carry the
+  Control API — `ResolvedRefs=False / BackendNotFound` is the only condition
+  that says so, and nothing checked it. Both defaults are corrected, with the
+  Service name tied to the bearer audience (`api.ate-system.svc`) in the
+  description and pinned across `substrate.tf`,
+  `deploy/gcp/terraform/substrate_token.tf` and
+  `.github/workflows/substrate-token-rotate.yml` by the same new test, because
+  a third spelling would produce a token the cluster refuses.
+  - **This fixes routing, not reachability.** The `api` backend serves TLS from
+    `/run/servicedns.podcert.ate.dev/credential-bundle.pem`, and no
+    `BackendTLSPolicy` exists in this repo, so the corrected route now resolves
+    and then fails the cleartext dial — it does not hand out an unauthenticated
+    control plane. The remaining gaps (podcert CA + `BackendTLSPolicy`, the
+    anonymous `grpc-status` probe that must answer 16) are tracked in
+    `docs/SUBSTRATE_STATUS.md` pending 2.
 - **The orchestrator image contains `@ai-fleet/shared`, so it can boot.** #283
   retired the Cloud Run planner and absorbed its HTTP surface into
   `services/orchestrator/src/agent-surface.js`, mounted from `app.js`, and added

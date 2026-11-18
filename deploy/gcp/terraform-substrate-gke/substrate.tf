@@ -368,7 +368,16 @@ resource "kubectl_manifest" "substrate_envoy_proxy" {
             loadBalancerIP: "${google_compute_address.substrate_ip[0].address}"
             externalTrafficPolicy: Local
             annotations:
-              networking.gke.io/load-balancer-ip-addresses: "${google_compute_address.substrate_ip[0].address}"
+              # The address NAME, never its value. GKE passes this string into the
+              # forwarding rule's `address` field, which validates against an
+              # address-name regex — an IP literal is a 400, so no forwarding rule is
+              # created, the Service sits at EXTERNAL-IP <pending>, and the Gateway
+              # reports Programmed=False / AddressNotAssigned while every other signal
+              # (DNS, the issued certificate, the control-plane pods) reads healthy.
+              # `loadBalancerIP` above is the deprecated field and does take the value;
+              # the two fields want DIFFERENT forms of the same address, which is why
+              # they are not one interpolated local.
+              networking.gke.io/load-balancer-ip-addresses: "${google_compute_address.substrate_ip[0].name}"
   YAML
 
   depends_on = [
