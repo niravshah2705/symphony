@@ -83,7 +83,9 @@ resource "google_secret_manager_secret_iam_member" "billing_flexprice_accessor" 
 
 locals {
   billing_flexprice_env = {
-    FLEXPRICE_ENABLED                 = tostring(var.flexprice_enabled)
+    # Both halves must be true: the feature switch AND the operator's cutover
+    # decision. See the variable for why they are not one variable.
+    FLEXPRICE_ENABLED                 = tostring(var.flexprice_enabled && var.flexprice_billing_cutover_enabled)
     FLEXPRICE_BASE_URL                = var.flexprice_base_url
     FLEXPRICE_ENVIRONMENT_ID          = var.flexprice_environment_id
     FLEXPRICE_SUPPLIER_STATE_CODE     = var.flexprice_supplier_state_code

@@ -10,6 +10,11 @@ name: Deploy to GCP
 #   • deploy/gcp/terraform-substrate-gke/** changed → the gke-reconcile job plans
 #                                  and applies the multi-tenant Substrate GKE
 #                                  module (separate state prefix, no images).
+#   • deploy/gcp/terraform-flexprice/**, deploy/flexprice/** or scripts/flexprice-*
+#                                  changed → the flexprice-reconcile job builds
+#                                  the pinned upstream image + stages the chart
+#                                  and applies that module (separate state
+#                                  prefix, separate concurrency group).
 #   • SPA source, config, or release tooling changed → Firebase Hosting deploy.
 #   • docs / anything else → nothing runs.
 #
@@ -33,6 +38,18 @@ on:
         default: false
       gke_allow_destroy:
         description: "GKE only: permit a plan that deletes resources"
+        type: boolean
+        default: false
+      flexprice_reconcile:
+        description: "Reconcile the self-hosted FlexPrice stack (plan + apply)"
+        type: boolean
+        default: false
+      flexprice_plan_only:
+        description: "FlexPrice only: plan without applying"
+        type: boolean
+        default: false
+      flexprice_allow_destroy:
+        description: "FlexPrice only: permit a plan that deletes resources"
         type: boolean
         default: false
 
@@ -63,6 +80,7 @@ jobs:
       spa: ${{ steps.plan.outputs.spa }}
       run_terraform: ${{ steps.plan.outputs.run_terraform }}
       run_gke: ${{ steps.plan.outputs.run_gke }}
+      run_flexprice: ${{ steps.plan.outputs.run_flexprice }}
     steps:
       - uses: actions/checkout@v6
 
@@ -90,6 +108,11 @@ jobs:
             # Separate stack, separate state prefix — deliberately NOT under
             # infra's terraform/** glob.
             gke:      ['deploy/gcp/terraform-substrate-gke/**']
+            # The self-hosted FlexPrice stack: its module, its local (kind) shape
+            # and the scripts that stage its chart. A VERSION bump belongs here
+            # too, because the pinned commit is what the image and chart are built
+            # from — not the module's own choice.
+            flexprice: ['deploy/gcp/terraform-flexprice/**', 'deploy/flexprice/**', 'scripts/flexprice-*']
             root:     ['package.json', 'package-lock.json']
             org:      ['services/org/**']
             settings: ['services/settings/**']
@@ -127,6 +150,8 @@ jobs:
           LITELLM: ${{ steps.filter.outputs.litellm }}
           GKE: ${{ steps.filter.outputs.gke }}
           GKE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.gke_reconcile }}
+          FLEXPRICE: ${{ steps.filter.outputs.flexprice }}
+          FLEXPRICE_REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.flexprice_reconcile }}
         run: |
           set -euo pipefail
           # A shared-code / root-deps change (or a forced run) rebuilds the Node
@@ -188,14 +213,23 @@ jobs:
           run_gke=false
           if [ "$FORCE_ALL" = "true" ] || [ "$GKE" = "true" ] || [ "$GKE_REQUESTED" = "true" ]; then run_gke=true; fi
 
+          # FlexPrice is its own stack on the same cluster: own state prefix, own
+          # concurrency group, own artifacts. It is deliberately NOT pulled in by
+          # `services != "[]"` the way terraform is — rebuilding a fleet image says
+          # nothing about the billing chart, and a reconcile here builds an
+          # upstream Go binary, so it is minutes of work nobody asked for.
+          run_fp=false
+          if [ "$FORCE_ALL" = "true" ] || [ "$FLEXPRICE" = "true" ] || [ "$FLEXPRICE_REQUESTED" = "true" ]; then run_fp=true; fi
+
           {
             echo "services=$services"
             echo "spa=$spa"
             echo "run_terraform=$run_tf"
             echo "run_gke=$run_gke"
+            echo "run_flexprice=$run_fp"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Plan → services=$services  spa=$spa  run_terraform=$run_tf  run_gke=$run_gke"
+          echo "Plan → services=$services  spa=$spa  run_terraform=$run_tf  run_gke=$run_gke  run_flexprice=$run_fp"
 
   # --------------------------------------------------------------------------
   # 2a. Build + push ONLY the changed service images (one matrix leg each).
@@ -672,9 +706,17 @@ jobs:
             -var="email_public_app_url=${{ vars.EMAIL_PUBLIC_APP_URL }}"
             -var="cashfree_env=${{ vars.CASHFREE_ENV || 'sandbox' }}"
             -var="cashfree_base_url=${{ vars.CASHFREE_BASE_URL || 'https://sandbox.cashfree.com' }}"
+            # All four below are optional: an unset repo variable arrives as "" (or
+            # "false") and Terraform accepts it, because the three endpoint
+            # variables now default empty and FLEXPRICE_ENABLED is the conjunction
+            # of the feature switch and the cutover gate. Those three used to be
+            # mandatory with unconditional https/UUID/state-code validations, which
+            # aborted every apply whose repo variables had never been created; a
+            # value is still format-checked when it IS supplied.
             -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}"
             -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
             -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
+            -var="flexprice_billing_cutover_enabled=${{ vars.FLEXPRICE_BILLING_CUTOVER_ENABLED || 'false' }}"
             # Dark by default: GATEWAY_VPC_EGRESS_ENABLED unset => false => the
             # gateway's vpc_access block is not rendered at all, so this is a
             # no-op for every deployment that has not opted in. VPC_NETWORK and
@@ -1063,3 +1105,403 @@ jobs:
           gcloud container node-pools list --cluster "$CLUSTER" \
             --location "$ZONE" --project "$PROJECT_ID" \
             --format 'table(name, status, config.machineType, autoscaling.minNodeCount, autoscaling.maxNodeCount)'
+
+  # --------------------------------------------------------------------------
+  # 4. Self-hosted FlexPrice: build the pinned upstream artifact, stage the
+  #    patched chart, and reconcile deploy/gcp/terraform-flexprice.
+  #
+  #    Own state prefix and own concurrency group. It must NOT join
+  #    `substrate-cluster-power`: that group exists so nothing flips a substrate
+  #    pool's autoscaling bounds while the power workflow is parking it, and this
+  #    job's node pool is deliberately outside the pools that workflow names
+  #    (deploy/gcp/flexprice-infra.test.js pins that). Sharing the group would
+  #    serialise two unrelated stacks for no safety.
+  #
+  #    Why the build steps are here rather than in a workstation runbook: the
+  #    chart is not pullable (`oci://ghcr.io/flexprice/charts/flexprice` answers
+  #    401 to an anonymous token request) and neither is the image, so BOTH
+  #    artifacts exist only if something builds them from the commit recorded in
+  #    deploy/flexprice/VERSION. Anything that must happen in that order, with
+  #    registry credentials, is CI work.
+  # --------------------------------------------------------------------------
+  flexprice_reconcile:
+    needs: changes
+    if: needs.changes.outputs.run_flexprice == 'true'
+    runs-on: ubuntu-24.04
+    name: reconcile flexprice (gke)
+    concurrency:
+      group: flexprice-reconcile
+      cancel-in-progress: false
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      CLUSTER: ${{ vars.SUBSTRATE_CLUSTER_NAME || 'substrate-multitenant' }}
+      ZONE: ${{ vars.SUBSTRATE_CLUSTER_ZONE || 'asia-south1-a' }}
+      FP_TF_DIR: deploy/gcp/terraform-flexprice
+      FP_TF_STATE_PREFIX: substrate/flexprice
+      FP_TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      FP_NAMESPACE: flexprice
+      AR_HOST: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev
+      FP_IMAGE_REPO: flexprice-app
+      FP_CHART_REPO: flexprice-chart
+      # Pinned by a human, never derived: a chart whose templates were patched
+      # must be re-versioned deliberately, because pushing different templates
+      # under a version the module already installed is how an unreviewed chart
+      # reaches a cluster.
+      FP_CHART_VERSION: ${{ vars.FLEXPRICE_CHART_VERSION || '1.10.0+fleet.1' }}
+      UPSTREAM: https://github.com/flexprice/flexprice
+      CHART_SRC: internal/ee/infrastructure/helm/flexprice
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Cluster credentials + registry logins
+        run: |
+          set -euo pipefail
+          # Before anything else: kubectl is needed to mirror the Secret, and the
+          # Helm OCI login is needed to push the chart. `helm` has no ADC, so the
+          # registry password is a short-lived access token presented as _json_key.
+          gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT_ID"
+          gcloud auth configure-docker "$AR_HOST" --quiet
+          helm registry login "oci://$AR_HOST" \
+            --username=_json_key --password="$(gcloud auth print-access-token)"
+
+      - name: Read the pin
+        id: pin
+        run: |
+          set -euo pipefail
+          COMMIT="$(sed -n 's/^commit=//p' deploy/flexprice/VERSION)"
+          REF="$(sed -n 's/^ref=//p' deploy/flexprice/VERSION)"
+          if ! printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::deploy/flexprice/VERSION has no 40-hex commit= line (got ${COMMIT:-<empty>}). Everything built here must come from one exact tree."
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Building FlexPrice from $REF ($COMMIT)"
+
+      - name: Check out the pinned upstream commit
+        id: src
+        run: |
+          set -euo pipefail
+          # Fetched by SHA rather than cloned at a branch: `main` moves, and a
+          # deployment built from whatever `main` was is not the deployment the
+          # findings and the chart patch were derived from.
+          git clone --filter=blob:none --no-checkout "$UPSTREAM" /tmp/fp-upstream
+          git -C /tmp/fp-upstream fetch --depth 1 origin '${{ steps.pin.outputs.commit }}'
+          git -C /tmp/fp-upstream checkout --quiet FETCH_HEAD
+          test -f "/tmp/fp-upstream/$CHART_SRC/Chart.yaml"
+          echo "dir=/tmp/fp-upstream" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Terraform init
+        working-directory: ${{ env.FP_TF_DIR }}
+        run: |
+          set -euo pipefail
+          BUCKET="${FP_TF_STATE_BUCKET:-${PROJECT_ID}-tfstate}"
+          terraform init -input=false \
+            -backend-config="bucket=$BUCKET" \
+            -backend-config="prefix=$FP_TF_STATE_PREFIX"
+          STATE_COUNT="$(terraform state list | wc -l | tr -d ' ')"
+          if [ "$STATE_COUNT" -lt 1 ]; then
+            echo "::notice::Remote state at gs://$BUCKET/$FP_TF_STATE_PREFIX is empty — greenfield first apply; everything in plan is a create."
+          else
+            echo "State already holds $STATE_COUNT resources"
+          fi
+
+      - name: Ensure the artifacts have somewhere to land
+        working-directory: ${{ env.FP_TF_DIR }}
+        run: |
+          set -euo pipefail
+          # The chicken-and-egg APPLY.md describes: the chart is installed FROM
+          # Artifact Registry, and Artifact Registry is created BY this root. Two
+          # targeted applies break it — the repos/APIs, then the namespace the
+          # Secret mirror below needs. Nothing that runs a Helm release is in
+          # scope here, so this cannot half-install the stack.
+          #
+          # The namespace target drags `google_container_node_pool.flexprice` in
+          # through its depends_on, so the pool is built here too — several
+          # minutes, and unavoidable: it is the only place the StatefulSets can
+          # schedule, so a reconcile that skipped it would just fail later.
+          terraform apply -input=false -auto-approve \
+            -var="project_id=$PROJECT_ID" -var="zone=$ZONE" -var="cluster_name=$CLUSTER" \
+            -target=google_project_service.flexprice_apis \
+            -target=google_artifact_registry_repository.flexprice_app \
+            -target=google_artifact_registry_repository.flexprice_chart
+          terraform apply -input=false -auto-approve \
+            -var="project_id=$PROJECT_ID" -var="zone=$ZONE" -var="cluster_name=$CLUSTER" \
+            -target=kubernetes_namespace_v1.flexprice
+
+      - name: Build + push the app image
+        id: image
+        run: |
+          set -euo pipefail
+          IMG="$AR_HOST/$PROJECT_ID/$FP_IMAGE_REPO/flexprice-app"
+          BUILD_TAG="$IMG:ci-$GITHUB_RUN_ID"
+          # The Dockerfile is upstream's own (compose.yaml builds the same way
+          # locally); nothing here re-implements how FlexPrice compiles.
+          docker build -t "$BUILD_TAG" -f '${{ steps.src.outputs.dir }}/Dockerfile' '${{ steps.src.outputs.dir }}'
+          docker push "$BUILD_TAG"
+          DIGEST="$(gcloud artifacts docker images describe "$BUILD_TAG" \
+            --format 'value(image_summary.digest)' --quiet)"
+          if ! printf '%s' "$DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::Could not read a sha256 digest back from $BUILD_TAG (got ${DIGEST:-<empty>}). Refusing to install an image whose identity is unknown."
+            exit 1
+          fi
+          # Content-derived tag, not a run-numbered one. The migration Job's NAME
+          # hashes `<repository>:<tag>`, so a stable tag plus a moved digest is
+          # the silent-skip case: the new image's versioned migrations never run
+          # and /health does not notice. This tag cannot describe anything other
+          # than the bytes it was computed from.
+          SHORT_TAG="${{ steps.pin.outputs.ref }}-ci${DIGEST:7:12}"
+          docker tag "$BUILD_TAG" "$IMG:$SHORT_TAG"
+          docker push "$IMG:$SHORT_TAG"
+          {
+            echo "digest=$DIGEST"
+            echo "tag=$SHORT_TAG"
+          } >> "$GITHUB_OUTPUT"
+          echo "image: $IMG:$SHORT_TAG @ $DIGEST"
+
+      - name: Stage + push the chart
+        id: chart
+        run: |
+          set -euo pipefail
+          node scripts/flexprice-stage-chart.js \
+            --source '${{ steps.src.outputs.dir }}/'"$CHART_SRC" \
+            --out /tmp/fp-staged/flexprice \
+            --version "$FP_CHART_VERSION" | tee /tmp/stage.log
+          SHA="$(sed -n 's/^chart sha256: //p' /tmp/stage.log)"
+          # Linted WITH the module's own values file, not bare: a shape error in
+          # base.yaml (a key the chart no longer has, a `fail` on two migration
+          # steps) must surface here rather than as a Helm timeout mid-apply.
+          helm lint /tmp/fp-staged/flexprice --values "$FP_TF_DIR/values/base.yaml"
+          helm package /tmp/fp-staged/flexprice -d /tmp/fp-pkg
+          # Pushed unconditionally: Artifact Registry is content-addressed, so an
+          # identical re-push is a no-op and a DIFFERENT chart under this version
+          # is refused. That refusal is the wanted signal — it means the pinned
+          # version already ships templates that are not these, and the fix is a
+          # human bumping FLEXPRICE_CHART_VERSION and recording the new sha in
+          # deploy/flexprice/VERSION, not a silent overwrite.
+          helm push "/tmp/fp-pkg/flexprice-${FP_CHART_VERSION}.tgz" "oci://$AR_HOST/$PROJECT_ID/$FP_CHART_REPO"
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "version=$FP_CHART_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Staged FlexPrice chart"
+            echo ""
+            echo "* upstream commit: \`${{ steps.pin.outputs.commit }}\`"
+            echo "* chart version: \`$FP_CHART_VERSION\`"
+            echo "* patched-chart sha256: \`$SHA\` — record this in deploy/flexprice/VERSION"
+            echo "* image: \`flexprice-app:${SHORT}\` @ \`$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SHORT: ${{ steps.image.outputs.tag }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+
+      - name: Mirror the Secret Manager values into the cluster
+        env:
+          SECRET_IDS: flexprice-postgres-password flexprice-clickhouse-password flexprice-auth-secret flexprice-encryption-key flexprice-api-key-keys
+        run: |
+          set -euo pipefail
+          # The five containers are Terraform-owned with NO versions in state; the
+          # material is the operator's. Read each enabled version into a file (not
+          # argv, not stdout) and apply the Kubernetes Secret the chart is pointed
+          # at. Same out-of-band posture as the root stack's secret staging.
+          DIR="$(mktemp -d)"; chmod 700 "$DIR"; trap 'rm -rf "$DIR"' EXIT
+          for id in $SECRET_IDS; do
+            key="${id#flexprice-}"
+            if ! gcloud secrets versions access latest --secret="$id" --project "$PROJECT_ID" \
+                 > "$DIR/$key" 2>/dev/null; then
+              echo "::error::Secret Manager has no enabled version for $id. Seed it before reconciling: gcloud secrets versions add $id --data-file=... (this job never creates secret material)."
+              exit 1
+            fi
+            chmod 600 "$DIR/$key"
+          done
+          # api-key-keys is the tenant→key map the API authenticates against, and
+          # only the seeded tenant exists. A map for any other id answers 401 on
+          # every call with nothing wrong in the stack, so check it here.
+          if ! grep -q '00000000-0000-0000-0000-000000000000' "$DIR/api-key-keys"; then
+            echo "::error::flexprice-api-key-keys does not name the seeded tenant 00000000-0000-0000-0000-000000000000; the API would authenticate nothing."
+            exit 1
+          fi
+          kubectl -n "$FP_NAMESPACE" create secret generic flexprice-secrets \
+            --from-file="postgres-password=$DIR/postgres-password" \
+            --from-file="clickhouse-password=$DIR/clickhouse-password" \
+            --from-file="auth-secret=$DIR/auth-secret" \
+            --from-file="encryption-key=$DIR/encryption-key" \
+            --from-file="api-key-keys=$DIR/api-key-keys" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "flexprice-secrets applied ($(kubectl -n "$FP_NAMESPACE" get secret flexprice-secrets -o jsonpath='{.data}' | wc -c) byte of key names, values not printed)"
+
+      - name: Validate configuration
+        working-directory: ${{ env.FP_TF_DIR }}
+        run: |
+          set -euo pipefail
+          terraform validate -no-color
+          if [ -n "$(terraform fmt -check -diff -no-color)" ]; then
+            echo "::error::terraform fmt drifted; run 'terraform fmt' in $FP_TF_DIR."
+            terraform fmt -check -diff -no-color || true
+            exit 1
+          fi
+
+      - name: Plan
+        working-directory: ${{ env.FP_TF_DIR }}
+        env:
+          PLAN_ONLY: ${{ inputs.flexprice_plan_only }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          TAG: ${{ steps.image.outputs.tag }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          INGRESS_HOSTNAME: ${{ vars.FLEXPRICE_INGRESS_HOSTNAME }}
+          CERT_EMAIL: ${{ vars.FLEXPRICE_CERT_EMAIL }}
+          REGISTRY_PREFIX: ${{ vars.FLEXPRICE_IMAGE_REGISTRY_PREFIX }}
+        run: |
+          set -euo pipefail
+          if [ "$PLAN_ONLY" = "true" ]; then echo "apply=false" >> "$GITHUB_OUTPUT"; MODE="plan only";
+          else echo "apply=true" >> "$GITHUB_OUTPUT"; MODE="plan + apply"; fi
+          echo "$MODE" > /tmp/fp-mode
+          # The plan-only path is the reviewable-first-run path, so it must still
+          # carry a REAL digest and tag: an empty digest makes the plan render
+          # `:tag` references that no apply will ever match.
+          terraform plan -refresh=true -input=false \
+            -var="project_id=$PROJECT_ID" -var="zone=$ZONE" -var="cluster_name=$CLUSTER" \
+            -var="chart_version=$CHART_VERSION" \
+            -var="image_digest=$DIGEST" -var="image_tag=$TAG" \
+            ${INGRESS_HOSTNAME:+-var="ingress_hostname=$INGRESS_HOSTNAME"} \
+            ${CERT_EMAIL:+-var="cert_email=$CERT_EMAIL"} \
+            ${REGISTRY_PREFIX:+-var="image_registry_prefix=$REGISTRY_PREFIX"} \
+            -out=fp.tfplan
+          terraform show -json fp.tfplan > fp.json
+          {
+            echo "## Terraform plan — FlexPrice (GKE)"
+            echo ""
+            echo "Mode: **$MODE** · chart \`$CHART_VERSION\` · image \`$TAG\` @ \`$DIGEST\`"
+            echo ""
+            echo '```'
+            terraform show -no-color fp.tfplan
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assess the plan
+        id: plan
+        working-directory: ${{ env.FP_TF_DIR }}
+        run: |
+          set -euo pipefail
+          ADD="$(jq '[.resource_changes[]? | select(.change.actions | index("create"))] | length' fp.json)"
+          CHANGE="$(jq '[.resource_changes[]? | select(.change.actions == ["update"])] | length' fp.json)"
+          DESTROY="$(jq '[.resource_changes[]? | select(.change.actions | index("delete"))] | length' fp.json)"
+          {
+            echo "add=$ADD"
+            echo "change=$CHANGE"
+            echo "destroy=$DESTROY"
+            echo "changed=$(( ADD + CHANGE + DESTROY ))"
+          } >> "$GITHUB_OUTPUT"
+          echo "Plan: $ADD create, $CHANGE update, $DESTROY delete"
+          if [ "$(( ADD + CHANGE + DESTROY ))" -gt 0 ] && [ "$(cat /tmp/fp-mode)" != "plan + apply" ]; then
+            echo "::warning::$ADD create / $CHANGE update / $DESTROY delete pending. This was a plan-only run; the FlexPrice stack is NOT converged."
+          fi
+
+      - name: Block a destroying apply
+        if: inputs.flexprice_plan_only != 'true'
+        env:
+          DESTROY_COUNT: ${{ steps.plan.outputs.destroy }}
+          ALLOW_DESTROY: ${{ inputs.flexprice_allow_destroy }}
+        run: |
+          set -euo pipefail
+          # A delete here is a database, a PV reference or the node pool. The
+          # volumes survive by design (Retain + resource-policy keep) but the
+          # StatefulSets do not, and re-creating them against retained data is
+          # exactly the operation that deserves an explicit human instruction.
+          if [ "$DESTROY_COUNT" -gt 0 ] && [ "$ALLOW_DESTROY" != "true" ]; then
+            echo "::error::The plan destroys $DESTROY_COUNT resource(s). Refusing to apply; re-run with flexprice_reconcile + flexprice_allow_destroy only if that is what you expect."
+            exit 1
+          fi
+
+      - name: Apply
+        if: inputs.flexprice_plan_only != 'true' && steps.plan.outputs.changed != '0'
+        working-directory: ${{ env.FP_TF_DIR }}
+        run: terraform apply -input=false -auto-approve fp.tfplan
+
+      - name: Dump why the cluster is unhappy
+        if: failure()
+        run: |
+          set +e
+          # atomic + cleanup_on_fail means a failed release leaves NOTHING behind
+          # in-cluster to inspect, and helm's own report is "context deadline
+          # exceeded" — true and useless. The reason is a scheduling event or a
+          # container waiting state, both one kubectl away.
+          kubectl -n "$FP_NAMESPACE" get pods -o wide
+          kubectl -n "$FP_NAMESPACE" get events --sort-by=.lastTimestamp | tail -60
+          helm -n "$FP_NAMESPACE" list
+          for job in $(kubectl -n "$FP_NAMESPACE" get job -o name 2>/dev/null); do
+            echo "--- $job ---"; kubectl -n "$FP_NAMESPACE" logs "$job" --all-containers --tail=40
+          done
+
+      - name: Verify the stack answers
+        if: inputs.flexprice_plan_only != 'true' && steps.plan.outputs.changed != '0'
+        run: |
+          set -euo pipefail
+          for d in flexprice-api flexprice-consumer flexprice-worker; do
+            kubectl -n "$FP_NAMESPACE" rollout status "deploy/$d" --timeout=300s
+          done
+          for s in flexprice-postgres flexprice-clickhouse flexprice-kafka flexprice-redis; do
+            kubectl -n "$FP_NAMESPACE" rollout status "statefulset/$s" --timeout=600s
+          done
+          kubectl -n "$FP_NAMESPACE" rollout status deploy/flexprice-temporal --timeout=300s
+
+          # The namespace registration is the silent one: a worker crashloop
+          # several minutes later is the only other way it surfaces.
+          kubectl -n "$FP_NAMESPACE" logs job/flexprice-temporal-bootstrap --tail=20
+          kubectl -n "$FP_NAMESPACE" exec deploy/flexprice-temporal -- \
+            temporal operator namespace describe -n default --address 127.0.0.1:7233 >/dev/null
+
+          # Read the health + auth behaviour over the in-cluster Service, not the
+          # public front: the front may still be waiting on a DNS record, and an
+          # unauthenticated 401 from /v1/meters is the proof that the API and its
+          # key boundary are both live.
+          kubectl -n "$FP_NAMESPACE" port-forward svc/flexprice-api 18080:80 >/tmp/pf.log 2>&1 &
+          PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:18080/health >/dev/null 2>&1 && break; sleep 2; done
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/health)"
+          echo "/health -> $CODE"
+          [ "$CODE" = "200" ]
+          UNAUTH="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/v1/meters)"
+          echo "/v1/meters (no key) -> $UNAUTH"
+          if [ "$UNAUTH" != "401" ]; then
+            echo "::error::/v1/meters answered $UNAUTH without a key. The API is up but not enforcing the key boundary."
+            exit 1
+          fi
+
+      - name: What is still the operator's job
+        if: inputs.flexprice_plan_only != 'true' && steps.plan.outputs.changed != '0'
+        run: |
+          set -euo pipefail
+          cd "$FP_TF_DIR"
+          terraform output -raw flexprice_dns_hint 2>/dev/null || true
+          {
+            echo "### FlexPrice: not done by this job"
+            echo ""
+            echo "* **Plane API keys** are not minted here. \`scripts/flexprice-provision.js\`"
+            echo "  reads and writes \`deploy/flexprice/.env\`, which is a workstation file; a CI"
+            echo "  runner has no admin key and should not acquire one. Run it once the front"
+            echo "  exists, per APPLY.md step 2."
+            echo "* **The A record.** Create \`<hostname> → ingress IP\` (TTL 300) if a public"
+            echo "  front is configured; nothing in this repo writes Cloud DNS."
+            echo "* **The billing cutover stays closed.** This job never touches"
+            echo "  \`FLEXPRICE_BILLING_CUTOVER_ENABLED\`; no organization can be billed by what"
+            echo "  it installed while docs/FLEXPRICE_AGPL_MEMO.md is uncleared."
+          } >> "$GITHUB_STEP_SUMMARY"

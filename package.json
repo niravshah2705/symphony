@@ -38,6 +38,7 @@
     "billing:metrics:probe": "bash scripts/kind-otel-roundtrip.sh",
     "billing:flexprice:bootstrap": "node scripts/flexprice-bootstrap.js",
     "billing:flexprice:helm": "node scripts/flexprice-helm.js",
+    "billing:flexprice:stage": "node scripts/flexprice-stage-chart.js",
     "billing:flexprice:spike": "node scripts/flexprice-spike/run.js",
     "billing:flexprice:provision": "node scripts/flexprice-provision.js",
     "billing:flexprice:phase1-probes": "node scripts/flexprice-phase1-probes.js",

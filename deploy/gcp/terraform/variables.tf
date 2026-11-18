@@ -806,30 +806,53 @@ variable "flexprice_enabled" {
   default     = true
 }
 
+variable "flexprice_billing_cutover_enabled" {
+  # Two gates, deliberately separate. `flexprice_enabled` is the code-path switch
+  # the billing service reads; this one is the operator's permission to move a
+  # tenant's money. docs/FLEXPRICE_AGPL_MEMO.md is NOT CLEARED for production, so
+  # the self-hosted FlexPrice stack can be built, probed and even reachable while
+  # every deployment still bills the way it always did — and an apply that merely
+  # forgets to pass three endpoint variables can never be the thing that opts a
+  # tenant in. Flipping this true is a decision with a review behind it, not a
+  # missing `vars.` entry.
+  type        = bool
+  description = "Admit the FlexPrice cutover: only with this true does FLEXPRICE_ENABLED reach the billing service. Stays false until counsel clears the AGPL memo."
+  default     = false
+}
+
+# The three values below are optional by design: an unset repo variable arrives as
+# "" and must not abort the apply. They are format-validated only when supplied,
+# because a typo in a value you meant to use is worth failing on, while an absent
+# value on a gated-off deployment is not. `flexprice-config.js` refuses to boot
+# with any of them missing WHILE ENABLED, so the fail-closed half lives in the app
+# and the empty string here is honest rather than dangerous.
 variable "flexprice_base_url" {
   type        = string
-  description = "FlexPrice API base URL. Must be https://."
+  description = "FlexPrice API base URL. Empty until the cutover gate is open; must be https:// when set."
+  default     = ""
   validation {
-    condition     = can(regex("^https://[^\\s/]+", var.flexprice_base_url))
-    error_message = "flexprice_base_url must be an https:// URL."
+    condition     = var.flexprice_base_url == "" || can(regex("^https://[^\\s/]+", var.flexprice_base_url))
+    error_message = "flexprice_base_url must be empty or an https:// URL."
   }
 }
 
 variable "flexprice_environment_id" {
   type        = string
-  description = "FlexPrice environment id (UUID)."
+  description = "FlexPrice environment id (UUID). Empty until the cutover gate is open."
+  default     = ""
   validation {
-    condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.flexprice_environment_id))
-    error_message = "flexprice_environment_id must be a UUID."
+    condition     = var.flexprice_environment_id == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", var.flexprice_environment_id))
+    error_message = "flexprice_environment_id must be empty or a UUID."
   }
 }
 
 variable "flexprice_supplier_state_code" {
   type        = string
-  description = "Supplier GST state code, two digits 01-37."
+  description = "Supplier GST state code, two digits 01-37. Empty until the cutover gate is open."
+  default     = ""
   validation {
-    condition     = can(regex("^(0[1-9]|[12][0-9]|3[0-7])$", var.flexprice_supplier_state_code))
-    error_message = "flexprice_supplier_state_code must be a two-digit GST state code 01-37."
+    condition     = var.flexprice_supplier_state_code == "" || can(regex("^(0[1-9]|[12][0-9]|3[0-7])$", var.flexprice_supplier_state_code))
+    error_message = "flexprice_supplier_state_code must be empty or a two-digit GST state code 01-37."
   }
 }
 
