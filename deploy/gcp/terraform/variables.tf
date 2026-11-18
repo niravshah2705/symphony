@@ -15,7 +15,7 @@ variable "region" {
 
 variable "firestore_location" {
   type        = string
-  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Kept at nam5 so an apply never tries to move the existing database in place."
+  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Pass the location the existing database actually lives in; the nam5 default is a placeholder, and prevent_destroy on the database blocks a plan that would move it."
   default     = "nam5"
 }
 
