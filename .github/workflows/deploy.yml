@@ -603,6 +603,19 @@ jobs:
             CUSTOM_DOMAIN_ARG="$(echo "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^https?://"; "") | gsub("/+$"; "")) | map(select(length > 0))')"
           fi
 
+          # The substrate atespace bindings are one comma-separated string each in
+          # the repo variable, because that is the shape substrate.tf renders into a
+          # single env name and the JS side parses. Empty stays empty list/map: the
+          # names are absent from the container env rather than set to "".
+          SUBSTRATE_ALLOWED_ATESPACES_ARG="[]"
+          if [ -n "${{ vars.SUBSTRATE_ALLOWED_ATESPACES }}" ]; then
+            SUBSTRATE_ALLOWED_ATESPACES_ARG="$(echo "${{ vars.SUBSTRATE_ALLOWED_ATESPACES }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')"
+          fi
+          SUBSTRATE_ATESPACE_BY_ORG_ARG="{}"
+          if [ -n "${{ vars.SUBSTRATE_ATESPACE_BY_ORG }}" ]; then
+            SUBSTRATE_ATESPACE_BY_ORG_ARG="$(echo "${{ vars.SUBSTRATE_ATESPACE_BY_ORG }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0) | split("=") | {(.[0] | gsub("^\\s+|\\s+$"; "")): (.[1] | gsub("^\\s+|\\s+$"; ""))}) | add // {}')"
+          fi
+
           # Every service tag above is either this run's immutable SHA or a
           # successfully resolved live tag. An unresolved tag aborts deployment.
           apply_args=(
@@ -658,7 +671,42 @@ jobs:
             -var="vpc_network=${{ vars.VPC_NETWORK }}"
             -var="vpc_subnet=${{ vars.VPC_SUBNET }}"
             -var="vpc_egress_mode=${{ vars.VPC_EGRESS_MODE || 'PRIVATE_RANGES_ONLY' }}"
+            # Agent Substrate is the only execution pattern (#283 retired the Cloud
+            # Run planner/coder harnesses), so these names are how a deployed agent
+            # reaches a control plane at all. None of them had a CI path before:
+            # every consumer falls back to an inert default when its variable is
+            # absent, so an unset SUBSTRATE_URL is not a plan error — the deploy
+            # goes green, the orchestrator refuses every run as "not configured",
+            # and the first person to notice is a user clicking Plan. Keep every
+            # default EMPTY: a `|| '<addr>'` fallback here would point production at
+            # an address nobody reviewed. The names
+            # whose Terraform default is NOT empty are appended below the array
+            # instead, for two reasons: an empty `-var="substrate_timeout_ms="` is
+            # not a valid HCL number, and an empty string beats the Terraform
+            # default for every type.
+            -var="substrate_url=${{ vars.SUBSTRATE_URL }}"
+            -var="substrate_ingress_url=${{ vars.SUBSTRATE_INGRESS_URL }}"
+            -var="substrate_atespace=${{ vars.SUBSTRATE_ATESPACE }}"
+            -var="substrate_allowed_atespaces=${SUBSTRATE_ALLOWED_ATESPACES_ARG}"
+            -var="substrate_atespace_by_org=${SUBSTRATE_ATESPACE_BY_ORG_ARG}"
+            -var="substrate_planner_image=${{ vars.SUBSTRATE_PLANNER_IMAGE }}"
+            -var="substrate_jwks_url=${{ vars.SUBSTRATE_JWKS_URL }}"
+            # The actor-callback group opens only when all of these agree; iam.tf
+            # gates the matching run.invoker binding on substrate_actor_member, so an
+            # env without the binding is a refused call and a binding without the
+            # env is an unauthenticated prompt endpoint.
+            -var="substrate_actor_mode=${{ vars.SUBSTRATE_ACTOR_MODE || 'false' }}"
+            -var="substrate_actor_member=${{ vars.SUBSTRATE_ACTOR_MEMBER }}"
           )
+          # The five names whose Terraform default is a real value are appended only
+          # when the repo variable is set: substrate.tf's own rule is that a key is
+          # absent rather than empty, and an empty string here would beat both the
+          # Terraform default and a value an operator put in the org's settings.
+          [ -n "${{ vars.SUBSTRATE_WORKER_POOL }}" ] && apply_args+=(-var="substrate_worker_pool=${{ vars.SUBSTRATE_WORKER_POOL }}") || true
+          [ -n "${{ vars.SUBSTRATE_ACTOR_JWT_AUDIENCE }}" ] && apply_args+=(-var="substrate_actor_jwt_audience=${{ vars.SUBSTRATE_ACTOR_JWT_AUDIENCE }}") || true
+          [ -n "${{ vars.SUBSTRATE_TRUST_DOMAIN }}" ] && apply_args+=(-var="substrate_trust_domain=${{ vars.SUBSTRATE_TRUST_DOMAIN }}") || true
+          [ -n "${{ vars.SUBSTRATE_TIMEOUT_MS }}" ] && apply_args+=(-var="substrate_timeout_ms=${{ vars.SUBSTRATE_TIMEOUT_MS }}") || true
+          [ -n "${{ vars.SUBSTRATE_ACTOR_TTL_MS }}" ] && apply_args+=(-var="substrate_actor_ttl_ms=${{ vars.SUBSTRATE_ACTOR_TTL_MS }}") || true
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.orchestrator }}" ] && apply_args+=(-var="orchestrator_image_tag=${{ steps.tags.outputs.orchestrator }}") || true
           [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
@@ -701,6 +749,20 @@ jobs:
             echo '### Primary Terraform plan'
             grep -E '^Plan:|^No changes' primary-plan.txt || echo 'No summary line found.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # #283 retired the Cloud Run harness in code and this plan retires it in
+          # production: once `planner` / `coder-control` / `coder-worker` are gone,
+          # Agent Substrate is the ONLY pattern that can run an agent. Applying that
+          # with substrate_url unset still goes green — the consumers fall back to
+          # their inert defaults and the orchestrator refuses every run as "not
+          # configured", so the failure surfaces as a user's dead button, not as a
+          # red job. Stop in the step that can still stop the apply, and name the
+          # switch.
+          if grep -qE '^  # google_cloud_run_v2_(service|job)\.(planner|coder_control|coder_worker) will be destroyed' primary-plan.txt \
+            && [ -z "${{ vars.SUBSTRATE_URL }}" ]; then
+            echo "::error::This plan destroys the last Cloud Run agent harness while SUBSTRATE_URL is unset, leaving no runnable agent pattern. Set the address with 'gh variable set SUBSTRATE_URL --body \"<ateapi gRPC address>\"' (see docs/SUBSTRATE_STATUS.md causes 5 and 9), then re-run."
+            exit 1
+          fi
           terraform apply -input=false primary.tfplan
 
       - name: Outputs
