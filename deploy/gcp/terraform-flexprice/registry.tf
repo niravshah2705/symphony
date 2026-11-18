@@ -8,7 +8,9 @@
 # pinned checkout in deploy/flexprice/VERSION is therefore the only source for
 # both, and a build that only exists on a workstation is not a deployment.
 #
-# The DOCKER repo holds the built app image. The OCI repo holds the *staged*
+# Both repos are DOCKER-format: Artifact Registry has no "OCI" format value, and
+# OCI artifacts — Helm charts included — live in DOCKER-format repos. The first
+# repo holds the built app image, the second the *staged*
 # chart — the upstream chart with its four subchart dependencies stripped (Helm
 # refuses to install a chart whose declared dependencies are not vendored, and
 # every one of their conditions is false here) and the template patches described
@@ -33,7 +35,7 @@ resource "google_artifact_registry_repository" "flexprice_app" {
   repository_id = var.image_repo
   format        = "DOCKER"
   description   = "FlexPrice application image, built from the commit pinned in deploy/flexprice/VERSION."
-  labels        = merge(local.common_labels, { component = "flexprice" })
+  labels        = merge(local.gcp_labels, { component = "flexprice" })
 
   # No immutability field here on purpose: google provider 6.x exposes neither
   # `docker_immutable_tags` nor a tag-immutability argument on this resource
@@ -52,9 +54,9 @@ resource "google_artifact_registry_repository" "flexprice_chart" {
   project       = var.project_id
   location      = var.region
   repository_id = var.chart_repo
-  format        = "OCI"
-  description   = "Staged FlexPrice Helm chart (subchart dependencies stripped, infra templates patched)."
-  labels        = merge(local.common_labels, { component = "flexprice" })
+  format        = "DOCKER"
+  description   = "Staged FlexPrice Helm chart (subchart dependencies stripped, infra templates patched). OCI artifacts live in DOCKER-format repos."
+  labels        = merge(local.gcp_labels, { component = "flexprice" })
 
   depends_on = [google_project_service.flexprice_apis]
 }
