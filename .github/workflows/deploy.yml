@@ -1178,6 +1178,11 @@ jobs:
           # as oauth2accesstoken (_json_key only accepts the full service-account
           # key file and 401s on a token). The token goes through stdin so it never
           # lands in the job log or process arguments.
+          #
+          # GKE 1.30+ kubeconfigs authenticate by shelling out to this plugin;
+          # without it every kubectl call dies with "gke-gcloud-auth-plugin: not
+          # found" (same install as substrate-control-plane.yml).
+          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
           gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT_ID"
           gcloud auth configure-docker "$AR_HOST" --quiet
           gcloud auth print-access-token | helm registry login "oci://$AR_HOST" \
