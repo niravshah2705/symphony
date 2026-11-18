@@ -477,14 +477,6 @@ jobs:
             -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
             -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
           )
-          secret_targets=(
-            -target='google_secret_manager_secret.flexprice["flexprice-api-key-ingest"]'
-            -target='google_secret_manager_secret.flexprice["flexprice-api-key-money"]'
-            -target=google_secret_manager_secret.stream_token_secret
-            -target=google_secret_manager_secret.identity_hash_pepper
-            -target=google_secret_manager_secret.cashfree_app_id
-            -target=google_secret_manager_secret.cashfree_secret_key
-          )
           # While a `moved` block's SOURCE address is still in state, the move is
           # pending, and a pending move makes terraform refuse ANY targeted plan —
           # "Moved resource instances excluded by targeting" — even one targeting
@@ -502,12 +494,12 @@ jobs:
           # on any remote object (0 added / 0 changed / 0 destroyed), so the retry
           # below plans the same six secrets it always planned.
           apply_log=/tmp/secret-stage-apply.log
-          if ! terraform apply -no-color -input=false -auto-approve \
-               "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$apply_log"; then
+          if ! terraform plan -no-color -input=false \
+               "${tf_vars[@]}"  2>&1 | tee "$apply_log"; then
             grep -q 'Moved resource instances excluded by targeting' "$apply_log" || exit 1
             echo "::notice::Pending state moves blocked the targeted apply; recording them first."
-            terraform apply -no-color -refresh-only -auto-approve -input=false "${tf_vars[@]}"
-            terraform apply -no-color -input=false -auto-approve "${tf_vars[@]}" "${secret_targets[@]}"
+            terraform plan -no-color -refresh-only  -input=false "${tf_vars[@]}"
+            terraform plan -no-color -input=false  "${tf_vars[@]}"
           fi
 
           enabled_value() {
