@@ -509,6 +509,14 @@ jobs:
           # API) and creates, changes or deletes no remote object. So the addresses
           # terraform itself names get recorded here and the read-only plan is
           # retried; anything that still fails stays the operator's call.
+          #
+          # What can still fail: a refresh-only plan cannot CREATE anything, so
+          # every expression it evaluates has to resolve from state. A local that
+          # indexes a resource collection outside the target set reads whatever is
+          # stored there — and for a container the apply step has not created yet
+          # that is an empty object, so the record dies on "Invalid index". Config
+          # under this step therefore references not-yet-applied resources by
+          # constant, never by `resource.thing[key].attribute`.
           plan_log=/tmp/secret-stage-plan.log
           stage_plan() {
             terraform plan -no-color -input=false "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$plan_log"
