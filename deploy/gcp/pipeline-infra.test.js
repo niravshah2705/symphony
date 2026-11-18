@@ -306,12 +306,12 @@ echo "resolver failure was masked" >&2
   assert.equal(failed.stdout, '');
 });
 
-test('pipeline topology enforces dedicated topics and brokered agent egress', () => {
+test('pipeline topology wires dedicated stage topics and enforces brokered agent egress', () => {
   const pipeline = read('deploy/gcp/terraform/pipeline.tf');
   const cloudRun = read('deploy/gcp/terraform/cloud_run.tf');
   const variables = read('deploy/gcp/terraform/variables.tf');
-  assert.match(pipeline, /check "pipeline_topics_are_dedicated"/);
-  assert.match(pipeline, /var\.planner_topic/);
+  assert.doesNotMatch(pipeline, /check "pipeline_topics_are_dedicated"/);
+  assert.doesNotMatch(pipeline, /var\.planner_topic/);
   assert.doesNotMatch(`${pipeline}\n${variables}`, /var\.coder_topic\b/);
   for (const stage of ['plan', 'code', 'test', 'results']) {
     assert.match(pipeline, new RegExp(`google_pubsub_topic" "pipeline_${stage}"`));

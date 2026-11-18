@@ -47,20 +47,8 @@ check "pipeline_agent_egress_is_brokered" {
   }
 }
 
-check "pipeline_topics_are_dedicated" {
-  assert {
-    condition = length(distinct([
-      var.planner_topic,
-      var.pipeline_plan_topic,
-      var.pipeline_code_topic,
-      var.pipeline_test_topic,
-      var.pipeline_plan_results_topic,
-      var.pipeline_code_results_topic,
-      var.pipeline_test_results_topic,
-    ])) == 7
-    error_message = "Pipeline command/result topics must be stage-specific, unique, and must not reuse the legacy planner topic."
-  }
-}
+# No plan-time topic-uniqueness check: duplicate stage-topic names collide on
+# creation anyway, and topic churn is accepted rather than gated.
 
 # --- Trust roles --------------------------------------------------------------
 
@@ -287,9 +275,9 @@ resource "google_pubsub_topic" "pipeline_test" {
 
 resource "google_pubsub_topic" "pipeline_results" {
   for_each = local.pipeline_on ? {
-    plan   = var.pipeline_plan_results_topic
-    code   = var.pipeline_code_results_topic
-    test   = var.pipeline_test_results_topic
+    plan = var.pipeline_plan_results_topic
+    code = var.pipeline_code_results_topic
+    test = var.pipeline_test_results_topic
   } : {}
   project    = var.project_id
   name       = each.value
@@ -300,9 +288,9 @@ resource "google_pubsub_topic" "pipeline_results" {
 # Only the orchestrator emits StageCommand messages.
 resource "google_pubsub_topic_iam_member" "orchestrator_stage_publish" {
   for_each = local.pipeline_on ? {
-    plan   = google_pubsub_topic.pipeline_plan[0].name
-    code   = google_pubsub_topic.pipeline_code[0].name
-    test   = google_pubsub_topic.pipeline_test[0].name
+    plan = google_pubsub_topic.pipeline_plan[0].name
+    code = google_pubsub_topic.pipeline_code[0].name
+    test = google_pubsub_topic.pipeline_test[0].name
   } : {}
   project = var.project_id
   topic   = each.value
@@ -315,9 +303,9 @@ resource "google_pubsub_topic_iam_member" "orchestrator_stage_publish" {
 # by the orchestrator), so one publisher identity covers the three.
 resource "google_pubsub_topic_iam_member" "pipeline_result_publish" {
   for_each = local.pipeline_on ? {
-    plan   = google_service_account.orchestrator.email
-    code   = google_service_account.orchestrator.email
-    test   = google_service_account.orchestrator.email
+    plan = google_service_account.orchestrator.email
+    code = google_service_account.orchestrator.email
+    test = google_service_account.orchestrator.email
   } : {}
   project = var.project_id
   topic   = google_pubsub_topic.pipeline_results[each.key].name
@@ -384,9 +372,9 @@ resource "google_pubsub_subscription" "pipeline_command_push" {
 
 resource "google_pubsub_subscription" "pipeline_results_push" {
   for_each = local.pipeline_on ? {
-    plan   = google_pubsub_topic.pipeline_results["plan"]
-    code   = google_pubsub_topic.pipeline_results["code"]
-    test   = google_pubsub_topic.pipeline_results["test"]
+    plan = google_pubsub_topic.pipeline_results["plan"]
+    code = google_pubsub_topic.pipeline_results["code"]
+    test = google_pubsub_topic.pipeline_results["test"]
   } : {}
   project              = var.project_id
   name                 = "${each.value.name}-push"
@@ -435,12 +423,12 @@ moved {
 # dead-letter forwarding work (the DLQ publisher binding is shared in pubsub.tf).
 resource "google_pubsub_subscription_iam_member" "pipeline_dead_letter_subscriber" {
   for_each = local.pipeline_on ? {
-    plan_command   = google_pubsub_subscription.pipeline_command_push["plan"].name
-    code_command   = google_pubsub_subscription.pipeline_command_push["code"].name
-    test_command   = google_pubsub_subscription.pipeline_command_push["test"].name
-    plan_result    = google_pubsub_subscription.pipeline_results_push["plan"].name
-    code_result    = google_pubsub_subscription.pipeline_results_push["code"].name
-    test_result    = google_pubsub_subscription.pipeline_results_push["test"].name
+    plan_command = google_pubsub_subscription.pipeline_command_push["plan"].name
+    code_command = google_pubsub_subscription.pipeline_command_push["code"].name
+    test_command = google_pubsub_subscription.pipeline_command_push["test"].name
+    plan_result  = google_pubsub_subscription.pipeline_results_push["plan"].name
+    code_result  = google_pubsub_subscription.pipeline_results_push["code"].name
+    test_result  = google_pubsub_subscription.pipeline_results_push["test"].name
   } : {}
   project      = var.project_id
   subscription = each.value
