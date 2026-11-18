@@ -64,7 +64,16 @@ output "flexprice_releases" {
     # is. Surfaced anyway because a release whose app_version moved is a chart
     # whose templates moved too.
     app_version = helm_release.flexprice_app[0].metadata[0].app_version
-  } : {}
+    } : {
+    # Same attribute set as the enabled branch: a Terraform conditional unifies
+    # its two sides, and a bare {} lacks infra/migration/app/app_version — the
+    # mismatch is invisible to `validate` and only errors when a plan evaluates
+    # this output with flexprice_enabled=true.
+    infra       = null
+    migration   = null
+    app         = null
+    app_version = null
+  }
 }
 
 output "flexprice_secret_ids" {
