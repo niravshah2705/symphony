@@ -105,7 +105,7 @@ means `graphPersonaViolations` runs before the write.
 | `DELETE /:id` | write | — | `404` |
 | `POST /:id/duplicate` | write | source graph must be persona-legal | `400`, `404` |
 | `POST /reset` | write | re-copies platform defaults over tenant edits | — |
-| `POST /import` | write | refuses while the tenant has graphs | `400` no valid input |
+| `POST /import` | write + **persona gate on each graph** | refuses while the tenant has graphs | `403 persona_denied`, `400` no valid input |
 | `GET /agents` | read | — | — |
 | `POST /agents`, `PUT /agents/:id` | write | profile fields validated | `400` |
 | `DELETE /agents/:id` | write | a platform-default id cannot be deleted | `400`, `404` |

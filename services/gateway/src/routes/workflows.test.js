@@ -145,6 +145,39 @@ test('unknown ids 404 and v1 import refuses to clobber existing graphs', async (
   } finally { server.close(); }
 });
 
+test('v1 import passes the same persona gate as a graph write', async () => {
+  // Import was the one graph write without the gate, and the browser can reach it
+  // with a persona the write routes refuse: `canWrite` comes from the org role,
+  // the gate reads the stored per-uid persona, and those are separate records.
+  const { app, state } = buildApp();
+  const { server, url } = await start(app);
+  const payload = {
+    workflows: [{
+      id: 'v1-gated', name: 'Old', edges: [],
+      nodes: [{ id: 'a', kind: 'agent', refId: 'coding', name: 'A', x: 0, y: 0 }],
+    }],
+  };
+  try {
+    await call(url, 'GET', '/api/workflows');
+    state.identity = IDENTITIES.designer;
+    assert.equal((await call(url, 'GET', '/api/workflows/me')).body.persona, 'builder', 'a fresh uid starts at the default persona');
+
+    await call(url, 'PUT', '/api/workflows/me/persona', { body: { persona: 'product-designer' } });
+    const denied = await call(url, 'POST', '/api/workflows/import', { body: payload });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.body.code, 'persona_denied');
+    assert.match(denied.body.violations[0], /Coding/);
+    assert.ok(!wfStore.listWorkflows().some((workflow) => workflow.id === 'v1-gated'), 'the refused graph reached the store anyway');
+
+    // Byte-identical payload, granted persona: the gate is persona-driven and not
+    // a blanket block on import. It then lands in the existing-graphs refusal.
+    await call(url, 'PUT', '/api/workflows/me/persona', { body: { persona: 'builder' } });
+    const allowed = await call(url, 'POST', '/api/workflows/import', { body: payload });
+    assert.equal(allowed.status, 200);
+    assert.equal(allowed.body.skipped, true);
+  } finally { server.close(); }
+});
+
 test('agent profile CRUD validates kagent specs and guards referenced deletes', async () => {
   const { app } = buildApp();
   const { server, url } = await start(app);
@@ -171,6 +204,45 @@ test('agent profile CRUD validates kagent specs and guards referenced deletes', 
     const deleteDefault = await call(url, 'DELETE', '/api/workflows/agents/coding');
     assert.equal(deleteDefault.status, 400);
     assert.match(deleteDefault.body.error, /Platform default/);
+  } finally { server.close(); }
+});
+
+test('a credential-shaped kagent env row never reaches a stored agent profile, on either backend', async () => {
+  // The invariant docs/WORKFLOWS_AUTHENTICATION.md states for `kagentSpec.env`:
+  // the row is dropped rather than stored. Graph nodes got that by persisting the
+  // normalized spec; a profile that validates the spec and then writes the input
+  // back keeps the credential in the tenant document AND echoes it to every reader
+  // of GET /api/workflows. Both halves are asserted because the publish path
+  // re-normalizes, so a clean CR is not evidence the document is clean.
+  const { app } = buildApp();
+  const { server, url } = await start(app);
+  // Matched by the NAME half of the SECRETISH test, so the fixture never carries
+  // a live-looking key literal while still being the row the rule must drop.
+  const secret = 'must-not-be-stored-here';
+  try {
+    for (const backend of ['kagent', 'substrate']) {
+      const id = `leak-${backend}`;
+      const saved = await call(url, 'PUT', `/api/workflows/agents/${id}`, {
+        body: {
+          name: `Leak ${backend}`, category: 'Coding', backend,
+          kagent: {
+            modelConfig: { name: 'default-model-config' },
+            env: [{ name: 'LOG_LEVEL', value: 'info' }, { name: 'ANTHROPIC_API_KEY', value: secret }],
+          },
+        },
+      });
+      assert.equal(saved.status, 200);
+      assert.ok(!JSON.stringify(saved.body).includes(secret), `${backend}: create response echoed the credential`);
+
+      const stored = wfStore.listAgentProfiles().find((profile) => profile.id === id);
+      assert.ok(stored, `${backend}: profile was not stored`);
+      assert.ok(!JSON.stringify(stored).includes(secret), `${backend}: credential persisted in the stored profile`);
+      assert.deepEqual(stored.kagent.env, [{ name: 'LOG_LEVEL', value: 'info' }], `${backend}: dropped the row along with the secret`);
+    }
+
+    const list = await call(url, 'GET', '/api/workflows');
+    assert.equal(list.status, 200);
+    assert.ok(!JSON.stringify(list.body).includes(secret), 'GET /api/workflows echoed a stored credential');
   } finally { server.close(); }
 });
 

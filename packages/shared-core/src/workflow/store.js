@@ -184,8 +184,16 @@ function upsertAgentProfile(input, { actor = null } = {}) {
   const id = model.stableId(input && input.id);
   const name = model.plainText(input && input.name, 120);
   if (!id || !name) return { error: 'Agent profile needs a valid id and name.' };
-  const spec = input.backend === 'kagent' && input.kagent ? model.normalizeKagentSpec(input.kagent) : null;
-  if (spec && spec.errors.length) return { error: spec.errors[0], errors: spec.errors };
+  // Normalize whatever backend claims the spec for. The credential-shaped env
+  // rows `normalizeKagentSpec` drops only stay out of the document if the
+  // normalized result is what gets written — validating and then storing the
+  // input left the row in Firestore and in the API response. Shape errors refuse
+  // a kagent profile, which has no other runtime to fall back to, and are left to
+  // the publish path for any other backend, as they are for graph nodes.
+  const normalized = input.kagent == null ? null : model.normalizeKagentSpec(input.kagent);
+  if (normalized && input.backend === 'kagent' && normalized.errors.length) {
+    return { error: normalized.errors[0], errors: normalized.errors };
+  }
   const profile = {
     schemaVersion: 2,
     custom: true,
@@ -204,7 +212,7 @@ function upsertAgentProfile(input, { actor = null } = {}) {
     taskTier: model.TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium',
     connectors: input.connectors || [],
     systemPrompt: model.plainText(input.systemPrompt, 16000),
-    kagent: input.kagent || null,
+    kagent: normalized ? normalized.spec : null,
     runtime: model.plainText(input.runtime, 60),
     updatedBy: actor ? String(actor) : null,
     updatedAt: nowIso(),

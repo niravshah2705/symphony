@@ -145,7 +145,17 @@ function createWorkflowsRouter({ kagentAdapter = null, substrateAdapter = null }
   // One-time carry-over of graphs designed in the localStorage (v1) designer.
   router.post('/import', asyncHandler(async (req, res) => {
     const ctx = callerContext(req);
-    const result = wfStore.importV1Workflows(bodyOf(req).workflows);
+    const supplied = bodyOf(req).workflows;
+    // Every other graph write passes this gate, and the v1 payload is a graph
+    // write: `importV1Workflows` only defaults `backend`/`taskTier`, so the agent
+    // nodes arrive with their `kind` and `refId` intact and are checked as stored.
+    // Without it, a persona that `PUT /:id` refuses could still land the same
+    // graph here — the browser sends an import with `canWrite` from the org role,
+    // which is a different record from the persona this gate reads.
+    if (Array.isArray(supplied)) {
+      for (const graph of supplied) if (!assertGraphPersona(res, ctx, graph)) return undefined;
+    }
+    const result = wfStore.importV1Workflows(supplied);
     if (!result.ok && !result.skipped) return res.status(400).json({ error: result.reason });
     if (result.skipped && !result.workflows.length) return res.status(400).json({ error: result.reason });
     return res.json({ imported: result.imported || 0, skipped: Boolean(result.skipped), workflows: wfStore.listWorkflows() });
