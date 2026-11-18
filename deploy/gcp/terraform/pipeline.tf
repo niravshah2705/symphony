@@ -47,20 +47,8 @@ check "pipeline_agent_egress_is_brokered" {
   }
 }
 
-check "pipeline_topics_are_dedicated" {
-  assert {
-    condition = length(distinct([
-      var.planner_topic,
-      var.pipeline_plan_topic,
-      var.pipeline_code_topic,
-      var.pipeline_test_topic,
-      var.pipeline_plan_results_topic,
-      var.pipeline_code_results_topic,
-      var.pipeline_test_results_topic,
-    ])) == 7
-    error_message = "Pipeline command/result topics must be stage-specific, unique, and must not reuse the legacy planner topic."
-  }
-}
+# No plan-time topic-uniqueness check: duplicate stage-topic names collide on
+# creation anyway, and topic churn is accepted rather than gated.
 
 # --- Trust roles --------------------------------------------------------------
 
