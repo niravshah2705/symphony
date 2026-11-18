@@ -16,9 +16,9 @@ import (
 const (
 	Version = 1
 	// PinnedPiVersion is the pi release the Dockerfile installs by default.
-	// It is NOT asserted at runtime (StrictVersion is false) because the experimental
-	// scaffold has no validated upstream pin yet — set it once the feed is confirmed.
-	PinnedPiVersion = "1.4.0"
+	// It is asserted at runtime: the image installs exactly this version and Validate
+	// fails a turn if `--version` does not report it.
+	PinnedPiVersion = "1.5.2"
 	// DisableUpdatesEnvName keeps the native CLI from self-updating past the installed version.
 	DisableUpdatesEnvName = "PI_DISABLE_AUTO_UPDATE"
 )
@@ -58,8 +58,8 @@ const maxEventBytes = 16 << 20
 func Production(model, instruction string) Config {
 	return Config{
 		Version: Version, Executable: "pi",
-		StrictVersion: false, // no validated upstream pin yet — do not hard-fail a turn on version drift
-		Model:         model, SystemPrompt: instruction,
+		ExpectedVersion: PinnedPiVersion, StrictVersion: true,
+		Model: model, SystemPrompt: instruction,
 		MaxEventBytes: maxEventBytes, MaxStderrBytes: 64 << 10,
 		InterruptGraceMillis: 2000,
 	}

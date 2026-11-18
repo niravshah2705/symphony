@@ -12,14 +12,16 @@ own `deploy/gcp/Dockerfile.coder` or the GCP Artifact Registry pipeline — that
 intentional. Integrating them behind `substratePlannerImage` /
 `harness-catalog.json` is a separate effort.
 
-> **Dark Dockerfiles (not published).** Six additional experimental harness scaffolds —
-> `opencode`, `gemini`, `pi`, `qoder`, `kilo`, `goose` — ship a `go/harness/<id>/Dockerfile` that
-> is **manually buildable only**. They have **no row in `go/harness/runtime-images.csv`**, so
-> `build-runtime-images.yml` never publishes them and `scripts/verify-runtime-images.sh` never
-> resolves them. Before a row may land: confirm a pinned upstream CLI feed, set the runtime image
-> version, add the runtime to the `resolve_url`/`arch_url` selectors in
-> `scripts/verify-runtime-images.sh`, and replace each scaffold's `StrictVersion: false` with a
-> validated pin. Until then these runtimes compile and unit-test but cannot run in-cluster.
+> **Experimental, published-but-not-in-cluster.** Six additional harness scaffolds —
+> `opencode`, `gemini`, `pi`, `qoder`, `kilo`, `goose` — now have a single `current: true` row each in
+> `go/harness/runtime-images.csv`, so `build-runtime-images.yml` resolves, preflights and publishes their
+> images, and `scripts/verify-runtime-images.sh` knows their upstream feeds (`resolve_url`). Each pins a
+> real, resolvable CLI release (opencode-ai, @google/gemini-cli, @earendil-works/pi-coding-agent,
+> @qoder-ai/qodercli, @kilocode/cli, goose) and asserts it at runtime (`StrictVersion: true`). What they
+> still do **not** have is the in-cluster path: no upstream kagent CRD `spec.<runtime>` key and no controller
+> translator, and their drivers are bounded stdout→TextDelta passthroughs. So the images build and run
+> standalone, but the fleet cannot dispatch a turn to them through kagent yet. `qoder` additionally fails
+> closed under the egress proxy (see `docs/HARNESS_CAPABILITY_MATRIX.md`).
 
 ## Layout
 
@@ -44,8 +46,15 @@ intentional. Integrating them behind `substratePlannerImage` /
 | codex | `ghcr.io/niravshah2705/symphony/codex-runtime` | `openai/codex` `rust-v*` release (musl tarball, sha256-pinned) |
 | deepagent | `ghcr.io/niravshah2705/symphony/deepagent-runtime` | PyPI `deepagents-code` (uv tool install; glibc base — see below) |
 | deepseek | `ghcr.io/niravshah2705/symphony/deepseek-runtime` | npm `@deepseek-ai/dsh` (global install; glibc base for native deps) |
+| opencode | `ghcr.io/niravshah2705/symphony/opencode-runtime` | npm `opencode-ai` (global install; node:22-slim base) |
+| gemini | `ghcr.io/niravshah2705/symphony/gemini-runtime` | npm `@google/gemini-cli` (global install; node:22-slim base) |
+| pi | `ghcr.io/niravshah2705/symphony/pi-runtime` | npm `@earendil-works/pi-coding-agent` (global install; node:22-slim base) |
+| qoder | `ghcr.io/niravshah2705/symphony/qoder-runtime` | npm `@qoder-ai/qodercli` (global install; provides the `qodercli` bin) |
+| kilo | `ghcr.io/niravshah2705/symphony/kilo-runtime` | npm `@kilocode/cli` (global install; node:22-slim base) |
+| goose | `ghcr.io/niravshah2705/symphony/goose-runtime` | `aaif-goose/goose` release tarball, per-arch `goose-<arch>-unknown-linux-gnu.tar.gz` (ubuntu base) |
 
-Each runtime ships **current + last 3 versions** (4 tags) in the CSV.
+The last six ship **one `current: true` version row each** (added with the kagent-registry PR); claude, codex,
+deepagent and deepseek ship **current + last 3 versions** (4 tags) each.
 
 `current` is a *tagging* flag, so a rotation moves two rows: the new current row
 (builds `:<version>` + `:latest`) and the demoted one (its `current` flipped to
@@ -59,7 +68,7 @@ beats sixteen.
 | --- | --- |
 | `runtime-images.csv` on a PR | none — the run resolves, preflights and reports the rows it *would* publish |
 | `runtime-images.csv` merged to `main` | only rows whose version, checksums or `current` moved |
-| a `Dockerfile` or the workflow itself | the whole manifest (16) — the recipe changed for every image |
+| a `Dockerfile` or the workflow itself | the whole manifest (22) — the recipe changed for every image |
 | anything else on `main` | nothing (the workflow does not trigger) |
 | `workflow_dispatch`, `rebuild: all` | the whole manifest, or one runtime if `runtime` is set |
 | `workflow_dispatch`, `rebuild: changed` | rows that moved versus the previous commit |

@@ -14,7 +14,7 @@ loop, and tool surface) — see [`../GLOSSARY.md`](../GLOSSARY.md): *"what runs 
 |---|---|---|
 | `native-full` | Real native runtime: controller translator + durable HITL + a machine-readable event protocol (stream-JSON / JSON-RPC). Runs end-to-end. | `go/harness/claude`, `go/harness/codex` (built images, README checklists) |
 | `passthrough-bounded` | Runs a CLI subprocess but only maps **stdout lines → TextDelta**; no confirmed event protocol, so no tool/subagent/MCP events. | `go/harness/deepagent`, `go/harness/deepseek` (`driver.go` NOTE) |
-| `scaffold-experimental` | Source scaffold **compiles + unit-tests offline** but has NO published image, NO controller translator, NO upstream kagent CRD `spec.<runtime>` key → **cannot run in-cluster yet**. | the 6 new dirs (build/vet/test green, dark Dockerfiles) |
+| `scaffold-experimental` | **Published image** (one pinned `current` version, `StrictVersion` asserted, `verify-runtime-images.sh` resolves the feed) and source compiles + unit-tests offline, driver is a bounded stdout→TextDelta passthrough — but there is still NO controller translator and NO upstream kagent CRD `spec.<runtime>` key → **cannot run in-cluster yet**. | the 6 new dirs (CSV row + build/vet/test green; in-cluster translator absent) |
 
 ## Harnesses covered
 
@@ -132,7 +132,7 @@ verify against the pinned CLI before trusting; none are asserted at runtime yet)
 | Qoder (JS) | `QODER_PERSONAL_ACCESS_TOKEN`, `QODERCLI_PATH`, `QODER_MODEL` | `packages/shared-core/src/config.js:483-493`, `store.js:717` |
 | Common agent env | `EGRESS_PROXY_URL`, `STREAM_TOKEN_SERVICE_URL`, `LANGFUSE_*` (basic-pair), `LLM_GATEWAY_FLAG` | `packages/shared/src/config.js`, `egress.js` |
 
-### scaffold-experimental runtimes (proposed — not yet asserted)
+### scaffold-experimental runtimes (image published + CLI pin asserted; provider env still to verify)
 
 | Harness | Executable | Disable-update env | Other env (proposed) |
 |---|---|---|---|
@@ -143,9 +143,25 @@ verify against the pinned CLI before trusting; none are asserted at runtime yet)
 | Kilo | `kilo` | `KILO_DISABLE_UPDATE` | `@kilocode/cli`; Claude/OpenAI-compat provider env *(low confidence)* |
 | Goose | `goose` | `GOOSE_DISABLE_VERSION_CHECK` | `GOOSE_PROVIDER`, `GOOSE_MODEL`; overrides `~/.config/goose/config.yaml` |
 
-Each scaffold's `Production()` config sets `StrictVersion: false` and no asserted `expected_version`,
-and sets `runtime_telemetry.runtime` empty — so a `--check` or a turn cannot silently claim a verified
-provider pin or emit a telemetry runtime string the weaver registry doesn't know. See the honesty
+Each runtime now has a `go/harness/runtime-images.csv` row (`current: true`, one pinned version), a
+`resolve_url` entry in `scripts/verify-runtime-images.sh`, and a `Production()` config that sets
+`ExpectedVersion: Pinned<X>Version` with `StrictVersion: true` — so a `--check` or a turn asserts the exact
+CLI the image installs. Pinned versions / packages:
+
+| Runtime | Package (feed) | Pinned version |
+|---|---|---|
+| OpenCode | npm `opencode-ai` | 1.19.6 |
+| Gemini CLI | npm `@google/gemini-cli` | 0.68.0 |
+| Pi | npm `@earendil-works/pi-coding-agent` | 1.5.2 |
+| Qoder | npm `@qoder-ai/qodercli` (provides the `qodercli` bin) | 1.1.92 |
+| Kilo | npm `@kilocode/cli` | 7.8.27 |
+| Goose | `aaif-goose/goose` release tarball (per-arch `goose-<arch>-unknown-linux-gnu.tar.gz`) | 1.60.1 |
+
+What is still **not** asserted: `runtime_telemetry.runtime` stays empty on each scaffold (the weaver
+registry has no entry for these runtimes, so a span would emit an unknown runtime string), and the
+disable-update / provider env names marked *proposed* above need confirmation against each vendor's docs.
+Publishing the image proves the CLI installs and version-checks; it does **not** mean the fleet can
+dispatch an in-cluster kagent turn (no CRD `spec.<runtime>` key, no controller translator). See the honesty
 guards in `go/harness/README.md`.
 
 ## 5. Harness CR appendix (`api.kagent.dev/v1alpha3`)

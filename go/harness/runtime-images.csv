@@ -15,3 +15,9 @@ deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-
 deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.3,,,false
 deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.2,,,false
 deepseek,go/harness/deepseek/Dockerfile,ghcr.io/niravshah2705/symphony/deepseek-runtime,0.2.2-rc.1,,,false
+opencode,go/harness/opencode/Dockerfile,ghcr.io/niravshah2705/symphony/opencode-runtime,1.19.6,,,true
+gemini,go/harness/gemini/Dockerfile,ghcr.io/niravshah2705/symphony/gemini-runtime,0.68.0,,,true
+pi,go/harness/pi/Dockerfile,ghcr.io/niravshah2705/symphony/pi-runtime,1.5.2,,,true
+qoder,go/harness/qoder/Dockerfile,ghcr.io/niravshah2705/symphony/qoder-runtime,1.1.92,,,true
+kilo,go/harness/kilo/Dockerfile,ghcr.io/niravshah2705/symphony/kilo-runtime,7.8.27,,,true
+goose,go/harness/goose/Dockerfile,ghcr.io/niravshah2705/symphony/goose-runtime,1.60.1,,,true

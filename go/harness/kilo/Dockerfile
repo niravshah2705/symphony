@@ -1,7 +1,7 @@
 # Kilo (kilo) native harness runtime image.
-# EXPERIMENTAL SCAFFOLD — buildable manually only; NOT in go/harness/runtime-images.csv.
+# EXPERIMENTAL — published via go/harness/runtime-images.csv; no in-cluster kagent translator yet.
 # Build context is the module root:  docker build -f go/harness/kilo/Dockerfile go
-#   --build-arg RUNTIME_VERSION=0.0.0
+#   --build-arg RUNTIME_VERSION=7.8.27
 # Claude/OpenAI-compatible provider env (proposed; verify upstream).
 ARG BASE_IMAGE_REGISTRY=cgr.dev
 ARG BUILDPLATFORM
@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod,rw \
     go build -trimpath -o /kilo-runtime ./harness/kilo/cmd
 
 FROM node:22-slim
-ARG RUNTIME_VERSION=0.0.0
+ARG RUNTIME_VERSION=7.8.27
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates git curl \
     && rm -rf /var/lib/apt/lists/* \

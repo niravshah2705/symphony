@@ -1,7 +1,7 @@
 # Gemini (gemini) native harness runtime image.
-# EXPERIMENTAL SCAFFOLD — buildable manually only; NOT in go/harness/runtime-images.csv.
+# EXPERIMENTAL — published via go/harness/runtime-images.csv; no in-cluster kagent translator yet.
 # Build context is the module root:  docker build -f go/harness/gemini/Dockerfile go
-#   --build-arg RUNTIME_VERSION=0.0.0
+#   --build-arg RUNTIME_VERSION=0.68.0
 # GEMINI_API_KEY / GOOGLE_API_KEY; Vertex via GOOGLE_GENAI_USE_VERTEXAI + GOOGLE_CLOUD_PROJECT.
 ARG BASE_IMAGE_REGISTRY=cgr.dev
 ARG BUILDPLATFORM
@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/go/pkg/mod,rw \
     go build -trimpath -o /gemini-runtime ./harness/gemini/cmd
 
 FROM node:22-slim
-ARG RUNTIME_VERSION=0.0.0
+ARG RUNTIME_VERSION=0.68.0
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates git curl \
     && rm -rf /var/lib/apt/lists/* \

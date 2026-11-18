@@ -39,7 +39,7 @@ runtime events -> runtime/a2a      private A2A task stream
 | --- | --- |
 | [`claude`](claude/README.md) | Claude Code configuration, materialization, process protocol, and image |
 | [`codex`](codex/README.md) | Codex App Server configuration, JSON-RPC driver, and image |
-| [`opencode`](opencode), [`gemini`](gemini), [`pi`](pi), [`qoder`](qoder), [`kilo`](kilo), [`goose`](goose) | **experimental scaffolds** — bounded stdout-passthrough drivers mirroring `deepagent`. Not in `runtime-images.csv`, no controller translator, no upstream kagent CRD `spec.<runtime>` key, so they cannot run in-cluster yet. See [`docs/HARNESS_CAPABILITY_MATRIX.md`](../../docs/HARNESS_CAPABILITY_MATRIX.md) |
+| [`opencode`](opencode), [`gemini`](gemini), [`pi`](pi), [`qoder`](qoder), [`kilo`](kilo), [`goose`](goose) | **experimental** — bounded stdout-passthrough drivers mirroring `deepagent`. Now **published** in `runtime-images.csv` (one pinned `current` version each, `StrictVersion` asserted against the installed CLI), so the images build and version-check. They still have **no controller translator and no upstream kagent CRD `spec.<runtime>` key**, so they **cannot run in-cluster yet**. See [`docs/HARNESS_CAPABILITY_MATRIX.md`](../../docs/HARNESS_CAPABILITY_MATRIX.md) |
 | [`runtime/runtime.go`](runtime/runtime.go) | Public runtime-neutral turn, event, sink, and outcome model |
 | [`runtime/a2a`](runtime/a2a) | Serializes Actor execution and maps runtime events to upstream A2A events |
 | [`runtime/continuation`](runtime/continuation) | Atomically persists the one native continuation ID owned by an Actor |
