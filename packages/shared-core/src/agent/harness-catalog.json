@@ -99,6 +99,39 @@
       "capabilities": ["planning", "coding", "testing", "subagents"],
       "stages": ["planning", "coding", "testing"],
       "brokeredStages": []
+    },
+    {
+      "id": "gemini-cli",
+      "label": "Gemini CLI",
+      "harnessName": "gemini",
+      "packageName": "@google/gemini-cli",
+      "requiresProvider": "gemini",
+      "availability": "experimental",
+      "capabilities": ["planning"],
+      "stages": ["planning"],
+      "brokeredStages": ["planning"]
+    },
+    {
+      "id": "kilo",
+      "label": "Kilo Code",
+      "harnessName": "kilo",
+      "packageName": "@kilocode/cli",
+      "requiresProvider": null,
+      "availability": "experimental",
+      "capabilities": ["planning", "coding", "testing"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": []
+    },
+    {
+      "id": "goose",
+      "label": "Goose",
+      "harnessName": "goose",
+      "packageName": "aaif-goose/goose",
+      "requiresProvider": null,
+      "availability": "experimental",
+      "capabilities": ["planning", "coding", "testing"],
+      "stages": ["planning", "coding", "testing"],
+      "brokeredStages": []
     }
   ]
 }

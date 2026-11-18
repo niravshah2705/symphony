@@ -27,7 +27,10 @@
     "opencode": "opencode-profile",
     "pi": "pi-package",
     "oh-my-pi": "oh-my-pi-marketplace",
-    "deepseek": "dsh-skills"
+    "deepseek": "dsh-skills",
+    "gemini-cli": "gemini-skills",
+    "kilo": "kilo-skills",
+    "goose": "goose-skills"
   },
   "skills": [
     { "name": "commit", "vendored": true },

@@ -36,6 +36,9 @@ const TOOL_VERSIONS = Object.freeze({
   qoder: '1.0.58',
   pi: '1.4.0',
   omp: '18.13.3',
+  gemini: '0.68.0',
+  kilo: '7.8.27',
+  goose: '1.60.1',
   'ecc-installer': '2.2.x',
 });
 
@@ -134,6 +137,33 @@ const STRATEGY_METADATA = Object.freeze({
     capabilities: { native: ['skills'], companion: [] },
     limitations: [
       'DeepSeek Harness is a developer preview; this artifact stages ECC SKILL.md bundles only and does not activate ECC commands, agents, hooks, MCP servers, credentials, or profiles.',
+    ],
+  },
+  'gemini-cli': {
+    installer: { name: '@google/gemini-cli', version: TOOL_VERSIONS.gemini },
+    compatibility: 'native-skills',
+    capabilities: { native: ['skills'], companion: [] },
+    limitations: [
+      'ECC ships no Gemini CLI adapter; this artifact stages validated ECC SKILL.md bundles into ~/.gemini/skills only — commands, agents, hooks, MCP servers, and credentials are not materialized.',
+      'The Gemini CLI runtime is an experimental scaffold with no in-cluster kagent translator; it is not registered for execution.',
+    ],
+  },
+  kilo: {
+    installer: { name: '@kilocode/cli', version: TOOL_VERSIONS.kilo },
+    compatibility: 'native-skills',
+    capabilities: { native: ['skills'], companion: [] },
+    limitations: [
+      'ECC ships no Kilo adapter; this artifact stages validated ECC SKILL.md bundles into ~/.kilo/skills only — commands, agents, hooks, MCP servers, and credentials are not materialized.',
+      'The Kilo runtime is an experimental scaffold with no in-cluster kagent translator; it is not registered for execution.',
+    ],
+  },
+  goose: {
+    installer: { name: 'goose', version: TOOL_VERSIONS.goose },
+    compatibility: 'native-skills',
+    capabilities: { native: ['skills'], companion: [] },
+    limitations: [
+      'ECC ships no Goose adapter; this artifact stages validated ECC SKILL.md bundles into ~/.goose/skills only — Goose is MCP-native, but MCP servers, commands, hooks, and credentials are not materialized by this artifact.',
+      'The Goose runtime is an experimental scaffold with no in-cluster kagent translator; it is not registered for execution.',
     ],
   },
 });
@@ -1226,6 +1256,39 @@ function installQoder(context) {
   return { stagedSkills: staged.skillNames };
 }
 
+function installGemini(context) {
+  // Experimental scaffold: ECC has no Gemini CLI adapter, so stage the validated
+  // SKILL.md bundles into ~/.gemini/skills without activating other surfaces.
+  const realHomeRoot = requireRealDirectory(context.homeRoot, 'Gemini artifact home root');
+  const staged = stageDshSkills(
+    { ...context, homeRoot: realHomeRoot },
+    { rootName: '.gemini', label: 'Gemini' }
+  );
+  return { stagedSkills: staged.skillNames };
+}
+
+function installKilo(context) {
+  // Experimental scaffold: ECC has no Kilo adapter, so stage the validated
+  // SKILL.md bundles into ~/.kilo/skills without activating other surfaces.
+  const realHomeRoot = requireRealDirectory(context.homeRoot, 'Kilo artifact home root');
+  const staged = stageDshSkills(
+    { ...context, homeRoot: realHomeRoot },
+    { rootName: '.kilo', label: 'Kilo' }
+  );
+  return { stagedSkills: staged.skillNames };
+}
+
+function installGoose(context) {
+  // Experimental scaffold: ECC has no Goose adapter, so stage the validated
+  // SKILL.md bundles into ~/.goose/skills without activating other surfaces.
+  const realHomeRoot = requireRealDirectory(context.homeRoot, 'Goose artifact home root');
+  const staged = stageDshSkills(
+    { ...context, homeRoot: realHomeRoot },
+    { rootName: '.goose', label: 'Goose' }
+  );
+  return { stagedSkills: staged.skillNames };
+}
+
 function installOpencode(context) {
   run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], {
     cwd: context.sourceRoot,
@@ -1310,6 +1373,9 @@ const HARNESS_INSTALLERS = Object.freeze({
   pi: installPi,
   'oh-my-pi': installOhMyPi,
   deepseek: installDeepseek,
+  'gemini-cli': installGemini,
+  kilo: installKilo,
+  goose: installGoose,
 });
 
 function directoryHasFile(root) {

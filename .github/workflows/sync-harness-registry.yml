@@ -145,6 +145,15 @@ jobs:
           - harness: deepseek
             python: false
             bun: false
+          - harness: gemini-cli
+            python: false
+            bun: false
+          - harness: kilo
+            python: false
+            bun: false
+          - harness: goose
+            python: false
+            bun: false
     steps:
       - uses: actions/checkout@v6
         with:
@@ -274,7 +283,7 @@ jobs:
           REGISTRY_DIR: ${{ runner.temp }}/registry
         run: |
           set -euo pipefail
-          test "$(find "$INPUTS_DIR/harnesses" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "9"
+          test "$(find "$INPUTS_DIR/harnesses" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "12"
           test -f "$INPUTS_DIR/resolve/source.json"
           test -d "$INPUTS_DIR/resolve/inert"
           node scripts/build-harness-artifact.js assemble \
@@ -288,7 +297,7 @@ jobs:
           jq -e \
             --arg schema "harness-registry/v2" \
             --arg version "$REGISTRY_VERSION" \
-            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 9)' \
+            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 12)' \
             "$INDEX" >/dev/null
 
       - name: Upload verified registry
@@ -325,17 +334,17 @@ jobs:
           test -f "$INDEX"
           test -d "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses"
           test -d "$REGISTRY_DIR/$REGISTRY_VERSION/inert"
-          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name artifact.json -type f | wc -l | tr -d ' ')" = "9"
-          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name rootfs.tar.gz -type f | wc -l | tr -d ' ')" = "9"
+          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name artifact.json -type f | wc -l | tr -d ' ')" = "12"
+          test "$(find "$REGISTRY_DIR/$REGISTRY_VERSION/harnesses" -name rootfs.tar.gz -type f | wc -l | tr -d ' ')" = "12"
           jq -e \
             --arg schema "harness-registry/v2" \
             --arg version "$REGISTRY_VERSION" \
-            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 9)' \
+            '.schemaVersion == $schema and .version == $version and (.harnesses | length == 12)' \
             "$INDEX" >/dev/null
 
           for HARNESS_ID in \
             deepagent codex-sdk claude-agent-sdk antigravity-sdk qoder-sdk \
-            opencode pi oh-my-pi deepseek
+            opencode pi oh-my-pi deepseek gemini-cli kilo goose
           do
             HARNESS_DIR="$REGISTRY_DIR/$REGISTRY_VERSION/harnesses/$HARNESS_ID"
             DESCRIPTOR="$HARNESS_DIR/artifact.json"

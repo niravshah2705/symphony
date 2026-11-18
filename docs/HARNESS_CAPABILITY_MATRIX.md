@@ -193,8 +193,15 @@ emit a `Harness` CR.
 ## PR-2 boundary
 
 `opencode`, `pi`, `qoder` already appear in the **SDK/artifact catalog**
-(`packages/shared-core/src/agent/harness-catalog.json`) as `experimental`/`available`; `gemini-cli`,
-`kilo`, `goose` do not. Adding them to that catalog is a separate change that forces lockstep edits
-across `registry/schema.js`, `registry/sources.json`, `scripts/harness-registry/artifact-builder.js`,
-and `.github/workflows/sync-harness-registry.yml` (exact-key-set + hardcoded-count enforcement). That
-ECC build pipeline is orthogonal to the kagent format documented here.
+(`packages/shared-core/src/agent/harness-catalog.json`) as `experimental`/`available`. PR-2 adds
+`gemini-cli`, `kilo`, `goose` to that catalog as `experimental` entries. Adding a catalog id forces
+lockstep edits across `registry/schema.js` (`HARNESS_STRATEGIES`), `registry/sources.json`
+(`harnessStrategies`), `scripts/harness-registry/artifact-builder.js` (`STRATEGY_METADATA` + installer),
+and `.github/workflows/sync-harness-registry.yml` (matrix + the `12` counts), each enforced by an
+exact-key-set / hardcoded-count test.
+
+The three new ids are **skills-only artifacts** (ECC ships no Gemini/Kilo/Goose adapter — the installer
+stages validated `SKILL.md` bundles into `~/.<tool>/skills`), and they stay `experimental`, so
+`packages/shared/src/agent/harnesses/registry.js` never registers them for execution and the policy
+universe excludes them. This ECC build pipeline is orthogonal to the kagent format documented above:
+a published artifact here does **not** imply an in-cluster kagent `spec.<runtime>` translator.

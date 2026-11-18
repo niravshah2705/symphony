@@ -51,6 +51,9 @@ const HARNESS_STRATEGIES = Object.freeze({
   pi: 'pi-package',
   'oh-my-pi': 'oh-my-pi-marketplace',
   deepseek: 'dsh-skills',
+  'gemini-cli': 'gemini-skills',
+  kilo: 'kilo-skills',
+  goose: 'goose-skills',
 });
 
 const FULL_GIT_SHA_RE = /^[0-9a-f]{40}$/;
