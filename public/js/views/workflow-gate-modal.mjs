@@ -48,7 +48,11 @@ export function openGateReview({ node, gateTemplate, canEdit = true, onApply, on
     'Every card needs a title: a gate whose cards are all untitled is dropped from the graph when it saves.');
   const grid = el('div', { class: 'workflow-gate-cards' });
 
-  const approve = el('button', { type: 'button', class: 'btn primary' }, 'Allow to move further');
+  const approve = el('button', { type: 'button', class: 'btn primary workflow-gate-approve' }, [
+    icon('check', { size: 14 }),
+    el('span', {}, 'Allow to move further'),
+    el('span', { class: 'workflow-gate-approve-hint' }, '(approve gate)'),
+  ]);
   const save = el('button', { type: 'button', class: 'btn' }, 'Save draft');
   const cancel = el('button', { type: 'button', class: 'btn' }, 'Cancel');
 
@@ -117,7 +121,10 @@ export function openGateReview({ node, gateTemplate, canEdit = true, onApply, on
         if (!current) return;
         current.items = current.items.map((item, i) => (i === index ? input.value : item));
       });
-      return input;
+      return el('div', { class: 'workflow-gate-item-row' }, [
+        el('span', { class: 'workflow-gate-item-index' }, String(index + 1)),
+        input,
+      ]);
     }));
 
     const remove = el('button', { type: 'button', class: 'workflow-gate-card-remove' }, 'Remove card');
@@ -177,12 +184,12 @@ export function openGateReview({ node, gateTemplate, canEdit = true, onApply, on
     ]),
     el('div', { class: 'workflow-gate-body' }, [
       el('label', { class: 'workflow-gate-field' }, [el('span', {}, 'Gate title'), titleInput]),
-      summary,
-      blockedNote,
-      cardNote,
       grid,
     ]),
-    el('div', { class: 'workflow-gate-actions' }, [cancel, save, approve]),
+    el('div', { class: 'workflow-gate-actions' }, [
+      el('div', { class: 'workflow-gate-actions-copy' }, [summary, blockedNote, cardNote]),
+      el('div', { class: 'workflow-gate-actions-buttons' }, [cancel, save, approve]),
+    ]),
   ]);
 
   const applied = (close) => {
