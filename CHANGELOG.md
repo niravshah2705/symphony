@@ -29,6 +29,29 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
     channels and IAM on the next apply; any organization approval awaiting a
     deploy will simply close its run after test.
 
+### Fixed
+
+- **The Deploy to GCP secret-staging step no longer plans the whole stack.** It
+  ran an un-targeted `terraform plan` with only six of the ~45 deploy
+  variables, so every other variable fell back to its default: the job died on
+  the email service's `email_public_app_url` precondition (skipping the real
+  apply) and the log showed a phantom `Plan: 33 to add, 14 to change, 38 to
+  destroy` — including a Firestore replace, the One Tap client-id secret and
+  the `platform.archagentix.com` hosting domain. The step is back to targeted
+  `apply` of the six secret containers, and its move-retry branch uses
+  `apply -refresh-only`, since a `plan -refresh-only` prints a pending
+  `moved` block without ever clearing it.
+- **Three production resources now refuse a destroy planned by a cleared repo
+  variable** (`prevent_destroy`): `google_firestore_database.default` (an
+  immutable `location_id` mismatch would drop the database from state),
+  `google_secret_manager_secret.google_one_tap_client_id` and
+  `google_firebase_hosting_custom_domain.default`. The `try(..., "dummy")`
+  placeholder on the FlexPrice secret references is gone — it converted a
+  plan-time error into a Cloud Run revision that mounts a nonexistent secret.
+- **Release note:** a deliberate Firestore region move, One Tap shutdown or
+  domain unmap now needs the lifecycle flag flipped or a `terraform state rm`
+  first; the CI job cannot do it by leaving a repository variable empty.
+
 ## 2026-11-17
 
 ### Removed

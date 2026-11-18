@@ -166,6 +166,15 @@ resource "google_secret_manager_secret" "google_one_tap_client_id" {
     auto {}
   }
 
+  # The count is driven by a repo variable, so an empty GOOGLE_ONE_TAP_CLIENT_ID
+  # reads as "turn One Tap off" and destroys the container — taking its versions
+  # and the gateway's accessor with it. The console-minted client id cannot be
+  # recovered from state, so refusing the plan is the cheaper failure. Deliberate
+  # removal: flip the lifecycle off or `terraform state rm` it first.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [google_project_service.services]
 }
 

@@ -477,6 +477,22 @@ jobs:
             -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
             -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
           )
+          # This step creates the secret CONTAINERS only. It must stay targeted:
+          # the var set above is a six-variable subset of the ~45 the apply step
+          # passes, so an un-targeted plan here evaluates the whole stack against
+          # defaults — firestore_location=nam5 (replaces the real database),
+          # google_one_tap_client_id="" (deletes the OAuth client-id secret),
+          # custom_domain=[] (unmaps the live hosting domain) — and dies on the
+          # email service's email_public_app_url precondition before the real
+          # apply can run. Plan output from here is NOT the deployment plan.
+          secret_targets=(
+            -target='google_secret_manager_secret.flexprice["flexprice-api-key-ingest"]'
+            -target='google_secret_manager_secret.flexprice["flexprice-api-key-money"]'
+            -target=google_secret_manager_secret.stream_token_secret
+            -target=google_secret_manager_secret.identity_hash_pepper
+            -target=google_secret_manager_secret.cashfree_app_id
+            -target=google_secret_manager_secret.cashfree_secret_key
+          )
           # While a `moved` block's SOURCE address is still in state, the move is
           # pending, and a pending move makes terraform refuse ANY targeted plan —
           # "Moved resource instances excluded by targeting" — even one targeting
@@ -490,16 +506,18 @@ jobs:
           # in the billing Jobs that mount those secrets with version=latest, which
           # Cloud Run rejects until the values exist — the exact bootstrap case this
           # step handles. Instead land the moves, which is what they are: a state
-          # address change. -refresh-only rewrites the addresses and takes no action
-          # on any remote object (0 added / 0 changed / 0 destroyed), so the retry
-          # below plans the same six secrets it always planned.
+          # address change. `apply -refresh-only` rewrites the addresses in state and
+          # takes no action on any remote object (0 added / 0 changed / 0 destroyed),
+          # so the retry below applies the same six secrets it always applied. A
+          # `plan -refresh-only` only PRINTS the moves — the pending move would never
+          # clear and this step would block on it every run.
           apply_log=/tmp/secret-stage-apply.log
-          if ! terraform plan -no-color -input=false \
-               "${tf_vars[@]}"  2>&1 | tee "$apply_log"; then
+          if ! terraform apply -no-color -input=false -auto-approve \
+               "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$apply_log"; then
             grep -q 'Moved resource instances excluded by targeting' "$apply_log" || exit 1
             echo "::notice::Pending state moves blocked the targeted apply; recording them first."
-            terraform plan -no-color -refresh-only  -input=false "${tf_vars[@]}"
-            terraform plan -no-color -input=false  "${tf_vars[@]}"
+            terraform apply -no-color -refresh-only -auto-approve -input=false "${tf_vars[@]}"
+            terraform apply -no-color -input=false -auto-approve "${tf_vars[@]}" "${secret_targets[@]}"
           fi
 
           enabled_value() {

@@ -58,7 +58,18 @@ resource "google_firebase_hosting_custom_domain" "default" {
   project       = var.project_id
   site_id       = var.project_id
   custom_domain = each.value
-  depends_on    = [google_firebase_hosting_site.default]
+
+  # local.custom_domains comes from var.custom_domain (repo variable
+  # FIREBASE_CUSTOM_DOMAIN), so a cleared or mistyped value plans an unmap of
+  # the live domain: the SPA hostname stops serving and the cert has to be
+  # re-provisioned. Identity Platform's authorized_domains shrinks from the same
+  # list, so an unmap must be a considered change, not a variable typo. To do
+  # one deliberately, flip this flag off or `terraform state rm` the domain.
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_firebase_hosting_site.default]
 }
 
 # -----------------------------------------------------------------------------
