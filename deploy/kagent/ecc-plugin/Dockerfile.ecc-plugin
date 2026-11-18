@@ -1,0 +1,14 @@
+# The ECC plugin bundle is data, not a program: Agent Substrate mounts this image's
+# filesystem into the sandbox as a read-only volume and kagent reads plugin.json and
+# skills/ from its root. No base layer, no entrypoint, nothing to execute.
+#
+# Built by build-ecc-plugin-image.sh with the build context set to build/, which
+# holds the composed bundle/ directory.
+FROM scratch
+
+COPY bundle/. /
+
+LABEL org.opencontainers.image.title="ecc" \
+      org.opencontainers.image.description="ECC agent skills packaged as an Agent Plugins 1.0.0 bundle" \
+      org.opencontainers.image.source="https://github.com/affaan-m/ECC" \
+      org.opencontainers.image.licenses="MIT"

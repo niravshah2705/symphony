@@ -67,3 +67,7 @@ docs/flexprice-spike/results.json
 # checkout on every run; committing it would fork 2000 lines of AGPL templates.
 deploy/flexprice/helm/build/
 docs/code-graph/
+
+# ECC plugin build scratch: fetched upstream checkout + composed bundle + stamped ref
+# Regenerate with deploy/kagent/ecc-plugin/build-ecc-plugin-image.sh
+deploy/kagent/ecc-plugin/build/
