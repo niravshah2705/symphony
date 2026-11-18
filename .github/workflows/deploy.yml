@@ -1173,11 +1173,15 @@ jobs:
           set -euo pipefail
           # Before anything else: kubectl is needed to mirror the Secret, and the
           # Helm OCI login is needed to push the chart. `helm` has no ADC, so the
-          # registry password is a short-lived access token presented as _json_key.
+          # registry password is a short-lived access token — and Artifact Registry
+          # pairs the credential kind with the username: a token must be presented
+          # as oauth2accesstoken (_json_key only accepts the full service-account
+          # key file and 401s on a token). The token goes through stdin so it never
+          # lands in the job log or process arguments.
           gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT_ID"
           gcloud auth configure-docker "$AR_HOST" --quiet
-          helm registry login "oci://$AR_HOST" \
-            --username=_json_key --password="$(gcloud auth print-access-token)"
+          gcloud auth print-access-token | helm registry login "oci://$AR_HOST" \
+            --username=oauth2accesstoken --password-stdin
 
       - name: Read the pin
         id: pin
