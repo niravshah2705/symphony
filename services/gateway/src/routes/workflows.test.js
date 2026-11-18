@@ -174,6 +174,45 @@ test('agent profile CRUD validates kagent specs and guards referenced deletes', 
   } finally { server.close(); }
 });
 
+test('a credential-shaped kagent env row never reaches a stored agent profile, on either backend', async () => {
+  // The invariant docs/WORKFLOWS_AUTHENTICATION.md states for `kagentSpec.env`:
+  // the row is dropped rather than stored. Graph nodes got that by persisting the
+  // normalized spec; a profile that validates the spec and then writes the input
+  // back keeps the credential in the tenant document AND echoes it to every reader
+  // of GET /api/workflows. Both halves are asserted because the publish path
+  // re-normalizes, so a clean CR is not evidence the document is clean.
+  const { app } = buildApp();
+  const { server, url } = await start(app);
+  // Matched by the NAME half of the SECRETISH test, so the fixture never carries
+  // a live-looking key literal while still being the row the rule must drop.
+  const secret = 'must-not-be-stored-here';
+  try {
+    for (const backend of ['kagent', 'substrate']) {
+      const id = `leak-${backend}`;
+      const saved = await call(url, 'PUT', `/api/workflows/agents/${id}`, {
+        body: {
+          name: `Leak ${backend}`, category: 'Coding', backend,
+          kagent: {
+            modelConfig: { name: 'default-model-config' },
+            env: [{ name: 'LOG_LEVEL', value: 'info' }, { name: 'ANTHROPIC_API_KEY', value: secret }],
+          },
+        },
+      });
+      assert.equal(saved.status, 200);
+      assert.ok(!JSON.stringify(saved.body).includes(secret), `${backend}: create response echoed the credential`);
+
+      const stored = wfStore.listAgentProfiles().find((profile) => profile.id === id);
+      assert.ok(stored, `${backend}: profile was not stored`);
+      assert.ok(!JSON.stringify(stored).includes(secret), `${backend}: credential persisted in the stored profile`);
+      assert.deepEqual(stored.kagent.env, [{ name: 'LOG_LEVEL', value: 'info' }], `${backend}: dropped the row along with the secret`);
+    }
+
+    const list = await call(url, 'GET', '/api/workflows');
+    assert.equal(list.status, 200);
+    assert.ok(!JSON.stringify(list.body).includes(secret), 'GET /api/workflows echoed a stored credential');
+  } finally { server.close(); }
+});
+
 test('kagent capabilities report disabled and publish refuses with 503 until configured', async () => {
   const { app } = buildApp();
   const { server, url } = await start(app);

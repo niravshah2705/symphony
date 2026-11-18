@@ -176,7 +176,11 @@ Only **genuine tenant edits** create a document here. The read is a merge:
 platform defaults first, tenant copy winning by `id` (`listAgentProfiles`). The
 record carries `schemaVersion: 2`, `custom: true`, the curated prompt/tools/guard
 fields, the same `backend`/`harness`/`modelFamily`/`taskTier` binding, `systemPrompt`
-(≤16000), `kagent`, `updatedBy`, `updatedAt`. A platform-default id cannot be
+(≤16000), `kagent` — the **normalized** spec, never the submitted blob, which is
+what keeps the credential-row rule of
+[authentication §6](./WORKFLOWS_AUTHENTICATION.md#6-secrets-and-the-credential-boundary)
+true of the stored document and not only of the rendered CR — `updatedBy`,
+`updatedAt`. A platform-default id cannot be
 deleted — only overridden — so `deleteAgentProfile` answers an error for it.
 
 ### 3.6 `personaGrants/<recordId>`
