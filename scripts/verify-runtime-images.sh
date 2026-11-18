@@ -10,15 +10,31 @@
 #   scripts/verify-runtime-images.sh --hash     # additionally download + print the
 #                                               # amd64/arm64 sha256 for CLI rows with
 #                                               # an empty checksum column (slow)
+#   scripts/verify-runtime-images.sh --selected FILE
+#                                               # FILE lists "runtime version" lines,
+#                                               # one per row the build will publish.
+#                                               # Rows outside it are reported but do
+#                                               # not fail the run, so a stale row in an
+#                                               # unrelated runtime cannot block a bump.
 #
 set -eu
 
 csv="$(dirname "$0")/../go/harness/runtime-images.csv"
 hash_mode=0
-[ "${1:-}" = "--hash" ] && hash_mode=1
+selected=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --hash) hash_mode=1 ;;
+    --selected) selected="${2:?--selected needs a file}"; shift ;;
+    *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
+  esac
+  shift
+done
+[ -z "$selected" ] || [ -f "$selected" ] || { printf 'no such selection file: %s\n' "$selected" >&2; exit 2; }
 
 fail_marker="$(mktemp)"
-trap 'rm -f "$fail_marker"' EXIT
+skipped_marker="$(mktemp)"
+trap 'rm -f "$fail_marker" "$skipped_marker"' EXIT
 
 # resolve_url <runtime> <version> -> URL to probe for existence
 resolve_url() {
@@ -51,19 +67,35 @@ sha256_of_url() {
   curl -fsSL --max-time 300 "$1" | sha256sum | cut -d' ' -f1
 }
 
-fail() { printf '%s\n' "$@" >&2; : > "$fail_marker"; }
+# The markers must carry content: the pipeline below runs in a subshell, so a
+# variable would not survive, and `[ -s ]` on a file mktemp already created is
+# only true once something has been written into it.
+fail() { printf '%s\n' "$@" >&2; printf 'fail\n' >> "$fail_marker"; }
+skip() { printf '%s\n' "$@"; printf 'skip\n' >> "$skipped_marker"; }
 
 tail -n +2 "$csv" | while IFS=, read -r runtime dockerfile image version amd64_sha arm64_sha current; do
   [ -z "${runtime:-}" ] && continue
+  if [ -n "$selected" ] && ! grep -qxF "$runtime $version" "$selected"; then
+    in_selection=0
+  else
+    in_selection=1
+  fi
+
   if url=$(resolve_url "$runtime" "$version"); then
     if curl -fsIL --max-time 60 "$url" >/dev/null 2>&1; then
       resolved="resolvable"
-    else
+    elif [ "$in_selection" = 1 ]; then
       fail "FAIL  $runtime $version NOT FOUND on feed: $url"
       continue
+    else
+      skip "WARN  $runtime $version NOT FOUND on feed, outside this selection"
+      continue
     fi
-  else
+  elif [ "$in_selection" = 1 ]; then
     fail "FAIL  $runtime unknown runtime"
+    continue
+  else
+    skip "WARN  $runtime unknown runtime, outside this selection"
     continue
   fi
 
@@ -84,7 +116,11 @@ tail -n +2 "$csv" | while IFS=, read -r runtime dockerfile image version amd64_s
 done
 
 if [ -s "$fail_marker" ]; then
-  echo "verify-runtime-images: one or more rows failed" >&2
+  echo "verify-runtime-images: one or more selected rows failed" >&2
   exit 1
 fi
-echo "verify-runtime-images: all rows resolvable"
+if [ -s "$skipped_marker" ]; then
+  echo "verify-runtime-images: selected rows resolvable (unrelated rows reported as WARN)"
+else
+  echo "verify-runtime-images: all rows resolvable"
+fi
