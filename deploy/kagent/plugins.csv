@@ -1,0 +1,2 @@
+plugin,repo,commit,version,image,dockerfile,current
+ecc,https://github.com/affaan-m/ECC.git,3f14a103a8694e51c1df9a806217a6d0b5f7a6f7,2.2.3,ghcr.io/niravshah2705/symphony/ecc-plugin,deploy/kagent/ecc-plugin/Dockerfile.ecc-plugin,true
