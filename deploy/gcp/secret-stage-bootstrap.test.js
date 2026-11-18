@@ -124,3 +124,48 @@ test('resources a cleared repo variable would remove refuse the destroy', () => 
     );
   }
 });
+
+// The two FlexPrice planes are mounted into the billing container by constant
+// name, so a plane with no enabled version is not a warning: Cloud Run refuses
+// the whole revision, mid-apply, after other resources have already changed.
+// Seeding them with the other converged secrets moves that failure into a step
+// that can name the fix — and "converged" must not slip into "generated", since
+// a minted-random third-party key is permanently invalid.
+test('both FlexPrice planes converge from repository secrets, never from random', () => {
+  const step = secretStageStep(read('.github/workflows/deploy.yml'));
+  const envBlock = step.slice(0, step.indexOf('run: |'));
+  for (const [id, secret] of [
+    ['flexprice-api-key-ingest', 'FLEXPRICE_API_KEY_INGEST'],
+    ['flexprice-api-key-money', 'FLEXPRICE_API_KEY_MONEY'],
+  ]) {
+    assert.match(
+      envBlock,
+      new RegExp(`${secret}: \\$\\{\\{ secrets\\.${secret} \\}\\}`),
+      `${secret} is not passed into the staging step, so nothing can seed ${id}`,
+    );
+    const line = step.split('\n').map((l) => l.trim()).find((l) => l.startsWith(`seed_secret ${id} `));
+    assert.ok(line, `seed_secret ${id} is gone: the container is created by the apply that binds it`);
+    assert.match(line, new RegExp(`\\$\\{${secret}:-\\}`), `${id} is not converged from ${secret}`);
+    assert.doesNotMatch(line, /allow-random/, `${id} is a third-party credential; a generated key never authenticates`);
+  }
+});
+
+test('a FlexPrice plane with no enabled version stops before the apply', () => {
+  const wf = read('.github/workflows/deploy.yml');
+  const start = wf.indexOf('- name: Verify FlexPrice secret versions');
+  assert.notEqual(start, -1, 'the pre-apply FlexPrice check is gone');
+  const next = wf.indexOf('\n      - name: ', start + 1);
+  const step = wf.slice(start, next === -1 ? wf.length : next);
+  for (const id of ['flexprice-api-key-ingest', 'flexprice-api-key-money']) {
+    assert.ok(step.includes(id), `${id} is not checked`);
+  }
+  assert.match(
+    step,
+    /if \[ -z "\$v" \]; then[\s\S]{0,700}?exit 1\n\s*fi/,
+    'a missing version has to fail the step, not print a note and continue',
+  );
+  assert.match(step, /gh secret set|repository secret/, 'the error has to name the path CI can seed from');
+  const verifyAt = wf.indexOf('- name: Verify FlexPrice secret versions');
+  const applyAt = wf.indexOf('- name: Terraform apply');
+  assert.ok(verifyAt < applyAt, 'the check runs after the apply, which is the failure it exists to prevent');
+});

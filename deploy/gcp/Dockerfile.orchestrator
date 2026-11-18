@@ -1,7 +1,20 @@
 # syntax=docker/dockerfile:1
-# Durable pipeline control plane. This image intentionally contains only
-# @ai-fleet/shared-core + LangGraph; it must never acquire the heavy agent SDK
-# dependency tree or provider credentials.
+# Durable pipeline control plane.
+#
+# It carries @ai-fleet/shared as well as @ai-fleet/shared-core + LangGraph:
+# #283 retired the Cloud Run planner and absorbed its HTTP surface into
+# services/orchestrator/src/agent-surface.js, which is mounted from app.js and
+# requires the shared library at boot. The image was left packaging only
+# shared-core, so the revision died at `Cannot find module
+# '@ai-fleet/shared/agent/pipeline-stage-service'` — a build-time- invisible
+# MODULE_NOT_FOUND, because npm ci never resolves local requires.
+#
+# The credential half of the earlier "never acquire the agent SDK tree or
+# provider credentials" rule still holds and is what actually matters: no
+# provider key enters this image or its environment. The orchestrator sends the
+# egress sentinel and the sidecar / model gateway resolves the real credential,
+# so confinement comes from the environment boundary rather than from which
+# directories are copied into the image.
 ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 FROM ${NODE_IMAGE} AS builder
@@ -10,10 +23,15 @@ ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
 COPY packages/shared-core/ ./packages/shared-core/
+COPY packages/shared/ ./packages/shared/
 COPY services/orchestrator/ ./services/orchestrator/
 
+# @ai-fleet/shared is selected explicitly: npm only installs the deps of the
+# workspaces named here, so leaving it out would resolve the symlink but ship
+# the agent library with its own dependency tree missing.
 RUN npm ci --omit=dev \
       --workspace=@ai-fleet/shared-core \
+      --workspace=@ai-fleet/shared \
       --workspace=@ai-fleet/orchestrator \
       --include-workspace-root=false \
     && npm cache clean --force

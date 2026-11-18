@@ -471,12 +471,40 @@ test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
   );
 });
 
-test('orchestrator image remains free of the heavy shared agent SDK workspace', () => {
+test('orchestrator image packages every workspace its own dependency list declares', () => {
+  // #283 moved the retired planner's HTTP surface into
+  // services/orchestrator/src/agent-surface.js and added @ai-fleet/shared to the
+  // service's dependencies, but left the image packaging only shared-core. The
+  // check that used to live here asserted that stale shape as if it were a
+  // preference, so the mismatch built green and died at boot with
+  // MODULE_NOT_FOUND — npm ci never resolves a local require, and Cloud Run had
+  // no earlier revision of a service Terraform was still creating. Pairing is
+  // the invariant now: whatever the package.json declares must be copied AND
+  // selected, so the Dockerfile cannot drift from the dependency list again.
+  const deps = JSON.parse(read('services/orchestrator/package.json')).dependencies || {};
   const dockerfile = read('deploy/gcp/Dockerfile.orchestrator');
-  assert.match(dockerfile, /COPY packages\/shared-core\//);
-  assert.doesNotMatch(dockerfile, /COPY packages\/shared\//);
-  assert.doesNotMatch(dockerfile, /COPY packages\/ \./);
+  for (const name of ['shared-core', 'shared']) {
+    const declared = deps[`@ai-fleet/${name}`] !== undefined;
+    assert.equal(
+      dockerfile.includes(`COPY packages/${name}/`),
+      declared,
+      `COPY packages/${name}/ must be present exactly when @ai-fleet/${name} is a dependency`,
+    );
+    assert.equal(
+      dockerfile.includes(`--workspace=@ai-fleet/${name}`),
+      declared,
+      `@ai-fleet/${name} must be an npm ci workspace exactly when it is a dependency, `
+      + 'otherwise the library ships with its own dependency tree missing',
+    );
+  }
   assert.match(dockerfile, /--workspace=@ai-fleet\/orchestrator/);
+
+  // The half of the old rule that still means something: this is the durable
+  // control plane, not the actor. Copying the whole workspace tree would turn it
+  // into Dockerfile.substrate-actor, and no provider credential belongs in the
+  // image or its environment — the egress sentinel is what the agents hold.
+  assert.doesNotMatch(dockerfile, /COPY packages\/ \./);
+  assert.doesNotMatch(dockerfile, /OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_GENERATIVE_AI_API_KEY/);
 });
 
 test('actor image installs the seccomp launcher for model-controlled commands', () => {
