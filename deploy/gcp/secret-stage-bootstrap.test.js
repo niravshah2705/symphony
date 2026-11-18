@@ -100,8 +100,13 @@ test('flexprice secret references fail loud instead of mounting a placeholder', 
   const block = billing.slice(start, billing.indexOf('}', start));
   assert.doesNotMatch(block, /\btry\(/, 'try() hides a missing secret as a runtime 500');
   assert.doesNotMatch(block, /"dummy"/);
-  assert.match(block, /google_secret_manager_secret\.flexprice\["flexprice-api-key-ingest"\]\.secret_id/);
-  assert.match(block, /google_secret_manager_secret\.flexprice\["flexprice-api-key-money"\]\.secret_id/);
+  // ...and the reference must not be a state read either: indexing the container
+  // collection is what made this step's targeted plan unrunnable until the
+  // containers existed, which is the very apply this step precedes.
+  assert.doesNotMatch(block, /google_secret_manager_secret\.flexprice/,
+    'the secret names are constants; indexing the collection deadlocks a targeted plan');
+  assert.match(block, /"flexprice-api-key-ingest"/);
+  assert.match(block, /"flexprice-api-key-money"/);
 });
 
 test('resources a cleared repo variable would remove refuse the destroy', () => {

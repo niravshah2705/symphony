@@ -92,9 +92,23 @@ locals {
     BILLING_GATE_POLICY               = "enforced"
   }
 
+  # The short names, spelled literally: `secret_key_ref.secret` below takes
+  # exactly what `.secret_id` returns, so nothing about the rendered revision
+  # changes. What does change is *when* the value is knowable. Indexing the
+  # resource collection made every plan that left those containers out of scope
+  # read them from state — and while they were absent there, the collection was
+  # "object with no attributes" and the plan died on Invalid index. That is a
+  # deadlock, not a guard: the CI secret-staging step (6 targets) and the
+  # `-refresh-only` record of billing's `moved` blocks both run before the apply
+  # that creates the containers, so neither could ever pass.
+  #
+  # The containers stay managed and ordered regardless: the accessor below
+  # iterates the real collection, and both the billing service and the billing
+  # job `depends_on` it. Existence is enforced out of band too — the workflow
+  # refuses to go on unless each key has an enabled version.
   billing_flexprice_secrets = {
-    FLEXPRICE_API_KEY_INGEST = google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id
-    FLEXPRICE_API_KEY_MONEY  = google_secret_manager_secret.flexprice["flexprice-api-key-money"].secret_id
+    FLEXPRICE_API_KEY_INGEST = "flexprice-api-key-ingest"
+    FLEXPRICE_API_KEY_MONEY  = "flexprice-api-key-money"
   }
 }
 

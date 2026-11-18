@@ -31,26 +31,27 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
 
 ### Fixed
 
-- **Agent Substrate became deployable.** #283 made substrate the only execution
-  pattern, but the `Deploy to GCP` apply step passed **none** of the fourteen
-  `substrate_*` variables the root stack reads — there was no CI path to
-  `substrate_url`, whose blank value is the whole switch. Every consumer falls
-  back to an inert default when its variable is absent, so this never errored:
-  a deployment would go green with an orchestrator that refuses every run as
-  "not configured". The apply step now threads all fourteen from repository
-  variables (the list and the org→space map are split with `jq`; the five names
-  whose Terraform default is a real value are appended only when set, so an
-  unset variable cannot blank a working default), and it refuses a plan that
-  destroys `planner` / `coder-control` / `coder-worker` while `SUBSTRATE_URL`
-  is unset — that cutover leaves no other way to run an agent.
-  - **Release note:** `substrate_url` is still unset, so the deployment that
-    retires the Cloud Run harness now fails here with the command to run rather
-    than shipping a stack with no agent pattern. Cause 9 — an ateapi address the
-    orchestrator can actually dial — is still open; see `docs/SUBSTRATE_STATUS.md`.
-  - Verified read-only against production state: the staging step's targeted
-    plan completes, and the pending primary plan is 32 add / 14 change /
-    33 destroy — the planner/coder retirement plus #278's billing jobs, with no
-    Firestore, One Tap or hosting-domain destroy in it.
+- **`local.billing_flexprice_secrets` names the two FlexPrice secret containers
+  instead of indexing them through state.** It read
+  `google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id`,
+  and a resource reference outside a plan's target scope is answered from state.
+  The containers are not in state — **#278 has never been applied**, because
+  every deploy since then died in the secret-staging step — so the collection
+  rendered as *object with no attributes* and `Deploy to GCP` failed with
+  `Error: Invalid index` on `billing_service.tf:96-97` in both the targeted
+  staging plan and the `-refresh-only` record of #278's billing `moved` blocks.
+  That was a deadlock, not a guard: both calls run *before* the apply step that
+  would create the containers. A secret name is a constant, so it is spelled as
+  one — the value `secret_id` returns, byte-identical to what the revision
+  carried, and the same short-name form the working Cashfree entries use.
+  Ordering and management are untouched: `billing_flexprice_accessor` still
+  iterates the real collection and both the billing service and the billing Job
+  `depends_on` it, and the workflow still refuses to run until each key has an
+  enabled version.
+  - **Release note:** the plan output changes, so the next apply creates #278's
+    whole outstanding set (the FlexPrice containers, the billing Job/scheduler
+    rename, the schedulers and their IAM). That is the deployment #278 describes;
+    review the plan before approving it.
 - **The Deploy to GCP secret-staging step no longer plans the whole stack, and
   no longer applies at all.** It ran an un-targeted `terraform plan` with only
   six of the ~45 deploy variables, so every other variable fell back to its
