@@ -14,8 +14,10 @@ standard route, byte-for-byte.
 ## How a request opts in
 
 1. The browser sets `X-AI-Fleet-Llm-Gateway: langsmith|litellm`. The SPA sends it
-   from `localStorage.aiFleetLlmGateway` (`public/js/api.js`); any value outside
-   that list is dropped.
+   from `localStorage.aiFleetLlmGateway` — or, to pin a single customer,
+   `localStorage['aiFleetLlmGateway:<organizationId>']`, which wins for that
+   organization alone (`public/js/llm-gateway.mjs`); any value outside that list is
+   dropped.
 2. The gateway service honors the header only when the matching server gate is
    on — `LLM_GATEWAY_ENABLED` for `langsmith`, `LITELLM_GATEWAY_ENABLED` for
    `litellm` (`services/gateway/src/request-context.js`, mode table

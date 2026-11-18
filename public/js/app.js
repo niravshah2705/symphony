@@ -69,13 +69,15 @@ function ensureStylesheet(href) {
 function route(loader, exportName, styles = []) {
   const routeStyles = [SHARED_STYLESHEET, ...styles];
   let rendererLoad = null;
+  let moduleLoad = null;
   return Object.freeze({
     styles: Object.freeze([...routeStyles]),
     load() {
       if (!rendererLoad) {
+        moduleLoad = loader();
         rendererLoad = Promise.all([
           ...routeStyles.map(ensureStylesheet),
-          loader(),
+          moduleLoad,
         ]).then((results) => {
           const renderer = results.at(-1)?.[exportName];
           if (typeof renderer !== 'function') throw new Error(`Route module is missing ${exportName}.`);
@@ -84,7 +86,42 @@ function route(loader, exportName, styles = []) {
       }
       return rendererLoad;
     },
+    // Views hold tenant-derived data at module scope, and navigating away does not
+    // unload a module. This is the only way to reach a view that is NOT on screen
+    // when the workspace changes underneath it.
+    async invalidate() {
+      if (!moduleLoad) return;
+      const mod = await moduleLoad.catch(() => null);
+      mod?.invalidate?.();
+    },
   });
+}
+
+/** Name the destination while a switch is in flight. The note normally reports
+ * where work is filed; during a switch it must not keep naming the old tenant. */
+function announceSwitch(panel, select) {
+  const note = panel.querySelector('.account-context-note');
+  const destination = select.selectedOptions?.[0]?.textContent || select.value;
+  if (note) note.textContent = `${t('switchingTo', 'Switching to')} ${destination}…`;
+}
+
+function invalidateWorkspaceViews() {
+  return Promise.all(Object.values(routes).map((entry) => entry.invalidate()));
+}
+
+// Clear the tenant caches, then reload — and reload even if a view never settles.
+// The reload is what actually completes a switch today; the clearing only closes the
+// window between the new context being applied and the page going away, and a stuck
+// view must not leave the switcher disabled with nothing on screen.
+function reloadWorkspace() {
+  let reloaded = false;
+  const reload = () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  };
+  window.setTimeout(reload, 500);
+  invalidateWorkspaceViews().catch(() => {}).then(reload);
 }
 
 const routes = Object.freeze({
@@ -640,7 +677,14 @@ function renderAuthControl() {
       if (!changeWorkspaceOrganization(organizationSelect.value)) return;
       panel.setAttribute('aria-busy', 'true');
       organizationSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 0);
+      announceSwitch(panel, organizationSelect);
+      // The request context is ALREADY the new organization's — every header from
+      // here says so — while this page still holds the previous one's conversation,
+      // jobs, stream and filter. Clear those before the reload so a timer or SSE
+      // callback in that window cannot paint tenant A's data behind tenant B's
+      // headers. The reload stays: a view without an invalidate() keeps state no
+      // caller can reach, so in-place switching is not yet safe to rely on.
+      reloadWorkspace();
     });
 
     const projects = organization?.projects || [];
@@ -669,7 +713,10 @@ function renderAuthControl() {
       if (!changeWorkspaceProject(nextProjectId)) return;
       panel.setAttribute('aria-busy', 'true');
       projectSelect.disabled = true;
-      window.setTimeout(() => window.location.reload(), 120);
+      announceSwitch(panel, projectSelect);
+      // Same reason as the organization switch: the headers moved to the new
+      // context first, so the caches have to go before the page does.
+      reloadWorkspace();
     });
 
     const orgTags = (organization?.tags || []).map((tag) =>
@@ -693,7 +740,14 @@ function renderAuthControl() {
           ...(projectTags.length ? [el('div', { class: 'account-context-tags' }, projectTags)] : []),
         ]),
         projectSelect,
-      ])
+      ]),
+      // Which tenant a mutation lands in has to be readable, not inferred: the
+      // selects show what is SELECTED, which after a rejected or half-applied
+      // switch is not necessarily what the next request will carry.
+      el('p', { class: 'account-context-note', role: 'status' },
+        t('contextAppliesTo', 'New work is filed under')
+        + ` ${organization?.name || t('contextNoOrganization', 'no organization')}`
+        + (project?.name ? ` / ${project.name}` : '')),
     );
   }
 

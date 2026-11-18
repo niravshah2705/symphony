@@ -192,3 +192,12 @@ async function runVerb(actor, action, rerender) {
     await rerender();
   }
 }
+
+/** Drop the view-local filter. A project id chosen under one organization must not
+ * narrow the next organization's board — the server answers an out-of-tenant filter
+ * with an empty list, which would read as "no actors" rather than "wrong tenant". */
+export function invalidate() {
+  renderGeneration += 1;
+  pending = null;
+  projectFilter = null;
+}
