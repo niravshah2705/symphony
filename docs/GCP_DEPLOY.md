@@ -372,7 +372,9 @@ The same names as repository variables, which is how a deployment turns them on
 means empty, so a merge cannot repoint production by itself):
 
 ```bash
-gh variable set SUBSTRATE_URL                --body "grpc://…:8443"  # the switch
+# https://, not grpc://: the client dials with node:http2.connect(), which
+# rejects any scheme other than http/https.
+gh variable set SUBSTRATE_URL                --body "https://…"   # the switch
 gh variable set SUBSTRATE_ATESPACE           --body "tenant-t3f9a2b4c6d8"
 gh variable set SUBSTRATE_ATESPACE_BY_ORG    --body "01934-…=tenant-t3f9a2b4c6d8"  # comma-separated org=space
 gh variable set SUBSTRATE_ALLOWED_ATESPACES  --body "tenant-t3f9a2b4c6d8,tenant-…" # comma-separated names
