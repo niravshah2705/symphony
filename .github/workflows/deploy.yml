@@ -467,6 +467,8 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           CASHFREE_APP_ID: ${{ secrets.CASHFREE_APP_ID }}
           CASHFREE_SECRET_KEY: ${{ secrets.CASHFREE_SECRET_KEY }}
+          FLEXPRICE_API_KEY_INGEST: ${{ secrets.FLEXPRICE_API_KEY_INGEST }}
+          FLEXPRICE_API_KEY_MONEY: ${{ secrets.FLEXPRICE_API_KEY_MONEY }}
         run: |
           set -euo pipefail
           tf_vars=(
@@ -497,8 +499,10 @@ jobs:
           # A brand-new secret therefore has no container yet: the plan says "1 to
           # add" and the gcloud seeding below cannot write a version into it. Add the
           # container with `gcloud secrets create <id> --replication-policy=automatic`
-          # (and let the apply step import or create it), which is what the FlexPrice
-          # verify step already enforces for the two operator-minted keys.
+          # (and let the apply step import or create it). The two FlexPrice planes are
+          # seeded here as well and re-checked in the next step, because their
+          # containers are created by the same apply that binds them to the billing
+          # revision — a missing version is a rejected revision, not a warning.
           #
           # A pending `moved` block is the one case this step cannot plan past: while
           # a move's SOURCE address is still in state, terraform refuses ANY targeted
@@ -558,12 +562,12 @@ jobs:
             cur="$(enabled_value "$id")"
             if [ -n "$val" ] && [ "$val" != "$cur" ]; then
               printf '%s' "$val" | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
-              echo "  $id: seeded from environment (corrected existing version)"
+              echo "  $id: seeded from environment (new version)"
             elif [ -z "$cur" ] && [ -n "$rand" ]; then
               openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$id" --project "$PROJECT_ID" --data-file=- >/dev/null
               echo "  $id: seeded (random fallback)"
             elif [ -z "$cur" ]; then
-              echo "  $id: MISSING and no value provided — refusing to generate one" >&2
+              echo "  $id: MISSING and no value provided — refusing to generate one. Set the repository secret this step reads, or publish it: gcloud secrets versions add $id --project $PROJECT_ID --data-file=-" >&2
               exit 1
             else
               echo "  $id: up to date"
@@ -573,9 +577,19 @@ jobs:
           seed_secret identity-hash-pepper "" allow-random
           seed_secret cashfree-app-id "${CASHFREE_APP_ID:-}"
           seed_secret cashfree-secret-key "${CASHFREE_SECRET_KEY:-}"
+          # The two FlexPrice planes: never generated (a minted-random third-party
+          # key is permanently invalid, and the ingest plane is the write boundary
+          # flexprice-config.js refuses to share with the money key), and never
+          # optional — billing_service.tf binds both names into the billing
+          # container unconditionally, so Cloud Run rejects the revision at apply
+          # time if either has no active version. Seeding them here turns that into
+          # a failure in the step that can name the fix.
+          seed_secret flexprice-api-key-ingest "${FLEXPRICE_API_KEY_INGEST:-}"
+          seed_secret flexprice-api-key-money "${FLEXPRICE_API_KEY_MONEY:-}"
 
-      # FlexPrice keys are added out of band by an operator. Check only that an
-      # enabled version exists; never read the value.
+      # Last gate before the apply, independent of the seeding above: an operator
+      # may publish either plane by hand, and a version can be disabled after it
+      # was added. Check only that an enabled version exists; never read a value.
       - name: Verify FlexPrice secret versions
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -585,7 +599,8 @@ jobs:
             v="$(gcloud secrets versions list "$id" --project "$PROJECT_ID" \
               --filter=state:enabled --limit=1 --format='value(name)')"
             if [ -z "$v" ]; then
-              echo "::error::$id has no enabled version; add one with 'gcloud secrets versions add $id --data-file=-'."
+              secret_name="FLEXPRICE_API_KEY_$(echo "${id#flexprice-api-key-}" | tr '[:lower:]' '[:upper:]')"
+              echo "::error::$id has no enabled version and the billing container mounts it. Set '$secret_name' as a repository secret (the secret-staging step publishes it), or publish it by hand: gcloud secrets versions add $id --project $PROJECT_ID --data-file=-"
               exit 1
             fi
             echo "  $id: enabled version present"
