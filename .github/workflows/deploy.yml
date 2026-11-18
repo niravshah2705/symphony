@@ -639,6 +639,17 @@ jobs:
             -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}"
             -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
             -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
+            # Dark by default: GATEWAY_VPC_EGRESS_ENABLED unset => false => the
+            # gateway's vpc_access block is not rendered at all, so this is a
+            # no-op for every deployment that has not opted in. VPC_NETWORK and
+            # VPC_SUBNET are passed by name instead of read through a data
+            # source: the root stack does not otherwise know about the substrate
+            # cluster's network, and an undeclared dependency on a second
+            # module's state is harder to debug than two repo variables.
+            -var="gateway_vpc_egress_enabled=${{ vars.GATEWAY_VPC_EGRESS_ENABLED || 'false' }}"
+            -var="vpc_network=${{ vars.VPC_NETWORK }}"
+            -var="vpc_subnet=${{ vars.VPC_SUBNET }}"
+            -var="vpc_egress_mode=${{ vars.VPC_EGRESS_MODE || 'PRIVATE_RANGES_ONLY' }}"
           )
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
           [ -n "${{ steps.tags.outputs.orchestrator }}" ] && apply_args+=(-var="orchestrator_image_tag=${{ steps.tags.outputs.orchestrator }}") || true

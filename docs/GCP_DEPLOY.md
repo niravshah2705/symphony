@@ -451,6 +451,56 @@ installing the binary is the easy half; the missing piece is the backend.
 What the structural assertions cannot see is a future local that quietly unions
 existence with privilege, and that is what the `grep` above checks.
 
+## Gateway Direct VPC egress (`cloud_run.tf`)
+
+Cloud Run gen2 can put a service's private traffic on a VPC without a Serverless
+VPC Access connector. The gateway carries that as an optional block:
+
+```hcl
+gateway_vpc_egress_enabled = true                # default false → no block at all
+vpc_network                = "default"           # var.vpc_name of terraform-substrate-gke
+vpc_subnet                 = "substrate-subnet"  # must be in var.region
+vpc_egress_mode            = "PRIVATE_RANGES_ONLY" # or "ALL_TRAFFIC"
+```
+
+```bash
+gh variable set GATEWAY_VPC_EGRESS_ENABLED --body "true"   # default: unset = false
+gh variable set VPC_NETWORK                --body "default"
+gh variable set VPC_SUBNET                 --body "substrate-subnet"
+gh variable set VPC_EGRESS_MODE            --body "PRIVATE_RANGES_ONLY"  # optional
+```
+
+Why each piece is shaped the way it is:
+
+- **Off renders nothing.** `vpc_access` sits inside a `dynamic` over
+  `var.gateway_vpc_egress_enabled ? [1] : []`, so a disabled deployment keeps the
+  template byte-identical to before instead of carrying an empty block the API
+  would still record as a request for VPC configuration.
+- **`network_interfaces` is plural.** The provider has no singular
+  `network_interface` argument here, and `terraform validate` rejects it (CI runs
+  that before any apply). `connector` is deliberately unused — same destination,
+  plus a throughput ceiling and another resource to babysit.
+- **Both names are required when on.** A `precondition` refuses the plan if
+  `gateway_vpc_egress_enabled` is true with either `vpc_network` or `vpc_subnet`
+  empty, because "switched on, changed nothing" is the worst state for a flag.
+- **`ALL_TRAFFIC` is a different dependency set.** It sends *everything* through
+  the VPC, so third-party calls (GitHub, Linear, the LLM hosts, the egress proxy)
+  then need the project's Cloud NAT. `PRIVATE_RANGES_ONLY` routes only RFC1918 and
+  VPC ranges and leaves the working public path alone.
+- **The source IP changes.** Egress instances take addresses from the
+  subnetwork's **primary** range (not its `pods`/`services` secondary ranges), so
+  whatever allow-lists the old Cloud Run IPs has to learn the range.
+
+**This is plumbing, not a feature — and there is currently nothing on the other
+end.** It gives the gateway a route *onto* the VPC; it does not create a
+VPC-reachable ateapi endpoint, because `Service api` in `ate-system` is headless
+(`ClusterIP: None`) and no internal LB for it exists in this repo. Read
+[SUBSTRATE_STATUS.md](SUBSTRATE_STATUS.md) pending 2 before switching it on
+expecting a control plane.
+
+The CI contract is
+[`deploy/gcp/gateway-vpc-egress.test.js`](../deploy/gcp/gateway-vpc-egress.test.js).
+
 ## Observability and alerting (`observability.tf`)
 
 OFF by default. `observability_enabled = true` creates one GCS log bucket

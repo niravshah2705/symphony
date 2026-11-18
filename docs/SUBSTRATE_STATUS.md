@@ -192,6 +192,21 @@ from asking it to, which is why it is the one still open.
    then the two variables. `substrate_ateapi_service` / `substrate_ateapi_port`
    therefore should not be corrected on their own — they are one change with the authN
    verification.
+
+   > **Half of the private branch now exists, dark.** The gateway service carries an
+   > optional `vpc_access` block (`gateway_vpc_egress_enabled` + `vpc_network` +
+   > `vpc_subnet` + `vpc_egress_mode`, all off/inert by default — see
+   > `deploy/gcp/gateway-vpc-egress.test.js`). It is deliberately only the egress
+   > half: switching it on gives the gateway a *route onto* the VPC and changes its
+   > source IPs to the subnetwork's primary range. It does **not** create anything to
+   > dial, because `Service api` in `ate-system` is **headless** (`ClusterIP: None`),
+   > so its 443 is per-pod and not answerable from outside the cluster, and nothing in
+   > this repo provisions an internal LB for it (every front here is a public
+   > `type: LoadBalancer` with a public static IP). The remaining work, in order:
+   > an internal L4 front for `api:443`; a firewall/NetworkPolicy rule that admits the
+   > subnet's primary range; and the client's `ca` + TLS server-name, since the
+   > listener serves a cluster-issued certificate rather than the public hostname.
+   > Do not enable the switch expecting a working control plane before those three.
 3. **Phase 3b**: move the system and substrate node pools off E2 too. That tears down
    `ate-system`, so it needs `gke_allow_destroy=true` and a re-run of the install
    afterwards. Separate PR, deliberate.
