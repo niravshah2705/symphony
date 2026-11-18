@@ -508,6 +508,17 @@ export const api = {
   },
   runSubstrateActor: (payload = {}) =>
     request('/agent/substrate/run', { method: 'POST', body: JSON.stringify(payload) }),
+  // Actor lifecycle behind the run cards. Only the actor NAME travels from the
+  // browser: the atespace every call is scoped to is resolved server-side from the
+  // pinned workspace context, so a name from another tenant reads as absent. The
+  // name is encoded into the path segment rather than a query, so it cannot widen
+  // the route it targets.
+  suspendSubstrateActor: (name) =>
+    request(`/agent/substrate/actors/${encodeURIComponent(name)}/suspend`, { method: 'POST' }),
+  resumeSubstrateActor: (name) =>
+    request(`/agent/substrate/actors/${encodeURIComponent(name)}/resume`, { method: 'POST' }),
+  deleteSubstrateActor: (name) =>
+    request(`/agent/substrate/actors/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   syncSubstrateSecrets: (payload = {}) =>
     request('/agent/substrate/secrets/sync', { method: 'PUT', body: JSON.stringify(payload) }),
   getGuardrail: () => request('/agent/guardrail'),

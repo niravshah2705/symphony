@@ -13,7 +13,7 @@ const store = require('@ai-fleet/shared/store');
  * Replace the ateapi client with a fake so the route can be exercised without a
  * cluster. Returns a restore fn.
  */
-function stubSubstrate({ connected, actors, token = 'sa-projected-token', runCapture }) {
+function stubSubstrate({ connected, actors, token = 'sa-projected-token', runCapture, exists = true }) {
   const real = require(SUBSTRATE_PATH);
   const calls = { listActors: 0, tokenResolutions: 0 };
   require.cache[SUBSTRATE_PATH] = {
@@ -37,6 +37,25 @@ function stubSubstrate({ connected, actors, token = 'sa-projected-token', runCap
         calls.listActors += 1;
         calls.listActorsAuth = opts && opts.token;
         return actors || [{ metadata: { name: 'actor-1' }, status: { state: 'RUNNING' } }];
+      },
+      // The three card verbs, plus the existence probe that runs before them. Each
+      // records the options it received so a test can assert the atespace came from
+      // the server-side resolution and not from the query string.
+      getActorStatus: async (opts) => {
+        calls.probe = opts;
+        return exists ? { metadata: { name: opts.name }, status: { state: 'RUNNING' } } : null;
+      },
+      suspendActor: async (opts) => {
+        calls.suspend = opts;
+        return { metadata: { name: opts.name }, status: { state: 'SUSPENDED' } };
+      },
+      resumeActor: async (opts) => {
+        calls.resume = opts;
+        return { actor: { metadata: { name: opts.name }, status: { state: 'RUNNING' } }, resumed: true };
+      },
+      deleteActor: async (opts) => {
+        calls.remove = opts;
+        return { deleted: true };
       },
     },
   };
@@ -81,10 +100,11 @@ function handlerFor(router, method, path) {
 
 // Express-shaped request: the route reads a header through req.get(), so a bare
 // `headers` object is not enough to exercise it.
-function fakeReq({ query = {}, body = {}, headers = {} } = {}) {
+function fakeReq({ query = {}, body = {}, headers = {}, params = {} } = {}) {
   return {
     query,
     body,
+    params,
     headers,
     get(name) {
       const want = String(name).toLowerCase();
@@ -99,6 +119,18 @@ function fakeReq({ query = {}, body = {}, headers = {} } = {}) {
 function invoke(handler, req = fakeReq()) {
   return new Promise((resolve, reject) => {
     handler(req, { json: resolve }, reject);
+  });
+}
+
+// For the handlers that answer with a status code rather than a bare 200 body:
+// captures both halves, because the code is the assertion in those tests.
+function invokeRes(handler, req = fakeReq()) {
+  return new Promise((resolve, reject) => {
+    const res = {
+      status(code) { this.statusCode = code; return this; },
+      json(body) { resolve({ status: this.statusCode || 200, body }); },
+    };
+    handler(req, res, reject);
   });
 }
 
@@ -221,4 +253,131 @@ test('substrate routes still honor a body organization when nothing is pinned', 
     query: {}, body: { organizationId: 'org-local' }, headers: {},
   });
   assert.equal(body.configured, true);
+});
+
+// The actor cards post suspend/resume/delete here. Each verb is a control-plane
+// write, so it must resolve its namespace the same way the read does: from the
+// pinned context. A name alone is not a scope — the ObjectRef is (atespace, name),
+// and the atespace half has to stay server-side.
+const VERBS = [
+  ['post', '/substrate/actors/:name/suspend', 'suspend'],
+  ['post', '/substrate/actors/:name/resume', 'resume'],
+  ['delete', '/substrate/actors/:name', 'delete'],
+];
+
+test('every actor verb takes its atespace from the pinned context, never the query', async (t) => {
+  for (const [method, path, action] of VERBS) {
+    const stub = stubSubstrate({ connected: true });
+    t.after(stub.restore);
+    await assert.rejects(() => invoke(
+      handlerFor(stub.router, method, path),
+      fakeReq({
+        params: { name: 'plan-p-1' },
+        query: { atespace: 'tenant-victim' },
+        headers: { 'x-ai-fleet-organization-id': 'org-caller' },
+      }),
+    ), (err) => {
+      assert.equal(err.status, 404, `${action}: a contradicted namespace is answered as absent`);
+      assert.equal(err.message, 'context_not_found', `${action}: no existence oracle for other tenants`);
+      return true;
+    });
+    assert.equal(stub.calls.suspend, undefined, `${action}: refused before reaching ateapi`);
+    assert.equal(stub.calls.resume, undefined, `${action}: refused before reaching ateapi`);
+    assert.equal(stub.calls.remove, undefined, `${action}: refused before reaching ateapi`);
+  }
+});
+
+test('an actor verb serves the resolved namespace and reports the resulting state', async (t) => {
+  const stub = stubSubstrate({ connected: true });
+  t.after(stub.restore);
+  const { atespace } = await invoke(handlerFor(stub.router, 'get', '/substrate/status'), fakeReq());
+  const body = await invoke(
+    handlerFor(stub.router, 'post', '/substrate/actors/:name/suspend'),
+    fakeReq({ params: { name: 'plan-p1-9f0a' } }),
+  );
+  assert.equal(body.ok, true);
+  assert.equal(body.action, 'suspend');
+  assert.equal(body.state, 'SUSPENDED');
+  assert.equal(body.atespace, atespace, 'the verb acts in the same namespace the list came from');
+  assert.equal(stub.calls.suspend.name, 'plan-p1-9f0a');
+  assert.equal(stub.calls.suspend.atespace, atespace);
+  // The projected service-account token is threaded per call, not cached at startup.
+  assert.equal(stub.calls.suspend.token, 'sa-projected-token');
+});
+
+test('an actor verb refuses a name the control plane cannot hold', async (t) => {
+  const stub = stubSubstrate({ connected: true });
+  t.after(stub.restore);
+  for (const name of ['', 'Plan-P1', 'plan_p1', '-lead', 'trail-', 'x'.repeat(41), '../etc/passwd']) {
+    const res = await invokeRes(
+      handlerFor(stub.router, 'post', '/substrate/actors/:name/suspend'),
+      fakeReq({ params: { name } }),
+    );
+    assert.equal(res.status, 400, `${JSON.stringify(name)} must be rejected before any RPC`);
+    assert.equal(res.body.error, 'actor_name_invalid');
+  }
+  assert.equal(stub.calls.probe, undefined, 'a malformed name never reaches the existence probe');
+});
+
+test('an actor verb reports an absent actor as 404 rather than acting on it', async (t) => {
+  const stub = stubSubstrate({ connected: true, exists: false });
+  t.after(stub.restore);
+  const res = await invokeRes(
+    handlerFor(stub.router, 'delete', '/substrate/actors/:name'),
+    fakeReq({ params: { name: 'plan-gone' } }),
+  );
+  assert.equal(res.status, 404);
+  assert.equal(res.body.error, 'context_not_found');
+  assert.equal(stub.calls.remove, undefined, 'delete must not be attempted for an actor that is not there');
+});
+
+test('an actor verb answers 409 when no credential resolves rather than trying anonymously', async (t) => {
+  const stub = stubSubstrate({ connected: true, token: '' });
+  t.after(stub.restore);
+  const res = await invokeRes(
+    handlerFor(stub.router, 'post', '/substrate/actors/:name/resume'),
+    fakeReq({ params: { name: 'plan-p1' } }),
+  );
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'substrate_not_configured');
+  assert.equal(stub.calls.resume, undefined);
+});
+
+test('delete reports the control plane\'s deletion result, resume unwraps the actor', async (t) => {
+  const del = stubSubstrate({ connected: true });
+  t.after(del.restore);
+  const deleted = await invoke(
+    handlerFor(del.router, 'delete', '/substrate/actors/:name'),
+    fakeReq({ params: { name: 'plan-p1' } }),
+  );
+  assert.equal(deleted.deleted, true, 'the UI keys its confirmation on this');
+  assert.equal(deleted.state, null);
+
+  const res = stubSubstrate({ connected: true });
+  t.after(res.restore);
+  const resumed = await invoke(
+    handlerFor(res.router, 'post', '/substrate/actors/:name/resume'),
+    fakeReq({ params: { name: 'plan-p1' } }),
+  );
+  assert.equal(resumed.state, 'RUNNING', 'ResumeActor answers { actor }, not the actor itself');
+});
+
+// A status list is only as scoped as the identity behind it: the project filter is
+// a display refinement inside the tenant's own namespace, so a project id from
+// another tenant can only ever yield an empty list, never another tenant's actors.
+test('the project filter narrows the list by the name token and echoes what it matched', async (t) => {
+  const stub = stubSubstrate({
+    connected: true,
+    actors: [
+      { metadata: { name: 'plan-p-1-aabb' }, status: { state: 'RUNNING' } },
+      { metadata: { name: 'plan-other-ccdd' }, status: { state: 'SUSPENDED' } },
+    ],
+  });
+  t.after(stub.restore);
+  const body = await invoke(handlerFor(stub.router, 'get', '/substrate/status'), {
+    query: { projectId: 'p 1' }, body: {}, headers: {}, params: {},
+  });
+  const prefix = `plan-${require(SUBSTRATE_PATH).actorProjectToken('p 1')}-`;
+  assert.equal(body.projectFilter.namePrefix, prefix);
+  assert.deepEqual(body.actors.map((a) => a.name), ['plan-p-1-aabb']);
 });
