@@ -22,14 +22,24 @@ const { createAgentSurface } = require('./agent-surface');
 const {
   createSubstrateActorRouter,
   shouldMount: shouldMountSubstrateActor,
+  actorModeFault: actorModeMisconfigured,
 } = require('@ai-fleet/shared/agent/substrate-actor');
 
 const app = express();
 
 // Substrate actor mode: mounted only when this process is running as an actor
-// (SUBSTRATE_ACTOR_MODE=true + SUBSTRATE_JWKS_URL set). The route owns its own
-// actor-JWT check and JSON parser and bypasses gateway auth — inside the actor
-// there is no gateway; the atenet-router already forwarded by `ate-target-actor`.
+// (SUBSTRATE_ACTOR_MODE=true + SUBSTRATE_JWKS_URL + SUBSTRATE_ACTOR_JWT_AUDIENCE).
+// The route owns its own actor-JWT check and JSON parser and bypasses gateway auth —
+// inside the actor there is no gateway; the atenet-router already forwarded by
+// `ate-target-actor`.
+// Half-configured actor mode is a startup failure, not a quiet 404: an actor that
+// cannot say what audience it accepts cannot authenticate anything, and a container
+// that starts anyway shows up as an unreachable cluster rather than a bad deploy.
+const substrateActorFault = actorModeMisconfigured();
+if (substrateActorFault) {
+  log.error(`substrate actor mode: ${substrateActorFault}; refusing to start this process`);
+  throw new Error(`substrate actor mode misconfigured: ${substrateActorFault}`);
+}
 if (shouldMountSubstrateActor()) {
   app.use(createSubstrateActorRouter());
 }

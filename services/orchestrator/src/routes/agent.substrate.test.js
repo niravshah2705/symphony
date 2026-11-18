@@ -175,3 +175,50 @@ test('POST /substrate/run resolves substrateApiToken over S2S and hands it to th
   // The credential is for our control-plane RPCs only — it is never echoed back.
   assert.equal(JSON.stringify(body).includes('sa-s2s-token'), false);
 });
+
+// The gateway pins the caller's workspace into x-ai-fleet-organization-id, and the
+// substrate routes used to let ?organizationId= / body.organizationId OVERRIDE it.
+// One line of that is a cross-tenant control-plane call: atespace resolution, actor
+// creation and credential sync all follow the organizationId this function returns.
+// A disagreement is answered as if the other tenant did not exist (404, not 403).
+test('substrate routes refuse a body organization that contradicts the pinned context', async (t) => {
+  const stub = stubSubstrate({ connected: true });
+  t.after(stub.restore);
+  const handler = handlerFor(stub.router, 'get', '/substrate/status');
+  for (const req of [
+    { query: { organizationId: 'org-victim' }, body: {}, headers: { 'x-ai-fleet-organization-id': 'org-caller' } },
+    // A project id is only a validated context once an organization came with it.
+    { query: { projectId: 'proj-victim' }, body: {}, headers: { 'x-ai-fleet-organization-id': 'org-caller', 'x-ai-fleet-project-id': 'proj-caller' } },
+  ]) {
+    await assert.rejects(() => invoke(handler, req), (err) => {
+      assert.equal(err.status, 404, 'a contradicted tenant must not be reported as forbidden');
+      assert.equal(err.message, 'context_not_found');
+      return true;
+    });
+  }
+  assert.equal(stub.calls.listActors, 0, 'the refused call must not reach the control plane');
+});
+
+test('substrate routes serve the organization the context pins', async (t) => {
+  const stub = stubSubstrate({ connected: true });
+  t.after(stub.restore);
+  const body = await invoke(handlerFor(stub.router, 'get', '/substrate/status'), {
+    query: { organizationId: 'org-caller' },
+    body: {},
+    headers: { 'x-ai-fleet-organization-id': 'org-caller', 'x-ai-fleet-project-id': 'proj-caller' },
+  });
+  assert.equal(body.configured, true);
+  assert.equal(stub.calls.listActors, 1);
+});
+
+// Auth-disabled and local installs send no selection headers, so the body value is
+// the only tenant signal there. Refusing it would break the local profile; it also
+// carries no cross-tenant risk because that profile serves one workspace.
+test('substrate routes still honor a body organization when nothing is pinned', async (t) => {
+  const stub = stubSubstrate({ connected: true });
+  t.after(stub.restore);
+  const body = await invoke(handlerFor(stub.router, 'get', '/substrate/status'), {
+    query: {}, body: { organizationId: 'org-local' }, headers: {},
+  });
+  assert.equal(body.configured, true);
+});

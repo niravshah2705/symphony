@@ -26,6 +26,9 @@ const bootstrap = read('deploy', 'gcp', 'bootstrap.sh');
 const vars = read(GKE_DIR, 'variables.tf');
 const versions = read(GKE_DIR, 'versions.tf');
 const namespaces = read(GKE_DIR, 'namespaces.tf');
+const front = read(GKE_DIR, 'substrate.tf');
+const gkeOutputs = read(GKE_DIR, 'outputs.tf');
+const tfvars = read(GKE_DIR, 'terraform.tfvars.example');
 const workflows = { power, deploy, control, nodepools };
 
 // The `variable "x" { ... }` block's scalar default, as written in Terraform.
@@ -175,6 +178,58 @@ test('the static-IP grant lists the addresses the module owns', () => {
   for (const address of listed[1].split(',').map((s) => s.trim())) {
     assert.ok(addresses.includes(address), `bootstrap.sh lists ${address}, which nothing creates`);
   }
+});
+
+// --- the ateapi control plane stays inside the cluster -----------------------------
+// substrate_control_plane_public is the one switch that puts CreateActor, DeleteActor
+// and actor-JWT minting behind the public hostname, and the route it renders carries no
+// caller authentication (substrate.tf:544 — the variable's own doc says so). Neither
+// graph indexes YAML or HCL well enough to catch a flip, and a plan with the route added
+// is green, so the gate is this file.
+
+test('the public control-plane route is opt-in and nothing opts in for the operator', () => {
+  assert.equal(tfDefault('substrate_control_plane_public'), 'false',
+    'substrate_control_plane_public now defaults to publishing an unauthenticated ateapi');
+  // The example tfvars is what an operator copies: a true there documents the
+  // exposure as the happy path rather than as an exception.
+  assert.match(tfvars, /^substrate_control_plane_public = false$/m);
+  assert.doesNotMatch(tfvars, /substrate_control_plane_public\s*=\s*true/);
+  // CI forwards the repo variable only when it is set. A fallback — or a literal true
+  // in the -var line — reopens the hop on every apply, including the ones nobody reads.
+  assert.equal(envBinding(deploy, 'SUBSTRATE_CONTROL_PLANE_PUBLIC').fallback, undefined,
+    'deploy.yml supplies a control-plane-public fallback, so an unset repo variable publishes ateapi');
+  assert.doesNotMatch(deploy, /substrate_control_plane_public=true/);
+});
+
+test('every public hop that reaches ateapi sits behind the opt-in', () => {
+  // Actors are addressed from outside by design; only a route whose backendRefs name
+  // the *control plane* Service may be public, and only when asked for.
+  const ateapiHops = (front.match(/resource "kubectl_manifest" "[a-z_]+" \{[\s\S]*?\n\}/g) || [])
+    .filter((block) => /var\.substrate_ateapi_service/.test(block));
+  assert.equal(ateapiHops.length, 1, 'expected exactly the control-plane HTTPRoute to backend ateapi');
+  for (const block of ateapiHops) {
+    const name = block.match(/resource "kubectl_manifest" "([a-z_]+)"/)[1];
+    assert.match(block, /^\s*count = .*&& var\.substrate_control_plane_public \? 1 : 0$/m,
+      `${name} publishes the control plane without the opt-in gate`);
+  }
+  // This URL is what a deployment feeds SUBSTRATE_URL. A non-null output with the flag
+  // off means something else renders the hop, and the fleet root would not know.
+  const urlOut = gkeOutputs.match(/output "substrate_control_plane_url" \{[\s\S]*?\n\}/);
+  assert.ok(urlOut, 'the control-plane URL output disappeared — check what publishes ateapi now');
+  assert.match(urlOut[0], /var\.substrate_control_plane_public/);
+});
+
+test('the control-plane ingress allowlist names workloads, never people', () => {
+  // --ingress-allowed-spiffe-ids is ateapi's only authN knob, so widening it past a
+  // per-workload identity is the difference between the planner reaching the control
+  // plane and any browser principal doing so.
+  const allowlist = control.match(/spiffe_ids="\$\{SUBSTRATE_INGRESS_SPIFFE_IDS:-([^"]+)\}"/);
+  assert.ok(allowlist, 'the SPIFFE allowlist left the control-plane workflow — check who authorizes ateapi calls');
+  for (const id of allowlist[1].split(',')) {
+    assert.match(id, /^spiffe:\/\/[a-z0-9.-]+\/ns\/[a-z0-9-]+\/sa\/[a-z0-9-]+$/,
+      `${id} is not a per-workload identity`);
+  }
+  assert.doesNotMatch(control, /allUsers|allAuthenticatedUsers/);
 });
 
 // --- substrate-nodepools.yml: the CI face of substrate-cleanup/recreate.sh ---------
