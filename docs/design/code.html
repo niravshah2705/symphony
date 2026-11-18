@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+
+<html lang="en"><head></head><body class="h-screen w-screen overflow-hidden flex flex-col bg-white text-slate-800 font-sans antialiased select-none"><svg aria-hidden="true" class="inline-defs-container" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kagent Workspace Workflows - ADLC Canvas</title>
+<!-- Tailwind CSS CDN with Forms & Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            canvas: '#f8f9fa',
+            gridline: '#e5e7eb',
+            brandBlue: '#2563eb',
+            brandTeal: '#059669',
+            brandOrange: '#d97706',
+            brandPurple: '#7c3aed',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+<!-- BEGIN: Custom Canvas and Layout Styles -->
+<style data-purpose="canvas-grid">
+    /* Subtle dot-grid canvas background identical to design screenshot */
+    .canvas-bg {
+      background-color: #f7f8fa;
+      background-image: 
+        radial-gradient(circle, #cbd5e1 1.1px, transparent 1.1px),
+        linear-gradient(to right, #edf2f7 1px, transparent 1px),
+        linear-gradient(to bottom, #edf2f7 1px, transparent 1px);
+      background-size: 24px 24px, 120px 120px, 120px 120px;
+    }
+
+    /* Custom scrollbars for side panels */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+<style data-purpose="node-styling">
+    .workflow-card {
+      transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+    }
+    .workflow-card:hover {
+      transform: translateY(-1px);
+    }
+    .port-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 9999px;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: crosshair;
+      z-index: 20;
+    }
+    .port-dot::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 9999px;
+      background-color: white;
+    }
+  </style>
+<!-- END: Custom Canvas and Layout Styles -->
+<!-- BEGIN: TopHeader -->
+<header class="h-14 border-b border-gray-200 bg-white px-5 flex items-center justify-between flex-shrink-0 z-30" data-purpose="application-header">
+<div class="flex items-center space-x-3">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold tracking-widest text-blue-600 uppercase">LOCAL ADLC PROTOTYPE</span>
+<div class="flex items-center gap-2">
+<h1 class="text-base font-bold text-slate-900 tracking-tight">Kagent Workspace workflows</h1>
+<span class="px-1.5 py-0.5 text-[9px] font-semibold bg-amber-50 text-amber-700 border border-amber-300 rounded tracking-wider">DOES NOT EXECUTE</span>
+</div>
+</div>
+<div class="hidden xl:flex items-center text-xs text-slate-400 pl-4 border-l border-slate-200 gap-2">
+<span>5 agents</span>
+<span>•</span>
+<span>2 decision gates</span>
+<span>•</span>
+<span>1 lane</span>
+</div>
+</div>
+<!-- Header Actions and Status -->
+<div class="flex items-center space-x-2.5">
+<div class="relative">
+<select class="text-xs bg-white border border-gray-300 rounded px-3 py-1.5 pr-8 font-medium text-slate-700 shadow-sm hover:border-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+<option>Full lifecycle · Ideation to Deploy</option>
+<option>Environment release · example</option>
+<option>Self-healing bugfix cycle</option>
+</select>
+</div>
+<button class="text-xs font-medium text-slate-700 bg-gray-50 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-100 transition shadow-sm" type="button">
+        New blank
+      </button>
+<button class="text-xs font-medium text-slate-700 bg-gray-50 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-100 transition shadow-sm" type="button">
+        Duplicate
+      </button>
+<button class="text-xs font-medium text-slate-700 bg-gray-50 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-100 transition shadow-sm" type="button">
+        Reset examples
+      </button>
+<div class="flex items-center text-xs text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded space-x-1.5 ml-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+<span class="text-[11px]">Saved locally · not shared</span>
+</div>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- BEGIN: AppBodyWrapper -->
+<div class="flex flex-1 overflow-hidden relative">
+<!-- BEGIN: LeftSidebar (Agent Palette) -->
+<aside class="w-64 border-r border-gray-200 bg-white flex flex-col flex-shrink-0 z-20 shadow-sm" data-purpose="agent-palette">
+<div class="p-3 border-b border-gray-100">
+<div class="flex items-center justify-between mb-2">
+<h2 class="text-xs font-bold text-slate-900 tracking-tight">Agent palette</h2>
+<span class="text-[10px] text-slate-400">Drag or click to add</span>
+</div>
+<!-- Search agents -->
+<div class="relative mb-2.5">
+<input class="w-full text-xs bg-slate-50 border border-gray-200 rounded px-2.5 py-1.5 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="Search agents and contexts" type="text"/>
+</div>
+<div class="grid grid-cols-2 gap-1.5">
+<button class="text-[11px] font-medium text-slate-700 bg-white border border-gray-300 hover:bg-slate-50 py-1.5 px-2 rounded text-center shadow-xs">
+            + New custom agent
+          </button>
+<button class="text-[11px] font-medium text-slate-700 bg-white border border-gray-300 hover:bg-slate-50 py-1.5 px-2 rounded text-center shadow-xs">
+            + New context
+          </button>
+</div>
+</div>
+<!-- Scrollable Agent List -->
+<div class="overflow-y-auto flex-1 p-2 space-y-1.5">
+<div class="px-2 pt-1 pb-1">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Available Agents</span>
+</div>
+<!-- Palette Item: Ideation Agent -->
+<div class="group border border-gray-200 rounded-md p-2.5 hover:border-blue-400 hover:bg-blue-50/40 cursor-grab active:cursor-grabbing transition bg-white shadow-xs">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center space-x-1.5">
+<span class="p-1 rounded bg-blue-50 text-blue-600 text-xs">✨</span>
+<span class="text-xs font-semibold text-slate-800">Ideation Agent</span>
+</div>
+<span class="text-slate-300 group-hover:text-slate-500 text-xs">›</span>
+</div>
+<p class="text-[11px] text-slate-500 leading-snug line-clamp-2">Explores requirements, defines MVB %, hosts tools &amp; harnesses Claude.</p>
+<span class="inline-block mt-1 text-[9px] uppercase font-mono text-slate-400">Ideation / Inception</span>
+</div>
+<!-- Palette Item: Planner Agent -->
+<div class="group border border-gray-200 rounded-md p-2.5 hover:border-blue-400 hover:bg-blue-50/40 cursor-grab active:cursor-grabbing transition bg-white shadow-xs">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center space-x-1.5">
+<span class="p-1 rounded bg-indigo-50 text-indigo-600 text-xs">📋</span>
+<span class="text-xs font-semibold text-slate-800">Planner Agent</span>
+</div>
+<span class="text-slate-300 group-hover:text-slate-500 text-xs">›</span>
+</div>
+<p class="text-[11px] text-slate-500 leading-snug line-clamp-2">Produces multi-week roadmaps and Jira/Linear phased work packages.</p>
+<span class="inline-block mt-1 text-[9px] uppercase font-mono text-slate-400">Planning &amp; Spec</span>
+</div>
+<!-- Palette Item: Coding Agent -->
+<div class="group border border-blue-500 bg-blue-50/20 rounded-md p-2.5 hover:border-blue-600 cursor-grab active:cursor-grabbing transition shadow-xs">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center space-x-1.5">
+<span class="p-1 rounded bg-blue-100 text-blue-700 text-xs">💻</span>
+<span class="text-xs font-semibold text-blue-900">Coding Agent</span>
+</div>
+<span class="text-blue-500 text-xs">›</span>
+</div>
+<p class="text-[11px] text-slate-600 leading-snug">Implements isolated sandbox commits with read-only tokens.</p>
+<span class="inline-block mt-1 text-[9px] uppercase font-mono text-blue-600 font-semibold">Active Selection</span>
+</div>
+<!-- Palette Item: Deploy Agent -->
+<div class="group border border-gray-200 rounded-md p-2.5 hover:border-blue-400 hover:bg-blue-50/40 cursor-grab active:cursor-grabbing transition bg-white shadow-xs">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center space-x-1.5">
+<span class="p-1 rounded bg-emerald-50 text-emerald-600 text-xs">🚀</span>
+<span class="text-xs font-semibold text-slate-800">Deploy Agent</span>
+</div>
+<span class="text-slate-300 group-hover:text-slate-500 text-xs">›</span>
+</div>
+<p class="text-[11px] text-slate-500 leading-snug line-clamp-2">Executes GitHub CI/CD, PR merge gates, &amp; auto-rollback to Coding Agent.</p>
+<span class="inline-block mt-1 text-[9px] uppercase font-mono text-slate-400">Deployment &amp; Rollback</span>
+</div>
+<!-- Palette Item: Monitoring Agent -->
+<div class="group border border-gray-200 rounded-md p-2.5 hover:border-blue-400 hover:bg-blue-50/40 cursor-grab active:cursor-grabbing transition bg-white shadow-xs">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center space-x-1.5">
+<span class="p-1 rounded bg-purple-50 text-purple-600 text-xs">📡</span>
+<span class="text-xs font-semibold text-slate-800">Monitoring Agent</span>
+</div>
+<span class="text-slate-300 group-hover:text-slate-500 text-xs">›</span>
+</div>
+<p class="text-[11px] text-slate-500 leading-snug line-clamp-2">Maintains telemetry listeners, scheduled health checks, and alerting.</p>
+<span class="inline-block mt-1 text-[9px] uppercase font-mono text-slate-400">Observability</span>
+</div>
+<!-- Palette Item: Security Review Agent -->
+<div class="group border border-gray-200 rounded-md p-2.5 hover:border-blue-400 hover:bg-blue-50/40 cursor-grab active:cursor-grabbing transition bg-white shadow-xs opacity-75">
+<div class="flex items-center justify-between mb-1">
+<div class="flex items-center space-x-1.5">
+<span class="p-1 rounded bg-amber-50 text-amber-600 text-xs">🛡️</span>
+<span class="text-xs font-semibold text-slate-800">Security Review Agent</span>
+</div>
+<span class="text-slate-300 group-hover:text-slate-500 text-xs">›</span>
+</div>
+<p class="text-[11px] text-slate-500 leading-snug line-clamp-2">Reviews abuse paths, isolation breach detection, secret leakage.</p>
+<span class="inline-block mt-1 text-[9px] uppercase font-mono text-slate-400">Security Guard</span>
+</div>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: CanvasMainArea -->
+<main class="flex-1 relative overflow-auto canvas-bg" data-purpose="canvas-area">
+<!-- Canvas Sub-Toolbar -->
+<div class="sticky top-3 left-4 z-30 flex items-center justify-between px-6 pointer-events-none">
+<div class="flex items-center gap-2 pointer-events-auto">
+<span class="text-xs text-slate-600 bg-white/90 backdrop-blur border border-slate-200 rounded px-2.5 py-1 font-mono shadow-xs">
+            1 lane · 0 standalone
+          </span>
+<button class="text-xs bg-white/90 backdrop-blur border border-slate-300 hover:bg-white text-slate-700 px-3 py-1 rounded shadow-xs font-medium transition">
+            Cancel connection
+          </button>
+</div>
+<!-- Canvas Zoom Controls matching Image 1 -->
+<div class="flex items-center bg-white/90 backdrop-blur border border-slate-300 rounded shadow-xs overflow-hidden text-xs font-medium text-slate-700 pointer-events-auto">
+<button class="px-2.5 py-1 hover:bg-slate-100 border-r border-slate-200" title="Zoom out">−</button>
+<span class="px-3 py-1 bg-slate-50/50 font-mono text-[11px] text-slate-600">82%</span>
+<button class="px-2.5 py-1 hover:bg-slate-100 border-r border-slate-200" title="Zoom in">+</button>
+<button class="px-2.5 py-1 hover:bg-slate-100 text-slate-600" title="Fit to screen">Fit</button>
+</div>
+</div>
+<!-- Infinite Canvas Stage (Width & Height expanded for dragging/scrolling) -->
+<div class="relative min-w-[2100px] min-h-[960px] p-10 pt-16" style="min-width: 2350px; min-height: 980px;">
+<!-- BEGIN: SVG Connections Layer -->
+<!-- Renders the flow connections matching Image 1 bezier curves + Image 2 pipeline logic -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none z-10" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="6" refy="5" viewbox="0 0 10 10"><path d="M 0 1 L 10 5 L 0 9 z" fill="#3b82f6"></path></marker><marker id="arrow-emerald" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="6" refy="5" viewbox="0 0 10 10"><path d="M 0 1 L 10 5 L 0 9 z" fill="#10b981"></path></marker><marker id="arrow-return" markerheight="6" markerwidth="6" orient="auto-start-reverse" refx="6" refy="5" viewbox="0 0 10 10"><path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b"></path></marker></defs><path d="M 365 310 C 395 310, 405 310, 435 310" fill="none" marker-end="url(#arrow)" stroke="#3b82f6" stroke-linecap="round" stroke-width="2"></path><path d="M 485 310 C 515 310, 525 310, 555 310" fill="none" marker-end="url(#arrow)" stroke="#3b82f6" stroke-linecap="round" stroke-width="2"></path><path d="M 865 310 C 895 310, 905 310, 935 310" fill="none" marker-end="url(#arrow)" stroke="#3b82f6" stroke-linecap="round" stroke-width="2"></path><path d="M 985 310 C 1015 310, 1025 310, 1055 310" fill="none" marker-end="url(#arrow)" stroke="#3b82f6" stroke-linecap="round" stroke-width="2"></path><path d="M 1365 310 C 1410 310, 1420 310, 1475 310" fill="none" marker-end="url(#arrow)" stroke="#3b82f6" stroke-linecap="round" stroke-width="2"></path><path d="M 1785 310 C 1830 310, 1840 310, 1895 310" fill="none" marker-end="url(#arrow-emerald)" stroke="#10b981" stroke-linecap="round" stroke-width="2"></path><path d="M 1630 580 C 1630 635, 1210 635, 1210 580" fill="none" marker-end="url(#arrow-return)" stroke="#f59e0b" stroke-dasharray="5 5" stroke-width="2"></path></svg>
+<!-- END: SVG Connections Layer -->
+<!-- BEGIN: Canvas Nodes (Workflow Cards) -->
+<!-- ============================================== -->
+<!-- NODE 1: IDEATION AGENT (From Image 2 & 1 UI) -->
+<!-- ============================================== -->
+<div class="absolute workflow-card bg-white rounded-lg border border-blue-500 shadow-md z-20 border-2 border-blue-600 shadow-xl ring-2 ring-blue-500/20" style="left: 55px; top: 90px; width: 310px;">
+<!-- Top Accent Line -->
+<div class="h-1 bg-blue-600 rounded-t-lg"></div>
+<!-- Port Dot Out -->
+<div class="port-dot bg-blue-500 -right-2 border-2 border-white shadow" title="Output connector"></div>
+<div class="p-3.5">
+<!-- Header Pill & Title -->
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center space-x-1.5">
+<span class="w-5 h-5 rounded bg-blue-50 flex items-center justify-center text-blue-600 text-xs">✨</span>
+<span class="text-[10px] font-bold text-blue-600 uppercase tracking-wider">IDEATION AGENT</span>
+</div>
+<span class="text-[10px] bg-slate-100 text-slate-600 font-mono px-1 rounded">Active</span>
+</div>
+<h3 class="text-sm font-bold text-slate-900 mb-2">Inception &amp; Harness</h3>
+<!-- Structured Spec Content (matching Sketch in Image 2) -->
+<div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-2 mb-3">
+<div class="flex items-center justify-between bg-slate-50 p-1.5 rounded border border-slate-100 font-mono text-[11px]">
+<span class="text-slate-500">Harness:</span>
+<div class="relative inline-flex items-center">
+<select class="text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 pr-5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs">
+<option value="Codex">Codex</option>
+<option selected="" value="Claude">Claude</option>
+<option value="DeepAgent">DeepAgent</option>
+<option value="Deepseek">Deepseek</option>
+<option value="OpenCode">OpenCode</option>
+</select>
+</div>
+</div>
+<div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-2"><div class="flex items-center justify-between font-mono text-[11px]"><span class="text-slate-500 font-medium">Model Family:</span><div class="relative inline-flex items-center"><select class="text-[10px] font-semibold text-purple-700 bg-white border border-purple-200 rounded px-1.5 py-0.5 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Anthropic">Anthropic</option><option value="OpenAI">OpenAI</option><option value="BYM">Custom (BYM)</option></select></div></div><div class="space-y-1 pt-1 border-t border-slate-200/60"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Task Tier Models</span><div class="grid grid-cols-1 gap-1 text-[10px] font-mono"><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-purple-700 font-medium">Complex:</span><span class="font-semibold text-slate-800">Opus 5.5</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-blue-600 font-medium">Medium:</span><span class="font-semibold text-slate-800">Claude Sonnet</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-slate-500 font-medium">Easy:</span><span class="font-semibold text-slate-800">Claude Sonnet</span></div></div></div><div class="pt-1 border-t border-slate-200/60 space-y-1.5 text-[10px]"><div class="flex items-center justify-between bg-blue-50/60 border border-blue-200/60 rounded px-1.5 py-1"><div class="flex items-center gap-1 text-slate-700 font-medium"><span class="text-[11px]">⚙️</span><span class="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Advanced Config</span></div><span class="font-mono text-[8px] bg-white border border-blue-200 text-blue-700 font-semibold px-1 rounded">Per-tier active</span></div><div class="flex items-center justify-between text-[8px] text-slate-500 px-0.5"><span class="flex items-center gap-1 font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Global fallback: 32k / 200k</span><span class="cursor-pointer text-blue-600 hover:underline font-mono">Edit tiers</span></div></div></div>
+<div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-1.5 text-[10px]"><div class="flex items-center justify-between"><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Plugins &amp; Connectors</span><span class="font-mono text-[9px] text-blue-600 font-semibold bg-blue-50 px-1 py-0.5 rounded border border-blue-200/60">2 Active</span></div><div class="space-y-1"><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Jira API</span></div><div class="flex items-center gap-1.5"><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button><button class="text-slate-400 hover:text-rose-600 font-bold text-[10px] ml-1" title="Remove" type="button">✕</button></div></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Linear Sync</span></div><div class="flex items-center gap-1.5"><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button><button class="text-slate-400 hover:text-rose-600 font-bold text-[10px] ml-1" title="Remove" type="button">✕</button></div></div></div><div class="pt-1 border-t border-slate-200/60"><div class="text-[9px] text-slate-400 mb-1 flex items-center justify-between"><span>Available to attach:</span><span class="text-blue-600 cursor-pointer hover:underline">+ Custom</span></div><div class="flex flex-wrap gap-1"><button class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-medium flex items-center gap-1 transition shadow-xs" type="button"><span>+</span><span>Figma</span></button><button class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-medium flex items-center gap-1 transition shadow-xs" type="button"><span>+</span><span>GitHub</span></button><button class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-medium flex items-center gap-1 transition shadow-xs" type="button"><span>+</span><span>Slack</span></button><button class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-medium flex items-center gap-1 transition shadow-xs" type="button"><span>+</span><span>Notion</span></button></div></div></div>
+<div class="bg-slate-50 p-1.5 rounded border border-slate-100 text-[11px]">
+<span class="text-slate-500 block text-[10px]">System Prompt:</span>
+<span class="italic text-slate-600 text-[10px]">"Analyze business domain &amp; cost envelope"</span>
+</div>
+</div>
+<!-- Footer Badge -->
+<div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+<span class="flex items-center gap-1 text-emerald-600 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Open Network Access
+              </span>
+<a class="text-blue-600 hover:underline" href="#">Agent profile</a>
+</div>
+</div>
+</div>
+<!-- DECISION GATE 1 (Between Ideation & Planner, sketched in Image 2) -->
+<div class="absolute z-20 flex flex-col items-center cursor-pointer group" id="decision-gate-node-1" style="left: 395px; top: 215px; width: 80px;" title="Click to configure decision gate">
+<div class="w-9 h-9 rotate-45 border-2 border-blue-400 bg-white shadow-sm flex items-center justify-center group-hover:scale-110 group-hover:border-blue-600 group-hover:ring-4 group-hover:ring-blue-500/20 transition cursor-pointer relative">
+<span class="-rotate-45 text-xs font-bold text-blue-600">?</span>
+<span class="absolute -top-1 -right-1 flex h-2.5 w-2.5 -rotate-45">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
+</span>
+</div>
+<div class="mt-3 text-center bg-white/95 backdrop-blur border border-slate-200 group-hover:border-blue-400 group-hover:shadow-md transition rounded p-1.5 shadow-xs w-36 -ml-14">
+<div class="flex items-center justify-center gap-1">
+<p class="text-[9px] font-bold text-slate-700 leading-tight group-hover:text-blue-700">Decision Gate: Specs</p>
+</div>
+<p class="text-[8px] text-slate-500 mt-0.5">MVB Defined % • Python Domain • Cost/Security OK</p>
+<span class="inline-block mt-1 text-[8px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">Click to configure</span>
+</div>
+</div>
+<!-- ============================================== -->
+<!-- NODE 2: PLANNER AGENT (From Image 2 & 1 UI)   -->
+<!-- ============================================== -->
+<div class="absolute workflow-card bg-white rounded-lg border border-slate-300 shadow-md z-20" style="left: 555px; top: 90px; width: 310px;"><div class="h-1 bg-indigo-500 rounded-t-lg"></div><div class="port-dot bg-blue-500 -left-2 border-2 border-white shadow" title="Input connector"></div><div class="port-dot bg-blue-500 -right-2 border-2 border-white shadow" title="Output connector"></div><div class="p-3.5"><div class="flex items-center justify-between mb-2"><div class="flex items-center space-x-1.5"><span class="w-5 h-5 rounded bg-indigo-50 flex items-center justify-center text-indigo-600 text-xs">📋</span><span class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">PLANNING &amp; SPEC</span></div><span class="text-[10px] bg-slate-100 text-slate-600 font-mono px-1 rounded">Configured</span></div><h3 class="text-sm font-bold text-slate-900 mb-2">Roadmap &amp; Task Synthesis</h3><div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-2 mb-3"><div class="flex items-center justify-between bg-slate-50 p-1.5 rounded border border-slate-100 font-mono text-[11px]"><span class="text-slate-500">Harness:</span><div class="relative inline-flex items-center"><select class="text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 pr-5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Claude 3.7">Claude 3.7</option><option value="Planner Harness">Planner Harness</option><option value="OpenSpec">OpenSpec</option></select></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-2"><div class="flex items-center justify-between font-mono text-[11px]"><span class="text-slate-500 font-medium">Model Family:</span><div class="relative inline-flex items-center"><select class="text-[10px] font-semibold text-purple-700 bg-white border border-purple-200 rounded px-1.5 py-0.5 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Anthropic">Anthropic</option><option value="OpenAI">OpenAI</option><option value="Bedrock">Bedrock</option></select></div></div><div class="space-y-1 pt-1 border-t border-slate-200/60"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Task Tier Models</span><div class="grid grid-cols-1 gap-1 text-[10px] font-mono"><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-purple-700 font-medium">Complex:</span><span class="font-semibold text-slate-800">Claude 3.7 Sonnet (Thinking)</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-blue-600 font-medium">Medium:</span><span class="font-semibold text-slate-800">Claude 3.5 Sonnet</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-slate-500 font-medium">Easy:</span><span class="font-semibold text-slate-800">Claude 3.5 Haiku</span></div></div></div><div class="pt-1 border-t border-slate-200/60 space-y-1.5 text-[10px]"><div class="flex items-center justify-between bg-blue-50/60 border border-blue-200/60 rounded px-1.5 py-1"><div class="flex items-center gap-1 text-slate-700 font-medium"><span class="text-[11px]">⚙️</span><span class="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Advanced Config</span></div><span class="font-mono text-[8px] bg-white border border-blue-200 text-blue-700 font-semibold px-1 rounded">Planning mode</span></div><div class="flex items-center justify-between text-[8px] text-slate-500 px-0.5"><span class="flex items-center gap-1 font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>32k thk / 200k ctx</span><span class="cursor-pointer text-blue-600 hover:underline font-mono">Edit tiers</span></div></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-1.5 text-[10px]"><div class="flex items-center justify-between"><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Plugins &amp; Connectors</span><span class="font-mono text-[9px] text-blue-600 font-semibold bg-blue-50 px-1 py-0.5 rounded border border-blue-200/60">3 Active</span></div><div class="space-y-1"><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Jira API</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Linear Sync</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Confluence / Notion</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div></div></div><div class="bg-slate-50 p-1.5 rounded border border-slate-100 text-[11px]"><span class="text-slate-500 block text-[10px]">System Prompt:</span><span class="italic text-slate-600 text-[10px]">"Transform verified MVB scope into multi-week phased epics, tasks, and dependency DAG."</span></div></div><div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500"><span class="flex items-center gap-1 text-emerald-600 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Open Network Access</span><a class="text-blue-600 hover:underline" href="#">Agent profile</a></div></div></div>
+<!-- DECISION GATE 2 (Validate Planning %, sketched in Image 2) -->
+<div class="absolute z-20 flex flex-col items-center" style="left: 895px; top: 215px; width: 80px;">
+<div class="w-9 h-9 rotate-45 border-2 border-indigo-400 bg-white shadow-sm flex items-center justify-center hover:scale-105 transition cursor-pointer">
+<span class="-rotate-45 text-xs font-bold text-indigo-600">✓</span>
+</div>
+<div class="mt-3 text-center bg-white/95 backdrop-blur border border-slate-200 rounded p-1.5 shadow-xs w-32 -ml-12">
+<p class="text-[9px] font-bold text-slate-700 leading-tight">Validate Planning %</p>
+<p class="text-[8px] text-slate-500 mt-0.5">Approval threshold &gt; 90%</p>
+</div>
+</div>
+<!-- ============================================== -->
+<!-- NODE 3: CODING AGENT (Selected node - Image 1/2)-->
+<!-- ============================================== -->
+<div class="absolute workflow-card bg-white rounded-lg z-20 border-2 border-blue-600 shadow-xl ring-2 ring-blue-500/20" style="left: 1055px; top: 90px; width: 310px;"><div class="h-1.5 bg-blue-600 rounded-t-lg"></div><div class="port-dot bg-blue-600 -left-2 border-2 border-white shadow" title="Input connector"></div><div class="port-dot bg-blue-600 -right-2 border-2 border-white shadow" title="Output connector"></div><div class="p-3.5"><div class="flex items-center justify-between mb-2"><div class="flex items-center space-x-1.5"><span class="w-5 h-5 rounded bg-blue-100 flex items-center justify-center text-blue-700 text-xs">💻</span><span class="text-[10px] font-bold text-blue-700 uppercase tracking-wider">DEV &amp; SANDBOX</span></div><span class="text-[9px] bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200 uppercase">Active Selection</span></div><h3 class="text-sm font-bold text-slate-900 mb-2">Isolated Code Synthesizer</h3><div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-2 mb-3"><div class="flex items-center justify-between bg-slate-50 p-1.5 rounded border border-slate-100 font-mono text-[11px]"><span class="text-slate-500">Harness:</span><div class="relative inline-flex items-center"><select class="text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 pr-5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Claude Code">Claude Code</option><option value="Docker Sandbox">Docker Sandbox</option><option value="Codex">Codex</option></select></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-2"><div class="flex items-center justify-between font-mono text-[11px]"><span class="text-slate-500 font-medium">Model Family:</span><div class="relative inline-flex items-center"><select class="text-[10px] font-semibold text-purple-700 bg-white border border-purple-200 rounded px-1.5 py-0.5 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Anthropic">Anthropic</option><option value="Bedrock">Bedrock</option><option value="OpenAI">OpenAI</option></select></div></div><div class="space-y-1 pt-1 border-t border-slate-200/60"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Task Tier Models</span><div class="grid grid-cols-1 gap-1 text-[10px] font-mono"><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-purple-700 font-medium">Complex:</span><span class="font-semibold text-slate-800">Claude 3.7 Sonnet (Optimal Code)</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-blue-600 font-medium">Medium:</span><span class="font-semibold text-slate-800">Claude 3.5 Sonnet</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-slate-500 font-medium">Easy:</span><span class="font-semibold text-slate-800">Claude 3.5 Haiku</span></div></div></div><div class="pt-1 border-t border-slate-200/60 space-y-1.5 text-[10px]"><div class="flex items-center justify-between bg-blue-50/60 border border-blue-200/60 rounded px-1.5 py-1"><div class="flex items-center gap-1 text-slate-700 font-medium"><span class="text-[11px]">⚙️</span><span class="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Advanced Config</span></div><span class="font-mono text-[8px] bg-white border border-blue-200 text-blue-700 font-semibold px-1 rounded">Sandbox locked</span></div><div class="flex items-center justify-between text-[8px] text-slate-500 px-0.5"><span class="flex items-center gap-1 font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Sandboxed ephemeral · 128k ctx</span><span class="cursor-pointer text-blue-600 hover:underline font-mono">Edit tiers</span></div></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-1.5 text-[10px]"><div class="flex items-center justify-between"><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Plugins &amp; Connectors</span><span class="font-mono text-[9px] text-blue-600 font-semibold bg-blue-50 px-1 py-0.5 rounded border border-blue-200/60">3 Active</span></div><div class="space-y-1"><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">GitHub App</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Docker Engine</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Secret Vault</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div></div></div><div class="bg-slate-50 p-1.5 rounded border border-slate-100 text-[11px]"><span class="text-slate-500 block text-[10px]">System Prompt:</span><span class="italic text-slate-600 text-[10px]">"Implement approved scope changes with test coverage; block cloud resource creation."</span></div></div><div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500"><span class="flex items-center gap-1 text-emerald-600 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Git Token Isolation</span><a class="text-blue-600 hover:underline" href="#">Agent profile</a></div></div></div>
+<!-- ============================================== -->
+<!-- NODE 4: DEPLOY AGENT (From Image 2 & 1 UI)    -->
+<!-- ============================================== -->
+<div class="absolute workflow-card bg-white rounded-lg border border-slate-300 shadow-md z-20" style="left: 1475px; top: 90px; width: 310px;"><div class="h-1 bg-amber-500 rounded-t-lg"></div><div class="port-dot bg-blue-500 -left-2 border-2 border-white shadow" title="Input connector"></div><div class="port-dot bg-emerald-500 -right-2 border-2 border-white shadow" title="Output connector"></div><div class="p-3.5"><div class="flex items-center justify-between mb-2"><div class="flex items-center space-x-1.5"><span class="w-5 h-5 rounded bg-amber-50 flex items-center justify-center text-amber-600 text-xs">🚀</span><span class="text-[10px] font-bold text-amber-600 uppercase tracking-wider">DEPLOYMENT &amp; CI/CD</span></div><span class="text-[10px] bg-slate-100 text-slate-600 font-mono px-1 rounded">Configured</span></div><h3 class="text-sm font-bold text-slate-900 mb-2">Pipeline &amp; Rollback Controller</h3><div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-2 mb-3"><div class="flex items-center justify-between bg-slate-50 p-1.5 rounded border border-slate-100 font-mono text-[11px]"><span class="text-slate-500">Harness:</span><div class="relative inline-flex items-center"><select class="text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 pr-5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="GitHub Actions">GitHub Actions</option><option value="ArgoCD Runner">ArgoCD Runner</option><option value="GitLab CI">GitLab CI</option></select></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-2"><div class="flex items-center justify-between font-mono text-[11px]"><span class="text-slate-500 font-medium">Model Family:</span><div class="relative inline-flex items-center"><select class="text-[10px] font-semibold text-purple-700 bg-white border border-purple-200 rounded px-1.5 py-0.5 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Anthropic">Anthropic</option><option value="OpenAI">OpenAI</option><option value="Bedrock">Bedrock</option></select></div></div><div class="space-y-1 pt-1 border-t border-slate-200/60"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Task Tier Models</span><div class="grid grid-cols-1 gap-1 text-[10px] font-mono"><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-purple-700 font-medium">Complex:</span><span class="font-semibold text-slate-800">Claude 3.7 Sonnet</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-blue-600 font-medium">Medium:</span><span class="font-semibold text-slate-800">Claude 3.5 Sonnet</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-slate-500 font-medium">Easy:</span><span class="font-semibold text-slate-800">Claude 3.5 Haiku</span></div></div></div><div class="pt-1 border-t border-slate-200/60 space-y-1.5 text-[10px]"><div class="flex items-center justify-between bg-blue-50/60 border border-blue-200/60 rounded px-1.5 py-1"><div class="flex items-center gap-1 text-slate-700 font-medium"><span class="text-[11px]">⚙️</span><span class="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Advanced Config</span></div><span class="font-mono text-[8px] bg-white border border-blue-200 text-blue-700 font-semibold px-1 rounded">Auto-rollback</span></div><div class="flex items-center justify-between text-[8px] text-slate-500 px-0.5"><span class="flex items-center gap-1 font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Rollback on fail · PR merge</span><span class="cursor-pointer text-blue-600 hover:underline font-mono">Edit tiers</span></div></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-1.5 text-[10px]"><div class="flex items-center justify-between"><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Plugins &amp; Connectors</span><span class="font-mono text-[9px] text-blue-600 font-semibold bg-blue-50 px-1 py-0.5 rounded border border-blue-200/60">3 Active</span></div><div class="space-y-1"><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">GitHub CI/CD</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">AWS CDK / Terraform</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">ArgoCD</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div></div></div><div class="bg-slate-50 p-1.5 rounded border border-slate-100 text-[11px]"><span class="text-slate-500 block text-[10px]">System Prompt:</span><span class="italic text-slate-600 text-[10px]">"Review PR diffs, execute pre-flight canary deploy, trigger auto-rollback on regression."</span></div></div><div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500"><span class="flex items-center gap-1 text-emerald-600 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Restricted Deploy Access</span><a class="text-blue-600 hover:underline" href="#">Agent profile</a></div></div></div>
+<!-- ============================================== -->
+<!-- NODE 5: MONITORING AGENT (From Image 2 & 1 UI) -->
+<!-- ============================================== -->
+<div class="absolute workflow-card bg-white rounded-lg border border-slate-300 shadow-md z-20" style="left: 1895px; top: 90px; width: 310px;"><div class="h-1 bg-emerald-500 rounded-t-lg"></div><div class="port-dot bg-emerald-500 -left-2 border-2 border-white shadow" title="Input connector"></div><div class="p-3.5"><div class="flex items-center justify-between mb-2"><div class="flex items-center space-x-1.5"><span class="w-5 h-5 rounded bg-purple-50 flex items-center justify-center text-purple-600 text-xs">📡</span><span class="text-[10px] font-bold text-purple-600 uppercase tracking-wider">OBSERVABILITY &amp; QA</span></div><span class="text-[10px] bg-slate-100 text-slate-600 font-mono px-1 rounded">Configured</span></div><h3 class="text-sm font-bold text-slate-900 mb-2">Telemetry &amp; Sentry Guardian</h3><div class="space-y-1.5 text-xs text-slate-600 border-t border-slate-100 pt-2 mb-3"><div class="flex items-center justify-between bg-slate-50 p-1.5 rounded border border-slate-100 font-mono text-[11px]"><span class="text-slate-500">Harness:</span><div class="relative inline-flex items-center"><select class="text-[11px] font-semibold text-slate-800 bg-white border border-slate-200 rounded px-1.5 py-0.5 pr-5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="OpenTelemetry">OpenTelemetry</option><option value="Datadog Harness">Datadog Harness</option><option value="Sentry Daemon">Sentry Daemon</option></select></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-2"><div class="flex items-center justify-between font-mono text-[11px]"><span class="text-slate-500 font-medium">Model Family:</span><div class="relative inline-flex items-center"><select class="text-[10px] font-semibold text-purple-700 bg-white border border-purple-200 rounded px-1.5 py-0.5 pr-4 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-xs"><option selected="" value="Anthropic">Anthropic</option><option value="OpenAI">OpenAI</option><option value="Bedrock">Bedrock</option></select></div></div><div class="space-y-1 pt-1 border-t border-slate-200/60"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Task Tier Models</span><div class="grid grid-cols-1 gap-1 text-[10px] font-mono"><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-purple-700 font-medium">Complex:</span><span class="font-semibold text-slate-800">Claude 3.7 Sonnet</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-blue-600 font-medium">Medium:</span><span class="font-semibold text-slate-800">Claude 3.5 Haiku</span></div><div class="flex items-center justify-between bg-white px-1.5 py-0.5 rounded border border-slate-200"><span class="text-slate-500 font-medium">Easy:</span><span class="font-semibold text-slate-800">Fast Event Filter</span></div></div></div><div class="pt-1 border-t border-slate-200/60 space-y-1.5 text-[10px]"><div class="flex items-center justify-between bg-blue-50/60 border border-blue-200/60 rounded px-1.5 py-1"><div class="flex items-center gap-1 text-slate-700 font-medium"><span class="text-[11px]">⚙️</span><span class="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Advanced Config</span></div><span class="font-mono text-[8px] bg-white border border-blue-200 text-blue-700 font-semibold px-1 rounded">5s polling</span></div><div class="flex items-center justify-between text-[8px] text-slate-500 px-0.5"><span class="flex items-center gap-1 font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Anomaly threshold: 99.2%</span><span class="cursor-pointer text-blue-600 hover:underline font-mono">Edit tiers</span></div></div></div><div class="bg-slate-50 p-2 rounded border border-slate-100 space-y-1.5 text-[10px]"><div class="flex items-center justify-between"><span class="text-slate-500 font-bold uppercase tracking-wider text-[9px]">Plugins &amp; Connectors</span><span class="font-mono text-[9px] text-blue-600 font-semibold bg-blue-50 px-1 py-0.5 rounded border border-blue-200/60">3 Active</span></div><div class="space-y-1"><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Datadog</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Sentry</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div><div class="flex items-center justify-between bg-white px-2 py-1 rounded border border-slate-200 shadow-xs"><div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span class="font-semibold text-slate-800 text-[10px]">Slack Alerts</span></div><button class="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[9px] flex items-center gap-0.5" type="button"><span>⚙️</span><span>Config</span></button></div></div></div><div class="bg-slate-50 p-1.5 rounded border border-slate-100 text-[11px]"><span class="text-slate-500 block text-[10px]">System Prompt:</span><span class="italic text-slate-600 text-[10px]">"Listen to real-time execution telemetry, trigger automated incident reports and diagnostic traces."</span></div></div><div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-500"><span class="flex items-center gap-1 text-emerald-600 font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Live Telemetry Stream</span><a class="text-blue-600 hover:underline" href="#">Agent profile</a></div></div></div>
+<!-- LOOPBACK BADGE / NOTE INDICATOR (Image 2 logic) -->
+<div class="absolute z-20 bg-amber-50 border border-amber-300 rounded px-3 py-1 shadow-sm flex items-center space-x-2 text-xs text-amber-800 font-medium" style="left: 1300px; top: 615px;">
+<span class="animate-spin text-amber-600">↻</span>
+<span>Failure Loopback: Automated rollback and diagnostic context passed back to Coding Agent</span>
+</div>
+</div>
+<!-- END: Infinite Canvas Stage -->
+</main>
+<!-- END: CanvasMainArea -->
+<!-- BEGIN: RightSidebar (Inspector Configuration Panel) -->
+<aside class="w-80 border-l border-gray-200 bg-white flex flex-col flex-shrink-0 z-20 shadow-sm" data-purpose="node-inspector">
+<div class="p-4 border-b border-gray-100">
+<h2 class="text-xs font-bold text-slate-900 tracking-tight">Coding Agent</h2>
+<p class="text-[11px] text-slate-400">Execution context &amp; Node parameters</p>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+<!-- Field 1: Card Name -->
+<div>
+<label class="block text-[11px] font-semibold text-slate-700 mb-1">Card name</label>
+<input class="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500" type="text" value="Coding Agent (Build &amp; Dev)"/>
+</div>
+<!-- Field 2: Description -->
+<div>
+<label class="block text-[11px] font-semibold text-slate-700 mb-1">Description</label>
+<textarea class="w-full text-xs border border-gray-300 rounded p-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none" rows="3">Implements approved change in an isolated sandbox development workspace with read-only tokens.</textarea>
+</div>
+<!-- Section: EXECUTION CONTEXT -->
+<div class="pt-2 border-t border-slate-100">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Execution Context</span>
+<div class="space-y-2.5">
+<div>
+<span class="text-[11px] text-slate-500 block mb-0.5">Model Engine</span>
+<select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-slate-800">
+<option>Claude 3.7 Sonnet (Optimal Code Synthesizer)</option>
+<option>Claude 3.5 Sonnet</option>
+<option>Custom BYM (Bring Your Model) Endpoint</option>
+</select>
+</div>
+<div class="bg-slate-50 p-2.5 rounded border border-slate-200/80 space-y-2">
+<label class="flex items-center space-x-2">
+<input checked="" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] text-slate-700 font-medium">Git Token Isolation</span>
+</label>
+<label class="flex items-center space-x-2">
+<input checked="" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] text-slate-700 font-medium">Prevent Cloud Resource Creation</span>
+</label>
+<label class="flex items-center space-x-2">
+<input checked="" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] text-slate-700 font-medium">Read-Only Production Secrets</span>
+</label>
+</div>
+<p class="text-[11px] text-slate-500">Curated platform profile configured with isolated ephemeral containers.</p>
+</div>
+</div>
+<!-- Section: DEPENDENCIES -->
+<div class="pt-2 border-t border-slate-100">
+<span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Dependencies</span>
+<p class="text-[11px] text-slate-500 mb-2">Keyboard alternative to drawing a connection.</p>
+<div class="space-y-2">
+<select class="w-full text-xs border border-gray-300 rounded px-2 py-1.5 bg-white text-slate-700">
+<option>Planner Agent (Phase 2)</option>
+<option>Ideation Agent</option>
+<option>Security Review Gate</option>
+</select>
+<button class="w-full text-xs font-medium text-slate-700 bg-gray-100 border border-gray-300 hover:bg-gray-200 py-1.5 rounded transition" type="button">
+              Add dependency
+            </button>
+</div>
+</div>
+<!-- Action: Delete Node -->
+<div class="pt-3 border-t border-slate-100">
+<button class="w-full text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 py-2 rounded transition" type="button">
+            Delete node
+          </button>
+</div>
+</div>
+</aside>
+<!-- END: RightSidebar -->
+</div>
+<!-- END: AppBodyWrapper -->
+<!-- BEGIN: Interactive Canvas Behaviors Script -->
+<script data-purpose="canvas-interactivity">
+    // Visual node selection toggling and basic UI feedback
+    document.addEventListener('DOMContentLoaded', () => {
+      const cards = document.querySelectorAll('.workflow-card');
+      
+      cards.forEach(card => {
+        card.addEventListener('click', (e) => {
+          // Deselect active ring from all cards
+          cards.forEach(c => {
+            c.classList.remove('border-2', 'border-blue-600', 'shadow-xl', 'ring-2', 'ring-blue-500/20');
+            c.classList.add('border-slate-300');
+          });
+
+          // Highlight selected card
+          card.classList.remove('border-slate-300');
+          card.classList.add('border-2', 'border-blue-600', 'shadow-xl', 'ring-2', 'ring-blue-500/20');
+        });
+      });
+    });
+  </script>
+<!-- END: Interactive Canvas Behaviors Script -->
+<!-- BEGIN: Decision Gate Review Modal Drawer -->
+<div aria-labelledby="modal-gate-title" aria-modal="true" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 transition-opacity" id="decision-gate-modal" role="dialog">
+<div class="relative w-full max-w-5xl bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden transform transition-all text-slate-800 font-sans" id="decision-gate-modal-panel">
+<!-- Modal Header -->
+<div class="px-6 py-4 border-b border-gray-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg border border-blue-200 shadow-xs">
+          ⚖️
+        </div>
+<div>
+<div class="flex items-center gap-2.5">
+<h2 class="text-base font-bold text-slate-900 tracking-tight" id="modal-gate-title">Curated Decision Gate Review: Questions to Decision</h2>
+<span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-full flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Threshold Pass Rate: 84%
+            </span>
+</div>
+<p class="text-xs text-slate-500 mt-0.5">Review domain analysis criteria, card thresholds, and validation rules to advance workflow.</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button aria-label="Close modal" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-200/60 transition" id="close-modal-x-btn" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</div>
+<!-- Modal Body: 6 Assessment Cards Grid -->
+<div class="flex-1 overflow-y-auto p-6 bg-slate-100/50 space-y-4">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+<!-- CARD 1: Business Analysis -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between p-4 hover:border-blue-300 transition">
+<div>
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-sm">📊</span>
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">Business Analysis</h3>
+</div>
+<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Passed (90%)</span>
+</div>
+<!-- Subsections & Checklist -->
+<div class="space-y-2.5 text-xs text-slate-700">
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">1. MVB Defined</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Minimum Viable Business scope verified (92%)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Phase 1 Defined</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Phase 1 MVP milestones and architecture locked</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Phase 3 Defined</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Phase 3 scalability and retirement guardrails approved</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Card-level threshold setting -->
+<div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+<span class="text-slate-500 font-medium">Threshold: ≥ 85% required</span>
+<span class="font-mono font-semibold text-emerald-600">Pass rate: 90%</span>
+</div>
+</div>
+<!-- CARD 2: Cloud Selection -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between p-4 hover:border-blue-300 transition">
+<div>
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-sm">☁️</span>
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">Cloud Selection</h3>
+</div>
+<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Approved (100%)</span>
+</div>
+<!-- Subsections & Checklist -->
+<div class="space-y-2.5 text-xs text-slate-700">
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">1. Provider Matrix</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Hosting environment selected (GCP / AWS / Hybrid)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Hosting Tool &amp; Runtime</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Runtime environment pinned (Python 3.11+ containerized)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Regional Compliance</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Sovereignty &amp; VPC peering constraints validated</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Card-level threshold setting -->
+<div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+<span class="text-slate-500 font-medium">Threshold: 100% Required</span>
+<span class="font-mono font-semibold text-emerald-600">Pass rate: 100%</span>
+</div>
+</div>
+<!-- CARD 3: Cost Analysis -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between p-4 hover:border-blue-300 transition">
+<div>
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-sm">💰</span>
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">Cost Analysis</h3>
+</div>
+<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Passed (85%)</span>
+</div>
+<!-- Subsections & Checklist -->
+<div class="space-y-2.5 text-xs text-slate-700">
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">1. Run-Rate Projection</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Monthly inference budget established ($1,200/mo cap)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Agent Execution Envelope</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Burst limit policy with circuit breakers configured</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Token Cap</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">ROI justification signed off by domain lead</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Card-level threshold setting -->
+<div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+<span class="text-slate-500 font-medium">Threshold: ≥ 80%</span>
+<span class="font-mono font-semibold text-emerald-600">Pass rate: 85%</span>
+</div>
+</div>
+<!-- CARD 4: Business Metrics -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between p-4 hover:border-blue-300 transition">
+<div>
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-sm">📈</span>
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">Business Metrics</h3>
+</div>
+<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Passed (88%)</span>
+</div>
+<!-- Subsections & Checklist -->
+<div class="space-y-2.5 text-xs text-slate-700">
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">1. KPI Framework</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Primary business conversion metric specified</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Telemetry Hooks</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Agent task completion rate benchmark (target &gt;95%)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Success Benchmarks</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Automated anomaly threshold defined</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Card-level threshold setting -->
+<div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+<span class="text-slate-500 font-medium">Threshold: ≥ 75%</span>
+<span class="font-mono font-semibold text-emerald-600">Pass rate: 88%</span>
+</div>
+</div>
+<!-- CARD 5: Revenue Model -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between p-4 hover:border-blue-300 transition">
+<div>
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-sm">💳</span>
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">Revenue Model</h3>
+</div>
+<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Passed (82%)</span>
+</div>
+<!-- Subsections & Checklist -->
+<div class="space-y-2.5 text-xs text-slate-700">
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">1. Monetization Tiering</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Tiered API quota and usage tiering verified</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Billing Integration</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Customer billing webhook validation active</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Unit Economics</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Gross margin per agent task &gt; 65%</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Card-level threshold setting -->
+<div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+<span class="text-slate-500 font-medium">Threshold: ≥ 80%</span>
+<span class="font-mono font-semibold text-emerald-600">Pass rate: 82%</span>
+</div>
+</div>
+<!-- CARD 6: Timeline Defined -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between p-4 hover:border-blue-300 transition">
+<div>
+<div class="flex items-center justify-between pb-2.5 border-b border-slate-100 mb-3">
+<div class="flex items-center gap-2">
+<span class="text-sm">🗓️</span>
+<h3 class="text-xs font-bold text-slate-900 uppercase tracking-wide">Timeline Defined</h3>
+</div>
+<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">Passed (100%)</span>
+</div>
+<!-- Subsections & Checklist -->
+<div class="space-y-2.5 text-xs text-slate-700">
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">1. Sprint Cadence</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Sprint delivery cadence locked (2-week release)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. Gate Sign-off SLAs</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Decision gate auto-escalation timer (&lt; 48 hrs)</span>
+</label>
+</div>
+<div class="space-y-1">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">3. Dependency Deadlines</span>
+<label class="flex items-start gap-2 cursor-pointer bg-slate-50 p-1.5 rounded border border-slate-100 hover:bg-slate-100/60">
+<input checked="" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" type="checkbox"/>
+<span class="text-[11px] leading-tight">Downstream Planner Agent dependency clearance verified</span>
+</label>
+</div>
+</div>
+</div>
+<!-- Card-level threshold setting -->
+<div class="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+<span class="text-slate-500 font-medium">Threshold: 100% Required</span>
+<span class="font-mono font-semibold text-emerald-600">Pass rate: 100%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Footer Action Bar -->
+<div class="px-6 py-3.5 bg-white border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
+<div class="flex items-center gap-2 text-xs font-medium text-slate-700">
+<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+<span>Summary: <strong class="text-slate-900">All 6 Card Thresholds Met</strong> (Overall 88% / 80% Required)</span>
+</div>
+<div class="flex items-center space-x-2.5">
+<button class="text-xs font-medium text-slate-600 hover:text-slate-800 bg-white border border-gray-300 hover:bg-slate-50 px-3.5 py-1.5 rounded transition shadow-xs" id="close-modal-cancel-btn" type="button">
+          Cancel
+        </button>
+<button class="text-xs font-medium text-slate-700 bg-gray-50 border border-gray-300 hover:bg-gray-100 px-3.5 py-1.5 rounded transition shadow-xs" id="save-draft-btn" type="button">
+          Save Draft
+        </button>
+<button class="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded transition shadow-sm flex items-center gap-1.5" id="approve-gate-btn" type="button">
+<span>✓</span> Allow to Move Further (Approve Gate)
+        </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Decision Gate Dialog Controller Script -->
+<script data-purpose="decision-gate-modal-script">
+  (function() {
+    const gateNode = document.getElementById('decision-gate-node-1');
+    const modal = document.getElementById('decision-gate-modal');
+    const closeXBtn = document.getElementById('close-modal-x-btn');
+    const cancelBtn = document.getElementById('close-modal-cancel-btn');
+    const saveDraftBtn = document.getElementById('save-draft-btn');
+    const approveGateBtn = document.getElementById('approve-gate-btn');
+
+    function openModal() {
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      if (modal) modal.classList.add('hidden');
+    }
+
+    if (gateNode) {
+      gateNode.addEventListener('click', openModal);
+    }
+    if (closeXBtn) {
+      closeXBtn.addEventListener('click', closeModal);
+    }
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', closeModal);
+    }
+    if (saveDraftBtn) {
+      saveDraftBtn.addEventListener('click', () => {
+        closeModal();
+      });
+    }
+    if (approveGateBtn) {
+      approveGateBtn.addEventListener('click', () => {
+        closeModal();
+      });
+    }
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+      });
+    }
+  })();
+</script>
+</body></html>

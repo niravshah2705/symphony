@@ -560,6 +560,29 @@ class PipelineRunRepository {
     });
   }
 
+  // The deploy stage was retired with the Cloud Run deployer (2026-11). A run
+  // that reaches the deploy transition closes as succeeded: nothing is
+  // dispatched, and a legacy awaiting_approval run is released the same way.
+  async retireDeployStage(runId) {
+    return this.store.transaction(async (transaction) => {
+      let run = await transaction.getRun(runId);
+      if (!run) repositoryError('Pipeline run was not found.', 'pipeline_run_not_found', 404);
+      if (TERMINAL_RUN_STATUSES.has(run.status)) return { changed: false, run };
+      if (run.checkpoint.activeCommandId) {
+        repositoryError('A stage command is already active.', 'pipeline_stage_active');
+      }
+      const now = this.clock();
+      run = nextRevision({
+        ...run,
+        status: 'succeeded',
+        pendingDeploymentApproval: null,
+        failure: null,
+      }, now);
+      await transaction.setRun(runId, run);
+      return { changed: true, run };
+    });
+  }
+
   async saveDeploymentApprovalClaim(runId, rawApproval) {
     const approval = copySecretFreeJson(rawApproval, 'deploymentApproval');
     return this.store.transaction(async (transaction) => {

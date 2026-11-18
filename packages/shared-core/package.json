@@ -15,6 +15,8 @@
     "./pipeline/*": "./src/pipeline/*.js",
     "./agent/*": "./src/agent/*.js",
     "./agent/harness-catalog.json": "./src/agent/harness-catalog.json",
+    "./workflow/*": "./src/workflow/*.js",
+    "./workflow-defaults": "./src/workflow-defaults.js",
     "./global-questions-defaults.json": "./src/global-questions-defaults.json",
     "./attachments/*": "./src/attachments/*.js",
     "./messaging/*": "./src/messaging/*.js",

@@ -4,9 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { providerForRole } = require('./llm');
-const { modelRoleForTask } = require('./coder-orchestrator');
 const { PlanSchema, normalizeTshirtSize } = require('./schema');
-const { CONFIG } = require('../config');
 
 /* ----------------------------- providerForRole ------------------------- */
 
@@ -50,21 +48,6 @@ test('providerForRole: purpose roles fall back to the hosted slot, then ollama',
   assert.strictEqual(providerForRole({ llmProvider: 'codex' }, 'execution'), 'codex');
   assert.strictEqual(providerForRole({}, 'testing'), 'ollama');
   assert.strictEqual(providerForRole({}, 'deployment'), 'ollama');
-});
-
-/* ----------------------------- modelRoleForTask ------------------------ */
-
-const LOCAL = CONFIG.CODER.localModelLabel;
-const HOSTED = CONFIG.CODER.hostedModelLabel;
-
-// Model selection is now purpose-based: the coder always uses the `execution`
-// role regardless of a task's size or legacy "local"/"hosted" model label.
-test('modelRoleForTask: always routes the coder to the execution role', () => {
-  assert.strictEqual(modelRoleForTask({ labels: ['AI', LOCAL] }), 'execution');
-  assert.strictEqual(modelRoleForTask({ labels: ['AI', HOSTED] }), 'execution');
-  assert.strictEqual(modelRoleForTask({ labels: ['AI'] }), 'execution');
-  assert.strictEqual(modelRoleForTask({}), 'execution');
-  assert.strictEqual(modelRoleForTask({ labels: [LOCAL.toUpperCase()] }), 'execution');
 });
 
 /* --------------------------- schema: tshirtSize ------------------------- */

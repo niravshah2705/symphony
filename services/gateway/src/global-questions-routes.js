@@ -32,7 +32,7 @@ function callerIdentity(req) {
 
 function mountGlobalQuestionsRoutes(app, options = {}) {
   const proxy = options.proxy
-    || createProxy(options.plannerUrl || CONFIG.SERVICES.plannerUrl, { injectHeaders: callerIdentity });
+    || createProxy(CONFIG.SERVICES.agentUrl, { injectHeaders: callerIdentity });
   const gates = {
     requireAuthenticated,
     requirePermission,

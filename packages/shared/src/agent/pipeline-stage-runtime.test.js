@@ -11,12 +11,9 @@ const {
   createStageCommandV1,
 } = require('@ai-fleet/shared-core/pipeline/contracts');
 const {
-  FULL_DEPLOYMENT_SEQUENCE,
-  assertDeploymentAllowed,
   parseStageVerdict,
   repositoryReference,
   executeTestingStage,
-  executeDeploymentStage,
   stampTrustedEvidence,
 } = require('./pipeline-stage-runtime');
 
@@ -33,9 +30,7 @@ const EFFECTIVE_POLICY = Object.freeze({
 });
 
 function typedCommand(stage, configuration = {}, { priorResults, requestedStages } = {}) {
-  const stages = requestedStages || (
-    stage === 'deploy' ? [...FULL_DEPLOYMENT_SEQUENCE] : stage === 'test' ? ['code', 'test'] : [stage]
-  );
+  const stages = requestedStages || (stage === 'test' ? ['code', 'test'] : [stage]);
   const stageConfiguration = {
     harness: 'deepagent',
     provider: MODEL.provider,
@@ -55,28 +50,8 @@ function typedCommand(stage, configuration = {}, { priorResults, requestedStages
     stageConfiguration: { [stage]: stageConfiguration },
     policy: { effectivePolicy: EFFECTIVE_POLICY, prefs: { workflowPattern: 'sequential' } },
   }, { clock: () => NOW });
-  const defaultPriorResults = stage === 'deploy'
-    ? [
-        {
-          stage: 'plan', status: 'succeeded', attempt: 1,
-          commandId: `run-${stage}:plan:1`, output: { summary: 'planned' },
-        },
-        {
-          stage: 'code', status: 'succeeded', attempt: 1,
-          commandId: `run-${stage}:code:1`, artifact: ARTIFACT,
-          output: { summary: 'coded', artifact: ARTIFACT, branch: 'ENG-1' },
-        },
-        {
-          stage: 'test', status: 'succeeded', attempt: 1,
-          commandId: `run-${stage}:test:1`, artifact: ARTIFACT,
-          output: {
-            summary: 'verified', artifact: ARTIFACT,
-            testEvidence: [trustedEvidence(`run-${stage}:test:1`)],
-          },
-        },
-      ]
-    : stage === 'test'
-      ? [{
+  const defaultPriorResults = stage === 'test'
+    ? [{
           stage: 'code', status: 'succeeded', attempt: 1,
           commandId: `run-${stage}:code:1`, artifact: ARTIFACT,
           output: { summary: 'coded', artifact: ARTIFACT, branch: 'ENG-1' },
@@ -147,105 +122,6 @@ function executionDependencies({ broker = null, capture = () => {}, roleCapture 
   };
 }
 
-test('deployment gate requires exact full sequence, successful tester, and explicit enablement', () => {
-  const testCommandId = 'run-gate:test:1';
-  const base = {
-    stage: 'deploy',
-    requestedStages: [...FULL_DEPLOYMENT_SEQUENCE],
-    input: { priorResults: [
-      { stage: 'plan', status: 'succeeded', output: { summary: 'ok' } },
-      {
-        stage: 'code', status: 'succeeded', artifact: ARTIFACT,
-        output: { summary: 'ok', artifact: ARTIFACT },
-      },
-      {
-        stage: 'test', status: 'succeeded', commandId: testCommandId, artifact: ARTIFACT,
-        output: { summary: 'ok', artifact: ARTIFACT, testEvidence: [trustedEvidence(testCommandId)] },
-      },
-    ] },
-    preflight: {
-      preflightDecisionDigest: 'c'.repeat(64),
-      stageConfiguration: { deploy: { enabled: true, environment: 'staging' } },
-    },
-  };
-  const allowed = assertDeploymentAllowed(base);
-  assert.equal(allowed.environment, 'staging');
-  assert.equal(allowed.production, false);
-  assert.deepEqual(allowed.artifact, ARTIFACT);
-  assert.equal(allowed.testCommandId, testCommandId);
-  assert.throws(
-    () => assertDeploymentAllowed({ ...base, requestedStages: ['test', 'deploy'] }),
-    (error) => error.code === 'deployment_sequence_required',
-  );
-  assert.throws(
-    () => assertDeploymentAllowed({ ...base, input: { priorResults: [] } }),
-    (error) => error.code === 'successful_test_required',
-  );
-  assert.throws(
-    () => assertDeploymentAllowed({
-      ...base,
-      preflight: { stageConfiguration: { deploy: { enabled: false, environment: 'staging' } } },
-    }),
-    (error) => error.code === 'deployment_disabled',
-  );
-});
-
-test('production deploy accepts only a server-tagged approval and canonical by/at fields', () => {
-  const testCommandId = 'run-production:test:1';
-  const digest = 'c'.repeat(64);
-  const base = {
-    stage: 'deploy',
-    requestedStages: [...FULL_DEPLOYMENT_SEQUENCE],
-    input: {
-      priorResults: [
-        { stage: 'plan', status: 'succeeded', output: {} },
-        { stage: 'code', status: 'succeeded', artifact: ARTIFACT, output: { artifact: ARTIFACT } },
-        {
-          stage: 'test', status: 'succeeded', commandId: testCommandId, artifact: ARTIFACT,
-          output: { artifact: ARTIFACT, testEvidence: [trustedEvidence(testCommandId)] },
-        },
-      ],
-      deploymentApproval: {
-        approved: true, by: 'operator-1', at: NOW, source: 'server', testCommandId,
-        ...ARTIFACT, preflightDecisionDigest: digest,
-      },
-    },
-    preflight: {
-      preflightDecisionDigest: digest,
-      stageConfiguration: { deploy: {
-        enabled: true,
-        environment: 'production',
-        approval: { approved: false, by: 'untrusted-caller', at: NOW, source: 'caller' },
-      } },
-    },
-  };
-  assert.equal(assertDeploymentAllowed(base).production, true);
-  assert.throws(
-    () => assertDeploymentAllowed({
-      ...base,
-      input: {
-        ...base.input,
-        deploymentApproval: { approved: true, by: 'caller', at: NOW, source: 'request' },
-      },
-    }),
-    (error) => error.code === 'deployment_approval_required',
-  );
-  assert.throws(
-    () => assertDeploymentAllowed({
-      ...base,
-      input: { priorResults: base.input.priorResults },
-      preflight: {
-        ...base.preflight,
-        stageConfiguration: { deploy: {
-          ...base.preflight.stageConfiguration.deploy,
-          approval: { approved: true, by: 'caller', at: NOW, source: 'server' },
-        } },
-      },
-    }),
-    (error) => error.code === 'deployment_approval_required',
-  );
-});
-
 test('fixed execution stages reject GitLab until a brokered egress path exists', () => {
   assert.throws(
     () => repositoryReference({ preflight: { repository: {
@@ -280,54 +156,6 @@ test('tester resolves the testing model role and exact admitted harness', async 
   assert.equal(result.output.testEvidence[0].source, 'pipeline-tester');
   assert.equal(result.output.testEvidence[0].commandId, 'run-test:test:1');
   assert.equal(result.output.selectedHarness, 'deepagent');
-  assert.equal(disposed, true);
-});
-
-test('deployer resolves the deployment role and exposes only its injected broker tool', async () => {
-  let role;
-  let invocation;
-  let disposed = false;
-  const deploymentTool = { name: 'repository_deployment' };
-  const broker = {
-    pinRevision: async (artifact) => {
-      assert.deepEqual(artifact, ARTIFACT);
-      return artifact;
-    },
-    createDeploymentTool: ({ environment, commandId, revision }) => {
-      assert.equal(environment, 'staging');
-      assert.equal(commandId, 'run-deploy:deploy:1');
-      assert.deepEqual(revision, ARTIFACT);
-      return deploymentTool;
-    },
-    deploymentReceipt: () => ({
-      provider: 'github-actions', environment: 'staging', workflow: 'deploy.yml',
-      ref: 'ai-fleet-deploy-a', sourceRef: 'main', commandId: 'run-deploy:deploy:1', ...ARTIFACT,
-      runId: 42, url: 'https://github.com/acme/widgets/actions/runs/42', status: 'succeeded', conclusion: 'success',
-    }),
-    availabilityError: () => null,
-    dispose: () => { disposed = true; },
-  };
-  const result = await executeDeploymentStage(
-    typedCommand('deploy', { enabled: true, environment: 'staging' }),
-    executionDependencies({
-      broker,
-      roleCapture: (value) => { role = value; },
-      capture: (value) => { invocation = value; },
-    }),
-  );
-
-  assert.equal(role, 'deployment');
-  assert.equal(invocation.runtime, 'deepagent');
-  assert.equal(invocation.workflow.name, 'deployment');
-  assert.deepEqual(invocation.extraTools, [deploymentTool]);
-  assert.equal(invocation.workflow.tools.length, 0);
-  assert.equal(invocation.workflow.backend, 'filesystem');
-  assert.deepEqual(invocation.workflow.permissions, [
-    { operations: ['write'], paths: ['/**'], mode: 'deny' },
-  ]);
-  assert.equal(result.status, 'succeeded');
-  assert.equal(result.output.deployment.runId, 42);
-  assert.deepEqual(result.artifact, ARTIFACT);
   assert.equal(disposed, true);
 });
 

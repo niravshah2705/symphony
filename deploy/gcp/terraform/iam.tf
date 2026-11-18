@@ -19,21 +19,11 @@ resource "google_service_account" "stream_token_broker" {
   display_name = "AI Fleet stream-token broker (private signer)"
 }
 
-resource "google_service_account" "planner" {
-  project      = var.project_id
-  account_id   = "planner-sa"
-  display_name = "AI Fleet planner (internal)"
-}
-
-# Used by BOTH coder-control (service) and coder-worker (job).
-resource "google_service_account" "coder" {
-  project      = var.project_id
-  account_id   = "coder-sa"
-  display_name = "AI Fleet coder control + worker"
-}
+# planner-sa / coder-sa are retired with their services: the orchestrator SA
+# (pipeline.tf) is the single agent-workload identity now.
 
 # Identity Pub/Sub push subscriptions and Cloud Scheduler jobs sign their OIDC
-# tokens as. It may ONLY invoke the two internal services.
+# tokens as. It may ONLY invoke the internal services.
 resource "google_service_account" "pubsub_push" {
   project      = var.project_id
   account_id   = "pubsub-push-sa"
@@ -48,30 +38,13 @@ resource "google_project_iam_member" "gateway_datastore" {
   member  = "serviceAccount:${google_service_account.gateway.email}"
 }
 
-resource "google_project_iam_member" "planner_datastore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.planner.email}"
-}
+# (the orchestrator/deployer datastore grants live in pipeline.tf)
 
-resource "google_project_iam_member" "coder_datastore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.coder.email}"
-}
-
-# --- Pub/Sub publish — gateway only, scoped to the two request topics ---------
+# --- Pub/Sub publish — gateway only, scoped to the request topic --------------
 
 resource "google_pubsub_topic_iam_member" "gateway_publish_planner" {
   project = var.project_id
   topic   = google_pubsub_topic.planner.name
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${google_service_account.gateway.email}"
-}
-
-resource "google_pubsub_topic_iam_member" "gateway_publish_coder" {
-  project = var.project_id
-  topic   = google_pubsub_topic.coder.name
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${google_service_account.gateway.email}"
 }
@@ -105,32 +78,32 @@ resource "google_secret_manager_secret_iam_member" "stream_token_broker" {
 }
 
 # --- Cloud Run invoke rights --------------------------------------------------
-# planner + coder-control are INTERNAL and IAM-gated. Their ONLY invokers are:
-#   - gateway-sa   (the gateway reverse-proxies read endpoints to them)
+# The agent workloads are INTERNAL and IAM-gated. Their invokers are only:
+#   - gateway-sa   (the gateway reverse-proxies to the orchestrator surface)
 #   - pubsub-push-sa (Pub/Sub push + Cloud Scheduler ticks)
 #   - substrate_actor_member, and only when an operator names it (see below)
-# There is intentionally NO allUsers binding on these services.
-
-resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_planner" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.planner.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.gateway.email}"
-}
+# There is intentionally NO allUsers binding on these services. The orchestrator
+# invoke bindings (gateway_invokes_orchestrator,
+# push_invokes_pipeline, pipeline_proxy_invokes_settings) live in pipeline.tf
+# next to the services they gate.
 
 # The substrate actor's own dispatch path: an actor calls
-# POST /internal/plan/run on the planner with its workload identity, and Cloud Run
+# POST /internal/plan/run on the orchestrator with its workload identity, and Cloud Run
 # answers 403 before the route's JWT verification ever runs unless this binding
 # exists. Naming an invoker is therefore part of OPENING the endpoint, not an
 # optional extra — which is why substrate.tf gates the SUBSTRATE_ACTOR_MODE env on
 # the same variable. `allUsers` / `allAuthenticatedUsers` are not accepted here:
 # the endpoint takes a prompt on behalf of an organization.
-resource "google_cloud_run_v2_service_iam_member" "substrate_actor_invokes_planner" {
+moved {
+  from = google_cloud_run_v2_service_iam_member.substrate_actor_invokes_planner
+  to   = google_cloud_run_v2_service_iam_member.substrate_actor_invokes_orchestrator
+}
+
+resource "google_cloud_run_v2_service_iam_member" "substrate_actor_invokes_orchestrator" {
   count    = trimspace(var.substrate_actor_member) != "" ? 1 : 0
   project  = var.project_id
   location = var.region
-  name     = google_cloud_run_v2_service.planner.name
+  name     = google_cloud_run_v2_service.orchestrator.name
   role     = "roles/run.invoker"
   member   = var.substrate_actor_member
 
@@ -145,14 +118,6 @@ resource "google_cloud_run_v2_service_iam_member" "substrate_actor_invokes_plann
   }
 }
 
-resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_coder" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.coder_control.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.gateway.email}"
-}
-
 # The public gateway can exercise only the broker's narrow mint/verify API. In
 # the completed migration state it cannot retrieve the HMAC key because
 # gateway-sa has no Secret Manager grant. The temporary legacy binding above is
@@ -165,25 +130,12 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_invokes_stream_token_
   member   = "serviceAccount:${google_service_account.gateway.email}"
 }
 
-resource "google_cloud_run_v2_service_iam_member" "push_invokes_planner" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.planner.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.pubsub_push.email}"
-}
-
-resource "google_cloud_run_v2_service_iam_member" "push_invokes_coder" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.coder_control.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.pubsub_push.email}"
-}
-
-# gateway is PUBLIC: allUsers may invoke it. This is intentional — the gateway
-# is guarded at the application layer by Firebase auth (AUTH_MODE=firebase) and is
-# the only browser-facing origin. (Internal services get no such binding.)
+# --- gateway is PUBLIC -----------------------------------------------------------------
+# The gateway is the only browser-facing origin, so its invoker below is the one
+# unauthenticated member binding in this root. That is intentional — it is
+# guarded at the application layer by Firebase auth (AUTH_MODE=firebase), and
+# internal services get no such binding.
+# ---------------------------------------------------------------------------------------
 resource "google_cloud_run_v2_service_iam_member" "gateway_public" {
   project  = var.project_id
   location = var.region
@@ -192,22 +144,9 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_public" {
   member   = "allUsers"
 }
 
-# --- coder-control launches the coder-worker Job ------------------------------
-# Scoped to the specific job resource (not project-wide). Running a job also
-# needs actAs on the job's runtime SA — coder-sa acts as itself.
-resource "google_cloud_run_v2_job_iam_member" "coder_runs_worker" {
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_job.coder_worker.name
-  role     = "roles/run.developer"
-  member   = "serviceAccount:${google_service_account.coder.email}"
-}
-
-resource "google_service_account_iam_member" "coder_actas_self" {
-  service_account_id = google_service_account.coder.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:${google_service_account.coder.email}"
-}
+# (the retired coder-control/coder-worker Job act-as + run.developer grants are
+# gone: the substrate worker pool, not Cloud Run Jobs, runs model-generated code,
+# and it holds no GCP identity of its own beyond the actor workload identity.)
 
 # --- Pub/Sub service agent: mint OIDC push tokens as pubsub-push-sa ------------
 # Required for push subscriptions with an oidc_token whose service_account_email

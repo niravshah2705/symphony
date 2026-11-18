@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 # The MemoryMiddleware (packages/shared/src/agent/memory-middleware.js) captures
 # + AI-compresses each finished agent run and injects durable memory into future
-# ones. Persistence is one Cloud SQL Postgres database; the planner + coder talk
+# ones. Persistence is one Cloud SQL Postgres database; the orchestrator talks
 # to it over the Cloud Run /cloudsql unix socket (Cloud SQL Auth Proxy is created
 # by Cloud Run from the cloud_sql volume — no VPC connector, no public network
 # rule). Tenant isolation is a row-level `org_key` column (a stable digest of the
@@ -120,38 +120,21 @@ resource "google_secret_manager_secret_version" "memory_database_url" {
 }
 
 # --- Access: Cloud SQL client + the connection-string secret ------------------
-# coder-sa is shared by coder-control AND the coder-worker Job, so one grant
-# covers the worker that actually persists memories.
-resource "google_project_iam_member" "planner_memory_db_client" {
+# The orchestrator is the agent workload that mounts the memory database; the
+# actors themselves hold no GCP identity.
+resource "google_project_iam_member" "orchestrator_memory_db_client" {
   count = var.memory_enabled ? 1 : 0
 
   project = var.project_id
   role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.planner.email}"
+  member  = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
-resource "google_project_iam_member" "coder_memory_db_client" {
-  count = var.memory_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.coder.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "planner_memory_database_url" {
+resource "google_secret_manager_secret_iam_member" "orchestrator_memory_database_url" {
   count = var.memory_enabled ? 1 : 0
 
   project   = var.project_id
   secret_id = google_secret_manager_secret.memory_database_url[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.planner.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "coder_memory_database_url" {
-  count = var.memory_enabled ? 1 : 0
-
-  project   = var.project_id
-  secret_id = google_secret_manager_secret.memory_database_url[0].secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.coder.email}"
+  member    = "serviceAccount:${google_service_account.orchestrator.email}"
 }

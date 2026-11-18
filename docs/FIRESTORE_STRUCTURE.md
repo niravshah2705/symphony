@@ -272,6 +272,7 @@ eula: {
   orgs: { <org-id>: { status, version, via, at } }
 }
 billing: { lastAggregatedAt: ISO string | null }
+workflowGraphsSeededAt: ISO string | null   // once-per-tenant graph seed marker
 ```
 
 `settings` is a large operational configuration map. In local and non-proxied
@@ -297,6 +298,14 @@ document ID.
 | `rechargeIntents` | `orderId`, `orgId`, `provider`, `providerOrderId?`, integer paise (`subtotalPaise`, `couponBps`, `bonusPaise`, `gstPaise`, `totalPaise`), `creditCount`, `supplierStateCode`, `placeOfSupply`, `status` (`QUOTED → SETTLED`, once), `createdAt`, `settledAt?`, `verification?`, `flexprice_settlement?` — the amount authority for `settle()`; the money fields freeze once settled |
 | `actorSessions` | `id`, `agentId`, `atespace`, `orgId`, `projectId?`, `userId?`, `userEmail?`, `runId?`, `tier`, explicit `hourlyRatePaise` (currently 0), integer epoch-second `startedAt`, `lastSeenAt`, `stoppedAt?`, `durationSeconds?`, `status` (`RUNNING → CLOSED`), `closeReason?`, `metered`, `metricsExported` (independent final-telemetry acknowledgement) — persisted runner heartbeats allow orphan settlement at last-seen; closed duration cannot extend on a late STOP |
 | `billingOutbox` | `id`, `orgId`, `projectId?`, `userId?`, `runId?`, `recordId?`, `actorSessionId?`, `agentId?`, `tier?`, `meter`, `eventName`, `quantityPaise`/`quantitySeconds`/`quantityMinutes`, `idempotencyKey` (doubles as FlexPrice's `event_id`; actor events key on session, not run), `status` (`pending → sent → verified`, `failed` after 12 attempts), `attempts`, `occurredAt`, `sentAt?`, `verifiedAt?`, `lastError?` |
+| `workflows` | Workflow-designer graph (schema v2): `id`, `name`, `description`, `viewport{x,y,zoom}`, bounded `nodes[]` / `edges[]`, server-owned `revision` (optimistic `If-Match`), `updatedAt`, `updatedBy`; a node's `kind` is `agent \| approval \| environment \| gate` and an agent node carries its runtime binding (`backend`, `harness`, `modelFamily`, `taskTier`) plus `kagentSpec` |
+| `agents` | Tenant **override** of a platform agent profile, merged over the shipped defaults by `id` at read time; only a genuine edit creates a document |
+| `personaGrants` | `id`, `persona`, `allowedCategories[] \| null` — per-organization role→category overrides, merged over `DEFAULT_PERSONA_GRANTS` |
+
+The workflow designer's collections are documented in full in
+[WORKFLOWS_DATABASE_DESIGN.md](WORKFLOWS_DATABASE_DESIGN.md), including why
+`workflowGraphsSeededAt` lives in the main document and what happens if a main
+key is left off `STORE_MAIN_KEYS`.
 
 Sources: [store schema and partition](../packages/shared-core/src/store.js) and
 [Firestore backend](../packages/shared-core/src/store/firestore-backend.js).

@@ -14,7 +14,7 @@
 # bucket. Unlike the skills bucket, the name is a FIXED value from
 # var.registry_bucket_name (default "aifleet-registry", NOT derived from
 # project_id) — GCS names are globally unique, so override it if taken. The
-# whole feature is gated by var.registry_enabled. The planner/coder SAs get
+# whole feature is gated by var.registry_enabled. The orchestrator SA gets
 # read-only access so runtime provisioning can select the descriptor for its
 # harness; publishing is done by the CI deployer SA.
 
@@ -28,7 +28,7 @@ resource "google_storage_bucket" "registry" {
   # Uniform bucket-level access — no per-object ACLs (infra checklist).
   uniform_bucket_level_access = true
 
-  # Internal registry (read by planner/coder SAs, written by the CI deployer).
+  # Internal registry (read by the orchestrator SA, written by the CI deployer).
   # Enforce no-public-access so an accidental allUsers grant can never expose the
   # bundles (they may embed third-party plugin payloads).
   public_access_prevention = "enforced"
@@ -44,20 +44,12 @@ resource "google_storage_bucket" "registry" {
   depends_on = [google_project_service.services]
 }
 
-# --- Read-only access for the planner + coder service accounts ----------------
-# coder-sa is shared by coder-control AND the coder-worker Job.
-resource "google_storage_bucket_iam_member" "planner_registry_read" {
+# --- Read-only access for the orchestrator service account --------------------
+resource "google_storage_bucket_iam_member" "orchestrator_registry_read" {
   count  = var.registry_enabled ? 1 : 0
   bucket = google_storage_bucket.registry[0].name
   role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.planner.email}"
-}
-
-resource "google_storage_bucket_iam_member" "coder_registry_read" {
-  count  = var.registry_enabled ? 1 : 0
-  bucket = google_storage_bucket.registry[0].name
-  role   = "roles/storage.objectViewer"
-  member = "serviceAccount:${google_service_account.coder.email}"
+  member = "serviceAccount:${google_service_account.orchestrator.email}"
 }
 
 # --- Optional publisher (CI) --------------------------------------------------

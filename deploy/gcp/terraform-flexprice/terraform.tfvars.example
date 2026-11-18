@@ -1,0 +1,59 @@
+# Copy to terraform.tfvars and adjust.
+#
+# These are the module defaults, with the two values that have no sensible
+# default filled in. Nothing here is a transcription of a running cluster: the
+# module has never been applied, which is the honest state of this file.
+
+project_id   = "adlc-9e72f"
+region       = "asia-south1"
+zone         = "asia-south1-a"          # must equal the cluster's location: PD is zonal
+cluster_name = "substrate-multitenant"  # read, never created — owned by ../terraform-substrate-gke
+
+# --- Supply chain -------------------------------------------------------------
+# Both artifacts come from the commit named in deploy/flexprice/VERSION. The
+# chart_version is OURS (a patched chart is not the upstream chart), and it must
+# equal the version CI packaged and pushed; the tag is what the migration Job's
+# name hash reads, so leave it empty and a schema bump can silently not run.
+chart_version = "1.10.0+fleet.1"
+image_tag     = "v2.1.48-fleet1"
+image_digest  = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# Empty keeps upstream docker.io references for the five infrastructure images.
+# Set it to an Artifact Registry mirror prefix when anonymous per-IP pull
+# throttling actually starts failing pods into ImagePullBackOff.
+image_registry_prefix = ""
+
+# --- Placement ----------------------------------------------------------------
+# flexprice-pool is deliberately NOT one of the names the substrate power
+# workflow parks at 03:00. min_count >= 1 is enforced: a parked pool cannot
+# serve a cold Kafka/ClickHouse quorum.
+node_pool_name     = "flexprice-pool"
+node_machine_type  = "e2-standard-4"
+node_min_count     = 1
+node_max_count     = 3
+
+# --- Storage -------------------------------------------------------------------
+# The chart creates this class (dataProtection.retainStorage), with Retain and
+# `helm.sh/resource-policy: keep`. Renaming it after the first apply orphans the
+# PVCs that reference the old name, so it is effectively immutable.
+storage_class_name = "flexprice-retained"
+postgres_size      = "5Gi"
+clickhouse_size    = "5Gi"          # the one that grows: usage events land here
+kafka_size         = "5Gi"
+redis_size         = "1Gi"
+
+# --- Public front ---------------------------------------------------------------
+# Empty deploys the stack with no public listener, which is the correct first
+# state. Setting it creates a regional static IP and one DNS obligation:
+#   terraform output flexprice_dns_hint
+# Nothing in this repo writes Cloud DNS, so the Certificate stays Pending until
+# you create that A record and it resolves.
+ingress_hostname = ""                    # e.g. "flexprice.archagentix.com"
+cert_email       = "you@example.com"     # ACME contact; only read when a hostname is set
+static_ip_name   = "flexprice-ip"
+
+# --- Kill switch -------------------------------------------------------------------
+# False renders every resource in this root at count 0. It is NOT the billing
+# switch: that is `flexprice_billing_cutover_enabled` in ../terraform, which
+# stays false while docs/FLEXPRICE_AGPL_MEMO.md is uncleared.
+flexprice_enabled = true

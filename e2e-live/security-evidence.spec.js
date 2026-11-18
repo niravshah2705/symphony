@@ -254,7 +254,7 @@ test.describe('recorded anonymous security journey', () => {
       await setSecurityEvidenceHud(page, 'Anonymous boundary', [
         'mode: signed out',
         'allowed: greeting, project question, reviewed-doc RAG',
-        'blocked: plan → code → test → deploy',
+        'blocked: plan → code → test (deploy retired)',
       ]);
       await settleEvidenceFrame(page);
 
@@ -301,7 +301,7 @@ test.describe('recorded anonymous security journey', () => {
 
       const denials = [
         ['canonical pipeline', '/api/pipeline/runs', {
-          requestedStages: ['plan', 'code', 'test', 'deploy'],
+          requestedStages: ['plan', 'code', 'test'],
           request: { purpose: 'synthetic anonymous denial probe' },
         }],
         ['planner compatibility start', '/api/agent/enqueue', { projectId: 'synthetic-denial-probe' }],

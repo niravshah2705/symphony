@@ -333,6 +333,23 @@ const DEFAULT_STORE = Object.freeze({
   actorSessions: [],
   billing: { lastAggregatedAt: null }, // sweep watermark (see billing/sweep.js)
 
+  // Workflow designer, schema v2 (see docs/WORKFLOWS_DATABASE_DESIGN.md and
+  // packages/shared-core/src/workflow/). `workflows` holds the tenant's v2
+  // graphs, `agents` the tenant's agent profiles (copies of the platform-global
+  // defaults, editable per org), `personaGrants` the per-org role→category
+  // overrides, `userProfiles` maps Firebase uid → { persona, displayName }.
+  workflows: [],
+  agents: [],
+  personaGrants: [],
+  userProfiles: {},
+  // When the tenant's graph collection was first filled. Null means "never",
+  // so seeding a tenant that deleted every graph is what this timestamp
+  // prevents; see `seedTenantFromDefaults` in workflow/store.js.
+  workflowGraphsSeededAt: null,
+  // Platform-global default overrides (agents/workflows/gate), persisted only
+  // in the legacy singleton root — read via readLegacyStore by the defaults API.
+  workflowDefaults: {},
+
   // End User License Agreement acceptance, keyed at two scopes. `users[key]` and
   // `orgs[orgId]` each hold { status:'accepted'|'rejected', version, via, at }.
   // Org membership itself implies acceptance (see services/gateway eula gate), so
@@ -450,9 +467,30 @@ function normalizeStore(parsed) {
     rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents : [],
     billingOutbox: Array.isArray(source.billingOutbox) ? source.billingOutbox : [],
     actorSessions: Array.isArray(source.actorSessions) ? source.actorSessions : [],
+    workflows: Array.isArray(source.workflows) ? source.workflows : [],
+    agents: Array.isArray(source.agents) ? source.agents : [],
+    personaGrants: Array.isArray(source.personaGrants) ? source.personaGrants : [],
+    userProfiles: normalizeUserProfiles(source.userProfiles),
+    workflowGraphsSeededAt: typeof source.workflowGraphsSeededAt === 'string' ? source.workflowGraphsSeededAt : null,
+    workflowDefaults: source.workflowDefaults && typeof source.workflowDefaults === 'object' && !Array.isArray(source.workflowDefaults)
+      ? { ...source.workflowDefaults } : {},
     billing: normalizeBilling(source.billing),
     eula: normalizeEula(source.eula),
   };
+}
+
+/** Keep only uid → { persona, displayName } entries; anything else is dropped. */
+function normalizeUserProfiles(source) {
+  const profiles = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+  const result = {};
+  for (const [uid, value] of Object.entries(profiles)) {
+    if (!uid || !value || typeof value !== 'object' || Array.isArray(value)) continue;
+    result[uid] = {
+      persona: typeof value.persona === 'string' ? value.persona : '',
+      displayName: typeof value.displayName === 'string' ? value.displayName : '',
+    };
+  }
+  return result;
 }
 
 /** Coerce a raw `billing` blob into the current { lastAggregatedAt } shape. */
@@ -475,12 +513,14 @@ function seedStore() {
 // Top-level keys kept together in one Firestore document (small, singleton) vs.
 // the growing arrays that each become a per-record sub-collection so no single
 // document approaches Firestore's 1 MB limit.
-const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing'];
+const STORE_MAIN_KEYS = ['settings', 'businesses', 'assumedRole', 'agentConfig', 'eula', 'billing', 'userProfiles', 'workflowDefaults', 'workflowGraphsSeededAt'];
 const STORE_COLLECTION_KEYS = [
   'jobs', 'memories', 'conversations', 'approvals', 'stackLinks', 'settingsHistory',
   // Discovery question overrides: one doc per question, so an org that adds many
   // custom questions never grows a single Firestore document.
   'globalQuestions',
+  // Workflow designer v2: one doc per graph / agent profile / persona grant.
+  'workflows', 'agents', 'personaGrants',
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
@@ -690,6 +730,13 @@ const SECRET_ENV = Object.freeze({
   openrouterApiKey: 'OPENROUTER_API_KEY',
   digilockerClientId: 'DIGILOCKER_CLIENT_ID',
   digilockerClientSecret: 'DIGILOCKER_CLIENT_SECRET',
+  // Substrate ateapi control-plane bearer (projected `ate-client` service-account
+  // token, mirrored from Secret Manager `substrate-ateapi-token`). A deployed
+  // planner never reads it here — the egress proxy is set, so secretOverlay()
+  // returns {} and resolveSubstrateApiToken() takes the S2S managed path per run.
+  // This entry is the non-proxied gateway + local-dev managed source only, and it
+  // keeps the map aligned with the settings service MANAGED_ENV / vault SECRET_KEYS.
+  substrateApiToken: 'SUBSTRATE_API_TOKEN',
 });
 
 function secretOverlay() {
@@ -1618,12 +1665,16 @@ function pruneApprovalGates(keep = MAX_APPROVAL_GATES) {
 module.exports = {
   DEFAULT_STORE,
   DEFAULT_AGENT_CONFIG,
+  STORE_MAIN_KEYS,
+  STORE_COLLECTION_KEYS,
   migrateBusinessRepositories,
   settingsForConfiguredModel,
   applyLegacyHostedReasoningDefaults,
   normalizeStore,
   readStore,
   writeStore,
+  readLegacyStore,
+  writeLegacyStore,
   initStore,
   normalizeWorkspaceContext: workspaceContext.normalizeWorkspaceContext,
   runWithWorkspaceContext: workspaceContext.runWithWorkspaceContext,

@@ -1,0 +1,251 @@
+name: Build runtime images
+
+# Publishes the native harness runtime images to ghcr.io. Edit
+# go/harness/runtime-images.csv (add/rotate a version row, flip `current` to move
+# the :latest tag) and open a PR: a PR run only resolves and validates the rows,
+# and the merge to main publishes. A main push rebuilds only the rows whose
+# version, checksum or `current` flag actually moved; a push that touches a
+# Dockerfile or this workflow instead rebuilds the whole manifest, because that
+# change applies to every image.
+#
+# A change to the Go adapter itself rebuilds nothing — the manifest drives the
+# matrix. Run this workflow manually with `rebuild: all` after landing one.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "go/harness/runtime-images.csv"
+      - "go/harness/**/Dockerfile"
+      - ".github/workflows/build-runtime-images.yml"
+  pull_request:
+    paths:
+      - "go/harness/runtime-images.csv"
+      - "go/harness/**/Dockerfile"
+      - ".github/workflows/build-runtime-images.yml"
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: "Only build this runtime (claude|codex|deepagent|deepseek). Leave empty for all."
+        required: false
+        default: ""
+      rebuild:
+        description: "all = every manifest row (use after a Go adapter change); changed = only rows that moved since the previous commit."
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - changed
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: runtime-images-${{ github.ref }}
+  # A run publishes multi-arch tags; cancelling it mid-push can leave a
+  # manifest list pointing at a partially uploaded set.
+  cancel-in-progress: false
+
+env:
+  MANIFEST: go/harness/runtime-images.csv
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.select-rows.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          # The selection diff needs the commit this run started from.
+          fetch-depth: 0
+
+      - name: Classify the change
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REBUILD: ${{ github.event.inputs.rebuild }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          base=""
+          reason="full manifest"
+          case "$EVENT_NAME" in
+            push)
+              # A force-push or a branch's first push reports an unusable `before`.
+              if [[ "$BEFORE_SHA" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+                base="$BEFORE_SHA"
+              else
+                base="$(git rev-parse "$HEAD_SHA~1" 2>/dev/null || true)"
+              fi ;;
+            pull_request)
+              base="$(git merge-base "origin/$BASE_REF" "$HEAD_SHA" 2>/dev/null || true)" ;;
+            workflow_dispatch)
+              [[ "$REBUILD" = changed ]] || { echo "mode=all" >> "$GITHUB_OUTPUT"; echo "reason=$reason" >> "$GITHUB_OUTPUT"; exit 0; }
+              base="$(git rev-parse HEAD~1 2>/dev/null || true)"
+              reason="dispatch rebuild=changed" ;;
+          esac
+
+          if [[ -z "$base" ]] || ! git cat-file -e "$base:$MANIFEST" 2>/dev/null; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+            echo "reason=no usable baseline commit" >> "$GITHUB_OUTPUT"
+            echo "Resolving every manifest row: no baseline to diff against."
+            exit 0
+          fi
+
+          # Anything outside the manifest changes the recipe for all four images.
+          if git diff --name-only "$base" "$HEAD_SHA" | grep -vqxF "$MANIFEST"; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+            echo "reason=non-manifest files changed" >> "$GITHUB_OUTPUT"
+            echo "Resolving every manifest row: $base is not a manifest-only change."
+            exit 0
+          fi
+
+          git show "$base:$MANIFEST" > "$RUNNER_TEMP/base.csv"
+          echo "mode=changed" >> "$GITHUB_OUTPUT"
+          # Keep the reason a dispatch already named; a push moved rows by itself.
+          if [[ "$reason" = "full manifest" ]]; then reason="manifest-only change"; fi
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Diffing the manifest against $base for moved rows only."
+
+      - name: Select rows from the manifest
+        id: select-rows
+        env:
+          MODE: ${{ steps.scope.outputs.mode }}
+          ONLY_RUNTIME: ${{ github.event.inputs.runtime }}
+          BASE_CSV: ${{ runner.temp }}/base.csv
+          SELECTED: ${{ runner.temp }}/selected.txt
+        run: |
+          python3 - "$MODE" "$ONLY_RUNTIME" "$BASE_CSV" "$MANIFEST" "$SELECTED" <<'PY' >> "$GITHUB_OUTPUT"
+          import csv, json, os, sys
+
+          mode, only, base_path, manifest, selected_path = sys.argv[1:6]
+
+          def rows(path):
+              with open(path, newline="") as fh:
+                  return [{k: (v or "").strip() for k, v in r.items()} for r in csv.DictReader(fh)]
+
+          head = manifest_rows = rows(manifest)
+          # An empty manifest is a mangled file, not a no-op: every row was
+          # dropped. Fail rather than let it publish nothing and look green.
+          if not manifest_rows:
+              sys.exit(f"{manifest} has no rows")
+          reason = "full manifest"
+          if mode == "changed" and os.path.exists(base_path):
+              before = {(r["runtime"], r["version"]): r for r in rows(base_path)}
+              # A whole-row compare catches a version bump, a new checksum, a
+              # flipped `current` and an added row alike; a deleted row simply
+              # has nothing left to publish.
+              head = [r for r in head if before.get((r["runtime"], r["version"])) != r]
+              reason = "moved rows only"
+
+          if only:
+              # Check the name against the whole manifest: a runtime whose rows
+              # simply did not move is a no-op, only an unknown name is a typo.
+              if only not in {r["runtime"] for r in manifest_rows}:
+                  sys.exit(f"no manifest rows for runtime {only!r}")
+              head = [r for r in head if r["runtime"] == only]
+
+          matrix = []
+          for r in head:
+              # build-push-action resolves `file` against the workspace root,
+              # not against `context` — the manifest path stays repo-relative.
+              if not os.path.isfile(r["dockerfile"]):
+                  sys.exit(f"row {r['runtime']} {r['version']}: {r['dockerfile']} is not a file")
+              tags = [f"{r['image']}:{r['version']}"]
+              if r["current"] == "true":
+                  tags.append(f"{r['image']}:latest")
+              matrix.append({
+                  "runtime": r["runtime"],
+                  "dockerfile": r["dockerfile"],
+                  "image": r["image"],
+                  "version": r["version"],
+                  "tags": ",".join(tags),
+                  "amd64": r["amd64_sha256"],
+                  "arm64": r["arm64_sha256"],
+              })
+
+          with open(selected_path, "w") as selected:
+              for row in matrix:
+                  selected.write(f"{row['runtime']} {row['version']}\n")
+          print("matrix=" + json.dumps(matrix))
+          print("count=" + str(len(matrix)))
+          print(f"selected {len(matrix)} row(s): {reason}", file=sys.stderr)
+          PY
+
+      - name: Preflight the selected versions
+        if: ${{ steps.select-rows.outputs.count != '0' }}
+        run: |
+          scripts/verify-runtime-images.sh --selected "$RUNNER_TEMP/selected.txt"
+
+      - name: Report the selection
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+          COUNT: ${{ steps.select-rows.outputs.count }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Runtime images: ${REASON:-full manifest}"
+            echo
+            if [ "${COUNT:-0}" = "0" ]; then
+              echo "No manifest row moved, so nothing will be published."
+            else
+              echo "Publishing ${COUNT} image(s):"
+              echo
+              while read -r runtime version; do
+                echo "- \`$runtime:$version\`"
+              done < "$RUNNER_TEMP/selected.txt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    if: ${{ github.event_name != 'pull_request' && needs.plan.outputs.matrix != '[]' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.runtime }} ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.runtime }}:${{ matrix.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: go
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            RUNTIME_VERSION=${{ matrix.version }}
+            AMD64_SHA256=${{ matrix.amd64 }}
+            ARM64_SHA256=${{ matrix.arm64 }}
+          tags: ${{ matrix.tags }}
+          # Scoped per runtime, not per version: the compiled adapter layer is
+          # version-independent, so a rotation reuses it instead of rebuilding.
+          cache-from: type=gha,scope=runtime-${{ matrix.runtime }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.runtime }}

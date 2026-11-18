@@ -40,7 +40,6 @@ substitutions:
   _EMAIL_SMTP_REQUIRE_TLS: "true"
   _EMAIL_FROM: ""
   _PIPELINE_ORCHESTRATOR_ENABLED: "false"
-  _PIPELINE_DEPLOYMENT_ENABLED: "false"
   _SETTINGS_OPERATOR_INVOKER: ""
   _OMLX_PROXY_UPSTREAM: ""
   _OLLAMA_PROXY_UPSTREAM: ""
@@ -63,26 +62,15 @@ steps:
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/gateway:${_IMAGE_TAG}
       - .
 
-  - id: build-planner
+  - id: build-substrate-actor
     name: gcr.io/cloud-builders/docker
     waitFor: ["-"]
     args:
       - build
       - -f
-      - deploy/gcp/Dockerfile.planner
+      - deploy/gcp/Dockerfile.substrate-actor
       - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/planner:${_IMAGE_TAG}
-      - .
-
-  - id: build-coder
-    name: gcr.io/cloud-builders/docker
-    waitFor: ["-"]
-    args:
-      - build
-      - -f
-      - deploy/gcp/Dockerfile.coder
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substrate-actor:${_IMAGE_TAG}
       - .
 
   - id: build-orchestrator
@@ -94,28 +82,6 @@ steps:
       - deploy/gcp/Dockerfile.orchestrator
       - -t
       - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-orchestrator:${_IMAGE_TAG}
-      - .
-
-  - id: build-tester
-    name: gcr.io/cloud-builders/docker
-    waitFor: ["-"]
-    args:
-      - build
-      - -f
-      - deploy/gcp/Dockerfile.tester
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-tester:${_IMAGE_TAG}
-      - .
-
-  - id: build-deployer
-    name: gcr.io/cloud-builders/docker
-    waitFor: ["-"]
-    args:
-      - build
-      - -f
-      - deploy/gcp/Dockerfile.deployer
-      - -t
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-deployer:${_IMAGE_TAG}
       - .
 
   - id: build-proxy
@@ -243,7 +209,7 @@ steps:
     name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
     # Do not create the ephemeral plaintext tfvars until every Docker build/push
     # has finished; otherwise it could enter the root Docker build context.
-    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state]
+    waitFor: [push-gateway, push-substrate-actor, push-orchestrator, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state]
     entrypoint: bash
     args:
       - -c
@@ -269,30 +235,15 @@ steps:
     waitFor: [build-gateway, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/gateway:${_IMAGE_TAG}"]
 
-  - id: push-planner
+  - id: push-substrate-actor
     name: gcr.io/cloud-builders/docker
-    waitFor: [build-planner, tf-bootstrap]
-    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/planner:${_IMAGE_TAG}"]
-
-  - id: push-coder
-    name: gcr.io/cloud-builders/docker
-    waitFor: [build-coder, tf-bootstrap]
-    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/coder-control:${_IMAGE_TAG}"]
+    waitFor: [build-substrate-actor, tf-bootstrap]
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/substrate-actor:${_IMAGE_TAG}"]
 
   - id: push-orchestrator
     name: gcr.io/cloud-builders/docker
     waitFor: [build-orchestrator, tf-bootstrap]
     args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-orchestrator:${_IMAGE_TAG}"]
-
-  - id: push-tester
-    name: gcr.io/cloud-builders/docker
-    waitFor: [build-tester, tf-bootstrap]
-    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-tester:${_IMAGE_TAG}"]
-
-  - id: push-deployer
-    name: gcr.io/cloud-builders/docker
-    waitFor: [build-deployer, tf-bootstrap]
-    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/pipeline-deployer:${_IMAGE_TAG}"]
 
   - id: push-proxy
     name: gcr.io/cloud-builders/docker
@@ -386,7 +337,7 @@ steps:
   # --- Terraform: full apply (services, job, pubsub, scheduler, secrets, …) --
   - id: tf-apply
     name: hashicorp/terraform:1.9
-    waitFor: [push-gateway, push-planner, push-coder, push-orchestrator, push-tester, push-deployer, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state, pipeline-secret-state]
+    waitFor: [push-gateway, push-substrate-actor, push-orchestrator, push-proxy, push-email, push-org, push-settings, push-provisioner, spa-publish, email-secret-state, pipeline-secret-state]
     entrypoint: sh
     args:
       - -c
@@ -414,8 +365,6 @@ steps:
           -var="artifact_repo=${_REPO}" \
           -var="image_tag=${_IMAGE_TAG}" \
           -var="orchestrator_image_tag=${_IMAGE_TAG}" \
-          -var="tester_image_tag=${_IMAGE_TAG}" \
-          -var="deployer_image_tag=${_IMAGE_TAG}" \
           -var="proxy_image_tag=${_IMAGE_TAG}" \
           -var="spa_bucket_name=${_BUCKET}" \
           -var="firestore_location=${_FIRESTORE_LOCATION}" \
@@ -424,7 +373,6 @@ steps:
           -var="firebase_allowed_domain=${_FIREBASE_ALLOWED_DOMAIN}" \
           -var="custom_domain=$${CUSTOM_DOMAIN_ARG}" \
           -var="pipeline_orchestrator_enabled=${_PIPELINE_ORCHESTRATOR_ENABLED}" \
-          -var="pipeline_deployment_enabled=${_PIPELINE_DEPLOYMENT_ENABLED}" \
           -var="settings_operator_invoker=${_SETTINGS_OPERATOR_INVOKER}" \
           -var="omlx_proxy_upstream=${_OMLX_PROXY_UPSTREAM}" \
           -var="ollama_proxy_upstream=${_OLLAMA_PROXY_UPSTREAM}" \

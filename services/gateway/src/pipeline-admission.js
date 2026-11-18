@@ -705,7 +705,6 @@ function createPipelineAdmission({
   settingsUrl = CONFIG.SERVICES.settingsUrl,
   orchestratorUrl = CONFIG.SERVICES.orchestratorUrl,
   orchestratorEnabled = CONFIG.PIPELINE && CONFIG.PIPELINE.orchestratorEnabled === true,
-  deploymentEnabled = CONFIG.PIPELINE && CONFIG.PIPELINE.deploymentEnabled === true,
   resolveLocalPreflight = localPreflightDecision,
   getSettings = store.getSettings,
   resolveRepository = localRepositorySnapshot,
@@ -766,11 +765,11 @@ function createPipelineAdmission({
     assertOrchestratorEnabled();
     const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
     const stages = requestedStages(fixedStages || body.requestedStages);
-    if (stages.includes('deploy') && !deploymentEnabled) {
+    if (stages.includes('deploy')) {
       admissionError(
-        'Deployment is disabled for this environment.',
-        403,
-        'pipeline_deployment_disabled',
+        'The pipeline deploy stage is retired; runs end after test.',
+        410,
+        'pipeline_deploy_retired',
       );
     }
     const harnesses = requestHarnesses(body, stages);

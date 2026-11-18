@@ -368,7 +368,16 @@ resource "kubectl_manifest" "substrate_envoy_proxy" {
             loadBalancerIP: "${google_compute_address.substrate_ip[0].address}"
             externalTrafficPolicy: Local
             annotations:
-              networking.gke.io/load-balancer-ip-addresses: "${google_compute_address.substrate_ip[0].address}"
+              # The address NAME, never its value. GKE passes this string into the
+              # forwarding rule's `address` field, which validates against an
+              # address-name regex — an IP literal is a 400, so no forwarding rule is
+              # created, the Service sits at EXTERNAL-IP <pending>, and the Gateway
+              # reports Programmed=False / AddressNotAssigned while every other signal
+              # (DNS, the issued certificate, the control-plane pods) reads healthy.
+              # `loadBalancerIP` above is the deprecated field and does take the value;
+              # the two fields want DIFFERENT forms of the same address, which is why
+              # they are not one interpolated local.
+              networking.gke.io/load-balancer-ip-addresses: "${google_compute_address.substrate_ip[0].name}"
   YAML
 
   depends_on = [
@@ -595,4 +604,87 @@ resource "kubectl_manifest" "substrate_control_plane_traffic" {
   YAML
 
   depends_on = [kubectl_manifest.substrate_control_plane_route]
+}
+
+# ---------------------------------------------------------------------------
+# Minting the control-plane bearer, narrowly.
+#
+# The ateapi Control plane admits exactly one credential: a projected service
+# account token for `system:serviceaccount:ate-system:ate-client` with audience
+# `api.ate-system.svc` (ConfigMap ate-api-authentication). The gateway and
+# planner run on Cloud Run and cannot reach the cluster API server as
+# themselves, so `.github/workflows/substrate-token-rotate.yml` mints it with
+#   kubectl -n ate-system create token ate-client \
+#     --audience=api.ate-system.svc --duration=43200s
+# and publishes it to Secret Manager (deploy/gcp/terraform/substrate_token.tf
+# holds the container and its two IAM grants). Terraform writes none of the
+# VALUE — only the permission to create it.
+#
+# `kubectl create token` is NOT a `serviceaccounts` call: it hits the
+# `serviceaccounts/token` SUBRESOURCE with verb `create`. Granting `get` or
+# `create` on `serviceaccounts` leaves the command at a 403 that reads like a
+# missing role rather than a missing subresource.
+#
+# Do not lean on roles/container.admin. GKE's RBAC model does not promise that
+# an IAM role implies a Kubernetes RBAC rule, so the day the project swaps
+# container.admin for a narrower pool role the rotation breaks in CI instead of
+# at apply. One verb is cheaper than that outage, and it is the same argument
+# ci_rbac.tf:9 makes for the power workflow.
+# ---------------------------------------------------------------------------
+
+locals {
+  # The condition the control-plane route above spells inline, named once here
+  # because the two RBAC objects below need it too.
+  substrate_control_plane_public_enabled = local.substrate_front_enabled && var.substrate_control_plane_public
+
+  # A GCP service account that reaches GKE through Workload Identity Federation
+  # is presented by the auth webhook with its email as the Kubernetes USERNAME,
+  # so the subject below is a User and not a ServiceAccount (see ci_rbac.tf:55
+  # for the same statement). A `kind: ServiceAccount` subject names only a
+  # Kubernetes-native SA in that namespace and would bind nothing.
+  substrate_token_creator_user = var.substrate_token_creator_user != "" ? var.substrate_token_creator_user : "gh-deployer@${var.project_id}.iam.gserviceaccount.com"
+}
+
+resource "kubectl_manifest" "substrate_ate_client_token_role" {
+  count = local.substrate_control_plane_public_enabled ? 1 : 0
+
+  # Pinned to ate-client by resourceNames: without them this would let the job
+  # mint tokens for every service account in ate-system, including the
+  # installer's own privileged ones.
+  yaml_body = <<-YAML
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: substrate-ate-client-token-minter
+      namespace: ate-system
+    rules:
+      - apiGroups: [""]
+        resources: ["serviceaccounts/token"]
+        resourceNames: ["ate-client"]
+        verbs: ["create"]
+  YAML
+
+  depends_on = [kubernetes_namespace_v1.substrate_system]
+}
+
+resource "kubectl_manifest" "substrate_ate_client_token_role_binding" {
+  count = local.substrate_control_plane_public_enabled ? 1 : 0
+
+  yaml_body = <<-YAML
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: substrate-ate-client-token-minter
+      namespace: ate-system
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: substrate-ate-client-token-minter
+    subjects:
+      - apiGroup: rbac.authorization.k8s.io
+        kind: User
+        name: ${local.substrate_token_creator_user}
+  YAML
+
+  depends_on = [kubectl_manifest.substrate_ate_client_token_role]
 }

@@ -48,3 +48,35 @@ image=sha256:4ad8d8ca6e69bcf510bc47224efdf591908522f863df20bcf27188cb105728c1
 # Tag-format trap, left here so nobody re-discovers it: the upstream tag list
 # contains a non-SemVer `v2.17`, which sorts *after* v2.1.48 under `sort -V` and
 # before it under `sort`. Never derive "latest" by sorting tags.
+
+# --- What the GKE stack installs (deploy/gcp/terraform-flexprice) --------------
+#
+# The cloud root installs two artifacts this repo builds from the commit above,
+# and a patched chart is not the upstream chart, so both identities are recorded
+# here rather than inferred.
+#
+# * The chart is staged by `npm run billing:flexprice:stage`
+#   (scripts/flexprice-stage-chart.js): the four un-vendored subchart
+#   dependencies and Chart.lock are dropped (Helm refuses to install a chart
+#   whose deps are not packaged), the hardcoded infra probe timings in
+#   templates/infra/{postgres,kafka,clickhouse,redis}.yaml are widened, and a
+#   global nodeSelector/tolerations block is injected into the three templates
+#   that expose no placement keys. Reasoning in
+#   deploy/gcp/terraform-flexprice/README.md, "What we patch, and why it is
+#   honest".
+# * `patched_chart_sha256` is the digest of the whole staged tree — sorted
+#   relative paths, each file hashed, the manifest hashed. It is what CI prints
+#   in its job summary after `helm package`; if a rebuild does not reproduce it,
+#   either the chart or the patch changed and the diff must be re-read, not
+#   re-pushed.
+# * `chart_version` carries a `+fleet.1` build metadata suffix so the staged
+#   chart can never be confused with an upstream `1.10.0` pulled from elsewhere.
+#   `helm_release.version` pins it exactly.
+# * The image is built into Artifact Registry from the commit above. Its digest
+#   is a `terraform plan` input (`var.image_digest`), is passed on the command
+#   line by the `flexprice_reconcile` job, and is NOT committed here — it is a
+#   registry string, not a source pin, and the `image=` line above stays the
+#   record of what the local stack ran.
+patched_chart_source=internal/ee/infrastructure/helm/flexprice
+patched_chart_version=1.10.0+fleet.1
+patched_chart_sha256=8a07dd6a0b7989d0c563a36537643981d96f8f82ace7cfed4e38eccfbe5728ca

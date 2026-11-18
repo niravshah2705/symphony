@@ -9,11 +9,14 @@ const { requestContext } = require('./request-context');
 
 /**
  * Compatibility adapters for the former self-contained planner/coder request
- * publishers. The rollout switch keeps their legacy publishers as the safe
- * default; once enabled they enter the same durable admission path as
+ * publishers. The rollout switch keeps the planner's queue-based publisher as
+ * the safe default; once enabled they enter the same durable admission path as
  * POST /api/pipeline/runs. The planner compatibility action includes code and
- * test because the legacy coder label poller is intentionally disabled during
- * rollout; stopping at plan would strand the existing Run-now workflow.
+ * test because the legacy coder label poller is retired with the Cloud Run
+ * harness; stopping at plan would strand the existing Run-now workflow.
+ * POST /api/coder/run has no legacy path any more: the coder service and its
+ * Pub/Sub topic are gone, so it only enters durable admission and answers 503
+ * while the pipeline orchestrator is disabled.
  */
 
 function requiredString(body, field, maxLength = 200) {
@@ -31,7 +34,6 @@ function createCompatibilityHandlers({
   getAssumedRole = store.getAssumedRole,
   publish = publishRequest,
   plannerTopic = CONFIG.GCP.plannerTopic,
-  coderTopic = CONFIG.GCP.coderTopic,
 } = {}) {
   const enqueue = asyncHandler(async (req, res) => {
     if (!orchestratorEnabled) {
@@ -87,25 +89,13 @@ function createCompatibilityHandlers({
   });
 
   const coderRun = asyncHandler(async (req, res) => {
+    // The retired coder service was the only other coding dispatch path; with
+    // the Cloud Run harness gone there is no queue to publish to any more.
     if (!orchestratorEnabled) {
-      const body = req.body || {};
-      const issueId = typeof body.issueId === 'string' ? body.issueId.trim() : '';
-      if (!issueId) return res.status(400).json({ error: 'issueId is required.' });
-      const context = requestContext(req);
-      const conversation = addConversation({
-        title: `Coder: ${issueId}`,
-        orgId: context.organizationId || null,
-        nativeProjectId: context.projectId || null,
+      return res.status(503).json({
+        error: 'Coding runs on the durable pipeline; start it with PIPELINE_ORCHESTRATOR_ENABLED=true.',
+        code: 'pipeline_orchestrator_unavailable',
       });
-      await publish(coderTopic, {
-        issueId,
-        conversationId: conversation.id,
-        orgId: context.organizationId || null,
-        nativeProjectId: context.projectId || null,
-        llmGateway: context.llmGateway || null,
-        traceparent: context.traceparent || null,
-      });
-      return res.status(202).json({ accepted: true, conversationId: conversation.id });
     }
     const result = await admission.submit(req, {
       stages: ['code'],
