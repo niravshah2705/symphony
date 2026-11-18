@@ -53,6 +53,55 @@ test('upsertActorTemplate requires a digest-pinned planner image', async () => {
   );
 });
 
+// The ActorTemplate is the actor container's ONLY env: the image cannot
+// self-bootstrap SUBSTRATE_JWKS_URL (empty env by design) and without it the
+// actor answers 503 jwks_unconfigured for every prompt. So the control plane
+// must forward the JWT-verification names Terraform rendered onto it.
+test('upsertActorTemplate forwards the actor-JWT verification env into the container', async () => {
+  let captured;
+  const transport = (method, payload) => {
+    captured = { method, payload };
+    return Promise.resolve({ status: 0, message: '' });
+  };
+  const saved = {
+    jwks: process.env.SUBSTRATE_JWKS_URL,
+    audience: process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE,
+    trust: process.env.SUBSTRATE_TRUST_DOMAIN,
+  };
+  process.env.SUBSTRATE_JWKS_URL = 'https://idp.example.com/discovery/keys';
+  process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE = 'substrate-router';
+  delete process.env.SUBSTRATE_TRUST_DOMAIN;
+  try {
+    await s.upsertActorTemplate({
+      url: 'http://substrate:8443',
+      atespace: 'tenant-a',
+      image: 'registry/substrate-actor@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      transport,
+    });
+  } finally {
+    for (const [key, value] of Object.entries({
+      SUBSTRATE_JWKS_URL: saved.jwks,
+      SUBSTRATE_ACTOR_JWT_AUDIENCE: saved.audience,
+      SUBSTRATE_TRUST_DOMAIN: saved.trust,
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  assert.equal(captured.method, 'CreateActorTemplate');
+  const template = decodeFields(captured.payload).get(1)[0].value;
+  const container = decodeFields(template).get(3)[0].value;
+  const envFields = decodeFields(container).get(5) || [];
+  const env = Object.fromEntries(envFields.map((e) => {
+    const varFields = decodeFields(e.value);
+    return [getString(varFields, 1), getString(varFields, 2)];
+  }));
+  assert.equal(env.SUBSTRATE_ACTOR_MODE, 'true');
+  assert.equal(env.SUBSTRATE_JWKS_URL, 'https://idp.example.com/discovery/keys');
+  assert.equal(env.SUBSTRATE_ACTOR_JWT_AUDIENCE, 'substrate-router');
+  assert.equal(env.SUBSTRATE_TRUST_DOMAIN, undefined);
+});
+
 test('CreateActor round-trips through encodeActor -> decodeActor', async () => {
   const reqs = [];
   const transport = (method, payload) => {

@@ -9,22 +9,6 @@ const { SnapshotPreflight } = require('./preflight');
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'cancelled', 'cancellation_requested']);
 
-function approvalFromClaim(claim) {
-  if (!claim) return null;
-  return {
-    approved: true,
-    approvalId: claim.approvalId,
-    by: claim.by,
-    at: claim.at,
-    source: 'server',
-    testCommandId: claim.testCommandId,
-    commitSha: claim.commitSha,
-    treeSha: claim.treeSha,
-    preflightDecisionDigest: claim.preflightDecisionDigest,
-    deployCommandId: claim.deployCommandId,
-  };
-}
-
 class PipelineOrchestrator {
   constructor({
     repository,
@@ -33,8 +17,6 @@ class PipelineOrchestrator {
     graph,
     checkpointer,
     langgraph,
-    deploymentApproval = null,
-    requireDeploymentApproval = false,
     clock = () => new Date().toISOString(),
     idFactory,
     log,
@@ -46,8 +28,6 @@ class PipelineOrchestrator {
     this.clock = clock;
     this.idFactory = idFactory;
     this.log = log || { info() {}, error() {} };
-    this.deploymentApproval = deploymentApproval;
-    this.requireDeploymentApproval = requireDeploymentApproval;
     this.preflight = preflight || new SnapshotPreflight({ clock });
     this.graph = graph || createPipelineGraph({
       checkpointer,
@@ -82,14 +62,11 @@ class PipelineOrchestrator {
     if (run.checkpoint.activeCommandId) return this.status(runId);
     const nextStage = run.requestedStages[run.checkpoint.nextStageIndex];
     if (nextStage === 'deploy') {
-      const approval = await this._deploymentApprovalFor(run);
-      if (approval === false) {
-        await this.repository.markAwaitingApproval(run.runId);
-        return this.status(run.runId);
+      const retired = await this.repository.retireDeployStage(run.runId);
+      if (retired.changed && this.log.info) {
+        this.log.info(`pipeline deploy stage retired: run ${run.runId} closed after test`);
       }
-      if (approval && !run.deploymentApprovalClaim) {
-        run = (await this.repository.saveDeploymentApprovalClaim(run.runId, approval)).run;
-      }
+      return this.status(run.runId);
     }
     await this.graph.invoke({
       runId: run.runId,
@@ -105,69 +82,6 @@ class PipelineOrchestrator {
       },
     });
     return this.status(runId);
-  }
-
-  async _deploymentApprovalFor(run) {
-    if (run.deploymentApprovalClaim) return approvalFromClaim(run.deploymentApprovalClaim);
-    const configuration = run.preflight
-      && run.preflight.stageConfiguration
-      && run.preflight.stageConfiguration.deploy || {};
-    const environment = String(configuration.environment || '').trim().toLowerCase();
-    const requiresApproval = this.requireDeploymentApproval
-      || environment === 'production'
-      || environment === 'prod';
-    if (!requiresApproval) return null;
-    if (!this.deploymentApproval || typeof this.deploymentApproval.assertApproved !== 'function') {
-      return false;
-    }
-    const stages = await this.repository.listStageRuns(run.runId);
-    const testStage = stages.find((stageRun) => (
-      stageRun.stage === 'test'
-      && stageRun.status === 'succeeded'
-      && stageRun.result
-    ));
-    if (!testStage) return false;
-    const artifact = testStage.result.artifact;
-    if (!artifact || !artifact.commitSha || !artifact.treeSha) return false;
-    let approval;
-    try {
-      approval = await this.deploymentApproval.assertApproved({
-        run,
-        testResult: testStage.result,
-      });
-    } catch (error) {
-      if (
-        error
-        && ['pipeline_deployment_not_approved', 'pipeline_deployment_approval_required'].includes(error.code)
-      ) return false;
-      throw error;
-    }
-    if (
-      !approval
-      || approval.approved !== true
-      || typeof approval.by !== 'string'
-      || !approval.by.trim()
-      || typeof approval.at !== 'string'
-      || Number.isNaN(Date.parse(approval.at))
-      || Date.parse(approval.at) < Date.parse(testStage.result.completedAt)
-      || approval.testCommandId !== testStage.result.commandId
-      || approval.commitSha !== artifact.commitSha
-      || approval.treeSha !== artifact.treeSha
-      || approval.preflightDecisionDigest !== run.preflight.preflightDecisionDigest
-    ) {
-      return false;
-    }
-    return {
-      approved: true,
-      approvalId: approval.approvalId || run.runId,
-      by: approval.by,
-      at: approval.at,
-      source: 'server',
-      testCommandId: approval.testCommandId,
-      commitSha: approval.commitSha,
-      treeSha: approval.treeSha,
-      preflightDecisionDigest: approval.preflightDecisionDigest,
-    };
   }
 
   async _dispatchNewStage(runId, stage) {
@@ -195,9 +109,6 @@ class PipelineOrchestrator {
       input: {
         request: run.start.request,
         priorResults,
-        ...(stage === 'deploy' && run.deploymentApprovalClaim
-          ? { deploymentApproval: approvalFromClaim(run.deploymentApprovalClaim) }
-          : {}),
       },
       trace: {
         correlationId: run.start.correlationId,

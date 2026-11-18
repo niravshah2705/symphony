@@ -4,6 +4,117 @@ All notable changes to AI Fleet (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
+## 2026-11-18
+
+### Removed
+
+- **The code-docs pre-commit gate is gone.** `.githooks/pre-commit` (the
+  drift check that regenerated `docs/code-graph/` and blocked commits) is
+  deleted and `docs/code-graph/` is now gitignored — the map is local-only
+  output of `npm run docs:code`. `.githooks/post-commit` still refreshes the
+  local query indexes in the background.
+- **The pipeline deploy stage is retired with the Cloud Run deployer.**
+  `services/deployer` and `deploy/gcp/Dockerfile.deployer` are deleted, along
+  with the `pipeline-deployer` Cloud Run service, its service account and IAM
+  bindings, the deploy command/result Pub/Sub topics and subscriptions, the
+  `pipeline_deployment_enabled` / `pipeline_deploy*_topic` Terraform variables,
+  the deployer CI build steps and the per-tenant deployer provisioning. The
+  durable pipeline now runs **plan → code → test** and closes the run as
+  succeeded after test.
+  - New runs that request the deploy stage are rejected at gateway admission
+    and at orchestrator preflight with `410 pipeline_deploy_retired`; a legacy
+    run that reaches the deploy transition is closed as succeeded without
+    dispatching anything (`repository.retireDeployStage`).
+  - **Release note:** terraform destroys the deployer service, its Pub/Sub
+    channels and IAM on the next apply; any organization approval awaiting a
+    deploy will simply close its run after test.
+
+### Fixed
+
+- **`local.billing_flexprice_secrets` names the two FlexPrice secret containers
+  instead of indexing them through state.** It read
+  `google_secret_manager_secret.flexprice["flexprice-api-key-ingest"].secret_id`,
+  and a resource reference outside a plan's target scope is answered from state.
+  The containers are not in state — **#278 has never been applied**, because
+  every deploy since then died in the secret-staging step — so the collection
+  rendered as *object with no attributes* and `Deploy to GCP` failed with
+  `Error: Invalid index` on `billing_service.tf:96-97` in both the targeted
+  staging plan and the `-refresh-only` record of #278's billing `moved` blocks.
+  That was a deadlock, not a guard: both calls run *before* the apply step that
+  would create the containers. A secret name is a constant, so it is spelled as
+  one — the value `secret_id` returns, byte-identical to what the revision
+  carried, and the same short-name form the working Cashfree entries use.
+  Ordering and management are untouched: `billing_flexprice_accessor` still
+  iterates the real collection and both the billing service and the billing Job
+  `depends_on` it, and the workflow still refuses to run until each key has an
+  enabled version.
+  - **Release note:** the plan output changes, so the next apply creates #278's
+    whole outstanding set (the FlexPrice containers, the billing Job/scheduler
+    rename, the schedulers and their IAM). That is the deployment #278 describes;
+    review the plan before approving it.
+- **The Deploy to GCP secret-staging step no longer plans the whole stack, and
+  no longer applies at all.** It ran an un-targeted `terraform plan` with only
+  six of the ~45 deploy variables, so every other variable fell back to its
+  default: the job died on the email service's `email_public_app_url`
+  precondition (skipping the real apply) and the log showed a phantom
+  `Plan: 33 to add, 14 to change, 38 to destroy` — including a Firestore
+  replace, the One Tap client-id secret and the `platform.archagentix.com`
+  hosting domain. None of it was the deployment plan: the six repository
+  variables involved all hold the correct values. The step is now a **targeted
+  plan** of the six secret addresses, so a merge cannot mutate production from
+  there; an operator applies. A `moved` block that has never been recorded — the
+  billing Cloud Run Job / scheduler rename from #278, pending ever since because
+  every deploy died in this step before reaching the apply — blocks even a
+  targeted plan, so the step records it with `terraform apply -refresh-only`,
+  the one apply that rewrites state addresses and cannot create, change or
+  delete a resource, then retries the plan once. If that still fails, the step
+  stops with the command an operator has to run.
+- **Three production resources now refuse a destroy planned by a cleared repo
+  variable** (`prevent_destroy`): `google_firestore_database.default` (an
+  immutable `location_id` mismatch would drop the database from state),
+  `google_secret_manager_secret.google_one_tap_client_id` and
+  `google_firebase_hosting_custom_domain.default`. The `try(..., "dummy")`
+  placeholder on the FlexPrice secret references is gone — it converted a
+  plan-time error into a Cloud Run revision that mounts a nonexistent secret.
+- **Release note:** a deliberate Firestore region move, One Tap shutdown or
+  domain unmap now needs the lifecycle flag flipped or a `terraform state rm`
+  first; the CI job cannot do it by leaving a repository variable empty.
+
+## 2026-11-17
+
+### Removed
+
+- **Cloud Run agent harness retired — Agent Substrate is the only execution
+  pattern.** `resolveAgentPattern()` no longer honors `agentPattern='cloudrun'`
+  (legacy values coerce to `substrate`). The planner, coder and tester Cloud Run
+  services are deleted along with their Dockerfiles, the coder-worker Cloud Run
+  Job, their Pub/Sub topics, Artifact Registry repos, IAM bindings and CI build
+  jobs. The planner's browser-facing surface (`/api/agent/*`, `/api/coder/*`,
+  settings, projects, issues, roles, observability) moved to the orchestrator's
+  agent surface (`services/orchestrator/src/agent-server.js`); the gateway now
+  proxies everything there.
+  - **Release note:** any environment still relying on `CODER_ROLE=worker` queue
+    polling must have migrated to substrate before deploying this — the worker
+    Job, `CODER_JOB_*`/`CODER_TOPIC`/`TESTER_IMAGE` wiring and the planner/coder
+    queue pop/publish helpers are gone with no fallback.
+  - `POST/GET /api/coder/monitor` is retired and answers
+    `410 coder_monitor_retired`; the board's coder monitor loop was deleted.
+- `deploy/gcp/Dockerfile.planner` → `Dockerfile.substrate-actor` (the actor
+  image, `SUBSTRATE_ACTOR_MODE=true`, entry
+  `services/orchestrator/src/substrate-actor-entry.js`); `Dockerfile.coder` and
+  `Dockerfile.tester` deleted. `substrate_planner_image` still pins the actor
+  image digest, now built from the actor Dockerfile.
+
+### Changed
+
+- Substrate control env placement: the **orchestrator** gets the full
+  control-plane + actor-callback pair, the provisioner the control plane only,
+  and the deployer and every other workload nothing. The `run.invoker` binding
+  for the substrate actor identity moved from the planner to the orchestrator.
+- Per-tenant provisioning no longer stands up `pl-`/`cc-`/`cw-`/`pt-` agent
+  services; actors run in the shared substrate with per-tenant
+  `SUBSTRATE_ORG_ID` / `SUBSTRATE_WORKER_POOL` (`naming.substrateActor`).
+
 ## 2026-08-11
 
 A dependency-modernization pass: reviewed every workspace's dependencies and

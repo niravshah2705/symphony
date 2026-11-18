@@ -10,7 +10,7 @@ until you opt in.
 | Tenant | What runs it | When |
 |--------|--------------|------|
 | **Pseudo-workspace (shared)** | the SHARED gateway/planner/coder | a signed-in user with no org — auto-given a `"<Name>'s Workspace"` org that points at the shared stack. **No provisioning.** |
-| **Provisioned org (dedicated)** | a per-tenant `gateway + orchestrator + planner + coder-control + coder-worker + tester + deployer` (reusing existing images, no rebuild) | a user **explicitly** creates a named organization |
+| **Provisioned org (dedicated)** | a per-tenant `gateway + orchestrator` (reusing existing images, no rebuild; agents run in the shared substrate) | a user **explicitly** creates a named organization |
 
 `org-service`, `settings-service`, and Firestore stay **shared** — they are the
 tenant registry. Only the agent stack is per-tenant. The per-tenant **gateway**
@@ -115,7 +115,7 @@ labels so an org's stack is filterable in the console and in the billing export:
 | `organization` | the org id (UUID, sanitized) | which org owns it |
 | `tenant` | the deployment slug (`t<hex>`) | opaque per-tenant id (also in the name) |
 | `tenancy` | `dedicated` | a provisioned per-tenant resource |
-| `component` | `gateway`/`orchestrator`/`planner`/`coder-control`/`coder-worker`/`tester`/`deployer` | which service |
+| `component` | `gateway`/`orchestrator`/`planner`/`pipeline-*` | which service or channel |
 | `managed-by` | `ai-fleet-provisioner` | created at runtime, not by Terraform |
 
 Shared-stack resources (Terraform) carry `tenancy = "shared"` (+ `environment` and

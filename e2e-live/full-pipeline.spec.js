@@ -7,7 +7,6 @@ const { test, expect } = require('@playwright/test');
 const { loadLiveConfig } = require('./support/config');
 const {
   PIPELINE_STAGES,
-  approveDeployment,
   boundedSafeText,
   freshBrowserBearer,
   jsonRequest,
@@ -21,7 +20,7 @@ const {
 let config;
 
 function liveConfig() {
-  if (!config) config = loadLiveConfig({ requireAuth: true, requireDeploy: true });
+  if (!config) config = loadLiveConfig({ requireAuth: true });
   return config;
 }
 
@@ -52,7 +51,7 @@ function issueFromResponse(data) {
   return issue;
 }
 
-function finalEvidence(status, issue, healthStatus, activeConfig) {
+function finalEvidence(status, issue) {
   const latest = latestStageRuns(status);
   const stages = Object.fromEntries(PIPELINE_STAGES.map((stage) => {
     const stageRun = latest.get(stage);
@@ -64,7 +63,6 @@ function finalEvidence(status, issue, healthStatus, activeConfig) {
       artifact: artifact ? { commitSha: artifact.commitSha, treeSha: artifact.treeSha } : null,
     }];
   }));
-  const deployment = latest.get('deploy')?.result?.output?.deployment || null;
   return {
     result: 'passed',
     completedAt: new Date().toISOString(),
@@ -73,33 +71,21 @@ function finalEvidence(status, issue, healthStatus, activeConfig) {
     requestedStages: status.run.requestedStages,
     status: status.run.status,
     stages,
-    deployment: deployment ? {
-      environment: deployment.environment,
-      status: deployment.status,
-      conclusion: deployment.conclusion || null,
-      url: deployment.url || null,
-      commitSha: deployment.commitSha,
-      treeSha: deployment.treeSha,
-    } : null,
-    health: { url: activeConfig.deployHealthUrl, status: healthStatus },
   };
 }
 
-test('03 — Tenant A completes the approved plan → code → test → deploy pipeline', async ({ page }, testInfo) => {
+test('03 — Tenant A completes the plan → code → test pipeline and the deploy stage stays retired', async ({ page }, testInfo) => {
   test.setTimeout(75 * 60 * 1_000);
   const startedAt = new Date().toISOString();
   let runId = '';
   let apiBaseUrl = '';
   let token = '';
-  let approvalCommitted = false;
   let issue = null;
   let recordedError = null;
   let fixture;
   let activeConfig;
 
   try {
-    // Re-run the strict deploy-specific checks at the last possible point
-    // before creating the Linear issue. This is the mutation safety boundary.
     activeConfig = liveConfig();
     fixture = requiredPipelineFixture(activeConfig.fixtures);
 
@@ -117,6 +103,19 @@ test('03 — Tenant A completes the approved plan → code → test → deploy p
       organizationId: fixture.tenantA.organizationId,
       projectId: fixture.tenantA.projectId,
     };
+
+    // The deploy stage was retired with the Cloud Run deployer (2026-11):
+    // admission must turn any new deploy-requesting run away with a typed 410
+    // before anything is created or dispatched.
+    await jsonRequest(apiBaseUrl, '/api/pipeline/runs', {
+      method: 'POST',
+      ...headers,
+      body: {
+        requestedStages: [...PIPELINE_STAGES, 'deploy'],
+        request: { projectId: fixture.tenantA.linearProjectId },
+      },
+      expectedStatuses: [410],
+    });
     const marker = `qa-e2e-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const titlePrefix = typeof fixture.task.title === 'string' && fixture.task.title.trim()
       ? fixture.task.title.trim()
@@ -136,7 +135,8 @@ test('03 — Tenant A completes the approved plan → code → test → deploy p
     issue = issueFromResponse(created.data);
     await setEvidenceHud(page, 'Full QA pipeline', [
       'fixture: synthetic work item created',
-      'requested: plan → code → test → deploy',
+      'requested: plan → code → test',
+      'deploy: retired (410 at admission)',
       'status: submitting',
     ]);
 
@@ -156,7 +156,6 @@ test('03 — Tenant A completes the approved plan → code → test → deploy p
             projectId: fixture.tenantA.linearProjectId,
             linearProjectId: fixture.tenantA.linearProjectId,
           },
-          deployment: { environment: activeConfig.deployEnvironment },
         },
       },
       expectedStatuses: [202],
@@ -171,55 +170,8 @@ test('03 — Tenant A completes the approved plan → code → test → deploy p
       `/api/pipeline/runs/${encodeURIComponent(runId)}`,
       { ...headers, expectedStatuses: [200] },
     )).data;
-    const awaiting = await waitForRun({
-      load,
-      page,
-      deadline,
-      stopStatuses: ['awaiting_approval', 'failed', 'cancelled', 'succeeded'],
-    });
-    expect(awaiting.run.status, 'QA requires a post-test operator approval').toBe('awaiting_approval');
-    for (const stage of ['plan', 'code', 'test']) {
-      expect(latestStageRuns(awaiting).get(stage)?.status, `${stage} succeeds before approval`).toBe('succeeded');
-    }
-    expect(latestStageRuns(awaiting).has('deploy'), 'deploy is not claimed before approval').toBe(false);
-
-    await setEvidenceHud(page, 'Full QA pipeline', [
-      'plan: succeeded', 'code: succeeded', 'test: succeeded',
-      'deploy: awaiting protected approval',
-    ]);
-    ({ token, apiBaseUrl } = await freshBrowserBearer(page));
-    await approveDeployment({
-      token,
-      apiBaseUrl,
-      settingsUrl: activeConfig.settingsUrl,
-      organizationId: fixture.tenantA.organizationId,
-      projectId: fixture.tenantA.projectId,
-      repository: activeConfig.repository,
-      environment: activeConfig.deployEnvironment,
-      runId,
-      cwd: path.resolve(__dirname, '..'),
-    });
-    approvalCommitted = true;
-    await jsonRequest(apiBaseUrl, `/api/pipeline/runs/${encodeURIComponent(runId)}/resume`, {
-      method: 'POST',
-      token,
-      organizationId: fixture.tenantA.organizationId,
-      projectId: fixture.tenantA.projectId,
-      body: { retryFailed: false },
-      expectedStatuses: [200],
-    });
-
     const final = await waitForRun({
-      load: async () => (await jsonRequest(
-        apiBaseUrl,
-        `/api/pipeline/runs/${encodeURIComponent(runId)}`,
-        {
-          token,
-          organizationId: fixture.tenantA.organizationId,
-          projectId: fixture.tenantA.projectId,
-          expectedStatuses: [200],
-        },
-      )).data,
+      load,
       page,
       deadline,
       stopStatuses: ['succeeded', 'failed', 'cancelled'],
@@ -228,37 +180,27 @@ test('03 — Tenant A completes the approved plan → code → test → deploy p
     expect(final.run.requestedStages).toEqual(PIPELINE_STAGES);
     const latest = latestStageRuns(final);
     for (const stage of PIPELINE_STAGES) expect(latest.get(stage)?.status, `${stage} stage status`).toBe('succeeded');
+    expect(latest.has('deploy'), 'a retired deploy stage must never be claimed').toBe(false);
 
     const codeArtifact = latest.get('code').result.artifact;
     const testArtifact = latest.get('test').result.artifact;
-    const deployArtifact = latest.get('deploy').result.artifact;
     expect(testArtifact).toEqual(codeArtifact);
-    expect(deployArtifact).toEqual(testArtifact);
-    const receipt = latest.get('deploy').result.output.deployment;
-    expect(receipt.status).toBe('succeeded');
-    expect(receipt.environment).toBe(activeConfig.deployEnvironment);
-    expect({ commitSha: receipt.commitSha, treeSha: receipt.treeSha }).toEqual(deployArtifact);
-
-    const health = await fetch(activeConfig.deployHealthUrl, { redirect: 'manual' });
-    expect(health.status, 'deployed QA health endpoint').toBeGreaterThanOrEqual(200);
-    expect(health.status, 'deployed QA health endpoint').toBeLessThan(300);
     await setEvidenceHud(page, 'Full QA pipeline — PASS', [
       'plan: succeeded', 'code: succeeded', 'test: succeeded',
-      `deploy (${activeConfig.deployEnvironment}): succeeded`,
-      `health: HTTP ${health.status}`,
+      'deploy: retired — runs end after test',
     ]);
-    mergeEvidence(activeConfig.evidenceDir, 'fullPipeline', finalEvidence(final, issue, health.status, activeConfig));
+    mergeEvidence(activeConfig.evidenceDir, 'fullPipeline', finalEvidence(final, issue));
   } catch (error) {
     recordedError = error;
-    if (runId && token && apiBaseUrl && !approvalCommitted && fixture) {
+    if (runId && token && apiBaseUrl && fixture) {
       try {
         await jsonRequest(apiBaseUrl, `/api/pipeline/runs/${encodeURIComponent(runId)}/cancel`, {
           method: 'POST',
           token,
           organizationId: fixture.tenantA.organizationId,
           projectId: fixture.tenantA.projectId,
-          body: { reason: 'QA E2E failed before deployment approval.' },
-          expectedStatuses: [200],
+          body: { reason: 'QA E2E failed mid-pipeline.' },
+          expectedStatuses: [200, 409],
         });
       } catch (_) {
         // Best effort: preserve the original failure and the server audit trail.

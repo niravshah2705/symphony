@@ -72,11 +72,14 @@ jobs:
           filters: |
             shared:  ['packages/shared/**', 'packages/shared-core/**']
             gateway: ['services/gateway/**', 'deploy/gcp/Dockerfile.gateway']
-            planner: ['services/planner/**', 'deploy/gcp/Dockerfile.planner']
-            coder:   ['services/coder/**',   'deploy/gcp/Dockerfile.coder']
+            # The actor image carries packages/shared + the orchestrator entry,
+            # both of which also trigger it through shared/orchestrator ($all /
+            # ORCHESTRATOR); this filter is for Dockerfile-only changes. Its
+            # digest reaches terraform via var.substrate_planner_image (operator
+            # input — never an image_tag var, because ActorTemplate requires a
+            # digest, not a tag).
+            substrate_actor: ['deploy/gcp/Dockerfile.substrate-actor', 'services/orchestrator/src/substrate-actor-entry.js']
             orchestrator: ['services/orchestrator/**', 'deploy/gcp/Dockerfile.orchestrator']
-            tester:       ['services/tester/**',       'deploy/gcp/Dockerfile.tester']
-            deployer:     ['services/deployer/**',     'deploy/gcp/Dockerfile.deployer']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
             # A release-tooling change must publish the newly transformed SPA;
@@ -108,12 +111,8 @@ jobs:
           SHARED: ${{ steps.filter.outputs.shared }}
           ROOT: ${{ steps.filter.outputs.root }}
           GATEWAY: ${{ steps.filter.outputs.gateway }}
-          PLANNER: ${{ steps.filter.outputs.planner }}
-          CODER: ${{ steps.filter.outputs.coder }}
+          SUBSTRATE_ACTOR: ${{ steps.filter.outputs.substrate_actor }}
           ORCHESTRATOR: ${{ steps.filter.outputs.orchestrator }}
-          TESTER: ${{ steps.filter.outputs.tester }}
-          DEPLOYER: ${{ steps.filter.outputs.deployer }}
-          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONER: ${{ steps.filter.outputs.provisioner }}
           PROXY: ${{ steps.filter.outputs.proxy }}
           SPA: ${{ steps.filter.outputs.spa }}
@@ -141,11 +140,8 @@ jobs:
             '. + [{id:$id, image:$image, dockerfile:$df, context:$ctx}]'); }
 
           if [ "$all" = "true" ] || [ "$GATEWAY" = "true" ]; then push gateway gateway       deploy/gcp/Dockerfile.gateway . ; fi
-          if [ "$all" = "true" ] || [ "$PLANNER" = "true" ]; then push planner planner       deploy/gcp/Dockerfile.planner . ; fi
-          if [ "$all" = "true" ] || [ "$CODER"   = "true" ]; then push coder   coder-control deploy/gcp/Dockerfile.coder   . ; fi
-          if [ "$all" = "true" ] || [ "$ORCHESTRATOR" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push orchestrator pipeline-orchestrator deploy/gcp/Dockerfile.orchestrator . ; fi
-          if [ "$all" = "true" ] || [ "$TESTER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push tester pipeline-tester deploy/gcp/Dockerfile.tester . ; fi
-          if [ "$all" = "true" ] || [ "$DEPLOYER" = "true" ] || { [ "$PIPELINE_ENABLED" = "true" ] && [ "$INFRA" = "true" ]; }; then push deployer pipeline-deployer deploy/gcp/Dockerfile.deployer . ; fi
+          if [ "$all" = "true" ] || [ "$SUBSTRATE_ACTOR" = "true" ]; then push substrate-actor substrate-actor deploy/gcp/Dockerfile.substrate-actor . ; fi
+          if [ "$all" = "true" ] || [ "$ORCHESTRATOR" = "true" ] || [ "$INFRA" = "true" ]; then push orchestrator pipeline-orchestrator deploy/gcp/Dockerfile.orchestrator . ; fi
           if [ "$all" = "true" ] || [ "$EMAIL"   = "true" ]; then push email   email-service deploy/gcp/Dockerfile.email   . ; fi
           if [ "$all" = "true" ] || [ "$IDENTITY" = "true" ]; then push identity identity-verification deploy/gcp/Dockerfile.identity-verification . ; fi
           if [ "$all" = "true" ] || [ "$BILLING"  = "true" ]; then push billing billing deploy/gcp/Dockerfile.billing . ; fi
@@ -337,7 +333,6 @@ jobs:
         id: tags
         env:
           SERVICES: ${{ needs.changes.outputs.services }}
-          PIPELINE_ENABLED: ${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}
           PROVISIONING_ENABLED: ${{ vars.PROVISIONING_ENABLED || 'false' }}
           LITELLM_ENABLED: ${{ vars.LITELLM_ENABLED || 'false' }}
         run: |
@@ -399,11 +394,7 @@ jobs:
 
           {
             write_tag gateway resolve gateway gateway
-            write_tag planner resolve planner planner
-            write_tag coder resolve coder coder-control
-            write_tag orchestrator resolve_optional orchestrator pipeline-orchestrator "$PIPELINE_ENABLED"
-            write_tag tester resolve_optional tester pipeline-tester "$PIPELINE_ENABLED"
-            write_tag deployer resolve_optional deployer pipeline-deployer "$PIPELINE_ENABLED"
+            write_tag orchestrator resolve orchestrator pipeline-orchestrator
             write_tag provisioner resolve_optional provisioner provisioner "$PROVISIONING_ENABLED"
             # One proxy artifact backs both sidecars and the standalone broker.
             # It is built on every terraform-running deploy (see the plan step),
@@ -486,6 +477,15 @@ jobs:
             -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
             -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
           )
+          # Read-only, and targeted. Read-only because a merge must never mutate
+          # production: applying here is how one bad commit reaches Firestore.
+          # Targeted because the var set above is a six-variable subset of the ~45
+          # the apply step passes, so an UN-targeted plan here evaluates the whole
+          # stack against defaults — firestore_location=nam5 (replaces the real
+          # database), google_one_tap_client_id="" (deletes the OAuth client-id
+          # secret), custom_domain=[] (unmaps the live hosting domain) — and dies on
+          # the email service's email_public_app_url precondition. That plan is not
+          # the deployment plan; the one in the apply step below is.
           secret_targets=(
             -target='google_secret_manager_secret.flexprice["flexprice-api-key-ingest"]'
             -target='google_secret_manager_secret.flexprice["flexprice-api-key-money"]'
@@ -494,29 +494,57 @@ jobs:
             -target=google_secret_manager_secret.cashfree_app_id
             -target=google_secret_manager_secret.cashfree_secret_key
           )
-          # While a `moved` block's SOURCE address is still in state, the move is
-          # pending, and a pending move makes terraform refuse ANY targeted plan —
-          # "Moved resource instances excluded by targeting" — even one targeting
-          # unrelated resources. So the first deploy after a PR that renames a
-          # resource address dies here, before the un-targeted apply below could
-          # land the move itself.
+          # A brand-new secret therefore has no container yet: the plan says "1 to
+          # add" and the gcloud seeding below cannot write a version into it. Add the
+          # container with `gcloud secrets create <id> --replication-policy=automatic`
+          # (and let the apply step import or create it), which is what the FlexPrice
+          # verify step already enforces for the two operator-minted keys.
           #
-          # terraform offers two remedies: drop -target, or widen it to cover the
-          # moved addresses. Neither is right here: this step exists to create the
-          # secret CONTAINERS before their values are seeded, so widening it drags
-          # in the billing Jobs that mount those secrets with version=latest, which
-          # Cloud Run rejects until the values exist — the exact bootstrap case this
-          # step handles. Instead land the moves, which is what they are: a state
-          # address change. -refresh-only rewrites the addresses and takes no action
-          # on any remote object (0 added / 0 changed / 0 destroyed), so the retry
-          # below plans the same six secrets it always planned.
-          apply_log=/tmp/secret-stage-apply.log
-          if ! terraform apply -no-color -input=false -auto-approve \
-               "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$apply_log"; then
-            grep -q 'Moved resource instances excluded by targeting' "$apply_log" || exit 1
-            echo "::notice::Pending state moves blocked the targeted apply; recording them first."
-            terraform apply -no-color -refresh-only -auto-approve -input=false "${tf_vars[@]}"
-            terraform apply -no-color -input=false -auto-approve "${tf_vars[@]}" "${secret_targets[@]}"
+          # A pending `moved` block is the one case this step cannot plan past: while
+          # a move's SOURCE address is still in state, terraform refuses ANY targeted
+          # plan — "Moved resource instances excluded by targeting" — even one
+          # targeting unrelated resources. Recording a move needs an apply, and
+          # `apply -refresh-only` is the only apply that cannot touch infrastructure:
+          # it rewrites state (relabels the moved addresses, refreshes them from the
+          # API) and creates, changes or deletes no remote object. So the addresses
+          # terraform itself names get recorded here and the read-only plan is
+          # retried; anything that still fails stays the operator's call.
+          #
+          # What can still fail: a refresh-only plan cannot CREATE anything, so
+          # every expression it evaluates has to resolve from state. A local that
+          # indexes a resource collection outside the target set reads whatever is
+          # stored there — and for a container the apply step has not created yet
+          # that is an empty object, so the record dies on "Invalid index". Config
+          # under this step therefore references not-yet-applied resources by
+          # constant, never by `resource.thing[key].attribute`.
+          plan_log=/tmp/secret-stage-plan.log
+          stage_plan() {
+            terraform plan -no-color -input=false "${tf_vars[@]}" "${secret_targets[@]}" 2>&1 | tee "$plan_log"
+          }
+          if ! stage_plan; then
+            grep -q 'Moved resource instances excluded by targeting' "$plan_log" || exit 1
+            # Take the addresses from the message rather than a list here that goes
+            # stale the moment the next `moved` block lands.
+            move_targets=()
+            while IFS= read -r moved; do
+              move_targets+=("$moved")
+            done < <(grep -oE '\-target="[^"]+"' "$plan_log" | sed -e 's/^-target="//' -e 's/"$//')
+            if [ "${#move_targets[@]}" -eq 0 ]; then
+              echo "::error::Pending state moves were reported without any -target suggestion. Record them with 'terraform apply -refresh-only' in $TF_DIR, then re-run this workflow."
+              exit 1
+            fi
+            target_args=( "${move_targets[@]/#/-target=}" )
+            echo "Recording pending state moves (state addresses only, no infrastructure changes):"
+            printf '  %s\n' "${move_targets[@]}"
+            if ! terraform apply -refresh-only -auto-approve -input=false -no-color \
+                 "${tf_vars[@]}" "${target_args[@]}"; then
+              echo "::error::Could not record the pending state moves. Run 'terraform apply -refresh-only ${target_args[*]}' in $TF_DIR, then re-run this workflow."
+              exit 1
+            fi
+            if ! stage_plan; then
+              echo "::error::Still blocked after recording the moves; see the plan output above."
+              exit 1
+            fi
           fi
 
           enabled_value() {
@@ -575,6 +603,19 @@ jobs:
             CUSTOM_DOMAIN_ARG="$(echo "${{ vars.FIREBASE_CUSTOM_DOMAIN }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | gsub("^https?://"; "") | gsub("/+$"; "")) | map(select(length > 0))')"
           fi
 
+          # The substrate atespace bindings are one comma-separated string each in
+          # the repo variable, because that is the shape substrate.tf renders into a
+          # single env name and the JS side parses. Empty stays empty list/map: the
+          # names are absent from the container env rather than set to "".
+          SUBSTRATE_ALLOWED_ATESPACES_ARG="[]"
+          if [ -n "${{ vars.SUBSTRATE_ALLOWED_ATESPACES }}" ]; then
+            SUBSTRATE_ALLOWED_ATESPACES_ARG="$(echo "${{ vars.SUBSTRATE_ALLOWED_ATESPACES }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))')"
+          fi
+          SUBSTRATE_ATESPACE_BY_ORG_ARG="{}"
+          if [ -n "${{ vars.SUBSTRATE_ATESPACE_BY_ORG }}" ]; then
+            SUBSTRATE_ATESPACE_BY_ORG_ARG="$(echo "${{ vars.SUBSTRATE_ATESPACE_BY_ORG }}" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0) | split("=") | {(.[0] | gsub("^\\s+|\\s+$"; "")): (.[1] | gsub("^\\s+|\\s+$"; ""))}) | add // {}')"
+          fi
+
           # Every service tag above is either this run's immutable SHA or a
           # successfully resolved live tag. An unresolved tag aborts deployment.
           apply_args=(
@@ -597,7 +638,6 @@ jobs:
             -var="laya_model_version=${{ vars.LAYA_MODEL_VERSION || 'v1' }}"
             -var="provisioning_enabled=${{ vars.PROVISIONING_ENABLED || 'false' }}"
             -var="pipeline_orchestrator_enabled=${{ vars.PIPELINE_ORCHESTRATOR_ENABLED || 'false' }}"
-            -var="pipeline_deployment_enabled=${{ vars.PIPELINE_DEPLOYMENT_ENABLED || 'false' }}"
             # Off by default: the gateway (3 containers + 4 secrets) only exists when
             # the repo variable says so. This is the infra knob only — admitting the
             # browser's `litellm` flag is the separate out-of-band
@@ -620,13 +660,55 @@ jobs:
             -var="flexprice_base_url=${{ vars.FLEXPRICE_BASE_URL }}"
             -var="flexprice_environment_id=${{ vars.FLEXPRICE_ENVIRONMENT_ID }}"
             -var="flexprice_supplier_state_code=${{ vars.FLEXPRICE_SUPPLIER_STATE_CODE }}"
+            # Dark by default: GATEWAY_VPC_EGRESS_ENABLED unset => false => the
+            # gateway's vpc_access block is not rendered at all, so this is a
+            # no-op for every deployment that has not opted in. VPC_NETWORK and
+            # VPC_SUBNET are passed by name instead of read through a data
+            # source: the root stack does not otherwise know about the substrate
+            # cluster's network, and an undeclared dependency on a second
+            # module's state is harder to debug than two repo variables.
+            -var="gateway_vpc_egress_enabled=${{ vars.GATEWAY_VPC_EGRESS_ENABLED || 'false' }}"
+            -var="vpc_network=${{ vars.VPC_NETWORK }}"
+            -var="vpc_subnet=${{ vars.VPC_SUBNET }}"
+            -var="vpc_egress_mode=${{ vars.VPC_EGRESS_MODE || 'PRIVATE_RANGES_ONLY' }}"
+            # Agent Substrate is the only execution pattern (#283 retired the Cloud
+            # Run planner/coder harnesses), so these names are how a deployed agent
+            # reaches a control plane at all. None of them had a CI path before:
+            # every consumer falls back to an inert default when its variable is
+            # absent, so an unset SUBSTRATE_URL is not a plan error — the deploy
+            # goes green, the orchestrator refuses every run as "not configured",
+            # and the first person to notice is a user clicking Plan. Keep every
+            # default EMPTY: a `|| '<addr>'` fallback here would point production at
+            # an address nobody reviewed. The names
+            # whose Terraform default is NOT empty are appended below the array
+            # instead, for two reasons: an empty `-var="substrate_timeout_ms="` is
+            # not a valid HCL number, and an empty string beats the Terraform
+            # default for every type.
+            -var="substrate_url=${{ vars.SUBSTRATE_URL }}"
+            -var="substrate_ingress_url=${{ vars.SUBSTRATE_INGRESS_URL }}"
+            -var="substrate_atespace=${{ vars.SUBSTRATE_ATESPACE }}"
+            -var="substrate_allowed_atespaces=${SUBSTRATE_ALLOWED_ATESPACES_ARG}"
+            -var="substrate_atespace_by_org=${SUBSTRATE_ATESPACE_BY_ORG_ARG}"
+            -var="substrate_planner_image=${{ vars.SUBSTRATE_PLANNER_IMAGE }}"
+            -var="substrate_jwks_url=${{ vars.SUBSTRATE_JWKS_URL }}"
+            # The actor-callback group opens only when all of these agree; iam.tf
+            # gates the matching run.invoker binding on substrate_actor_member, so an
+            # env without the binding is a refused call and a binding without the
+            # env is an unauthenticated prompt endpoint.
+            -var="substrate_actor_mode=${{ vars.SUBSTRATE_ACTOR_MODE || 'false' }}"
+            -var="substrate_actor_member=${{ vars.SUBSTRATE_ACTOR_MEMBER }}"
           )
+          # The five names whose Terraform default is a real value are appended only
+          # when the repo variable is set: substrate.tf's own rule is that a key is
+          # absent rather than empty, and an empty string here would beat both the
+          # Terraform default and a value an operator put in the org's settings.
+          [ -n "${{ vars.SUBSTRATE_WORKER_POOL }}" ] && apply_args+=(-var="substrate_worker_pool=${{ vars.SUBSTRATE_WORKER_POOL }}") || true
+          [ -n "${{ vars.SUBSTRATE_ACTOR_JWT_AUDIENCE }}" ] && apply_args+=(-var="substrate_actor_jwt_audience=${{ vars.SUBSTRATE_ACTOR_JWT_AUDIENCE }}") || true
+          [ -n "${{ vars.SUBSTRATE_TRUST_DOMAIN }}" ] && apply_args+=(-var="substrate_trust_domain=${{ vars.SUBSTRATE_TRUST_DOMAIN }}") || true
+          [ -n "${{ vars.SUBSTRATE_TIMEOUT_MS }}" ] && apply_args+=(-var="substrate_timeout_ms=${{ vars.SUBSTRATE_TIMEOUT_MS }}") || true
+          [ -n "${{ vars.SUBSTRATE_ACTOR_TTL_MS }}" ] && apply_args+=(-var="substrate_actor_ttl_ms=${{ vars.SUBSTRATE_ACTOR_TTL_MS }}") || true
           [ -n "${{ steps.tags.outputs.gateway }}" ] && apply_args+=(-var="gateway_image_tag=${{ steps.tags.outputs.gateway }}")
-          [ -n "${{ steps.tags.outputs.planner }}" ] && apply_args+=(-var="planner_image_tag=${{ steps.tags.outputs.planner }}")
-          [ -n "${{ steps.tags.outputs.coder }}" ]   && apply_args+=(-var="coder_image_tag=${{ steps.tags.outputs.coder }}") || true
           [ -n "${{ steps.tags.outputs.orchestrator }}" ] && apply_args+=(-var="orchestrator_image_tag=${{ steps.tags.outputs.orchestrator }}") || true
-          [ -n "${{ steps.tags.outputs.tester }}" ] && apply_args+=(-var="tester_image_tag=${{ steps.tags.outputs.tester }}") || true
-          [ -n "${{ steps.tags.outputs.deployer }}" ] && apply_args+=(-var="deployer_image_tag=${{ steps.tags.outputs.deployer }}") || true
           [ -n "${{ steps.tags.outputs.provisioner }}" ] && apply_args+=(-var="provisioner_image_tag=${{ steps.tags.outputs.provisioner }}") || true
           [ -n "${{ steps.tags.outputs.proxy }}" ] && apply_args+=(-var="proxy_image_tag=${{ steps.tags.outputs.proxy }}") || true
           [ -n "${{ steps.tags.outputs.org }}" ]     && apply_args+=(-var="org_image_tag=${{ steps.tags.outputs.org }}") || true
@@ -667,6 +749,20 @@ jobs:
             echo '### Primary Terraform plan'
             grep -E '^Plan:|^No changes' primary-plan.txt || echo 'No summary line found.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+          # #283 retired the Cloud Run harness in code and this plan retires it in
+          # production: once `planner` / `coder-control` / `coder-worker` are gone,
+          # Agent Substrate is the ONLY pattern that can run an agent. Applying that
+          # with substrate_url unset still goes green — the consumers fall back to
+          # their inert defaults and the orchestrator refuses every run as "not
+          # configured", so the failure surfaces as a user's dead button, not as a
+          # red job. Stop in the step that can still stop the apply, and name the
+          # switch.
+          if grep -qE '^  # google_cloud_run_v2_(service|job)\.(planner|coder_control|coder_worker) will be destroyed' primary-plan.txt \
+            && [ -z "${{ vars.SUBSTRATE_URL }}" ]; then
+            echo "::error::This plan destroys the last Cloud Run agent harness while SUBSTRATE_URL is unset, leaving no runnable agent pattern. Set the address with 'gh variable set SUBSTRATE_URL --body \"<ateapi gRPC address>\"' (see docs/SUBSTRATE_STATUS.md causes 5 and 9), then re-run."
+            exit 1
+          fi
           terraform apply -input=false primary.tfplan
 
       - name: Outputs

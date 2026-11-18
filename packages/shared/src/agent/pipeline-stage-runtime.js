@@ -4,7 +4,6 @@ const crypto = require('node:crypto');
 const store = require('../store');
 const framework = require('./framework');
 const testingWorkflow = require('./workflows/testing.workflow');
-const deploymentWorkflow = require('./workflows/deployment.workflow');
 const { resolveLlm } = require('./llm');
 const { normalizeLlmGatewayMode } = require('../config');
 const { registry: harnessRegistry } = require('./harnesses');
@@ -12,7 +11,6 @@ const { preparePlannedWorkspace, sanitizeBranch } = require('./workspace');
 const { redactSecrets, runCommand, sanitizedToolEnv } = require('./tools/exec');
 const { pickTestRunner } = require('./tools/quality');
 
-const FULL_DEPLOYMENT_SEQUENCE = Object.freeze(['plan', 'code', 'test', 'deploy']);
 const POLICY_DOMAINS = Object.freeze(['harness', 'tools', 'skills', 'plugins', 'hooks', 'models']);
 const CHECK_STATUSES = new Set(['passed', 'failed', 'skipped']);
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -214,80 +212,8 @@ function trustedTestContext(command) {
   return Object.freeze({ artifact: testArtifact, commandId, evidence });
 }
 
-function sameSequence(actual, expected) {
-  return Array.isArray(actual)
-    && actual.length === expected.length
-    && actual.every((stage, index) => stage === expected[index]);
-}
-
 function validApprovalTime(value) {
   return typeof value === 'string' && value && !Number.isNaN(Date.parse(value));
-}
-
-/** Fail-closed deployment gate. Production approval is a durable, run-bound
- * orchestrator input injected only after the tester checkpoint; preflight
- * configuration is immutable caller-era data and is never approval authority. */
-function assertDeploymentAllowed(command) {
-  if (!command || command.stage !== 'deploy') {
-    throw new StageExecutionError('A deploy StageCommand is required.', 'invalid_deploy_command');
-  }
-  if (!sameSequence(command.requestedStages, FULL_DEPLOYMENT_SEQUENCE)) {
-    throw new StageExecutionError(
-      'Deployment requires the full plan -> code -> test -> deploy sequence.',
-      'deployment_sequence_required',
-    );
-  }
-  const completedPrefix = FULL_DEPLOYMENT_SEQUENCE.slice(0, -1);
-  if (!completedPrefix.every((stage) => {
-    const result = priorResult(command, stage);
-    return result && result.status === 'succeeded';
-  })) {
-    throw new StageExecutionError(
-      'Deployment requires successful plan, code, and tester completions.',
-      'successful_test_required',
-    );
-  }
-  const configuration = stageConfiguration(command, 'deploy');
-  if (configuration.enabled !== true) {
-    throw new StageExecutionError('Deployment is disabled unless deploy.enabled is explicitly true.', 'deployment_disabled');
-  }
-  const environment = String(configuration.environment || '').trim().toLowerCase();
-  if (!/^[a-z][a-z0-9_-]{0,39}$/.test(environment)) {
-    throw new StageExecutionError('A valid deployment environment is required.', 'invalid_deployment_environment');
-  }
-  const production = environment === 'production' || environment === 'prod';
-  const tested = trustedTestContext(command);
-  const decisionDigest = preflightDecisionDigest(command);
-  const approval = command && command.input && command.input.deploymentApproval;
-  if (production) {
-    const approvedBy = approval && (approval.by || approval.approvedBy);
-    const approvedAt = approval && (approval.at || approval.approvedAt);
-    if (
-      !approval
-      || approval.approved !== true
-      || approval.source !== 'server'
-      || typeof approvedBy !== 'string'
-      || !approvedBy.trim()
-      || !validApprovalTime(approvedAt)
-      || approval.testCommandId !== tested.commandId
-      || approval.commitSha !== tested.artifact.commitSha
-      || approval.treeSha !== tested.artifact.treeSha
-      || approval.preflightDecisionDigest !== decisionDigest
-    ) {
-      throw new StageExecutionError(
-        'Production deployment requires a trusted server-side approval.',
-        'deployment_approval_required',
-      );
-    }
-  }
-  return {
-    configuration,
-    environment,
-    production,
-    artifact: tested.artifact,
-    testCommandId: tested.commandId,
-    preflightDecisionDigest: decisionDigest,
-  };
 }
 
 function repositoryReference(command) {
@@ -636,116 +562,7 @@ async function executeTestingStage(command, dependencies = {}) {
   }
 }
 
-function publicDeploymentReceipt(receipt) {
-  if (!receipt || typeof receipt !== 'object') return null;
-  return {
-    provider: boundedString(receipt.provider, 80),
-    environment: boundedString(receipt.environment, 40),
-    workflow: receipt.workflow ? boundedString(receipt.workflow, 120) : null,
-    ref: boundedString(receipt.ref, 120),
-    sourceRef: boundedString(receipt.sourceRef, 120),
-    commandId: boundedString(receipt.commandId, 160),
-    commitSha: boundedString(receipt.commitSha, 40).toLowerCase(),
-    treeSha: boundedString(receipt.treeSha, 40).toLowerCase(),
-    runId: Number.isSafeInteger(Number(receipt.runId)) ? Number(receipt.runId) : null,
-    url: typeof receipt.url === 'string' && /^https:\/\//.test(receipt.url) ? receipt.url.slice(0, 1_000) : null,
-    status: receipt.status === 'succeeded' ? 'succeeded' : receipt.status === 'failed' ? 'failed' : 'waiting',
-    conclusion: boundedString(receipt.conclusion, 80),
-  };
-}
-
-async function executeDeploymentStage(command, dependencies = {}) {
-  const gate = assertDeploymentAllowed(command);
-  const step = typeof dependencies.step === 'function' ? dependencies.step : () => {};
-  const agent = await resolveStageAgent(command, { role: 'deployment', workflowStage: 'deployment' }, { ...dependencies, step });
-  const workspace = await prepareStageWorkspace(command, { ...dependencies, step });
-  if (!workspace.repositoryBroker) {
-    throw new StageExecutionError('Deployment requires a brokered repository.', 'repository_broker_required');
-  }
-  try {
-    if (typeof workspace.repositoryBroker.pinRevision !== 'function') {
-      throw new StageExecutionError('Deployment requires immutable revision pinning.', 'repository_broker_required');
-    }
-    const pinned = immutableArtifact(
-      await workspace.repositoryBroker.pinRevision(gate.artifact),
-      'broker-pinned deployment artifact',
-    );
-    if (!sameArtifact(pinned, gate.artifact)) {
-      throw new StageExecutionError('The deployer checkout differs from the tested artifact.', 'deployment_revision_mismatch');
-    }
-    const deploymentTool = workspace.repositoryBroker.createDeploymentTool({
-      environment: gate.environment,
-      commandId: command.idempotencyKey,
-      revision: pinned,
-    });
-    const runWorkflow = dependencies.runWorkflow || framework.runWorkflow;
-    const execution = await runWorkflow({
-      workflow: deploymentWorkflow,
-      llm: agent.llm,
-      userMessage: promptFor(command, 'deploy', { environment: gate.environment, artifact: pinned }),
-      rootDir: workspace.workDir,
-      skillPaths: [],
-      ctx: { cwd: workspace.workDir, rootDir: workspace.workDir, step, effectivePolicy: agent.effectivePolicy },
-      invokeConfig: {
-        runName: `pipeline:deploy:${command.runId}`,
-        tags: deploymentWorkflow.tags,
-        metadata: { pipeline_run_id: command.runId, pipeline_stage: 'deploy', pipeline_attempt: command.attempt },
-      },
-      runtime: agent.harness,
-      workflowPattern: agent.workflowPattern,
-      env: workspace.env,
-      extraTools: [deploymentTool],
-      settings: agent.prefs,
-      attribution: {
-        orgId: command.organizationId,
-        projectId: command.projectId,
-        taskId: command.preflight.workItem && command.preflight.workItem.id,
-        source: 'deployer',
-        providerSource: agent.providerSource,
-      },
-    });
-    const availabilityError = workspace.repositoryBroker.availabilityError();
-    if (availabilityError) throw availabilityError;
-    const receipt = publicDeploymentReceipt(workspace.repositoryBroker.deploymentReceipt());
-    const verdict = parseStageVerdict(execution.finalText);
-    const output = {
-      summary: verdict ? verdict.summary : 'Deployment broker result is authoritative.',
-      checks: verdict ? verdict.checks : [],
-      environment: gate.environment,
-      selectedHarness: agent.harness,
-      harness: execution.runtime || agent.harness,
-      provider: agent.llm.provider,
-      model: agent.llm.model,
-      artifact: pinned,
-      deployment: receipt,
-    };
-    const receiptMatches = receipt
-      && receipt.commandId === command.idempotencyKey
-      && receipt.commitSha === pinned.commitSha
-      && receipt.treeSha === pinned.treeSha;
-    if (!receipt || receipt.status !== 'succeeded' || !receiptMatches) {
-      return resultFailure(
-        receipt && receipt.status === 'failed'
-          ? 'deployment_failed'
-          : receipt && !receiptMatches
-            ? 'deployment_revision_mismatch'
-            : 'deployment_not_executed',
-        receipt && receipt.status === 'failed'
-          ? `Allowlisted deployment completed with ${receipt.conclusion || 'failure'}.`
-          : 'The deployment broker did not confirm a successful deployment.',
-        output,
-        false,
-        pinned,
-      );
-    }
-    return { status: 'succeeded', artifact: pinned, output };
-  } finally {
-    workspace.repositoryBroker.dispose();
-  }
-}
-
 module.exports = {
-  FULL_DEPLOYMENT_SEQUENCE,
   POLICY_DOMAINS,
   StageExecutionError,
   assertLinearProjectScope,
@@ -758,7 +575,6 @@ module.exports = {
   validateTrustedEvidence,
   defaultTrustedChecks,
   trustedTestContext,
-  assertDeploymentAllowed,
   repositoryReference,
   sourceBranch,
   prepareStageWorkspace,
@@ -766,6 +582,4 @@ module.exports = {
   resolveStageAgent,
   parseStageVerdict,
   executeTestingStage,
-  executeDeploymentStage,
-  publicDeploymentReceipt,
 };

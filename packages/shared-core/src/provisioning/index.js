@@ -5,7 +5,6 @@ const { buildPlan } = require('./plan');
 const { names, urls, assertSlug } = require('./naming');
 const {
   extractSourceService,
-  extractSourceJob,
   mergeServiceScaling,
   cloneContainers,
 } = require('./containers');
@@ -17,13 +16,13 @@ const {
  * v2 Cloud Run, Pub/Sub, and Cloud Scheduler SDKs. All SDKs are required LAZILY
  * so importing this module (e.g. for provision/teardown re-exports or tests of
  * the pure core) never needs the GCP libraries installed. Every create/delete is
- * idempotent: ALREADY_EXISTS services/jobs are reconciled in place, while
+ * idempotent: ALREADY_EXISTS services are reconciled in place, while
  * ALREADY_EXISTS auxiliary resources and NOT_FOUND deletes are tolerated, so
  * retried provisions and teardowns converge on the current secure template.
  *
- * "Reuse original builds": createService/createJob copy the image AND the secret
+ * "Reuse original builds": createService copies the image AND the secret
  * env blocks, resource limits, execution environment, scaling, concurrency,
- * and skills volumes from the live SHARED source service/job. Explicit
+ * and skills volumes from the live SHARED source service. Explicit
  * per-service safety overrides (such as the pipeline's max-one ceiling) are
  * applied after the source profile.
  */
@@ -43,11 +42,11 @@ function iamMember(value) {
   return member.includes(':') ? member : `serviceAccount:${member}`;
 }
 
-function assertContainerBoundary(spec, src, kind) {
+function assertContainerBoundary(spec, src) {
   const primary = src.containers && src.containers[0];
   const secretEnv = (primary && primary.secretEnv) || [];
   if (spec.requireSecretFreePrimary && secretEnv.length) {
-    throw new Error(`${spec.name} source app container contains secret env; ${kind} agents require sidecar-only credentials`);
+    throw new Error(`${spec.name} source app container contains secret env; agent services require sidecar-only credentials`);
   }
   if (spec.forbidProviderSecretsOnPrimary) {
     const forbidden = secretEnv.find((entry) => PROVIDER_SECRET_ENV_RE.test(String(entry.name || '')));
@@ -56,7 +55,7 @@ function assertContainerBoundary(spec, src, kind) {
     }
   }
   if ((spec.requireEgressProxy || spec.requireProxySidecar) && (!src.containers || src.containers.length < 2)) {
-    throw new Error(`${spec.name} source ${kind} has no required proxy sidecar`);
+    throw new Error(`${spec.name} source service has no required proxy sidecar`);
   }
 }
 
@@ -66,36 +65,32 @@ async function awaitOperation(start) {
 }
 
 /**
- * Reconcile a Cloud Run resource after create reports ALREADY_EXISTS.
+ * Reconcile a Cloud Run service after create reports ALREADY_EXISTS.
  *
  * Updates require the server-owned fully-qualified name. Carrying the etag
  * forward also makes reconciliation fail on a concurrent modification instead
  * of silently overwriting it with a stale template.
  */
-async function updateExistingRunResource({ client, kind, name, desired, updateMask }) {
-  const resourceKey = kind === 'service' ? 'service' : 'job';
-  const getMethod = kind === 'service' ? 'getService' : 'getJob';
-  const updateMethod = kind === 'service' ? 'updateService' : 'updateJob';
-  const [existing] = await client[getMethod]({ name });
+async function updateExistingService({ services, name, desired }) {
+  const [existing] = await services.getService({ name });
   if (!existing || !String(existing.name || '').trim()) {
-    throw new Error(`Cloud Run ${kind} ${name} has no server identity`);
+    throw new Error(`Cloud Run service ${name} has no server identity`);
   }
-
-  const resource = {
-    ...desired,
-    name: existing.name,
-    ...(existing.etag ? { etag: existing.etag } : {}),
-  };
-  const request = { [resourceKey]: resource };
-  if (updateMask) request.updateMask = updateMask;
-  await awaitOperation(client[updateMethod](request));
+  await awaitOperation(services.updateService({
+    service: {
+      ...desired,
+      name: existing.name,
+      ...(existing.etag ? { etag: existing.etag } : {}),
+    },
+    updateMask: { paths: ['ingress', 'labels', 'template'] },
+  }));
 }
 
 let runClients = null;
 function getRun() {
   if (!runClients) {
-    const { ServicesClient, JobsClient } = require('@google-cloud/run').v2;
-    runClients = { services: new ServicesClient(), jobs: new JobsClient() };
+    const { ServicesClient } = require('@google-cloud/run').v2;
+    runClients = { services: new ServicesClient() };
   }
   return runClients;
 }
@@ -120,10 +115,8 @@ function getScheduler() {
 function createGcpClients({ projectId, region }, dependencies = {}) {
   const parent = `projects/${projectId}/locations/${region}`;
   const services = () => (dependencies.run || getRun()).services;
-  const jobs = () => (dependencies.run || getRun()).jobs;
 
   const serviceSrcCache = new Map();
-  const jobSrcCache = new Map();
   async function sourceService(name) {
     if (!serviceSrcCache.has(name)) {
       const [svc] = await services().getService({ name: `${parent}/services/${name}` });
@@ -132,16 +125,6 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
       serviceSrcCache.set(name, extractSourceService(svc));
     }
     return serviceSrcCache.get(name);
-  }
-
-  async function sourceJob(name) {
-    if (!jobSrcCache.has(name)) {
-      const [job] = await jobs().getJob({ name: `${parent}/jobs/${name}` });
-      // Jobs have a different template nesting than services. Read the shared
-      // worker Job so its app + proxy resources are inherited independently.
-      jobSrcCache.set(name, extractSourceJob(job));
-    }
-    return jobSrcCache.get(name);
   }
 
   async function setInvoker(spec) {
@@ -159,12 +142,9 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
     async getServiceImage(name) {
       return (await sourceService(name)).containers[0].image;
     },
-    async getJobImage(name) {
-      return (await sourceJob(name)).containers[0].image;
-    },
     async createService(spec) {
       const src = spec.sourceName ? await sourceService(spec.sourceName) : { containers: [] };
-      assertContainerBoundary(spec, src, 'service');
+      assertContainerBoundary(spec, src);
       const service = {
         ingress: spec.ingress,
         labels: spec.labels,
@@ -189,43 +169,13 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
         await awaitOperation(services().createService({ parent, serviceId: spec.name, service }));
       } catch (err) {
         if (!err || err.code !== ALREADY_EXISTS) throw err;
-        await updateExistingRunResource({
-          client: services(),
-          kind: 'service',
+        await updateExistingService({
+          services: services(),
           name: `${parent}/services/${spec.name}`,
           desired: service,
-          updateMask: { paths: ['ingress', 'labels', 'template'] },
         });
       }
       await setInvoker(spec);
-    },
-    async createJob(spec) {
-      const src = spec.sourceName ? await sourceJob(spec.sourceName) : { containers: [] };
-      assertContainerBoundary(spec, src, 'job');
-      const job = {
-        labels: spec.labels,
-        template: {
-          template: {
-            serviceAccount: spec.serviceAccount,
-            timeout: { seconds: 86400 },
-            maxRetries: 1,
-            executionEnvironment: src.executionEnvironment,
-            volumes: src.volumes,
-            containers: cloneContainers(src.containers, spec, { withPorts: false }),
-          },
-        },
-      };
-      try {
-        await awaitOperation(jobs().createJob({ parent, jobId: spec.name, job }));
-      } catch (err) {
-        if (!err || err.code !== ALREADY_EXISTS) throw err;
-        await updateExistingRunResource({
-          client: jobs(),
-          kind: 'job',
-          name: `${parent}/jobs/${spec.name}`,
-          desired: job,
-        });
-      }
     },
     async createTopic(topic) {
       const name = typeof topic === 'string' ? topic : topic.name;
@@ -296,14 +246,6 @@ function createGcpClients({ projectId, region }, dependencies = {}) {
     async deleteService(name) {
       try {
         const [op] = await services().deleteService({ name: `${parent}/services/${name}` });
-        await op.promise();
-      } catch (err) {
-        tolerate([NOT_FOUND], err);
-      }
-    },
-    async deleteJob(name) {
-      try {
-        const [op] = await jobs().deleteJob({ name: `${parent}/jobs/${name}` });
         await op.promise();
       } catch (err) {
         tolerate([NOT_FOUND], err);

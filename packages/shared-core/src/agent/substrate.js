@@ -611,7 +611,7 @@ async function ensureAtespace(input = {}) {
 }
 
 /**
- * Ensure the org's planner ActorTemplate exists (once per tenant). The planner
+ * Ensure the org's planner ActorTemplate exists (once per tenant). The actor
  * image MUST be pinned by digest (image@sha256:...) per the ActorTemplate schema.
  */
 async function upsertActorTemplate(input = {}) {
@@ -627,9 +627,21 @@ async function upsertActorTemplate(input = {}) {
     throw new Error('substratePlannerImage must be pinned by digest (name@sha256:...) for ActorTemplate.');
   }
   const workerPool = resolveSubstrateWorkerPool(input.workerPool || (await readSetting('substrateWorkerPool')));
+  // The actor container's env: only what it needs to verify the actor JWT that
+  // arrives on /internal/plan/run — credentials never cross this boundary, so
+  // the Dockerfile image + these plain values are all the actor holds. Without
+  // SUBSTRATE_JWKS_URL the route fails closed 503 jwks_unconfigured, so the
+  // names substrate.tf renders onto the control plane are forwarded here too
+  // (audience/trust domain decide what "verified" MEANS; a mismatch between
+  // the two halves looks like a dead cluster, not a config error).
+  const actorEnv = { SUBSTRATE_ACTOR_MODE: 'true' };
+  if (String(process.env.SUBSTRATE_JWKS_URL || '').trim()) actorEnv.SUBSTRATE_JWKS_URL = String(process.env.SUBSTRATE_JWKS_URL).trim();
+  if (String(process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE || '').trim()) actorEnv.SUBSTRATE_ACTOR_JWT_AUDIENCE = String(process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE).trim();
+  if (String(process.env.SUBSTRATE_TRUST_DOMAIN || '').trim()) actorEnv.SUBSTRATE_TRUST_DOMAIN = String(process.env.SUBSTRATE_TRUST_DOMAIN).trim();
   const containers = [{
     name: 'planner',
     image,
+    env: actorEnv,
     wakeupProbe: input.wakeupProbe || { path: '/healthz', port: 8080, timeoutSeconds: 5 },
     resources,
   }];
