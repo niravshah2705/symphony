@@ -224,6 +224,21 @@ alone took the Gateway from `Programmed=False` to an Envoy Deployment plus a
 LoadBalancer Service on `substrate-ip` with `PORT(S) = 80`, while the `https`
 listener still reported `ResolvedRefs=False InvalidCertificateRef`.
 
+`AddressNotAssigned` has a second cause, and it is the one that actually bit this
+front: `networking.gke.io/load-balancer-ip-addresses` must carry the reserved
+address's **name** (`substrate-ip`), while the deprecated `loadBalancerIP` field
+must carry its **value** (`34.14.188.214`). GKE forwards the annotation string
+into the forwarding rule's `address` field, which validates against an
+address-name regex, so an IP literal there is a `400 Invalid value for field
+'address'` from `SyncExternalLoadBalancer` — no forwarding rule, `EXTERNAL-IP
+<pending>`, and the same `Programmed=False reason=AddressNotAssigned`. Both
+fields take "the IP", which is why they get confused; the fix is one attribute,
+not both. The tell is that everything else looks fine: DNS resolves to the
+reserved address, `gcloud compute addresses describe substrate-ip` reports
+`RESERVED` (held and unbound — if a front had stolen it you would see `IN_USE`),
+the certificate is Ready, and the Envoy pods are Running. Check the forwarding
+rule before believing any capacity or certificate story.
+
 Two manifests carry that through:
 
 - **A port-80 `http` listener** on `substrate-ingress`. `substrate-http-redirect`
@@ -628,8 +643,14 @@ nobody exposed.
   Gateway on it; the agentgateway front lives in its own namespace, so expect the
   substrate one beside its own
   `EnvoyProxy` in `ate-system`. A `Gateway` stuck on `Programmed=False` with no
-  address means the Envoy Service could not bind `substrate-ip` — check the
-  `parametersRef` name/namespace pair, not the DNS.
+  address means the Envoy Service could not bind `substrate-ip`. Two causes, in
+  the order worth checking: the `parametersRef` name/namespace pair, then the
+  `networking.gke.io/load-balancer-ip-addresses` annotation — it must hold the
+  address *name*, and an IP literal there fails the forwarding-rule create
+  (`SyncExternalLoadBalancerFailed … Invalid value for field 'address'`) while
+  DNS, the certificate and the pods all still read healthy. `kubectl describe
+  svc` on that Envoy Service shows the event; `gcloud compute addresses describe
+  substrate-ip --region=asia-south1` shows `RESERVED` for "held, never bound".
 
 ### 8.1 Substrate can create a sandbox — end-to-end check
 
