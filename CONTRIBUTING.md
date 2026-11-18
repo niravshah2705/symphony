@@ -35,9 +35,10 @@ the code map — read the [Developer Onboarding guide](./docs/DEVELOPER_ONBOARDI
 ## Finding your way around
 
 - [`CLAUDE.md`](./CLAUDE.md) — the developer/agent guide to the monorepo.
-- [`docs/code-graph/index.md`](./docs/code-graph/index.md) — an auto-generated
-  structural map of the whole codebase (functions, classes, and tests grouped into
-  communities with `file:line` locations). **Read it before exploring the source.**
+- `docs/code-graph/index.md` — an auto-generated structural map of the whole
+  codebase (functions, classes, and tests grouped into communities with
+  `file:line` locations). **Local-only output:** run `npm run docs:code` to
+  generate it, then read it before exploring the source.
 - Per-service guides live alongside each service (e.g. `services/org/CLAUDE.md`).
 
 ## Running the tests
@@ -51,21 +52,18 @@ The Python services have their own `pytest` suites (see `services/org` and
 `services/settings`). CI runs all of these — see the **Checks** workflow at
 [`.github/workflows/checks.yml`](./.github/workflows/checks.yml).
 
-## The code map (local, not committed)
+## Code map: local only, no pre-commit gate
 
-`docs/code-graph/` is an auto-generated structural map of the codebase. It is
-**gitignored** and there is **no commit gate** on it — a commit is never blocked
-for doc drift, and CI does not depend on it.
+The pre-commit hook that regenerated `docs/code-graph/` and blocked commits on
+drift was **removed (2026-11)**; the pages are gitignored and never committed.
+Generate the map locally whenever you want to read it (`npm run docs:code`).
+
+The `.githooks/post-commit` hook remains and refreshes the local query indexes
+in the background after each commit; enable it once per clone:
 
 ```bash
-npm run docs:code     # regenerate the map whenever it looks stale
-npm run hooks:install # enable the repo git hooks (once per clone)
+npm run hooks:install
 ```
-
-`post-commit` refreshes the local query indexes (`.code-review-graph/graph.db`,
-`graphify-out/`) in the background; it never stages or commits anything.
-
-- Requires the CLI: `pipx install code-review-graph`.
 
 See [`.githooks/README.md`](./.githooks/README.md) for details.
 

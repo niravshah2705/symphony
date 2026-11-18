@@ -38,8 +38,11 @@ by local (Ollama / LM Studio / OMLX) or hosted (Codex / Claude) models.
 
 <sub>Diagram source: <a href="diagrams/how-it-works.excalidraw"><code>diagrams/how-it-works.excalidraw</code></a> (editable in <a href="https://excalidraw.com">Excalidraw</a>).</sub>
 
-The **planner** enriches labelled projects on a schedule; the **coder**'s board monitor
-polls active tickets and drives each to a PR. Everything is traced end-to-end (Langfuse)
+The **planner** enriches labelled projects on a schedule; the durable pipeline
+dispatches each active ticket to a code-writer run and drives it to a PR. Every
+agent run executes on the **Agent Substrate** — an isolated gVisor actor per run,
+dispatched by the orchestrator (the retired board monitor and the per-agent Cloud
+Run services are gone). Everything is traced end-to-end (Langfuse)
 and every LLM write is schema-validated before it touches Linear.
 
 ## Quick start
@@ -59,7 +62,7 @@ key** (create one at <https://linear.app/settings/api>). See [Run](#run) for opt
 - **Board** — Linear issues shown as a Kanban **board** by workflow state, with drag-and-drop to move issues between columns.
 - **Business** — a Business tab where each business is backed by a Linear project in the background. **OTA** is pre-seeded as the initial business.
 - **Agent** — a **business-owner planning deep agent** (Ollama, LM Studio, OMLX, Codex, or Claude + web search) enriches projects **carrying any of the chosen labels** (default `AI`): it checks business viability (unfit → `aifail`), writes a business plan — **MVB** (Minimal Viable Business) first, then business metrics, branding, and beyond — creates milestones, tasks, and dependencies, and marks the project **`aidone`** once issues exist. Interrupted projects **resume on restart** (missing issues get created). Projects are **discovered and processed on a configurable 5/10/15-minute schedule**.
-- **Code-writer agent** — a second deep agent that works a **single Linear ticket end-to-end** inside an **isolated git clone**: it implements the change, keeps one **`## Workpad`** comment as the source of truth, and drives the ticket through its state machine to a **pull request** (stamped with a configurable label). A board monitor polls active-state tickets and dispatches runs up to a concurrency cap. See [Code-writer agent](#code-writer-agent) below.
+- **Code-writer agent** — a second deep agent that works a **single Linear ticket end-to-end** inside an **isolated git clone**: it implements the change, keeps one **`## Workpad`** comment as the source of truth, and drives the ticket through its state machine to a **pull request** (stamped with a configurable label). The durable pipeline dispatches runs per ticket, up to a concurrency cap. See [Code-writer agent](#code-writer-agent) below.
 - **Settings** — a guided page with a configuration-health overview and category navigation for **Models & runtime**, **Connections**, **Automation**, and **Identity**. **Models & runtime** holds **Task Models** — a **Thinking**, **Execution**, and **Testing** model (provider, model, and model-aware reasoning per role). Local server address and authentication sit in the primary model flow; less common tuning remains collapsed. All secrets are validated/stored **server-side** and never returned to the browser.
 - **Agent activity omnibox** — one intent-aware entry point routes greetings, bounded workspace/document search, business evaluation, safe-policy responses, troubleshooting, general planning, and confirmed implementation-task creation. Route-specific evidence and actions stay in the side panel.
 - **Organization workflow designer** — compose browser-local ADLC diagrams from curated or custom agents, Dev/Beta/Prod execution contexts, and role-based human approvals. Five realistic examples cover gated releases, research, commercial launch, incident response, and independent operations; diagrams are intentionally non-executable prototypes.
@@ -103,7 +106,7 @@ Collapsible sections:
 
 1. **Scope vault & connections** — organization administrators store provider credentials in the encrypted organization vault, with optional per-project overrides. Linear is customer-owned and has no process-wide or platform-managed fallback. The UI exposes only masked presence/source metadata and connector readiness.
 2. **Tool integrations** — choose a planning connector (**Linear / Jira / Asana**) and repository host (**GitHub / GitLab**), then save non-secret connector metadata separately from credentials. Agent containers send sentinel credentials to their loopback egress proxy; only the proxy resolves and injects the selected organization/project vault value.
-3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (planner), **Execution** (coder), **Testing** (tester), and **Deployment** (deployer). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
+3. **Task Models** — choose **Provider**, **Model**, and **Reasoning** for each task role ("models as tasks"): **Thinking** (planner), **Execution** (coder), **Testing** (tester), and **Deployment** (retired deploy stage). Each role picks any provider — local (Ollama / LM Studio / OMLX) or hosted (OpenAI / Anthropic). Selecting a model atomically applies its recommended context, output, sampling, and provider-native reasoning defaults. Expand **Customize parameters** to change supported numeric values later.
    - **Ollama / LM Studio / OMLX (local)** — the page renders immediately, discovers available models asynchronously, and offers a refresh action. In proxied deployments their network origins are trusted operator configuration on the proxy, never browser-selected targets. Ollama and LM Studio require no key; an optional OMLX key belongs in the scope vault. LM Studio's configured context must match the context used when loading the model, and its output budget is capped at half that context so prompt and output fit together.
    - **OpenAI / Codex** — browser OAuth is intentionally disabled. An organization administrator imports a Codex token bundle out of band with `adlc admin codex import --org-id <uuid> --settings-url <url>` (stdin by default, or `--token-file`); the IAM-gated settings service encrypts it in the org vault. The browser exposes status/model selection only and never receives the bundle.
    - **Anthropic / Claude OAuth** — **Sign in with Claude**, approve in the opened tab, then paste the returned `code#state`. Available models are queried from Anthropic with bundled fallbacks, and only each model's advertised adaptive-thinking effort values are shown.
@@ -133,7 +136,7 @@ The top-bar language picker intentionally shows a small suggestion set rather th
 ## Durable fixed pipeline
 
 When `PIPELINE_ORCHESTRATOR_ENABLED=true`, new starts use a versioned, durable
-`plan → code → test → deploy` control plane. The gateway performs EULA, billing,
+`plan → code → test` control plane. The gateway performs EULA, billing,
 user-scoped policy, harness, model, and credential-readiness preflight once, then
 persists only the secret-free decision. The LangGraph orchestrator advances from
 typed `StageCommandV1`/`StageResultV1` messages with stable run, attempt, and
@@ -150,7 +153,7 @@ Firestore.
 The wire contract caps raw `StageCommandV1` JSON at 256 KiB, caller request data
 at 64 KiB, a stage-result output at 32 KiB, and a whole result at 48 KiB. Worker
 HTTP parser limits include the calculated base64 expansion plus bounded Pub/Sub
-envelope headroom. Commands and results each use four stage-specific topics;
+envelope headroom. Commands and results each use three stage-specific topics;
 publisher IAM grants a worker only its own result topic, whose subscription is
 bound to `/pubsub/pipeline-stage-results/{stage}`.
 
@@ -164,19 +167,12 @@ identity boundary between untrusted repository scripts and the tester/proxy
 Cloud Run service account.
 
 The rollout flag defaults off and preserves the legacy planner/coder paths. When
-enabled, legacy label polling is disabled to prevent double dispatch. Deployment
-has a second default-off gate (`PIPELINE_DEPLOYMENT_ENABLED=false`), accepts only
-the exact full four-stage sequence, requires a successful tester result, and
-uses a server approval for production plus repository-owned, allowlisted CI/CD
-from `.ai-fleet/deployment.json`. The deployer receives neither raw CI credentials
-nor an unrestricted deployment shell. The local Workflows canvas remains a
+enabled, legacy label polling is disabled to prevent double dispatch. The deploy
+stage was retired with the Cloud Run deployer (2026-11): runs end after test, a
+new start that requests `deploy` is rejected with `410 pipeline_deploy_retired`,
+and a legacy run reaching the deploy transition closes as succeeded without
+dispatching. The local Workflows canvas remains a
 non-executable draft designer and is not a second pipeline schema.
-
-When a run reaches `awaiting_approval`, an organization administrator can run
-`adlc admin deploy approve` with the run, project, repository, environment, and
-settings URL. The CLI reads the scoped run status and binds the approval to the
-exact successful test command, commit/tree SHAs, and preflight digest before the
-orchestrator can claim the deploy command.
 
 Shared-stack pipeline admission accepts platform-managed provider credentials
 only. A customer-selected credential is admitted only on the matching dedicated
@@ -245,12 +241,13 @@ in **Task Models** (each of Thinking / Execution / Testing picks any local Ollam
   set of **skills** (`linear`, `commit`, `push`, `pull`, `land`) loaded from
   `packages/shared-core/src/agent/skills/`. Its system prompt is the **workflow** (ticket state
   machine + a single `## Workpad` comment as the source of truth).
-- **Board monitor** (`packages/shared/src/agent/coder-orchestrator.js`) — on a fixed cadence it
-  polls the tracker for tickets in an **active state**
-  (`Todo, In Progress, Merging, Rework` by default) and dispatches a code-writer
-  run per ticket, up to a global concurrency cap. State is in-memory and re-derived
+- **Dispatch** — the durable pipeline owns coding dispatch: it publishes a
+  stage command per ticket and the code-writer run executes in its own substrate
+  actor, up to a concurrency cap (`CODER_MAX_CONCURRENT`). State is re-derived
   from the tracker on restart (single-writer model: a ticket is never dispatched
-  twice concurrently). It does **not** start automatically — start it via the API.
+  twice concurrently). The legacy board monitor is retired — `packages/shared/
+  src/agent/coder-orchestrator.js` is deleted and `/api/coder/monitor` answers
+  `410 coder_monitor_retired`.
 
 ### Configuring the code-writer
 
@@ -260,11 +257,11 @@ All values are env-overridable (`CODER_*`, see `packages/shared/src/config.js`):
 | ------- | ------- | ------- |
 | `CODER_REPO_URL` | *(empty)* | Repository the agent clones per ticket (**required**). |
 | `CODER_WORKSPACE_ROOT` | `~/code/techmavins-workspaces` | Where isolated clones live. |
-| `CODER_ACTIVE_STATES` | `Todo,In Progress,Merging,Rework` | Ticket states the monitor acts on. |
+| `CODER_ACTIVE_STATES` | `Todo,In Progress,Merging,Rework` | Ticket states pipeline dispatch acts on. |
 | `CODER_TERMINAL_STATES` | `Done,Closed,Cancelled,Canceled,Duplicate` | States left alone. |
 | `CODER_MAX_TURNS` | `40` | `deepagents` recursion budget per run. |
 | `CODER_MAX_CONCURRENT` | `3` | Max tickets worked concurrently. |
-| `CODER_POLL_INTERVAL_MS` | `15000` | Board-monitor poll cadence. |
+| `CODER_POLL_INTERVAL_MS` | `15000` | Tracker poll cadence for stage dispatch. |
 | `CODER_SHELL_TIMEOUT_SEC` | `600` | Shell command timeout in the workspace. |
 | `CODER_PR_LABEL` | `techmavins` | Label stamped on the agent's PRs. |
 
@@ -277,11 +274,10 @@ curl http://localhost:4000/api/coder
 # run the code-writer on ONE ticket (async — watch the logs / Linear Workpad)
 curl -X POST http://localhost:4000/api/coder/run \
   -H 'content-type: application/json' -d '{"issueId":"<issue-uuid>"}'
-
-# start / stop the board monitor
-curl -X POST http://localhost:4000/api/coder/monitor \
-  -H 'content-type: application/json' -d '{"action":"start"}'
 ```
+
+The legacy `POST /api/coder/monitor` board-monitor control is retired and
+answers `410`; dispatch moved to the durable pipeline above.
 
 Progress is reported to the server logs (`data/app.log`) and to the ticket's
 `## Workpad` comment in Linear.
@@ -313,30 +309,36 @@ Use the default local backend for brokered GitHub/GitLab operation.
 
 <p align="center">
   <img src="diagrams/architecture.png" width="100%"
-       alt="AI Fleet architecture: the browser SPA calls the Gateway (:4000), which reverse-proxies to the Planner (:4010) and Coder (:4020) services; all three build on the @ai-fleet/shared library and reach external systems — Linear, GitHub/GitLab, and LLM providers.">
+       alt="AI Fleet architecture: the browser SPA calls the Gateway (:4000), which reverse-proxies /api/agent and /api/coder to the orchestrator's agent surface (:4010); agent runs execute as Agent Substrate actors (gVisor on GKE); the services build on the @ai-fleet/shared library and reach external systems — Linear, GitHub/GitLab, and LLM providers.">
 </p>
 
 - See [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md) for the visual system
   map covering preset-routed local and hosted inference, Linear ticket management,
   DeepAgent skills, and Linear/GitHub integrations.
 
-The app is an **npm-workspaces monorepo** decomposed into **three isolated
-services over one shared library**. Each service is an independently runnable
+The app is an **npm-workspaces monorepo** decomposed into **isolated services
+over one shared library**, with agent execution itself isolated one step
+further: every deep-agent run executes as an **Agent Substrate actor** (a gVisor
+sandbox on GKE) rather than inside a service process. Each service is an
+independently runnable
 Express process with its own port and HTTP surface; all business logic lives in
 a single shared package (`@ai-fleet/shared`) so nothing is copied per service.
 
 - **`packages/shared`** (`@ai-fleet/shared`) — the single source of truth:
   config, JSON store, Linear GraphQL client, logger/util, and the whole
   deep-agent runtime (framework, tools, skills, LLM router, planner + coder
-  modules). Imported by every service; never duplicated.
+  modules — these execute inside the actor). Imported by every service; never duplicated.
 - **`services/gateway`** (`@ai-fleet/gateway`, default port 4000) — the only
   browser-facing origin. Serves the SPA, owns the user-facing REST API
   (settings, projects, issues, businesses, roles) and the OAuth flows, and
-  **reverse-proxies** `/api/agent/*` → planner and `/api/coder/*` → coder.
-- **`services/planner`** (`@ai-fleet/planner`, default port 4010) — the isolated
-  software-design planner (deep agent + enrichment scheduler); exposes `/api/agent`.
-- **`services/coder`** (`@ai-fleet/coder`, default port 4020) — the isolated
-  code-writer (board monitor + single-ticket runner); exposes `/api/coder`.
+  **reverse-proxies** `/api/agent/*` and `/api/coder/*` → the orchestrator's agent surface.
+- **`services/orchestrator`** (`@ai-fleet/orchestrator`) — the single internal
+  agent service: the browser-facing agent surface (the retired planner's
+  `/api/agent` + `/api/coder` routes, enrichment scheduler, and legacy queue),
+  the durable pipeline control plane, and the substrate control plane + actor
+  callback (`/internal/plan/run`). For local development the agent surface also
+  boots standalone (`services/orchestrator/src/agent-server.js`, default port
+  4010), and it is the CMD of the substrate actor image.
 - **Frontend** (`public/`) — a dependency-free vanilla-JS single-page app (ES
   modules) served by the gateway. It calls same-origin `/api/*` and is unaware
   of the split (the gateway proxies agent calls to the agent services).
@@ -356,15 +358,15 @@ packages/shared/
       analytics.js diagnostics.js workflow-patterns.js  ← operations
       workflows/          planning.workflow.js · coding.workflow.js (declarative)
       schema.js plan.js apply.js scheduler.js search.js   ← planner
-      coder.js coder-orchestrator.js workspace.js repository-broker.js openswe.js  ← code-writer
+      coder.js workspace.js repository-broker.js openswe.js  ← code-writer
       tools.js mcp.js safe-read.js   built-in tools (web_search, linear_graphql) + optional MCP
       llm.js llm-presets.json model-presets.js model-discovery.js lmstudio-context.js  ← LLM router + catalog
       oauth.js pkce.js claude-oauth.js trace-annotations.js
       skills/           software-planning · web-research · linear · commit · push · pull · land (SKILL.md each)
 services/
   gateway/src/   index.js · proxy.js · routes/ (settings, projects, issues, businesses, roles, codex, claude)
-  planner/src/   index.js (boots scheduler) · routes/agent.js
-  coder/src/     index.js (boots board monitor) · routes/coder.js
+  orchestrator/src/ agent-server.js + agent-surface.js (agent surface: /api/agent
+                  + /api/coder + scheduler) · index.js + controller.js (pipeline)
 scripts/
   start-all.js          boot all three services from one terminal (prefixed output)
   models-label-group.js one-off: create the Linear "Models" label group
@@ -381,14 +383,15 @@ npm start          # boots the local services plus isolated egress/token helpers
 # or: npm run dev  # same, each service under node --watch
 
 # run a single service (e.g. only the gateway):
-npm run start:gateway   # or start:planner / start:coder
+npm run start:gateway   # or start:agent / start:orchestrator
 ```
 
-Ports are env-overridable: `PORT` (gateway), `PLANNER_PORT`, `CODER_SERVICE_PORT`,
+Ports are env-overridable: `PORT` (gateway), `AGENT_SERVICE_PORT` (orchestrator
+agent surface), `ORCHESTRATOR_SERVICE_PORT` (pipeline orchestrator),
 and `LOCAL_STREAM_TOKEN_PORT` (standalone local stream-token broker).
-To run services on different hosts, point the gateway at them with `PLANNER_URL`
-and `CODER_URL`. The shared `data/store.json` location can be overridden with
-`AI_FLEET_DATA_DIR`.
+To run services on different hosts, point the gateway at them with `AGENT_URL`
+and the pipeline client at it with `ORCHESTRATOR_URL`. The shared
+`data/store.json` location can be overridden with `AI_FLEET_DATA_DIR`.
 
 Then open http://localhost:4000, go to **Settings**, and paste a Linear
 **personal API key** (create one at https://linear.app/settings/api). The key is
@@ -565,9 +568,9 @@ rather than stuck in "running".
 | GET | `/api/agent/candidates` | Preview of labelled projects to be processed *(role required → 403)* |
 | POST | `/api/agent/run-now` | Trigger a scheduler tick now (auto-discovers by label) |
 | GET/DELETE | `/api/agent/jobs[...]` | Job history / cleanup |
-| GET | `/api/coder` | Code-writer monitor status + in-flight tickets |
+| GET | `/api/coder` | Code-writer status (the legacy board monitor is retired — no in-flight queue) |
 | POST | `/api/coder/run` | Run the code-writer on one ticket `{ issueId }` |
-| POST | `/api/coder/monitor` | Start/stop the board monitor `{ action }` |
+| POST | `/api/coder/monitor` | Retired — answers `410 coder_monitor_retired` |
 | POST | `/api/pipeline/runs` | Start an explicit ordered durable pipeline (`plan`, `code`, `test`, optional `deploy`) when rollout is enabled |
 | GET | `/api/pipeline/runs/:runId` | Read durable run/stage status in the caller's organization/project scope |
 | POST | `/api/pipeline/runs/:runId/cancel` | Cancel a durable run in the caller's scope |
@@ -596,8 +599,8 @@ rather than stuck in "running".
 
 Contributions from authorized collaborators are welcome. Please read:
 
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, tests, the local code map,
-  commit conventions, and the PR flow.
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev setup, tests, commit
+  conventions, and the PR flow.
 - [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md) — expected behavior in the community.
 - [`SECURITY.md`](./SECURITY.md) — how to report a vulnerability **privately** (please
   don't open public issues for security problems).

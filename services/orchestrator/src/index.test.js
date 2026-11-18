@@ -15,9 +15,6 @@ function config(overrides = {}) {
     storeBackend: 'file',
     messagingMode: 'direct',
     projectId: 'project-1',
-    deploymentEnabled: false,
-    requireDeploymentApproval: false,
-    settingsUrl: 'http://settings',
     internalApiToken: '',
     resultAudience: '',
     resultAllowedEmails: [],
@@ -73,31 +70,13 @@ test('production construction refuses unauthenticated direct stage messaging', (
   }), (error) => error.code === 'pipeline_cloud_messaging_required');
 });
 
-test('deployment approval client inherits the service URL, token, and messaging mode', () => {
+// The deploy stage was retired with the Cloud Run deployer (2026-11): the
+// service must not carry the deployment-approval machinery any more.
+test('the service holds no deploy-stage approval client', () => {
   const service = createService({
-    config: config({
-      requireDeploymentApproval: true,
-      settingsUrl: 'https://settings.example.test',
-      internalApiToken: 'internal-token',
-      messagingMode: 'direct',
-    }),
+    config: config({ internalApiToken: 'internal-token' }),
     bus: { dispatch: async () => ({}) },
   });
-  assert.equal(service.orchestrator.deploymentApproval.settingsUrl, 'https://settings.example.test');
-  assert.equal(service.orchestrator.deploymentApproval.internalToken, 'internal-token');
-  assert.equal(service.orchestrator.deploymentApproval.cloud, false);
-});
-
-test('enabling deployment constructs the production approval client even without the all-environment flag', () => {
-  const service = createService({
-    config: config({
-      deploymentEnabled: true,
-      requireDeploymentApproval: false,
-      settingsUrl: 'https://settings.example.test',
-      internalApiToken: 'internal-token',
-    }),
-    bus: { dispatch: async () => ({}) },
-  });
-
-  assert.equal(service.orchestrator.deploymentApproval.settingsUrl, 'https://settings.example.test');
+  assert.equal(service.orchestrator.deploymentApproval, undefined);
+  assert.equal('requireDeploymentApproval' in service.orchestrator, false);
 });

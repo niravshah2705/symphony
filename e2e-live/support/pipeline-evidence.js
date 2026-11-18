@@ -2,9 +2,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFile } = require('node:child_process');
 
-const PIPELINE_STAGES = Object.freeze(['plan', 'code', 'test', 'deploy']);
+const PIPELINE_STAGES = Object.freeze(['plan', 'code', 'test']);
 const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
 const SECRET_TEXT = /(?:bearer\s+)?(?:eyJ[A-Za-z0-9._-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})/gi;
 
@@ -143,45 +142,6 @@ async function waitForRun({
   throw new Error('The full QA pipeline did not reach the expected state within 60 minutes.');
 }
 
-function approveDeployment({
-  token,
-  apiBaseUrl,
-  settingsUrl,
-  organizationId,
-  projectId,
-  repository,
-  environment,
-  runId,
-  cwd,
-  env = process.env,
-}) {
-  const cli = path.join(cwd, 'packages', 'cli', 'bin', 'adlc.js');
-  const args = [
-    cli, 'admin', 'deploy', 'approve',
-    '--api', apiBaseUrl,
-    '--org-id', organizationId,
-    '--settings-url', settingsUrl,
-    '--run-id', runId,
-    '--project-id', projectId,
-    '--repository', repository,
-    '--environment', environment,
-  ];
-  return new Promise((resolve, reject) => {
-    execFile(process.execPath, args, {
-      cwd,
-      env: { ...env, ADLC_TOKEN: token },
-      encoding: 'utf8',
-      maxBuffer: 256 * 1024,
-    }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`Deployment approval failed: ${boundedSafeText(stderr || stdout || error.message)}`));
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
 function mergeEvidence(evidenceDir, key, value) {
   fs.mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
   const filename = path.join(evidenceDir, 'evidence.json');
@@ -211,7 +171,6 @@ async function saveStableVideo(page, evidenceDir, basename, testInfo) {
 module.exports = {
   PIPELINE_STAGES,
   TERMINAL_RUN_STATUSES,
-  approveDeployment,
   boundedSafeText,
   freshBrowserBearer,
   jsonRequest,

@@ -11,9 +11,9 @@ function csv(value) {
   return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
 }
 
-function stageEndpoint(base, override) {
+function stageEndpoint(base, stage, override) {
   if (override) return String(override).trim();
-  return base ? `${String(base).replace(/\/$/, '')}/internal/pipeline/stage` : '';
+  return base ? `${String(base).replace(/\/$/, '')}/internal/pipeline/stage/${stage}` : '';
 }
 
 function loadConfig(env = process.env) {
@@ -27,9 +27,6 @@ function loadConfig(env = process.env) {
     ).trim().toLowerCase(),
     messagingMode: String(env.MESSAGING_MODE || (production ? 'pubsub' : CONFIG.MESSAGING_MODE || 'direct')).trim().toLowerCase(),
     projectId: env.GCP_PROJECT_ID || env.GOOGLE_CLOUD_PROJECT || CONFIG.GCP.projectId || '',
-    deploymentEnabled: bool(env.PIPELINE_DEPLOYMENT_ENABLED, false),
-    requireDeploymentApproval: bool(env.PIPELINE_REQUIRE_DEPLOYMENT_APPROVAL, production),
-    settingsUrl: String(env.SETTINGS_URL || CONFIG.SERVICES.settingsUrl || '').replace(/\/+$/, ''),
     internalApiToken: String(env.INTERNAL_API_TOKEN || '').trim(),
     resultAudience: String(
       env.PIPELINE_RESULTS_AUDIENCE
@@ -42,16 +39,17 @@ function loadConfig(env = process.env) {
       env.PIPELINE_RESULTS_ALLOWED_EMAILS || env.PUBSUB_PUSH_SA || CONFIG.GCP.pushServiceAccount,
     ),
     stageEndpoints: Object.freeze({
-      plan: stageEndpoint(CONFIG.SERVICES.plannerUrl, env.PIPELINE_PLAN_URL),
-      code: stageEndpoint(CONFIG.SERVICES.coderUrl, env.PIPELINE_CODE_URL),
-      test: stageEndpoint(CONFIG.SERVICES.testerUrl, env.PIPELINE_TEST_URL),
-      deploy: stageEndpoint(CONFIG.SERVICES.deployerUrl, env.PIPELINE_DEPLOY_URL),
+      // plan/code/test all execute in the agent surface process since Agent
+      // Substrate retired the per-service planner/coder/tester deployments.
+      // deploy is retired too (2026-11): runs end after test.
+      plan: stageEndpoint(CONFIG.SERVICES.agentUrl, 'plan', env.PIPELINE_PLAN_URL),
+      code: stageEndpoint(CONFIG.SERVICES.agentUrl, 'code', env.PIPELINE_CODE_URL),
+      test: stageEndpoint(CONFIG.SERVICES.agentUrl, 'test', env.PIPELINE_TEST_URL),
     }),
     stageTopics: Object.freeze({
       plan: String(env.PUBSUB_PIPELINE_PLAN_TOPIC || CONFIG.GCP.pipelinePlanTopic).trim(),
       code: String(env.PUBSUB_PIPELINE_CODE_TOPIC || CONFIG.GCP.pipelineCodeTopic).trim(),
       test: String(env.PUBSUB_PIPELINE_TEST_TOPIC || CONFIG.GCP.pipelineTestTopic).trim(),
-      deploy: String(env.PUBSUB_PIPELINE_DEPLOY_TOPIC || CONFIG.GCP.pipelineDeployTopic).trim(),
     }),
   });
 }

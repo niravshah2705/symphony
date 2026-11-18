@@ -47,8 +47,8 @@ const streamTokenHandlers = createStreamTokenHandlers({
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
  * the user-facing auth, billing, EULA, publishing, and SSE boundaries, and
  * reverse-proxies model/agent/domain APIs to their isolated services:
- *   /api/agent/*  → planner service (CONFIG.SERVICES.plannerUrl)
- *   /api/coder/*  → coder service   (CONFIG.SERVICES.coderUrl)
+ *   /api/agent/*  → agent surface (CONFIG.SERVICES.agentUrl)
+ *   /api/coder/*  → agent surface   (CONFIG.SERVICES.agentUrl)
  * The frontend keeps calling same-origin /api/* paths and is unaware of the
  * split.
  */
@@ -196,8 +196,8 @@ const gateIssueWrites = (() => {
   return (req, res, next) => (req.method === 'POST' ? gate(req, res, next) : next());
 })();
 
-const plannerProxy = createProxy(CONFIG.SERVICES.plannerUrl);
-const localeProxy = createProxy(CONFIG.SERVICES.plannerUrl, {
+const plannerProxy = createProxy(CONFIG.SERVICES.agentUrl);
+const localeProxy = createProxy(CONFIG.SERVICES.agentUrl, {
   // The planner otherwise sees the gateway socket and loses coarse locale
   // discovery. Only server-derived, bounded values are injected.
   injectHeaders: (req) => ({
@@ -288,7 +288,7 @@ app.post('/api/agent/conversations/:id/attachments/ask', requirePermission('work
 mountGlobalQuestionsRoutes(app);
 app.use('/api/agent', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
 
-app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), createProxy(CONFIG.SERVICES.coderUrl));
+app.use('/api/coder', requireAuthenticated(), requirePermission('workspace'), requireOrganizationContext(), plannerProxy);
 
 // Identity verification service (DigiLocker / PAN / age proof / APAAR / NAD).
 // Browser calls stay same-origin and are scoped by authenticated user plus the
@@ -417,8 +417,7 @@ initStore()
   .then(() => {
     app.listen(CONFIG.SERVICES.gatewayPort, () => {
       log.info(`AI Fleet gateway running at http://localhost:${CONFIG.SERVICES.gatewayPort}`);
-      log.info(`  → proxying /api/agent to ${CONFIG.SERVICES.plannerUrl}`);
-      log.info(`  → proxying /api/coder to ${CONFIG.SERVICES.coderUrl}`);
+      log.info(`  → proxying /api/agent and /api/coder to ${CONFIG.SERVICES.agentUrl}`);
       // Which admission rule this process will apply, stated at boot. A named
       // `enforced` with no FlexPrice throws, and an uncaught throw in here stops
       // the service — which is the point: that combination is a gate that admits

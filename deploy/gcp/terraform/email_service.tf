@@ -208,12 +208,12 @@ resource "google_pubsub_topic" "email" {
   depends_on = [google_project_service.services]
 }
 
-# Organization invitations and planner-owned billing notifications share the
-# delivery service, while SMTP access remains isolated on email-sa.
+# Organization invitations and orchestrator-owned billing notifications share
+# the delivery service, while SMTP access remains isolated on email-sa.
 resource "google_pubsub_topic_iam_member" "email_publishers" {
   for_each = {
-    org     = google_service_account.org.email
-    planner = google_service_account.planner.email
+    org          = google_service_account.org.email
+    orchestrator = google_service_account.orchestrator.email
   }
   project = var.project_id
   topic   = google_pubsub_topic.email.name

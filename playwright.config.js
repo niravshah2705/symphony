@@ -5,8 +5,7 @@ const { defineConfig } = require('@playwright/test');
 
 const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL || '';
 const gatewayPort = Number(process.env.PLAYWRIGHT_PORT) || 1456;
-const plannerPort = gatewayPort + 1;
-const coderPort = gatewayPort + 2;
+const agentPort = gatewayPort + 1;
 const baseURL = externalBaseURL || `http://127.0.0.1:${gatewayPort}`;
 
 module.exports = defineConfig({
@@ -38,10 +37,8 @@ module.exports = defineConfig({
     env: {
       ...process.env,
       PORT: String(gatewayPort),
-      PLANNER_PORT: String(plannerPort),
-      CODER_SERVICE_PORT: String(coderPort),
-      PLANNER_URL: `http://127.0.0.1:${plannerPort}`,
-      CODER_URL: `http://127.0.0.1:${coderPort}`,
+      AGENT_SERVICE_PORT: String(agentPort),
+      AGENT_URL: `http://127.0.0.1:${agentPort}`,
       AI_FLEET_DATA_DIR: path.join(__dirname, 'test-results', 'runtime-data'),
     },
   },

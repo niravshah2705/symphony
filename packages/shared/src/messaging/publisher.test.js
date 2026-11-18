@@ -23,7 +23,7 @@ test.before(async () => {
   // Configure BEFORE the first require of config (via publisher).
   process.env.MESSAGING_MODE = 'direct';
   process.env.INTERNAL_API_TOKEN = 'local-publisher-token';
-  process.env.PLANNER_URL = `http://localhost:${port}`;
+  process.env.AGENT_URL = `http://localhost:${port}`;
   process.env.EMAIL_URL = `http://localhost:${port}`;
   publisher = require('./publisher');
 });

@@ -9,11 +9,6 @@ const LABEL_TRANSITIONS = Object.freeze({
     succeeded: 'aitested',
     failed: 'aitestfail',
   }),
-  deploy: Object.freeze({
-    from: 'aitested',
-    succeeded: 'aideployed',
-    failed: 'aideployfail',
-  }),
 });
 
 function cleanId(value) {

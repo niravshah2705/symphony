@@ -26,9 +26,11 @@ function dependencies(labels) {
   };
 }
 
-test('terminal label transitions are fixed projections for test and deploy', () => {
+test('terminal label transitions are fixed projections, and only for test', () => {
   assert.deepEqual(LABEL_TRANSITIONS.test, { from: 'aidone', succeeded: 'aitested', failed: 'aitestfail' });
-  assert.deepEqual(LABEL_TRANSITIONS.deploy, { from: 'aitested', succeeded: 'aideployed', failed: 'aideployfail' });
+  // The deploy stage was retired with the Cloud Run deployer (2026-11): runs
+  // end after test, so no deploy labels may ever be projected again.
+  assert.equal(LABEL_TRANSITIONS.deploy, undefined);
 });
 
 test('tester success swaps only aidone and preserves unrelated labels', async () => {
@@ -45,15 +47,16 @@ test('tester success swaps only aidone and preserves unrelated labels', async ()
   }]);
 });
 
-test('deployer failure projects aideployfail from aitested', async () => {
+test('retired deploy-stage results are never projected to Linear', async () => {
   const deps = dependencies([{ id: 'tested', name: 'aitested' }]);
-  await projectStageResult(command('deploy'), { status: 'failed' }, deps);
-  assert.deepEqual(deps.writes[0].labelIds, ['id-aideployfail']);
+  const result = await projectStageResult(command('deploy'), { status: 'failed' }, deps);
+  assert.deepEqual(result, { projected: false, skipped: 'unsupported-stage' });
+  assert.deepEqual(deps.writes, []);
 });
 
 test('cancelled stages do not masquerade as terminal failures in Linear', async () => {
   const deps = dependencies([{ id: 'tested', name: 'aitested' }]);
-  const result = await projectStageResult(command('deploy'), { status: 'cancelled' }, deps);
+  const result = await projectStageResult(command('test'), { status: 'cancelled' }, deps);
   assert.deepEqual(result, { projected: false, skipped: 'non-projectable-status' });
   assert.deepEqual(deps.writes, []);
 });
