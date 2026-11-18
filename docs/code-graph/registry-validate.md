@@ -4,18 +4,68 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 147 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.2667
+- **Size**: 147 nodes
+- **Cohesion**: 0.2836
 - **Dominant Language**: javascript
 
 ## Members
 
 | Name | Kind | File | Lines |
 |------|------|------|-------|
-| validateSkillName | Function | ./packages/shared-core/src/agent/registry/fs-guards.js | 56-69 |
-| test:validateSkillName rejects traversal / separators@L21 | Test | ./packages/shared-core/src/agent/registry/fs-guards.test.js | 21-26 |
+| read | Function | ./deploy/kagent/plugin-bundle.test.js | 20-20 |
+| exists | Function | ./deploy/kagent/plugin-bundle.test.js | 21-21 |
+| csv | Function | ./deploy/kagent/plugin-bundle.test.js | 27-34 |
+| test:every pack has its own directory with the inputs the composer reads@L43 | Test | ./deploy/kagent/plugin-bundle.test.js | 43-57 |
+| test:every artifact image is data-only: FROM scratch, and the bundle is the context@L59 | Test | ./deploy/kagent/plugin-bundle.test.js | 59-69 |
+| test@L63 | Test | ./deploy/kagent/plugin-bundle.test.js | 63-63 |
+| test@L67 | Test | ./deploy/kagent/plugin-bundle.test.js | 67-67 |
+| test:the publish rows are pinned, resolvable, and have one current row each@L71 | Test | ./deploy/kagent/plugin-bundle.test.js | 71-87 |
+| test:the composers keep the bundle inside kagent's limits and keep the entry file@L89 | Test | ./deploy/kagent/plugin-bundle.test.js | 89-117 |
+| test@L115 | Test | ./deploy/kagent/plugin-bundle.test.js | 115-115 |
+| test:local builds and CI resolve the same row through one helper@L119 | Test | ./deploy/kagent/plugin-bundle.test.js | 119-132 |
+| test:every script a workflow runs by path is executable@L134 | Test | ./deploy/kagent/plugin-bundle.test.js | 134-148 |
+| test:the selection is one shared table, not two hand-kept workflow scripts@L150 | Test | ./deploy/kagent/plugin-bundle.test.js | 150-173 |
+| test:the selector's tables name paths that exist, and nothing that reaches a bundle is inert@L175 | Test | ./deploy/kagent/plugin-bundle.test.js | 175-193 |
+| test:no builder writes a committed manifest@L195 | Test | ./deploy/kagent/plugin-bundle.test.js | 195-216 |
+| test:every committed manifest sources exactly the image its catalog record publishes@L218 | Test | ./deploy/kagent/plugin-bundle.test.js | 218-240 |
+| test@L245 | Test | ./deploy/kagent/plugin-bundle.test.js | 245-245 |
+| test:the mount test covers both tracks and refuses a placeholder digest@L252 | Test | ./deploy/kagent/plugin-bundle.test.js | 252-263 |
+| test:build artifacts stay out of the repository@L265 | Test | ./deploy/kagent/plugin-bundle.test.js | 265-270 |
+| test:every generated manifest says so, and the hand-written reference does not@L272 | Test | ./deploy/kagent/plugin-bundle.test.js | 272-283 |
+| assertName | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 74-79 |
+| crNames | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 85-94 |
+| validateEnv | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 96-106 |
+| buildCrSet | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 127-230 |
+| buildSkillCrSet | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 254-325 |
+| modelConfigDoc | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 327-346 |
+| harnessDoc | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 348-366 |
+| agentDoc | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 368-383 |
+| validateEnvForEngine | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 385-393 |
+| providerBlockKey | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 400-404 |
+| systemPrompt | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 414-423 |
+| skillSystemPrompt | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 429-438 |
+| scalar | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 463-472 |
+| foldLines | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 475-488 |
+| emitFolded | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 494-497 |
+| isLongString | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 499-501 |
+| emitMap | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 503-542 |
+| renderCrSet | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 545-552 |
+| renderablePairs | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 558-567 |
+| renderableSkillPairs | Function | ./packages/shared-core/src/agent/registry/agent-crset.js | 570-579 |
+| doc | Function | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 24-24 |
+| template | Function | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 25-25 |
+| harness | Function | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 26-26 |
+| test:a rendered set is exactly ModelConfig, Harness, AgentTemplate, Agent@L28 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 28-33 |
+| test:the Agent is the only place the template and the harness meet@L35 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 35-46 |
+| test:names are deterministic from (pack, cli) so two runs cannot differ@L48 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 48-54 |
+| test:the plugin source is digest-pinned, and an unstamped ref is visibly zeroes@L56 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 56-62 |
+| test:a bare tag is rejected: the worker would resolve it to different bytes@L64 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 64-69 |
+| test:the enabled skill list reaches the template and cannot be empty or over cap@L71 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 71-83 |
+| test:the most common Ready failure is designed out: pool and snapshot location are named@L85 | Test | ./packages/shared-core/src/agent/registry/agent-crset.test.js | 85-94 |
+
+*... and 97 more members.*
 
 ## Execution Flows
 
@@ -25,15 +75,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `includes` (2 edge(s))
-- `basename` (1 edge(s))
-- `String` (1 edge(s))
-- `throws` (1 edge(s))
-- `equal` (1 edge(s))
+- `equal` (86 edge(s))
+- `match` (79 edge(s))
+- `ok` (59 edge(s))
+- `join` (56 edge(s))
+- `map` (31 edge(s))
+- `includes` (30 edge(s))
+- `deepEqual` (26 edge(s))
+- `test` (24 edge(s))
+- `entries` (18 edge(s))
+- `throws` (17 edge(s))
+- `split` (16 edge(s))
+- `push` (16 edge(s))
+- `some` (16 edge(s))
+- `isArray` (15 edge(s))
+- `String` (14 edge(s))
 
 ### Incoming
 
-- `./packages/shared-core/src/agent/registry/fs-guards.js` (2 edge(s))
-- `./packages/shared-core/src/agent/registry/fs-guards.test.js` (1 edge(s))
-- `throws` (1 edge(s))
-- `equal` (1 edge(s))
+- `equal` (86 edge(s))
+- `match` (79 edge(s))
+- `ok` (57 edge(s))
+- `join` (40 edge(s))
+- `./packages/shared-core/src/agent/registry/agent-crset.js` (31 edge(s))
+- `deepEqual` (26 edge(s))
+- `./packages/shared-core/src/agent/registry/agent-crset.test.js` (26 edge(s))
+- `./packages/shared-core/src/agent/registry/plugin-catalog.js` (23 edge(s))
+- `map` (21 edge(s))
+- `./packages/shared-core/src/agent/registry/plugin-catalog.test.js` (19 edge(s))
+- `./deploy/kagent/plugin-bundle.test.js` (18 edge(s))
+- `./packages/shared-core/src/agent/registry/skill-catalog.test.js` (18 edge(s))
+- `throws` (17 edge(s))
+- `includes` (16 edge(s))
+- `some` (16 edge(s))

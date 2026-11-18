@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 467 nodes
+Community of 469 nodes
 
-- **Size**: 467 nodes
-- **Cohesion**: 0.2919
+- **Size**: 469 nodes
+- **Cohesion**: 0.2914
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 467 nodes
 | test:a failing row stays retryable, and only gives up after the ceiling@L168 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 168-178 |
 | test:enqueue never throws at a run that already happened@L180 | Test | ./packages/shared-core/src/billing/billing-outbox.test.js | 180-190 |
 
-*... and 417 more members.*
+*... and 419 more members.*
 
 ## Execution Flows
 
@@ -82,7 +82,7 @@ Community of 467 nodes
 
 - `equal` (628 edge(s))
 - `deepEqual` (82 edge(s))
-- `String` (74 edge(s))
+- `String` (76 edge(s))
 - `Number` (54 edge(s))
 - `throws` (53 edge(s))
 - `map` (49 edge(s))

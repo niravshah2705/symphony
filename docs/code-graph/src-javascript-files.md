@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 2 nodes
+Community of 3 nodes
 
-- **Size**: 2 nodes
-- **Cohesion**: 0.0667
+- **Size**: 3 nodes
+- **Cohesion**: 0.1136
 - **Dominant Language**: javascript
 
 ## Members
@@ -16,6 +16,7 @@ Community of 2 nodes
 |------|------|------|-------|
 | javascriptFiles | Function | ./services/gateway/src/dependency-boundary.test.js | 13-19 |
 | staticRequires | Function | ./services/gateway/src/dependency-boundary.test.js | 21-23 |
+| test:gateway source imports shared-core and no heavy AI workspace or agent package@L25 | Test | ./services/gateway/src/dependency-boundary.test.js | 25-44 |
 
 ## Execution Flows
 
@@ -25,17 +26,31 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `./services/gateway/src/dependency-boundary.test.js::test:gateway source imports shared-core and no heavy AI workspace or agent package@L25` (2 edge(s))
+- `join` (6 edge(s))
+- `split` (2 edge(s))
 - `flatMap` (1 edge(s))
 - `readdirSync` (1 edge(s))
-- `join` (1 edge(s))
 - `isDirectory` (1 edge(s))
 - `isFile` (1 edge(s))
 - `endsWith` (1 edge(s))
 - `map` (1 edge(s))
 - `matchAll` (1 edge(s))
+- `readFileSync` (1 edge(s))
+- `startsWith` (1 edge(s))
+- `slice` (1 edge(s))
+- `has` (1 edge(s))
+- `push` (1 edge(s))
+- `relative` (1 edge(s))
 
 ### Incoming
 
-- `./services/gateway/src/dependency-boundary.test.js` (2 edge(s))
-- `./services/gateway/src/dependency-boundary.test.js::test:gateway source imports shared-core and no heavy AI workspace or agent package@L25` (2 edge(s))
+- `join` (5 edge(s))
+- `./services/gateway/src/dependency-boundary.test.js` (3 edge(s))
+- `split` (2 edge(s))
+- `readFileSync` (1 edge(s))
+- `startsWith` (1 edge(s))
+- `slice` (1 edge(s))
+- `has` (1 edge(s))
+- `push` (1 edge(s))
+- `relative` (1 edge(s))
+- `deepEqual` (1 edge(s))

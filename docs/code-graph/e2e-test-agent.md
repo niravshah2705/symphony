@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 9 nodes
+Community of 10 nodes
 
-- **Size**: 9 nodes
-- **Cohesion**: 0.1203
+- **Size**: 10 nodes
+- **Cohesion**: 0.0950
 - **Dominant Language**: javascript
 
 ## Members
@@ -17,6 +17,7 @@ Community of 9 nodes
 | json | Function | ./e2e/agent-jobs.spec.js | 5-11 |
 | mockShell | Function | ./e2e/agent-jobs.spec.js | 13-62 |
 | mixedJobs | Function | ./e2e/agent-jobs.spec.js | 64-97 |
+| test:Agent jobs restores complete grouped planner and coding history@L99 | Test | ./e2e/agent-jobs.spec.js | 99-166 |
 | test:Agent jobs exposes load failures and retries successfully@L168 | Test | ./e2e/agent-jobs.spec.js | 168-181 |
 | test:Agent jobs rejects a malformed successful response and retries@L183 | Test | ./e2e/agent-jobs.spec.js | 183-198 |
 | test:Agent jobs preserves row focus and defers refresh while delete is armed@L200 | Test | ./e2e/agent-jobs.spec.js | 200-251 |
@@ -32,36 +33,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (43 edge(s))
-- `locator` (30 edge(s))
-- `route` (25 edge(s))
-- `toHaveText` (13 edge(s))
-- `toHaveCount` (12 edge(s))
-- `getByRole` (11 edge(s))
-- `goto` (8 edge(s))
-- `toHaveAttribute` (6 edge(s))
+- `expect` (72 edge(s))
+- `locator` (48 edge(s))
+- `route` (26 edge(s))
+- `toHaveCount` (23 edge(s))
+- `getByRole` (18 edge(s))
+- `toHaveText` (17 edge(s))
+- `toHaveAttribute` (11 edge(s))
+- `click` (10 edge(s))
+- `goto` (9 edge(s))
+- `getByText` (8 edge(s))
+- `toBeVisible` (7 edge(s))
+- `request` (6 edge(s))
 - `fulfill` (5 edge(s))
-- `./e2e/agent-jobs.spec.js::test:Agent jobs restores complete grouped planner and coding history@L99` (5 edge(s))
 - `toContainText` (5 edge(s))
-- `click` (5 edge(s))
-- `getByText` (5 edge(s))
-- `request` (3 edge(s))
-- `stringify` (2 edge(s))
+- `method` (4 edge(s))
 
 ### Incoming
 
-- `expect` (43 edge(s))
-- `locator` (30 edge(s))
-- `route` (16 edge(s))
-- `toHaveText` (13 edge(s))
-- `toHaveCount` (12 edge(s))
-- `getByRole` (11 edge(s))
-- `./e2e/agent-jobs.spec.js` (9 edge(s))
-- `goto` (8 edge(s))
-- `toHaveAttribute` (6 edge(s))
-- `./e2e/agent-jobs.spec.js::test:Agent jobs restores complete grouped planner and coding history@L99` (5 edge(s))
+- `expect` (72 edge(s))
+- `locator` (48 edge(s))
+- `toHaveCount` (23 edge(s))
+- `getByRole` (18 edge(s))
+- `route` (17 edge(s))
+- `toHaveText` (17 edge(s))
+- `toHaveAttribute` (11 edge(s))
+- `./e2e/agent-jobs.spec.js` (10 edge(s))
+- `click` (10 edge(s))
+- `goto` (9 edge(s))
+- `getByText` (8 edge(s))
+- `toBeVisible` (7 edge(s))
 - `toContainText` (5 edge(s))
-- `click` (5 edge(s))
-- `getByText` (5 edge(s))
-- `fulfill` (3 edge(s))
-- `slice` (2 edge(s))
+- `request` (5 edge(s))
+- `method` (4 edge(s))

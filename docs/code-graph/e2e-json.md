@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 4 nodes
+Community of 8 nodes
 
-- **Size**: 4 nodes
-- **Cohesion**: 0.0531
+- **Size**: 8 nodes
+- **Cohesion**: 0.0937
 - **Dominant Language**: javascript
 
 ## Members
@@ -15,8 +15,12 @@ Community of 4 nodes
 | Name | Kind | File | Lines |
 |------|------|------|-------|
 | json | Function | ./e2e/page-loading.spec.js | 5-11 |
+| test:workspace renders while optional locale and Linear discovery are stalled@L61 | Test | ./e2e/page-loading.spec.js | 61-118 |
+| test:authentication configuration failure locks the workspace before protected API calls@L120 | Test | ./e2e/page-loading.spec.js | 120-146 |
 | test:fixed language groups mark, but never auto-apply, the IP recommendation@L184 | Test | ./e2e/page-loading.spec.js | 184-219 |
 | authorizedJson | Function | ./e2e/page-loading.spec.js | 242-248 |
+| test:authenticated users without an organization route to onboarding before workspace requests@L477 | Test | ./e2e/page-loading.spec.js | 477-551 |
+| test:selected organization admins can open scoped policy without global settings write@L617 | Test | ./e2e/page-loading.spec.js | 617-658 |
 | test:sign-in card shows only the enabled provider (Microsoft-only, primary)@L711 | Test | ./e2e/page-loading.spec.js | 711-734 |
 
 ## Execution Flows
@@ -27,36 +31,36 @@ No execution flows pass through this community.
 
 ### Outgoing
 
-- `expect` (17 edge(s))
+- `expect` (40 edge(s))
+- `route` (30 edge(s))
+- `locator` (19 edge(s))
 - `./e2e/page-loading.spec.js::test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221` (11 edge(s))
-- `locator` (10 edge(s))
+- `push` (8 edge(s))
 - `./e2e/page-loading.spec.js::test:Settings Policy uses the active native project and selected-context roles@L553` (8 edge(s))
-- `route` (8 edge(s))
-- `./e2e/page-loading.spec.js::test:workspace renders while optional locale and Linear discovery are stalled@L61` (7 edge(s))
-- `./e2e/page-loading.spec.js::test:authenticated users without an organization route to onboarding before workspace requests@L477` (6 edge(s))
-- `./e2e/page-loading.spec.js::test:selected organization admins can open scoped policy without global settings write@L617` (4 edge(s))
-- `./e2e/page-loading.spec.js::test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660` (4 edge(s))
-- `toHaveText` (4 edge(s))
-- `request` (3 edge(s))
-- `toBe` (3 edge(s))
-- `fulfill` (3 edge(s))
-- `nth` (3 edge(s))
-- `./e2e/page-loading.spec.js::test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148` (2 edge(s))
+- `toEqual` (8 edge(s))
+- `fulfill` (7 edge(s))
+- `toHaveText` (7 edge(s))
+- `url` (6 edge(s))
+- `on` (6 edge(s))
+- `goto` (6 edge(s))
+- `toBeVisible` (6 edge(s))
+- `setItem` (5 edge(s))
+- `method` (4 edge(s))
 
 ### Incoming
 
-- `expect` (15 edge(s))
+- `expect` (38 edge(s))
+- `route` (30 edge(s))
+- `locator` (19 edge(s))
 - `./e2e/page-loading.spec.js::test:authenticated Firebase session adds a bearer token and reports only gateway identity to GA@L221` (11 edge(s))
-- `locator` (10 edge(s))
+- `./e2e/page-loading.spec.js` (8 edge(s))
 - `./e2e/page-loading.spec.js::test:Settings Policy uses the active native project and selected-context roles@L553` (8 edge(s))
-- `route` (8 edge(s))
-- `./e2e/page-loading.spec.js::test:workspace renders while optional locale and Linear discovery are stalled@L61` (7 edge(s))
-- `./e2e/page-loading.spec.js::test:authenticated users without an organization route to onboarding before workspace requests@L477` (6 edge(s))
-- `./e2e/page-loading.spec.js` (4 edge(s))
-- `./e2e/page-loading.spec.js::test:selected organization admins can open scoped policy without global settings write@L617` (4 edge(s))
-- `./e2e/page-loading.spec.js::test:Microsoft popup sign-in renders Google-first, federates into Firebase, and carries a bearer@L660` (4 edge(s))
-- `toHaveText` (4 edge(s))
-- `nth` (3 edge(s))
-- `./e2e/page-loading.spec.js::test:disabled auth skips Firebase and bodyless API GETs omit the JSON content type@L148` (2 edge(s))
-- `goto` (2 edge(s))
-- `toHaveValue` (2 edge(s))
+- `toEqual` (8 edge(s))
+- `push` (7 edge(s))
+- `toHaveText` (7 edge(s))
+- `on` (6 edge(s))
+- `fulfill` (6 edge(s))
+- `goto` (6 edge(s))
+- `toBeVisible` (6 edge(s))
+- `url` (5 edge(s))
+- `setItem` (5 edge(s))
