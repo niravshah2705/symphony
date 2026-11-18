@@ -29,6 +29,16 @@ locals {
     "fleet.dev/component"  = "billing"
     "fleet.dev/root"       = "terraform-flexprice"
   }
+
+  # The same three facts in the shape GCP labels accept: a GCP label key may not
+  # contain '.', so feeding common_labels to a repository, secret or node pool is
+  # a 400 at apply time, not a plan error. Kubernetes objects keep common_labels —
+  # there the dot is the namespace separator that makes the key legal.
+  gcp_labels = {
+    fleet_dev_managed_by = "terraform"
+    fleet_dev_component  = "billing"
+    fleet_dev_root       = "terraform-flexprice"
+  }
 }
 
 provider "kubernetes" {

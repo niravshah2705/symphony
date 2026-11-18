@@ -37,7 +37,7 @@ resource "google_secret_manager_secret" "flexprice" {
 
   project   = var.project_id
   secret_id = each.value
-  labels    = merge(local.common_labels, { component = "flexprice" })
+  labels    = merge(local.gcp_labels, { component = "flexprice" })
 
   replication {
     auto {}

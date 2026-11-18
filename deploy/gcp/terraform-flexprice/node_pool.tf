@@ -43,9 +43,9 @@ resource "google_container_node_pool" "flexprice" {
     # image GKE's node auto-repair and container-optimised tooling assume.
     image_type = "COS_CONTAINERD"
 
-    labels = {
-      "fleet.dev/component" = "billing"
-    }
+    # GCE instance labels reject the dotted fleet.dev/* keys, so this pool takes
+    # the underscore form (see main.tf: same facts, GCP-legal shape).
+    labels = local.gcp_labels
 
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform",
