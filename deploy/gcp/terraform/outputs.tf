@@ -30,12 +30,12 @@ output "pipeline_orchestrator_uri" {
 output "pipeline_topics" {
   description = "Dedicated durable pipeline topics. Empty while the rollout flag is off."
   value = var.pipeline_orchestrator_enabled ? {
-    plan           = google_pubsub_topic.pipeline_plan[0].name
-    code           = google_pubsub_topic.pipeline_code[0].name
-    test           = google_pubsub_topic.pipeline_test[0].name
-    plan_results   = google_pubsub_topic.pipeline_results["plan"].name
-    code_results   = google_pubsub_topic.pipeline_results["code"].name
-    test_results   = google_pubsub_topic.pipeline_results["test"].name
+    plan         = google_pubsub_topic.pipeline_plan[0].name
+    code         = google_pubsub_topic.pipeline_code[0].name
+    test         = google_pubsub_topic.pipeline_test[0].name
+    plan_results = google_pubsub_topic.pipeline_results["plan"].name
+    code_results = google_pubsub_topic.pipeline_results["code"].name
+    test_results = google_pubsub_topic.pipeline_results["test"].name
   } : {}
 }
 
