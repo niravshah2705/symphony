@@ -31,6 +31,36 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
 
 ### Fixed
 
+- **The orchestrator image contains `@ai-fleet/shared`, so it can boot.** #283
+  retired the Cloud Run planner and absorbed its HTTP surface into
+  `services/orchestrator/src/agent-surface.js`, mounted from `app.js`, and added
+  `"@ai-fleet/shared": "*"` to `services/orchestrator/package.json` — but left
+  `deploy/gcp/Dockerfile.orchestrator` packaging only `packages/shared-core/`.
+  The image therefore built green and died at the first shared require
+  (`Cannot find module '@ai-fleet/shared/agent/pipeline-stage-service'`,
+  `agent-surface.js:15`), because `npm ci --workspace=…` never resolves local
+  `require()`s and no test boots the image. Cloud Run marked the revision
+  `HealthCheckContainerError`, and since Terraform was *creating*
+  `pipeline-orchestrator` there was no earlier revision to fall back on: the
+  service came up with no URL at all. The build now copies `packages/shared/`
+  and selects `--workspace=@ai-fleet/shared` so the library's own dependencies
+  install, not just its symlink.
+  - **This is a deliberate change to the image's dependency surface, not an
+    incident hotfix.** The old header claimed the orchestrator "must never
+    acquire the heavy agent SDK dependency tree or provider credentials". The
+    first half no longer holds — the agent surface lives here now, so the agent
+    library ships with it. The half that matters is unchanged and is now
+    enforced by the environment rather than by the file list: the orchestrator
+    holds no provider credential, it sends the egress sentinel and the proxy
+    sidecar / model gateway resolves the real key.
+  - **Release note:** merging rebuilds the orchestrator (the `orchestrator`
+    filter covers `deploy/gcp/Dockerfile.orchestrator`), and the resulting apply
+    rolls the revision. Confirm with
+    `gcloud run services describe pipeline-orchestrator --project <project> --region asia-south1 --format 'value(status.url)'`
+    — an empty URL means it is still dead. The substrate control-plane variables
+    are a separate question: with `SUBSTRATE_URL` pointing at an address that
+    does not answer, a healthy orchestrator boots and then refuses every run.
+
 - **The deploy workflow publishes the two FlexPrice key versions instead of only
   demanding them.** `flexprice-api-key-ingest` existed in Secret Manager with
   **zero versions**, and `billing_service.tf` binds both planes into the billing
