@@ -1,10 +1,16 @@
-# Agent Substrate Integration (parallel execution substrate)
+# Agent Substrate Integration (the execution substrate)
 
 This document covers how [Agent Substrate](https://github.com/agent-substrate/substrate)
-is wired in as a **user-selectable execution substrate** alongside Cloud Run, how
+is wired in as **the only execution substrate** (the custom Cloud Run harness is
+retired), how
 authentication stays managed (raw credentials never enter the actor), and how the
 **one shared guardrail spec** drives Substrate's egress, namespace and credential
 rendering.
+
+> **Migration completed 2026-11.** `agentPattern` has exactly one accepted value,
+> `substrate`; stored `cloudrun` values are coerced to it. The planner / coder /
+> tester Cloud Run services, their Dockerfiles and their terraform are deleted —
+> the orchestrator service dispatches every run and hosts the actor callback.
 
 ## 1. Three orthogonal "how the agent runs" concepts
 
@@ -14,11 +20,10 @@ Do not confuse these — each is a separate persisted key:
 |---|---|---|---|
 | Harness / SDK | `agentRuntime` | deepagent, claude-agent-sdk, codex-sdk, … | `packages/shared/src/agent/harnesses/registry.js`, admission in `services/gateway/src/pipeline-admission.js` |
 | Reasoning pattern | `workflowPattern` | plan/act/reflect, … | `packages/shared/src/agent/harnesses/contract.js` |
-| **Execution substrate** | **`agentPattern`** | **`cloudrun` \| `substrate`** | `packages/shared/src/agent/pattern-router.js` (planning stage only) |
+| **Execution substrate** | **`agentPattern`** | **`substrate`** (only; legacy `cloudrun` coerces) | `packages/shared/src/agent/pattern-router.js` |
 
-`agentPattern` defaults to `cloudrun`, so **every existing install is byte-for-byte
-unchanged** unless an operator opts in. Only the **planning stage** diverts to
-Substrate; every other stage falls through to `executeAgentRuntime`.
+Every agent run dispatches to Substrate; `agentRuntime` still selects *what*
+executes inside the actor.
 
 ## 2. What runs where
 
@@ -34,12 +39,13 @@ Substrate; every other stage falls through to `executeAgentRuntime`.
   (honoring `substrateActorTtlMs`).
 - **Data plane**: the prompt is POSTed to `substrateIngressUrl` with header
   `ate-target-actor: <atespace>/<actor>` + `authorization: Bearer <actorJwt>`;
-  the atenet-router forwards to the planner image's actor-mode route
-  `POST /internal/plan/run` (`services/planner/src/routes/substrate-actor.js`),
+  the atenet-router forwards to the actor image's actor-mode route
+  `POST /internal/plan/run` (`packages/shared/src/agent/substrate-actor.js`,
+  mounted by `services/orchestrator/src/substrate-actor-entry.js`),
   which verifies the actor JWT against the ate-idp-server JWKS and runs
   planning in-process via `executeAgentRuntime`. Mounted only when
   `SUBSTRATE_ACTOR_MODE=true` + `SUBSTRATE_JWKS_URL` are set, so a normal
-  planner pod 404s on this path.
+  orchestrator deployment 404s on this path.
 
 ## 3. Managed authentication / credential injection
 
@@ -175,7 +181,7 @@ Two things make the hostname usable rather than decorative:
   `EnvoyProxy substrate-proxy-config` (in `ate-system`, so `parametersRef` needs no
   ReferenceGrant) bound to `substrate-ip`, and points
   `spec.infrastructure.parametersRef` at it.
-- **A control-plane route.** The planner reaches ateapi over gRPC, and ateapi only
+- **A control-plane route.** The orchestrator reaches ateapi over gRPC, and ateapi only
   listens in-cluster. Set `SUBSTRATE_CONTROL_PLANE_PUBLIC=true` to also publish a
   path-prefixed route for `/substrate.ateapi.v1.Control` →
   `${SUBSTRATE_ATEAPI_SERVICE}:${SUBSTRATE_ATEAPI_PORT}` (defaults `ateapi:8443`) on
@@ -255,7 +261,7 @@ Leave `SUBSTRATE_INGRESS_HOSTNAME` unset and the installer stays the sole owner.
 | `substrateAtespace` | **must be a space this deployment has already declared** — i.e. listed in `SUBSTRATE_ALLOWED_ATESPACES`, pinned as `SUBSTRATE_ATESPACE`, or a value in `SUBSTRATE_ATESPACE_BY_ORG`. Anything else is dropped by `resolveSubstrateAtespace`, which then resolves from the binding table by organization id. Nothing is derived from the *text* of an org id any more, and once a deployment declares more than one space an organization that is not bound **throws** instead of landing in `tenant-a`. A per-tenant stack does not need this field: the provisioner pins `SUBSTRATE_ATESPACE` from the deployment slug. `GET /api/agent/substrate/status` echoes what was resolved; the runner creates the atespace over ateapi (`CreateAtespace`/`GetAtespace`) if missing |
 | `substrateWorkerPool` | **the name of the `WorkerPool` custom resource** the actors land on. ate-controller stamps `ate.dev/worker-pool=<WorkerPool name>` onto the pool's worker pods and the ate API matches the template's `workerSelector` against those pod labels — no node label participates in placement. `substrate.tf` also copies the same string onto the GKE node pool as `ate.dev/worker-pool`, purely so the pool is recognizable in `kubectl get nodes`. It is `var.substrate_worker_pool_label` (default `planner-pool`), `DEFAULT_WORKER_POOL` in `packages/shared-core/src/agent/substrate.js`, `substrate_worker_pool` in `deploy/gcp/terraform/variables.tf` and the install workflow's `SUBSTRATE_WORKER_POOL` fallback: four defaults, one value, and `deploy/gcp/substrate-env.test.js` fails if they drift. Blank falls back to `planner-pool`. A pool that is selected but never *created* is §5.3 |
 | `substrateActorTemplate` | `planner` |
-| `substratePlannerImage` | the planner image **pinned by digest** (`name@sha256:…`) — `upsertActorTemplate` throws on a tag, so use the digest the stack is on |
+| `substratePlannerImage` | the substrate actor image (`deploy/gcp/Dockerfile.substrate-actor`) **pinned by digest** (`name@sha256:…`) — `upsertActorTemplate` throws on a tag, so use the digest the stack is on |
 | `substrateTimeoutMs` | per-call gRPC deadline; `60000` is the default. Keep it under the Cloud Run / ingress budget of the calling service |
 | `substrateActorTtlMs` | how long the per-run actor survives before the power path suspends/reaps it; `120000` default. Below the actor's resume cost is wasted |
 
@@ -271,7 +277,7 @@ is what §5.3's WorkerPool pods tolerate automatically.
 no workstation needs a substrate checkout or a Go toolchain.
 
 It is a separate workflow, on purpose: dispatching **Deploy to GCP** on a branch
-runs that workflow's path filters, and a branch touching `services/planner/**` or
+runs that workflow's path filters, and a branch touching `services/orchestrator/**` or
 `public/**` would rebuild and redeploy those Cloud Run services **from the
 unmerged branch**. A control-plane preflight must never be able to ship app code.
 
@@ -332,7 +338,7 @@ Repo variables it reads (all optional; defaults shown):
 | `SUBSTRATE_POSTGRES_STORAGE_CLASS` | unset (cluster default) | Set `dynamic-rwo` if the bundled postgres PVC will not attach to your node machine type |
 | `SUBSTRATE_POSTGRES_STORAGE_SIZE` | `50Gi` | Size of the bundled postgres claim. Upstream hardcodes `500Gi` in `manifests/ate-install/postgres/postgres.yaml` and ate-setup has no flag for it, so the workflow rewrites that file in the checkout before installing. **A bound PVC cannot shrink**: if the live claim is a different size, the install deletes the `postgres` StatefulSet and `data-postgres-0` with it (the `dynamic-rwo` StorageClass is `reclaimPolicy: Delete`, so the disk goes too). atespace and actor metadata are rebuilt on the next app run; snapshots in GCS survive. The preflight reports the mismatch before it happens |
 | `SUBSTRATE_ROLLOUT_TIMEOUT` | `10m` | Cold-start image pulls on a just-created pool are slow; the installer default is 60s |
-| `SUBSTRATE_WORKER_POOL` | `planner-pool` | Name of the `WorkerPool` the install step creates (§5.3). Must equal what the planner sends as `workerSelector` — the same string as `substrate_worker_pool` in Terraform and `DEFAULT_WORKER_POOL` in `substrate.js` |
+| `SUBSTRATE_WORKER_POOL` | `planner-pool` | Name of the `WorkerPool` the install step creates (§5.3). Must equal what the orchestrator sends as `workerSelector` — the same string as `substrate_worker_pool` in Terraform and `DEFAULT_WORKER_POOL` in `substrate.js` |
 | `SUBSTRATE_WORKER_NODE_POOL` | `substrate-worker-pool` | The GKE node pool the WorkerPool's `nodeSelector` pins workers to; `var.substrate_node_pool_name` in `terraform-substrate-gke` |
 | `SUBSTRATE_WORKER_POOL_REPLICAS` | `2` | How many idle worker pods stay ready. Each advertises a 2 CPU / 4Gi per-actor ceiling, so this is the concurrent-sandbox budget of the pool |
 | `SUBSTRATE_REPO_URL` / `SUBSTRATE_GKE_REPO_URL` | upstream GitHub URLs | Only change these to mirror or to pin a fork |
@@ -353,7 +359,7 @@ leaves the queue, with a control plane that looks healthy and a
 
 Four things have to line up; the first three each broke here at least once:
 
-1. **The pool must exist, and be named what the planner selects.** ate-controller
+1. **The pool must exist, and be named what the orchestrator selects.** ate-controller
    stamps `ate.dev/worker-pool=<WorkerPool name>` on the pool's worker pods; the ate
    API matches the ActorTemplate's `workerSelector` against those labels
    (`cmd/ateapi/internal/scheduling/scheduling.go`, comparing `worker.GetLabels()`).
@@ -414,6 +420,116 @@ kubectl -n substrate-workers get pods -l ate.dev/worker-pool=planner-pool -o wid
 kubectl -n ate-system get pods -l app=atelet -o wide    # one per worker node, or the taint is wrong
 ```
 
+### 5.4 Rotating the control-plane bearer
+
+§5.3 makes a pool exist; this makes a *caller* exist. `api` in `ate-system` admits exactly
+one credential — ConfigMap `ate-api-authentication` names one jwtProvider: issuer
+`https://container.googleapis.com/v1/projects/<project>/locations/<zone>/clusters/<cluster>`,
+audience `api.ate-system.svc`, subject `system:serviceaccount:ate-system:ate-client`. So the
+only bearer it accepts is a Kubernetes **projected service-account token**, which only the
+cluster's own API server mints, and the planner runs on Cloud Run. Something with cluster
+access has to mint on its behalf and hand the result over before it expires. That is
+`.github/workflows/substrate-token-rotate.yml` plus Secret Manager.
+
+```bash
+kubectl -n ate-system create token ate-client \
+  --audience=api.ate-system.svc --duration=43200s
+```
+
+**The job.** A six-hour cron plus `workflow_dispatch`, authenticating as the same CI
+deployer identity **Deploy to GCP** uses (no new credential introduced). It runs exactly the
+mint above, decodes the JWT's own `iss`/`aud`/`sub`/`exp` and fails the run if they are not
+what ateapi will check, publishes with `gcloud secrets versions add --data-file=…`, then
+re-probes the live control plane through the public hostname with the version it just
+published and requires `grpc-status: 0`. That last step is what makes a green run mean *the
+caller can authenticate right now*, rather than *something was written*.
+
+The token is never printed, never an argv, and never a variable: a projected SA JWT is
+longer than the 256 characters `::add-mask::` can register, so masking is not the control —
+not echoing is. kubectl's stdout goes straight to a `umask 077` temp file and
+`--data-file` reads it from there. The probe sends the bearer through `curl --config` for
+the same reason (`ps` would show a `-H` value).
+
+**Why 12 hours against a 6-hour cadence.** GKE will mint far longer — a 7-day `--duration`
+was accepted when the ceiling was probed. The short lifetime is deliberate: this bearer
+creates and deletes actors and mints actor JWTs, so a leaked one should expire by itself.
+The gap between lifetime and cadence is the outage budget — **two missed runs of slack** —
+and it is needed because GitHub runs *scheduled* workflows from the **default branch's**
+copy and does not guarantee their start time. Consequence: **the rotator is live only after
+merge.** Until this file is on the default branch nothing rotates anything, and
+`credentialConfigured: false` from a branch is expected, not a bug.
+
+**Storage and grants** (`deploy/gcp/terraform/substrate_token.tf`, in the **root** stack, so
+`deploy.yml`'s terraform job applies it — not `gke_reconcile`): the secret container plus
+exactly two bindings, `roles/secretmanager.secretAccessor` for `settings-sa` and
+`roles/secretmanager.secretVersionManager` for `gh-deployer`, both scoped to this one secret
+so holding them grants no visibility into the provider keys the same service account mounts.
+Terraform creates the container and never writes a **value** — the rotator fills it, the same
+rule `secrets.tf` follows. Two things were learned the expensive way here:
+
+- The writer role is **not** `roles/secretmanager.secretVersionAdd`, tempting as that reads.
+  The extra fine-grained version roles bind only to a *version*, which a publisher cannot
+  address before the version exists, and the apply said so:
+  `Role roles/secretmanager.secretVersionAdd is not supported for this resource`.
+  `secretVersionManager` is the smallest role Secret Manager accepts at secret scope, and it
+  genuinely matches the job — the rotator reads its version back to send the probe frame, so
+  it needs `versions.access` as well as `versions.add`.
+- Minting is not delegated to `roles/container.admin` implying something. GKE's RBAC model
+  does not promise that an IAM role implies a Kubernetes rule, so that shortcut breaks in a
+  03:00 CI run rather than at apply. `terraform-substrate-gke/substrate.tf` renders a
+  `Role`/`RoleBinding` granting one verb — `create` on the **`serviceaccounts/token`
+  subresource** (`get`/`create` on `serviceaccounts` is a different permission and leaves
+  `kubectl create token` at a 403 that reads like a missing role), pinned by
+  `resourceNames: ["ate-client"]` so the job cannot mint the installer's own privileged
+  accounts. The subject is `kind: User` with the deployer's email, because a GCP service
+  account arriving through Workload Identity Federation is presented with its email as its
+  Kubernetes **username**; a `kind: ServiceAccount` subject names only an in-cluster SA and
+  binds nothing.
+
+**Why resolved per request rather than env-mounted.** `substrateApiToken` is a managed key
+(`services/settings/app/models/secrets.py`) held out of `BROWSER_WRITABLE_SECRET_KEYS` — an
+org admin who could write it could point our control-plane client at a token of their
+choosing — and it is the only managed key resolved at request time:
+`services/settings/app/core/secret_manager.py` reads `versions/latest` over REST with ADC
+(no new SDK, and it never puts the payload in an exception) while `secrets_service.py`
+memoises it for `SUBSTRATE_ATEAPI_TOKEN_TTL_SECONDS` (default **300**). The reason is Cloud
+Run: container env is frozen at start, so a 12-hour bearer mounted as an env would be served
+stale — and rejected as expired — for days. 300 s is what tracks a 21600 s rotation. Two
+behaviours matter when tuning it: a failed Secret Manager read yields the key **absent**,
+never an error, so an outage degrades to `credentialConfigured: false` instead of a 500 on
+`/internal/s2s/managed-secrets`; and a non-numeric or non-positive TTL falls back to 300.
+Lower it to recover from an outage sooner; never raise it past the cadence.
+
+**Callers.** `resolveSubstrateApiToken()` (`packages/shared-core/src/agent/substrate.js`)
+resolves per run/request, deliberately uncached, in order: caller-supplied value → the store
+/ non-proxied managed overlay → the S2S managed path (`fetchS2sSecrets`), and hands the
+result to `grpcCall` as `options.token`. `runPlanningOnSubstrate` resolves **once per run**
+and threads that one value into every RPC, so a run cannot straddle a rotation with half its
+calls authenticated. The client fails closed **before opening a socket** when nothing
+resolved — an unauthenticated call answers `16 / missing bearer token`, which reads as a
+broken cluster rather than the missing managed secret it is — and `withCredentialHint` turns
+a returned 16 into a message naming `substrateApiToken`. `SUBSTRATE_TOKEN` survives only as
+the local-dev/test fallback and is still never a repo variable or an agent env.
+
+**Invariant to preserve:** `substrateApiToken` is **not** synced into the actor's
+`substrate-credentials` namespace. `syncSubstrateSecrets` reads `githubToken`,
+`openrouterApiKey` and `imageRegistryPassword` by name and nothing else; adding this key
+would copy a cluster-privileged bearer into a namespace reachable by sandbox workload, which
+is the exact exfiltration path the egress boundary exists to close.
+
+| Task | How |
+|---|---|
+| First-time setup | Deploy to GCP's terraform job creates the secret + both grants and the mint Role, then **dispatch the rotator once by hand**; the cron takes over |
+| Rotate now | `gh workflow run substrate-token-rotate.yml` — also the recovery after a missed schedule |
+| Prove without the app | the `kubectl create token` mint above, then the probe the job's last step runs |
+| Retire | drop the cron trigger and revoke both bindings; disable the secret's versions rather than deleting them, which keeps the audit trail |
+
+Inputs that matter: `GCP_PROJECT_ID` / the WIF provider + deployer SA (who mints),
+`SUBSTRATE_CLUSTER_NAME` / `SUBSTRATE_CLUSTER_ZONE` (whose issuer is trusted — the job
+checks `iss` against it), `SUBSTRATE_INGRESS_HOSTNAME` (what the closing probe dials),
+`SUBSTRATE_ATEAPI_AUDIENCE`, `SUBSTRATE_TOKEN_SECRET`, `SUBSTRATE_TOKEN_DURATION`. No token
+value is ever any of them.
+
 ## 6. Key files
 
 
@@ -423,18 +539,26 @@ kubectl -n ate-system get pods -l app=atelet -o wide    # one per worker node, o
 - `packages/shared-core/src/agent/grpc-wire.js` — protobuf framing primitives.
 - `packages/shared-core/src/secrets/s2s-resolver.js` — single managed secret source.
 - `packages/shared-core/src/guardrails/{spec,consumers}.js` — unified spec + per-pattern renderers.
-- `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` branch (substrate|cloudrun).
-- `services/planner/src/routes/agent.js` — `/agent/substrate/*` and `/agent/guardrail` routes.
-- `services/planner/src/routes/substrate-actor.js` — actor-side `POST /internal/plan/run` (only mounted when `SUBSTRATE_ACTOR_MODE=true`).
-- `services/planner/src/jwks.js` — cached JWKS fetcher used by the actor route.
-- `deploy/gcp/terraform-substrate-gke/substrate.tf` — pool, namespaces, snapshots, ingress.
+- `packages/shared/src/agent/pattern-router.js` — `dispatchPlanning` (substrate is the only pattern).
+- `services/orchestrator/src/routes/agent.js` — `/agent/substrate/*` and `/agent/guardrail` routes.
+- `packages/shared/src/agent/substrate-actor.js` — actor-side `POST /internal/plan/run` (only mounted when `SUBSTRATE_ACTOR_MODE=true`).
+- `packages/shared/src/agent/substrate-jwks.js` — cached JWKS fetcher used by the actor route.
+- `deploy/gcp/terraform-substrate-gke/substrate.tf` — pool, namespaces, snapshots, ingress
+  and the `serviceaccounts/token` Role that lets the rotator mint the bearer (§5.4).
+- `deploy/gcp/terraform/substrate_token.tf` — the `substrate-ateapi-token` secret plus
+  the writer (rotator) and reader (settings) grants.
+- `.github/workflows/substrate-token-rotate.yml` — mints, publishes and verifies the
+  control-plane bearer (§5.4).
+- `services/settings/app/core/secret_manager.py` — reads the *latest* secret version on
+  demand over REST, so a rotating bearer is served fresh instead of being pinned into
+  the container env at deploy time.
 - `public/js/views/settings.js` — pattern selector + guardrails panel.
 
 ### Actor-mode env vars (set on the substrate ActorTemplate's container)
 
 | Var | Purpose |
 |---|---|
-| `SUBSTRATE_ACTOR_MODE=true` | Mounts the `/internal/plan/run` route; a normal planner pod does not register it. |
+| `SUBSTRATE_ACTOR_MODE=true` | Mounts the `/internal/plan/run` route; a normal orchestrator deployment does not register it. |
 | `SUBSTRATE_JWKS_URL=https://<ate-idp-server>/jwks.json` | Required. Without it the route returns 503 and refuses every request. |
 | `SUBSTRATE_ACTOR_JWT_AUDIENCE` | Defaults to `substrate-router`; must match the `aud` the runner mints. |
 | `SUBSTRATE_TRUST_DOMAIN` | Defaults to `cluster.local`; the SPIFFE trust domain the router forwards under. |
@@ -463,6 +587,22 @@ The **first apply with `substrate_enabled = true` shows the new resources as
 `create`** (pool, namespaces, snapshot class, ingress) — this is expected and does
 **not** destroy anything, so it passes the destroy gate. Do not set
 `gke_allow_destroy` for it.
+
+`.github/workflows/substrate-token-rotate.yml` (§5.4) is the third substrate workflow
+and the only scheduled one. It gets its **own** `concurrency.group:
+substrate-token-rotate` with `cancel-in-progress: false`: a rotation publishes and then
+re-reads the version it just wrote to prove the application will accept it, so
+interrupting one mid-flight can leave the newest version unproven — which is exactly
+what a silent credential expiry looks like from the outside.
+It deliberately does not join `substrate-cluster-power` — minting a token needs the
+control plane *up*, and the power workflow is what takes it down.
+
+The kubectl RBAC it needs (`substrate_ate_client_token_role`) renders from the
+`terraform-substrate-gke` module, so it exists only where the substrate cluster state
+does; the workflow itself touches no Terraform state. It is also gated on the same
+`substrate_control_plane_public` switch as the route it authorizes, which keeps the
+default deployment from granting a cloud identity the right to mint actors in a space
+nobody exposed.
 
 ## 8. Verification
 
@@ -502,7 +642,7 @@ Run this after the install workflow and before pointing any organization at the
 kubectl -n ate-system get deploy,sts,svc
 kubectl get crd | grep ate.dev
 
-# 2. A WorkerPool exists, is named what the planner selects, and has a Ready
+# 2. A WorkerPool exists, is named what the orchestrator selects, and has a Ready
 #    worker on a node atelet also runs on (see §5.3 — the pool is not installed
 #    by ate-setup, and a tainted-with-the-wrong-key node hosts no atelet).
 kubectl get workerpools.ate.dev -A
@@ -540,8 +680,13 @@ missing atespace/worker pool is the §5.1 field table, not a broken install.
   in `substrate.js` against the tracked `.proto`.
 - gVisor runsc must be available on the pool's node image; plain containers are
   unsupported. Cloud Hypervisor microVM is the fallback.
-- Actor cold-start / resume latency must fit inside the planner stage request
+- Actor cold-start / resume latency must fit inside the dispatching stage's request
   budget; measure on staging before defaulting orgs to `substrate`.
+- The control-plane bearer (§5.4) is a *deployment* dependency, not a config one: the
+  rotator only schedules once merged, and its kubectl permission only exists after a
+  `terraform-substrate-gke` apply. Until both land, every ateapi call fails closed with
+  the credential hint instead of silently trying anonymous — which reads as "the
+  control plane is down" in the status tile.
 
 ## 10. Operator access — why the panel can be missing
 
@@ -562,12 +707,12 @@ Three independent gates, checked in this order:
    and `AUTH_DEFAULT_ROLE=viewer`, so that account resolves to `admin` /
    `settings: write` and is not blocked at this gate.
 2. **Settings read path.** `GET /api/settings` must expose `agentPattern` and every
-   `substrate*` key (`publicSettings` in `services/planner/src/routes/settings.js`).
+   `substrate*` key (`publicSettings` in `services/orchestrator/src/routes/settings.js`).
    It exposed none of them while `POST /api/agent/substrate/pattern` happily persisted
    them, so the UI fell back to `cloudrun` on each load and the "Substrate configuration"
    card — gated on the active pattern being `substrate` — never appeared, making a
    correctly saved install look absent. Regression:
-   `services/planner/src/routes/settings.substrate.test.js`.
+   `services/orchestrator/src/routes/settings.substrate.test.js`.
 3. **Local install.** A `node_modules` older than the Langfuse migration aborts the whole
    stack at boot with `Cannot find module '@langfuse/client'`
    (`packages/shared/src/agent/analytics.js`), which also blocks `npm run test:e2e`.
@@ -578,7 +723,7 @@ Three independent gates, checked in this order:
 on `status_ok(status)` inside the same `const [status, actors] = await Promise.all([…])`
 destruction that defines `status`, so every operator saw an error string instead of a
 health line. Status is now awaited first and the actor list fetched only once connected.
-Regression: `services/planner/src/routes/agent.substrate.test.js`.
+Regression: `services/orchestrator/src/routes/agent.substrate.test.js`.
 
 ## 11. Loading one sandbox by hand
 
@@ -629,12 +774,12 @@ as an error rather than a silent no-op:
 agent cards, and the placeholder deliberately stops there instead of shipping a discoverable
 surface. An agent card is a *discovery* document — a stable, cacheable URL a peer resolves
 before it decides to call you — so the only party in this stack with anything to advertise is
-**the planner**: it is the one workload that already answers the two questions a peer would
+**the orchestrator**: it is the one workload that already answers the two questions a peer would
 ask. It can say who is calling, because `verifyActorJwt`
 (`packages/shared-core/src/agent/substrate-runner.js`) resolves a bearer to a SPIFFE identity
 and rejects anything outside the cluster trust domain, and it can say what a run cost, because
 the dispatcher meters `usage`/`costUsd`/`traceId` for the org that admitted it. A card would
-therefore point at the planner's run contract behind the gateway front, authenticated by a
+therefore point at the orchestrator's run contract behind the gateway front, authenticated by a
 per-org virtual key — not at an actor. **Actor-local A2A is out of scope for a reason that is
 structural, not editorial**: an actor is an ephemeral gVisor container that
 `runPlanningOnSubstrate` suspends and deletes in the same request's `finally`, so its address
@@ -642,7 +787,7 @@ under the atenet-router (`<atespace>/<actor>`, decided by the `ate-target-actor`
 reachable only for the seconds one run lasts. A card naming it would be a URL that 404s minutes
 later and that an external party caches anyway — and cross-tenant, it is worse than stale,
 because a resolver that outlives the run is pointing at a slot the next run's actor fills. The
-third reason is the cheapest to miss: there is no second party. planner↔coder is Pub/Sub plus
+third reason is the cheapest to miss: there is no second party. plan-stage↔code-stage is Pub/Sub plus
 Firestore stage commands, and putting a gateway-fronted A2A hop in the middle of that adds a
 credential boundary and a trace span without adding a counterpart to talk to. Turning the seam
 on is therefore a decision with three prerequisites — a card publisher, a cacheable address

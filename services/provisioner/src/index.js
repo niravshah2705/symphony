@@ -46,28 +46,18 @@ function buildCfg(projectNumber) {
     emailTopic: process.env.EMAIL_TOPIC || 'email-delivery',
     internalIngress: process.env.INTERNAL_INGRESS || 'INGRESS_TRAFFIC_ALL',
     pipelineOrchestratorEnabled: enabled('PIPELINE_ORCHESTRATOR_ENABLED', false),
-    pipelineDeploymentEnabled: enabled('PIPELINE_DEPLOYMENT_ENABLED', false),
     orgS2sSigningKey: process.env.ORG_S2S_SIGNING_KEY || '',
     // Empty means "this deployment has no Substrate control plane", which the
     // atespace step reports as SKIPPED instead of pretending it created one.
     substrateUrl: (CONFIG.SUBSTRATE && CONFIG.SUBSTRATE.url) || '',
     serviceAccounts: {
       gateway: process.env.GATEWAY_SA || '',
-      planner: process.env.PLANNER_SA || '',
-      coder: process.env.CODER_SA || '',
       orchestrator: process.env.ORCHESTRATOR_SA || '',
-      tester: process.env.TESTER_SA || '',
-      deployer: process.env.DEPLOYER_SA || '',
       pubsubPush: process.env.PUBSUB_PUSH_SA || '',
     },
     sourceServiceNames: {
       gateway: process.env.GATEWAY_SERVICE_NAME || 'gateway',
-      planner: process.env.PLANNER_SERVICE_NAME || 'planner',
-      coder: process.env.CODER_SERVICE_NAME || 'coder-control',
-      worker: process.env.CODER_JOB_NAME || 'coder-worker',
       orchestrator: process.env.ORCHESTRATOR_SERVICE_NAME || 'pipeline-orchestrator',
-      tester: process.env.TESTER_SERVICE_NAME || 'pipeline-tester',
-      deployer: process.env.DEPLOYER_SERVICE_NAME || 'pipeline-deployer',
     },
   };
 }

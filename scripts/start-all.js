@@ -13,7 +13,7 @@
  *   node scripts/start-all.js
  *   node scripts/start-all.js --watch
  *
- * Non-secret env (PORT, PLANNER_PORT, CODER_SERVICE_PORT, CODER_*, etc.) is
+ * Non-secret env (PORT, AGENT_SERVICE_PORT, ORCHESTRATOR_SERVICE_PORT, etc.) is
  * inherited by each child. Credentials are copied only into the process that
  * owns the corresponding capability.
  */
@@ -39,6 +39,7 @@ const egressProxyPort = Number(process.env.LOCAL_EGRESS_PROXY_PORT) || 4030;
 const streamTokenPort = Number(
   process.env.LOCAL_STREAM_TOKEN_PORT || process.env.LOCAL_STREAM_PROXY_PORT,
 ) || 4031;
+const agentServicePort = Number(process.env.AGENT_SERVICE_PORT) || 4010;
 
 const LOCAL_DEPENDENCIES = [
   { name: 'egress-proxy', entry: 'services/proxy/src/index.js', healthPort: egressProxyPort },
@@ -56,11 +57,8 @@ const SERVICES = [
   { name: 'email', entry: 'services/email/src/index.js' },
   { name: 'billing', entry: 'services/billing/src/index.js' },
   { name: 'identity-verification', entry: 'services/identity-verification/src/index.js' },
-  { name: 'planner', entry: 'services/planner/src/index.js' },
-  { name: 'coder', entry: 'services/coder/src/index.js' },
+  { name: 'agent', entry: 'services/orchestrator/src/agent-server.js' },
   ...(pipelineEnabled ? [
-    { name: 'tester', entry: 'services/tester/src/index.js' },
-    { name: 'deployer', entry: 'services/deployer/src/index.js' },
     { name: 'orchestrator', entry: 'services/orchestrator/src/index.js' },
   ] : []),
   { name: 'gateway', entry: 'services/gateway/src/index.js' },
@@ -110,8 +108,9 @@ function envFor(name) {
     env.STREAM_TOKEN_SECRET = localStreamSecret;
   } else if (name === 'gateway') {
     env.STREAM_TOKEN_SERVICE_URL = `http://127.0.0.1:${streamTokenPort}`;
-  } else if (['planner', 'coder', 'tester', 'deployer'].includes(name)) {
+  } else if (name === 'agent') {
     env.EGRESS_PROXY_URL = `http://127.0.0.1:${egressProxyPort}`;
+    env.PORT = String(agentServicePort);
   }
   if (String(env.EVENTS_BACKEND || 'memory').toLowerCase() === 'firestore') return env;
   const gatewayPort = Number(env.PORT) || 4000;

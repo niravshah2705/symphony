@@ -8,6 +8,16 @@ For the design and the operator-facing tables see
 [`SUBSTRATE_INTEGRATION.md`](./SUBSTRATE_INTEGRATION.md); this file is only the
 progress ledger and the by-hand path.
 
+> **Superseded 2026-11 (harness migration completed).** The custom Cloud Run
+> harness is retired: Agent Substrate is now the only execution pattern, and the
+> planner/coder/tester Cloud Run services no longer exist. Where this ledger says
+> "the planner deployment", read **the orchestrator** — the agent surface and the
+> substrate control env moved there. Causes 5 and 9 remain genuinely open: the
+> orchestrator still needs `substrate_url` wired (pending 1) and a control plane it
+> is allowed to dial (pending 2). The "silently keeps using the Cloud Run pattern"
+> symptom in cause 5 no longer applies — with the fallback gone, a missing
+> `SUBSTRATE_*` env fails loudly instead.
+
 ## Bottom line
 
 **Sandbox capacity is live.** A `WorkerPool` exists, its 2 workers are Ready and
@@ -19,7 +29,10 @@ cause 9 below, which does not affect sandbox capacity.
 
 **Not yet proven:** an actor created by *this app* reaching `ACTIVE`. The planner
 deployment still has no `SUBSTRATE_*` environment (see cause 5 below), so the
-application-side path is dark even though the substrate is able to serve one.
+application-side path is dark even though the substrate is able to serve one. Neither
+is the credential that path would send: the rotating bearer exists in code on this
+branch and nothing has applied it — no secret, no grants, no mint permission on the
+cluster.
 
 Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 
@@ -40,6 +53,8 @@ Run `deploy/gcp/substrate-check.sh` to reproduce every claim in this file.
 | The by-hand cluster state and the Terraform module agree | PR #271, verified by the merge-triggered apply | run [42684395694](https://github.com/niravshah2705/symphony/actions/runs/42684395694) job `reconcile substrate gke`: **"No changes. Your infrastructure matches the configuration"**, `Plan: 0 create, 0 update, 0 delete` — so the node GKE is running is the node the module describes, not just the node someone typed into `gcloud` |
 | Backup, force-teardown and restore as two scripts | `deploy/gcp/substrate-cleanup.sh`, `deploy/gcp/substrate-recreate.sh` | the restore ran end-to-end on 2026-11-10: 6 Ready nodes, `postgres-0 2/2`, `planner-pool` `2/2 Ready`, `atelet` on every worker node; the backup ran into `gs://adlc-9e72f-substrate-backup/` with 7/7 objects verified |
 | Both scripts as manual CI, with the permissions they need reported from the live policy | `.github/workflows/substrate-nodepools.yml`, pinned by `substrate-workflow-config.test.js` | `workflow_dispatch` only; `dry_run` default true plus a typed `confirm`; the authorization step fails a `--with-disk-snapshot` run because `compute.snapshots.create` is granted to the deployer SA nowhere in this project |
+| Gateway Direct VPC egress plumbing (dark) | PR #280 (**open**), `deploy/gcp/terraform/cloud_run.tf` + `gateway-vpc-egress.test.js` | `gateway_vpc_egress_enabled` defaults false and renders `vpc_access { network_interfaces {…} }` with `PRIVATE_RANGES_ONLY`; no traffic changes until the variable and a `vpc_network`/`vpc_subnet` pair are set. **Does not yet reach ateapi** — see pending 2, "private" |
+| The rotating control-plane bearer and everything it needs to be minted, stored and read (this branch, unmerged) | `substrate-token-rotate.yml`, `terraform/substrate_token.tf`, `substrate_ate_client_token_role`, `services/settings/app/core/secret_manager.py`, §5.4 of the integration doc | Recovered from the branch that never merged, and pinned by `substrate-workflow-config.test.js`: the rotator drives the same cluster/zone variables as the power workflow, mints one verb on one service account, publishes with `--data-file` and never echoes the token, and the client fails closed with a hint instead of dialling anonymously. **Not applied yet** — the secret, the grants and the Role all need a run |
 
 ## Teardown and restore
 
@@ -150,18 +165,33 @@ from asking it to, which is why it is the one still open.
    - **Private**: Cloud Run Direct VPC egress (or a Serverless VPC Connector) to the
      `api` Service, and `substrate_control_plane_public = false`. Nothing new is
      reachable from the internet, at the cost of a connector on every stack that runs
-     agents, and a cluster whose internal LB the connector can actually see.
+     agents, and a cluster whose internal LB the connector can actually see. The
+     egress half is now mergeable (PR #280, dark); the reach half is not — `api` is
+     headless (`ClusterIP: None`), so there is no address for VPC egress to dial until
+     an internal L4 Service for it exists. None does in this repo.
    - **Public**: keep the existing route, fix its backend to `api:443`, and put an
      authN policy in front of it — an Envoy `SecurityPolicy`/JWT check, or the
      `SUBSTRATE_TOKEN` bearer the client already supports, enforced server-side. This
      is the branch `substrate_control_plane_public`'s own description asks for ("leave
      false until the planner reaches ateapi over VPC egress or an authN policy is
-     attached to that route").
+     attached to that route"). The **bearer** half of this option is what the current
+     branch recovers (§5.4 of the integration doc): a 12 h credential minted by CI,
+     stored in Secret Manager, read per request by the settings service, refused
+     client-side when absent. Three things still stand between it and a usable route:
+     the backend name/port, a TLS hop for the backend (no `BackendTLSPolicy` exists
+     anywhere in this repo, and a GKE managed backend serving a self-signed
+     `istiod`-issued cert needs one), and the anonymous `grpc-status` probe that must
+     answer 16 and never 0 before the front is treated as authenticated.
    Today the flag is on **and** the route is dead, which fails closed by accident: the
-   hostname is published, so whoever fixes the backend name without adding authN
-   exposes an unauthenticated API that creates actors, deletes them and mints actor
-   JWTs. `substrate_ateapi_service` / `substrate_ateapi_port` therefore should not be
-   corrected on their own — they are one change with the authN decision.
+   hostname is published, so whoever fixes the backend name and port without first
+   checking what the front enforces may expose an API that creates actors, deletes
+   them and mints actor JWTs. The cluster does demand a JWT — `ate-api-authentication`
+   carries exactly one jwtProvider and an anonymous dial is refused — but that has only
+   been observed on the cluster network, never through the Gateway. So the order is:
+   CA + `BackendTLSPolicy` + corrected backend, then the anonymous probe from outside,
+   then the two variables. `substrate_ateapi_service` / `substrate_ateapi_port`
+   therefore should not be corrected on their own — they are one change with the authN
+   verification.
 
    > **Half of the private branch now exists, dark.** The gateway service carries an
    > optional `vpc_access` block (`gateway_vpc_egress_enabled` + `vpc_network` +

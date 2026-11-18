@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { MemoryPipelineStore } = require('@ai-fleet/shared-core/pipeline/storage');
 const { PipelineRunRepository } = require('@ai-fleet/shared-core/pipeline/repository');
-const { createStageResultV1 } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { createStageResultV1, createPreflightSnapshot } = require('@ai-fleet/shared-core/pipeline/contracts');
 const { PipelineOrchestrator } = require('./controller');
 const { SnapshotPreflight } = require('./preflight');
 const { fakeLangGraph } = require('./fake-langgraph.test-helper');
@@ -34,7 +34,7 @@ function result(command, status = 'succeeded', extra = {}) {
     ...(status === 'failed'
       ? { error: { code: 'stage_failed', message: 'Worker failed', retryable: true } }
       : {}),
-    ...(status === 'succeeded' && ['code', 'test', 'deploy'].includes(command.stage)
+    ...(status === 'succeeded' && ['code', 'test'].includes(command.stage)
       ? { artifact: { commitSha: 'a'.repeat(40), treeSha: 'b'.repeat(40) } }
       : {}),
     ...extra,
@@ -46,9 +46,7 @@ function setup({
   dispatch,
   cancel,
   graph,
-  deploymentApproval = null,
-  requireDeploymentApproval = false,
-  deploymentEnabled = false,
+  preflight,
 } = {}) {
   const commands = [];
   const repository = new PipelineRunRepository({ store, clock });
@@ -66,9 +64,7 @@ function setup({
     clock,
     langgraph: fakeLangGraph(),
     graph,
-    deploymentApproval,
-    requireDeploymentApproval,
-    preflight: new SnapshotPreflight({ clock, deploymentEnabled }),
+    preflight: preflight || new SnapshotPreflight({ clock }),
   });
   return { orchestrator, repository, commands, store };
 }
@@ -224,125 +220,41 @@ test('dispatch failure leaves a resumable checkpoint instead of creating a secon
   assert.deepEqual(context.commands.map((command) => command.commandId), ['run-1:plan:1', 'run-1:plan:1']);
 });
 
-test('production deployment pauses after test and resume attaches only post-test server approval', async () => {
-  let approval = null;
-  const context = setup({
-    deploymentEnabled: true,
-    requireDeploymentApproval: true,
-    deploymentApproval: { async assertApproved() { return approval; } },
-  });
-  const input = start(['plan', 'code', 'test', 'deploy']);
-  input.request.stageConfiguration = {
-    deploy: { enabled: true, environment: 'production', approval: { source: 'caller' } },
+// The deploy stage was retired with the Cloud Run deployer (2026-11): a run
+// already carrying deploy in requestedStages must close as succeeded at the
+// deploy transition instead of dispatching anything. Preflight rejects deploy
+// for NEW runs, so this exercises the legacy path with a stub snapshot.
+test('a legacy run reaching the deploy transition closes as succeeded', async () => {
+  const legacyPreflight = {
+    async capture(st) {
+      return createPreflightSnapshot({
+        runId: st.runId,
+        organizationId: st.organizationId,
+        projectId: st.projectId,
+        requestedStages: st.requestedStages,
+        repository: {},
+        workItem: {},
+        stageConfiguration: {},
+        policy: {},
+        capturedAt: clock(),
+        metadata: { source: 'test-legacy' },
+      }, { clock });
+    },
   };
-  await context.orchestrator.start(input);
-  let testResult;
+  const context = setup({ preflight: legacyPreflight });
+  await context.orchestrator.start(start(['plan', 'code', 'test', 'deploy']));
   for (const stage of ['plan', 'code', 'test']) {
     const command = context.commands.at(-1);
     assert.equal(command.stage, stage);
-    const stageResult = result(command, 'succeeded', stage === 'test'
-      ? { artifact: { commitSha: 'a'.repeat(40), treeSha: 'b'.repeat(40) } }
-      : {});
-    if (stage === 'test') testResult = stageResult;
-    await context.orchestrator.handleStageResult(stageResult);
+    await context.orchestrator.handleStageResult(result(command, 'succeeded'));
   }
-  let status = await context.orchestrator.status('run-1');
-  assert.equal(status.run.status, 'awaiting_approval');
-  assert.deepEqual(status.run.pendingDeploymentApproval, {
-    runId: 'run-1',
-    projectId: 'project-1',
-    repository: 'acme/fleet',
-    environment: 'production',
-    testCommandId: 'run-1:test:1',
-    commitSha: 'a'.repeat(40),
-    treeSha: 'b'.repeat(40),
-    preflightDecisionDigest: status.run.preflight.preflightDecisionDigest,
-  });
+
+  const status = await context.orchestrator.status('run-1');
+  assert.equal(status.run.status, 'succeeded');
+  assert.equal(status.run.pendingDeploymentApproval, null);
   assert.deepEqual(context.commands.map((command) => command.stage), ['plan', 'code', 'test']);
 
-  approval = {
-    approved: true,
-    approvalId: 'approval-1',
-    by: 'release@example.com',
-    // The fixture clock gives test completion this exact timestamp; equality is
-    // allowed and represents approval committed in the same logical instant.
-    at: clock(),
-    testCommandId: testResult.commandId,
-    commitSha: testResult.artifact.commitSha,
-    treeSha: testResult.artifact.treeSha,
-    preflightDecisionDigest: status.run.preflight.preflightDecisionDigest,
-  };
-  status = await context.orchestrator.resume('run-1');
-  assert.equal(status.run.status, 'waiting');
-  assert.equal(status.run.pendingDeploymentApproval, null);
-  const deploy = context.commands.at(-1);
-  assert.equal(deploy.stage, 'deploy');
-  assert.deepEqual(deploy.input.deploymentApproval, {
-    approved: true,
-    approvalId: 'approval-1',
-    by: 'release@example.com',
-    at: clock(),
-    source: 'server',
-    testCommandId: 'run-1:test:1',
-    commitSha: 'a'.repeat(40),
-    treeSha: 'b'.repeat(40),
-    preflightDecisionDigest: status.run.preflight.preflightDecisionDigest,
-    deployCommandId: 'run-1:deploy:1',
-  });
-  assert.equal(deploy.preflight.stageConfiguration.deploy.approval, null);
-});
-
-test('a consumed deployment approval survives a crash before the deploy command claim', async () => {
-  let approval = null;
-  const first = setup({
-    deploymentEnabled: true,
-    deploymentApproval: { async assertApproved() { return approval; } },
-  });
-  const input = start(['plan', 'code', 'test', 'deploy']);
-  input.request.stageConfiguration = { deploy: { enabled: true, environment: 'production' } };
-  await first.orchestrator.start(input);
-  let testResult;
-  for (const stage of ['plan', 'code', 'test']) {
-    const command = first.commands.at(-1);
-    const stageResult = result(command, 'succeeded', stage === 'test'
-      ? { artifact: { commitSha: 'c'.repeat(40), treeSha: 'd'.repeat(40) } }
-      : {});
-    if (stage === 'test') testResult = stageResult;
-    await first.orchestrator.handleStageResult(stageResult);
-  }
-  const waiting = await first.orchestrator.status('run-1');
-  approval = {
-    approved: true,
-    approvalId: 'approval-durable',
-    by: 'release@example.com',
-    at: clock(),
-    testCommandId: testResult.commandId,
-    commitSha: testResult.artifact.commitSha,
-    treeSha: testResult.artifact.treeSha,
-    preflightDecisionDigest: waiting.run.preflight.preflightDecisionDigest,
-  };
-  let consumeCalls = 0;
-  const crashing = setup({
-    store: first.store,
-    deploymentEnabled: true,
-    deploymentApproval: { async assertApproved() { consumeCalls += 1; return approval; } },
-    graph: { async invoke() { throw new Error('process crashed before deploy claim'); } },
-  });
-
-  await assert.rejects(() => crashing.orchestrator.resume('run-1'), /process crashed/);
-  const afterCrash = await crashing.repository.getRun('run-1');
-  assert.equal(afterCrash.deploymentApprovalClaim.deployCommandId, 'run-1:deploy:1');
-  assert.equal(afterCrash.checkpoint.activeCommandId, null);
-
-  const reconstructed = setup({
-    store: first.store,
-    deploymentEnabled: true,
-    deploymentApproval: { async assertApproved() { throw new Error('approval was consumed twice'); } },
-  });
-  const resumed = await reconstructed.orchestrator.resume('run-1');
-
-  assert.equal(consumeCalls, 1);
-  assert.equal(resumed.run.status, 'waiting');
-  assert.equal(reconstructed.commands[0].commandId, 'run-1:deploy:1');
-  assert.equal(reconstructed.commands[0].input.deploymentApproval.approvalId, 'approval-durable');
+  const again = await context.orchestrator.advance('run-1');
+  assert.equal(again.run.status, 'succeeded');
+  assert.equal(context.commands.length, 3, 'a retired stage must never re-dispatch');
 });

@@ -4,8 +4,8 @@
 #
 # Keeps the CRG SQLite graph and the graphify AST graph fresh so "where/who/what
 # connects" queries stay accurate (see CLAUDE.md → "Querying the code"). Both are
-# gitignored local caches — this does NOT touch committed docs (that's the
-# drift-gated pre-commit hook).
+# gitignored local caches, as is the generated docs/code-graph/ map — nothing
+# here stages, commits, or blocks anything.
 #
 # Runs detached so `git commit` returns immediately, and is PID-locked so
 # concurrent commits don't pile up rebuilds.

@@ -3,7 +3,7 @@
 const { CONFIG } = require('../config');
 
 /**
- * Request publisher for the planner/coder on-demand path.
+ * Request publisher for the planner on-demand path.
  *
  * Two modes (CONFIG.MESSAGING_MODE):
  *   - 'pubsub' : publish to a Cloud Pub/Sub topic (push-delivered to the service).
@@ -14,8 +14,7 @@ const { CONFIG } = require('../config');
 
 // Topic name -> the in-process HTTP endpoint that handles it (direct mode).
 function directRoute(topic) {
-  if (topic === CONFIG.GCP.plannerTopic) return `${CONFIG.SERVICES.plannerUrl}/pubsub/planner`;
-  if (topic === CONFIG.GCP.coderTopic) return `${CONFIG.SERVICES.coderUrl}/pubsub/coder`;
+  if (topic === CONFIG.GCP.plannerTopic) return `${CONFIG.SERVICES.agentUrl}/pubsub/planner`;
   if (topic === CONFIG.GCP.emailTopic) return `${CONFIG.SERVICES.emailUrl}/pubsub/email`;
   return null;
 }

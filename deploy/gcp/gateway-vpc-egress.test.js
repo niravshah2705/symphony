@@ -12,8 +12,9 @@
 // The second half is scope. Egress changes the SOURCE IP of everything the
 // service sends into the VPC range, so a block that leaked onto a second service
 // would move traffic nobody reviewed. Today the gateway is the only one, on
-// purpose (planner/coder are being retired); this file pins that so widening it
-// stays a decision rather than a copy-paste.
+// purpose — the ateapi front this was meant to reach is still headless, so no
+// other workload has a reason to be on the VPC; this file pins that so widening
+// it stays a decision rather than a copy-paste.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -138,7 +139,7 @@ test('only the gateway has egress, and enabling it requires both names', () => {
   assert.equal(
     (cloudRunTf.match(/^\s+network_interfaces \{/gm) || []).length,
     1,
-    'exactly one service may join the VPC until the planner/coder question is settled',
+    'exactly one service may join the VPC until an internal front for ateapi exists',
   );
   const lifecycle = /lifecycle \{([\s\S]*?)\n  \}/.exec(services.gateway);
   assert.ok(lifecycle, 'the gateway resource lost its lifecycle block');

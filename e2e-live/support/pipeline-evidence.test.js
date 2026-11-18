@@ -33,7 +33,6 @@ test('latestStageRuns and stageSummary select the newest attempt in canonical or
     'plan: succeeded',
     'code: waiting',
     'test: pending',
-    'deploy: pending',
   ]);
 });
 

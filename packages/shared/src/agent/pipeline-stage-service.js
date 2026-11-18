@@ -24,7 +24,6 @@ const DEFAULT_RESULTS_TOPICS = Object.freeze({
   plan: 'pipeline-plan-results',
   code: 'pipeline-code-results',
   test: 'pipeline-test-results',
-  deploy: 'pipeline-deploy-results',
 });
 const DEFAULT_ORCHESTRATOR_PORT = 4070;
 const MAX_COMPLETED_RESULTS = 1_000;

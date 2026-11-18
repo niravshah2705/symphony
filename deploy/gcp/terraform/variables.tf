@@ -15,7 +15,7 @@ variable "region" {
 
 variable "firestore_location" {
   type        = string
-  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Kept at nam5 so an apply never tries to move the existing database in place."
+  description = "Firestore location. May be a region (e.g. asia-south1) or a multi-region (nam5, eur3). IMMUTABLE — cannot be changed after the database is created; relocating it needs a data migration (see docs/GCP_REGION_MIGRATION.md). Pass the location the existing database actually lives in; the nam5 default is a placeholder, and prevent_destroy on the database blocks a plan that would move it."
   default     = "nam5"
 }
 
@@ -55,32 +55,9 @@ variable "gateway_image_tag" {
   default = ""
 }
 
-variable "planner_image_tag" {
-  type    = string
-  default = ""
-}
-
-variable "coder_image_tag" {
-  type        = string
-  description = "Tag for coder-control AND the coder-worker Job (they share one image)."
-  default     = ""
-}
-
 variable "orchestrator_image_tag" {
   type        = string
-  description = "Per-service image tag for the lightweight durable pipeline orchestrator."
-  default     = ""
-}
-
-variable "tester_image_tag" {
-  type        = string
-  description = "Per-service image tag for the brokered pipeline tester."
-  default     = ""
-}
-
-variable "deployer_image_tag" {
-  type        = string
-  description = "Per-service image tag for the brokered pipeline deployer."
+  description = "Per-service image tag for the orchestrator (agent surface + durable pipeline)."
   default     = ""
 }
 
@@ -115,29 +92,9 @@ variable "gateway_service_name" {
   default = "gateway"
 }
 
-variable "planner_service_name" {
-  type    = string
-  default = "planner"
-}
-
-variable "coder_service_name" {
-  type    = string
-  default = "coder-control"
-}
-
 variable "orchestrator_service_name" {
   type    = string
   default = "pipeline-orchestrator"
-}
-
-variable "tester_service_name" {
-  type    = string
-  default = "pipeline-tester"
-}
-
-variable "deployer_service_name" {
-  type    = string
-  default = "pipeline-deployer"
 }
 
 variable "org_service_name" {
@@ -320,12 +277,6 @@ variable "cashfree_base_url" {
   default     = "https://sandbox.cashfree.com"
 }
 
-variable "coder_job_name" {
-  type        = string
-  description = "Cloud Run Job name. MUST match the CODER_JOB_NAME env the coder-control service uses to launch it."
-  default     = "coder-worker"
-}
-
 # --- Mandatory egress proxy + stream-token broker ----------------------------
 
 variable "secret_vault_kms_enabled" {
@@ -472,7 +423,8 @@ variable "internal_api_token" {
 variable "internal_ingress" {
   type        = string
   description = <<-EOT
-    Ingress for the non-public services (planner, coder-control). Default is
+    Ingress for the non-public services (orchestrator, provisioner).
+    Default is
     INGRESS_TRAFFIC_ALL, but they remain IAM-gated (no allUsers invoker) — every
     caller MUST present an OIDC token for gateway-sa or pubsub-push-sa. This lets
     the gateway reverse-proxy its read endpoints over the run.app hostname with an
@@ -648,7 +600,7 @@ variable "cloud_run_service_cpu" {
 
 variable "cloud_run_proxy_cpu" {
   type        = string
-  description = "vCPU limit for egress-proxy sidecars and the standalone stream-token broker on gen2 Cloud Run. Supported values are 1 or 2; Cloud Run Jobs use coder_job_proxy_cpu."
+  description = "vCPU limit for egress-proxy sidecars and the standalone stream-token broker on gen2 Cloud Run. Supported values are 1 or 2."
   default     = "1"
 
   validation {
@@ -660,18 +612,14 @@ variable "cloud_run_proxy_cpu" {
 # --- Pub/Sub topics -----------------------------------------------------------
 
 variable "planner_topic" {
-  type    = string
-  default = "planner-requests"
-}
-
-variable "coder_topic" {
-  type    = string
-  default = "coder-requests"
+  type        = string
+  description = "Legacy planner-queue topic — the gateway publishes, the orchestrator's /pubsub/planner push consumes."
+  default     = "planner-requests"
 }
 
 # Durable pipeline command/result topics are deliberately distinct from the
-# legacy planner/coder request topics. Reusing either legacy topic would fan a
-# typed StageCommand into the autonomous-label handlers.
+# legacy planner request topic. Reusing it would fan a typed StageCommand into
+# the autonomous-label handlers.
 variable "pipeline_plan_topic" {
   type    = string
   default = "pipeline-plan-commands"
@@ -685,11 +633,6 @@ variable "pipeline_code_topic" {
 variable "pipeline_test_topic" {
   type    = string
   default = "pipeline-test-commands"
-}
-
-variable "pipeline_deploy_topic" {
-  type    = string
-  default = "pipeline-deploy-commands"
 }
 
 variable "pipeline_plan_results_topic" {
@@ -707,20 +650,9 @@ variable "pipeline_test_results_topic" {
   default = "pipeline-test-results"
 }
 
-variable "pipeline_deploy_results_topic" {
-  type    = string
-  default = "pipeline-deploy-results"
-}
-
 variable "pipeline_orchestrator_enabled" {
   type        = bool
   description = "Create and enable the durable fixed-stage pipeline topology. False preserves the legacy autonomous label flow and creates no pipeline Cloud Run/Pub/Sub resources."
-  default     = false
-}
-
-variable "pipeline_deployment_enabled" {
-  type        = bool
-  description = "Allow the deploy stage after the full plan/code/test/deploy sequence. False is the fail-closed default."
   default     = false
 }
 
@@ -807,14 +739,8 @@ variable "ack_deadline_seconds" {
 
 variable "planner_schedule" {
   type        = string
-  description = "Planner cadence tick — POSTs to /pubsub/planner-tick."
+  description = "Planner-queue cadence tick — POSTs to the orchestrator's /pubsub/planner-tick."
   default     = "*/5 * * * *"
-}
-
-variable "coder_schedule" {
-  type        = string
-  description = "Coder board-poll tick — POSTs to /pubsub/coder-tick."
-  default     = "*/2 * * * *"
 }
 
 variable "billing_schedule" {
@@ -913,34 +839,11 @@ variable "billing_job_dry_run" {
   default     = false
 }
 
-# --- Coder worker Job knobs ---------------------------------------------------
-
-variable "coder_job_task_timeout" {
-  type        = string
-  description = "Max wall-clock for one coder ticket (a worker runs one ticket to completion). Cloud Run Job task timeout maxes at 24h."
-  default     = "86400s"
-}
-
-variable "coder_job_cpu" {
-  type        = string
-  description = "vCPU limit for the coder-worker app container. Cloud Run Job containers require at least 1 vCPU."
-  default     = "1"
-}
-
-variable "coder_job_proxy_cpu" {
-  type        = string
-  description = "vCPU limit for the coder-worker egress-proxy sidecar. Kept independent so increasing worker CPU does not overprovision the proxy; Cloud Run Job containers require at least 1 vCPU."
-  default     = "1"
-}
-
-variable "coder_job_memory" {
-  type    = string
-  default = "4Gi"
-}
+# --- Optional default repo for the OpenSWE backend ----------------------------
 
 variable "coder_repo_url" {
   type        = string
-  description = "Optional default repo the coder clones (CODER_REPO_URL). Usually set per-project instead; leave empty to rely on per-project config."
+  description = "Optional default repo the OpenSWE backend clones (CODER_REPO_URL, read by packages/shared-core/src/config.js). Usually set per-project instead; leave empty to rely on per-project config."
   default     = ""
 }
 
@@ -995,8 +898,8 @@ variable "spa_origin" {
 
 # --- Skills registry (GCS bucket, gcsfuse mount) -----------------------------
 # See skills.tf. Terraform CREATES and OWNS the bucket. skills_enabled toggles the
-# whole feature (bucket + mounts + SKILLS_ROOT env); when off, planner/coder fall
-# back to the vendored skills baked into the image. The bucket name defaults to a
+# whole feature (bucket + mounts + SKILLS_ROOT env); when off, the orchestrator
+# falls back to the vendored skills baked into the image. The bucket name defaults to a
 # stable derived value ("<project_id>-aifleet-skills") — skills_bucket_name is an
 # OPTIONAL override, no longer a pre-existing bucket the operator must supply.
 
@@ -1008,7 +911,7 @@ variable "skills_enabled" {
 
 variable "skills_mount_enabled" {
   type        = bool
-  description = "Mount the skills bucket read-only via gcsfuse (+ SKILLS_ROOT/SKILLS_VERSION env) on planner/coder. Default OFF: the fuse mount under the gen2 execution environment currently fails the coder-control startup probe (heavy dual-role image) and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → services use the vendored skills baked into the image."
+  description = "Mount the skills bucket read-only via gcsfuse (+ SKILLS_ROOT/SKILLS_VERSION env) on the orchestrator. Default OFF: the fuse mount under the gen2 execution environment previously failed the heavy dual-role startup probe and needs validation (and an initially-populated bucket + a resolveSkillsSrc empty-mount fallback) before enabling. Requires skills_enabled. Off → the service uses the vendored skills baked into the image."
   default     = false
 }
 
@@ -1042,7 +945,7 @@ variable "attachments_bucket_force_destroy" {
 
 variable "skills_version" {
   type        = string
-  description = "Skills bundle version the runtime PINS (SKILLS_VERSION). The planner/coder read /skills/<skills_version>/<skill>/SKILL.md, so bumping the published bundle to a new version does NOT affect a deployment until this is bumped — older pinned versions keep working. Must match a published `<version>/` prefix in the bucket."
+  description = "Skills bundle version the runtime PINS (SKILLS_VERSION). The orchestrator reads /skills/<skills_version>/<skill>/SKILL.md, so bumping the published bundle to a new version does NOT affect a deployment until this is bumped — older pinned versions keep working. Must match a published `<version>/` prefix in the bucket."
   default     = "v1"
 }
 
@@ -1096,7 +999,7 @@ variable "laya_models_publisher_member" {
 
 variable "memory_enabled" {
   type        = bool
-  description = "Create the Terraform-managed Cloud SQL for PostgreSQL memory instance (+ database/user/URL secret) and wire MEMORY_DATABASE_URL + the /cloudsql socket into planner/coder. false disables the feature entirely and keeps the stack at $0."
+  description = "Create the Terraform-managed Cloud SQL for PostgreSQL memory instance (+ database/user/URL secret) and wire the connection-string secret file + the /cloudsql socket into the orchestrator. false disables the feature entirely and keeps the stack at $0."
   default     = false
 }
 
@@ -1556,7 +1459,7 @@ variable "substrate_worker_pool" {
 
 variable "substrate_planner_image" {
   type        = string
-  description = "Container image an actor workspace is created from. Empty falls back to the per-run image a caller names, which the planner takes from org settings. It is NOT the Cloud Run planner image: an actor needs the agent toolchain in the image, while the Cloud Run service only serves HTTP."
+  description = "Container image an actor workspace is created from (built from deploy/gcp/Dockerfile.substrate-actor). Empty falls back to the per-run image a caller names, which the orchestrator takes from org settings. It is NOT the orchestrator's Cloud Run image: an actor needs the agent toolchain in the image, while the Cloud Run service only serves HTTP."
   default     = ""
 }
 
@@ -1584,25 +1487,25 @@ variable "substrate_actor_ttl_ms" {
 
 variable "substrate_jwks_url" {
   type        = string
-  description = "JWKS the planner uses to verify a substrate actor's own JWT at POST /internal/substrate/actor. Empty disables that endpoint (it stays closed unless BOTH substrate_actor_mode and this are set) — which is the safe half-state, since the endpoint accepts a prompt on behalf of an org."
+  description = "JWKS the orchestrator uses to verify a substrate actor's own JWT at POST /internal/plan/run. Empty disables that endpoint (it stays closed unless BOTH substrate_actor_mode and this are set) — which is the safe half-state, since the endpoint accepts a prompt on behalf of an org."
   default     = ""
 }
 
 variable "substrate_actor_mode" {
   type        = bool
-  description = "Accept actor-originated dispatches on the planner. Paired with substrate_jwks_url: the endpoint refuses to open for a deployment that cannot verify the token it would be trusting."
+  description = "Accept actor-originated dispatches on the orchestrator. Paired with substrate_jwks_url: the endpoint refuses to open for a deployment that cannot verify the token it would be trusting."
   default     = false
 }
 
 variable "substrate_actor_member" {
   type        = string
-  description = "The IAM member a substrate actor invokes the planner as — a Google service account email, or the Workload Identity Federation principal of the cluster identity the actors run under (the same identity SUBSTRATE_TRUST_DOMAIN describes). It is the receiving half of substrate_actor_mode: empty creates no invoker binding, so the router is mounted but nobody can reach it. You cannot open /internal/plan/run without naming WHO may call it."
+  description = "The IAM member a substrate actor invokes the orchestrator as — a Google service account email, or the Workload Identity Federation principal of the cluster identity the actors run under (the same identity SUBSTRATE_TRUST_DOMAIN describes). It is the receiving half of substrate_actor_mode: empty creates no invoker binding, so the router is mounted but nobody can reach it. You cannot open /internal/plan/run without naming WHO may call it."
   default     = ""
 }
 
 variable "substrate_actor_jwt_audience" {
   type        = string
-  description = "audience a substrate actor JWT must carry to be accepted by the planner's /internal/plan/run. It is whatever the control plane stamps, not a value invented here; the default matches substrate-runner's own default."
+  description = "audience a substrate actor JWT must carry to be accepted by the orchestrator's /internal/plan/run. It is whatever the control plane stamps, not a value invented here; the default matches substrate-runner's own default."
   default     = "substrate-router"
 }
 

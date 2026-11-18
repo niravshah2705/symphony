@@ -35,9 +35,10 @@ the code map — read the [Developer Onboarding guide](./docs/DEVELOPER_ONBOARDI
 ## Finding your way around
 
 - [`CLAUDE.md`](./CLAUDE.md) — the developer/agent guide to the monorepo.
-- [`docs/code-graph/index.md`](./docs/code-graph/index.md) — an auto-generated
-  structural map of the whole codebase (functions, classes, and tests grouped into
-  communities with `file:line` locations). **Read it before exploring the source.**
+- `docs/code-graph/index.md` — an auto-generated structural map of the whole
+  codebase (functions, classes, and tests grouped into communities with
+  `file:line` locations). **Local-only output:** run `npm run docs:code` to
+  generate it, then read it before exploring the source.
 - Per-service guides live alongside each service (e.g. `services/org/CLAUDE.md`).
 
 ## Running the tests
@@ -51,18 +52,18 @@ The Python services have their own `pytest` suites (see `services/org` and
 `services/settings`). CI runs all of these — see the **Checks** workflow at
 [`.github/workflows/checks.yml`](./.github/workflows/checks.yml).
 
-## The code-map pre-commit hook (important)
+## Code map: local only, no pre-commit gate
 
-A pre-commit hook regenerates `docs/code-graph/` and **blocks the commit** if the
-result differs from what you staged, so the map never drifts from the code.
+The pre-commit hook that regenerated `docs/code-graph/` and blocked commits on
+drift was **removed (2026-11)**; the pages are gitignored and never committed.
+Generate the map locally whenever you want to read it (`npm run docs:code`).
+
+The `.githooks/post-commit` hook remains and refreshes the local query indexes
+in the background after each commit; enable it once per clone:
 
 ```bash
-npm run hooks:install   # enable the repo git hooks (once per clone)
+npm run hooks:install
 ```
-
-- On a block: `git add -A docs/code-graph` and commit again.
-- Regenerate manually anytime: `npm run docs:code`.
-- Requires the CLI: `pipx install code-review-graph`.
 
 See [`.githooks/README.md`](./.githooks/README.md) for details.
 

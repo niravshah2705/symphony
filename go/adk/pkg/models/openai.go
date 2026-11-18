@@ -1,0 +1,226 @@
+package models
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"github.com/openai/openai-go/v3"
+	"github.com/openai/openai-go/v3/option"
+
+	"github.com/niravshah2705/symphony/go/adk/pkg/internal/azureai"
+	"github.com/niravshah2705/symphony/go/core/pkg/env"
+	"github.com/niravshah2705/symphony/go/pkg/logging"
+)
+
+// OpenAI API format values (ModelConfig openAI.apiFormat).
+const (
+	OpenAIAPIFormatChatCompletions = "chatCompletions"
+	OpenAIAPIFormatResponses       = "responses"
+)
+
+// OpenAIConfig holds OpenAI configuration
+type OpenAIConfig struct {
+	TransportConfig
+	Model   string
+	BaseUrl string
+	// APIKey overrides OPENAI_API_KEY unless APIKeyPassthrough is enabled.
+	// If both keys are empty, only a custom BaseUrl may be used without authentication.
+	APIKey              string
+	FrequencyPenalty    *float64
+	MaxTokens           *int64
+	MaxCompletionTokens *int64
+	N                   *int64
+	PresencePenalty     *float64
+	ReasoningEffort     *string
+	Seed                *int64
+	Temperature         *float64
+	TopP                *float64
+	// APIFormat selects chatCompletions (default) or responses.
+	APIFormat string
+	// StrictOutputSchema sends strict with this value alongside the structured
+	// output schema. Nil omits strict.
+	StrictOutputSchema *bool
+}
+
+// AzureOpenAIConfig holds Azure OpenAI configuration
+type AzureOpenAIConfig struct {
+	TransportConfig
+	Model      string
+	Endpoint   string
+	Deployment string
+	APIVersion string
+	APIFormat  string
+
+	StrictOutputSchema *bool
+
+	// credential overrides the Azure credential used for the implicit Workload
+	// Identity auth path. When nil, azureai.NewDefaultCredential is used. It is
+	// unexported and exists so tests can inject a fake credential.
+	credential azureai.TokenCredential
+}
+
+// OpenAIModel implements model.LLM (see openai_adk.go) for OpenAI/Azure OpenAI.
+type OpenAIModel struct {
+	Config  *OpenAIConfig
+	Client  openai.Client
+	IsAzure bool
+	Logger  *slog.Logger
+}
+
+// NewOpenAIModel creates a new OpenAI model instance.
+func NewOpenAIModel(ctx context.Context, config *OpenAIConfig) (*OpenAIModel, error) {
+	apiKey, err := resolveOpenAIAPIKey(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	logger := logging.FromContext(ctx)
+	opts := []option.RequestOption{
+		// An empty key overrides the SDK's own OPENAI_API_KEY default, so the
+		// client sends no Authorization header.
+		option.WithAPIKey(apiKey),
+	}
+	if config.BaseUrl != "" {
+		opts = append(opts, option.WithBaseURL(config.BaseUrl))
+	}
+	httpClient, err := BuildHTTPClient(config.TransportConfig)
+	if err != nil {
+		return nil, err
+	}
+	if len(config.Headers) > 0 {
+		logger.InfoContext(ctx, "setting default headers for OpenAI client", "headers_count", len(config.Headers))
+	}
+	opts = append(opts, option.WithHTTPClient(httpClient))
+
+	client := openai.NewClient(opts...)
+	logger.InfoContext(ctx, "initialized OpenAI model", "model", config.Model, "base_url", config.BaseUrl)
+	return &OpenAIModel{
+		Config:  config,
+		Client:  client,
+		IsAzure: false,
+		Logger:  logger,
+	}, nil
+}
+
+// resolveOpenAIAPIKey resolves the data-plane API key for the OpenAI provider.
+// api.openai.com requires a key. A custom baseURL may point at an
+// OpenAI-compatible endpoint that takes no credentials, so there a missing key
+// yields an empty one and the client sends no Authorization header. With
+// passthrough the transport sets the key per request.
+func resolveOpenAIAPIKey(ctx context.Context, config *OpenAIConfig) (string, error) {
+	if config.APIKeyPassthrough {
+		return "passthrough", nil
+	}
+	if config.APIKey != "" {
+		return config.APIKey, nil
+	}
+	if apiKey := env.OpenAIAPIKey.Get(); apiKey != "" {
+		return apiKey, nil
+	}
+	if config.BaseUrl == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY environment variable is not set")
+	}
+	logging.FromContext(ctx).WarnContext(ctx,
+		"no OpenAI API key is set; calling the custom OpenAI base URL without an Authorization header",
+		"base_url", config.BaseUrl)
+	return "", nil
+}
+
+// NewAzureOpenAIModel creates a new Azure OpenAI model instance with a logger.
+// It targets the Azure OpenAI OpenAI-compatible data plane
+// (POST {endpoint}/openai/deployments/{deployment}/chat/completions) through the
+// shared azureai client. Endpoint, api-version, and deployment come from the
+// model config, with AZURE_OPENAI_ENDPOINT / OPENAI_API_VERSION env fallbacks.
+//
+// Authentication is implicit and mirrors Foundry: the incoming bearer token when
+// APIKeyPassthrough is enabled; otherwise the AZURE_OPENAI_API_KEY Api-Key header
+// when set; otherwise DefaultAzureCredential, which resolves to Azure Workload
+// Identity in-cluster (or the az CLI in local development). The Workload Identity
+// path eagerly acquires a token so a missing or misconfigured identity fails
+// readiness at startup instead of on the first inference request.
+func NewAzureOpenAIModel(ctx context.Context, config *AzureOpenAIConfig) (*OpenAIModel, error) {
+	logger := logging.FromContext(ctx)
+	endpoint := config.Endpoint
+	if endpoint == "" {
+		endpoint = env.AzureOpenAIEndpoint.Get()
+	}
+	if endpoint == "" {
+		return nil, fmt.Errorf("AZURE_OPENAI_ENDPOINT environment variable is not set")
+	}
+
+	apiVersion := config.APIVersion
+	if apiVersion == "" {
+		apiVersion = env.OpenAIAPIVersion.Get()
+	}
+	if apiVersion == "" {
+		apiVersion = "2024-02-15-preview"
+	}
+
+	deployment := config.Deployment
+	if deployment == "" {
+		deployment = config.Model
+	}
+
+	httpClient, err := BuildHTTPClient(config.TransportConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	clientCfg := azureai.ClientConfig{
+		Endpoint:   endpoint,
+		Deployment: deployment,
+		APIVersion: apiVersion,
+		HTTPClient: httpClient,
+		V1:         config.APIFormat == OpenAIAPIFormatResponses,
+	}
+
+	// Implicit auth: the incoming bearer token when APIKeyPassthrough is enabled
+	// (a placeholder Api-Key is overwritten per request by openAIPassthroughOpts),
+	// otherwise the AZURE_OPENAI_API_KEY Api-Key header, otherwise
+	// DefaultAzureCredential (Workload Identity), eagerly probed for readiness.
+	apiKey := env.AzureOpenAIAPIKey.Get()
+	if config.APIKeyPassthrough {
+		apiKey = "passthrough"
+	}
+	if err := azureai.ApplyImplicitAuth(ctx, &clientCfg, azureai.AuthOptions{
+		APIKey:     apiKey,
+		Credential: config.credential,
+		EagerProbe: true,
+	}); err != nil {
+		return nil, err
+	}
+
+	client, err := azureai.NewOpenAIClient(clientCfg)
+	if err != nil {
+		return nil, err
+	}
+	logger.InfoContext(ctx, "initialized Azure OpenAI model", "model", config.Model, "deployment", deployment, "endpoint", endpoint, "api_version", apiVersion, "api_format", config.APIFormat)
+	return &OpenAIModel{
+		Config: &OpenAIConfig{
+			TransportConfig:    config.TransportConfig,
+			Model:              deployment,
+			APIFormat:          config.APIFormat,
+			StrictOutputSchema: config.StrictOutputSchema,
+		},
+		Client:  client,
+		IsAzure: true,
+		Logger:  logger,
+	}, nil
+}
+
+// openAIPassthroughOpts returns a per-request option that injects the bearer token from ctx
+// For OpenAI the SDK sends this as "Authorization: Bearer <token>".
+// For Azure the SDK sends this as "Api-Key: <token>" via option.WithHeader.
+func openAIPassthroughOpts(ctx context.Context, m *OpenAIModel) []option.RequestOption {
+	if m.Config == nil {
+		return nil
+	}
+	token, ok := PassthroughToken(ctx, m.Config.APIKeyPassthrough)
+	if !ok {
+		return nil
+	}
+	if m.IsAzure {
+		return []option.RequestOption{option.WithHeader("Api-Key", token)}
+	}
+	return []option.RequestOption{option.WithAPIKey(token)}
+}

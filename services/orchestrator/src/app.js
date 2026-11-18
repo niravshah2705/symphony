@@ -140,12 +140,33 @@ function errorResponse(error) {
   return { status: 500, body: { error: 'Pipeline service unavailable.', code: 'pipeline_service_unavailable' } };
 }
 
-function createApp({ orchestrator, config, logger, authenticatePush, verifyResultToken } = {}) {
+function createApp({ orchestrator, config, logger, authenticatePush, verifyResultToken, substrateActor } = {}) {
   if (!orchestrator) throw new TypeError('orchestrator is required.');
   if (!config) throw new TypeError('config is required.');
   const log = logger || { info() {}, warn() {}, error() {} };
   const app = express();
   app.disable('x-powered-by');
+  // Substrate actor mode: this process IS the actor, so the run endpoint must
+  // answer before any other middleware — it parses its own JSON body and does
+  // its own actor-JWT auth (there is no gateway inside the actor). The env
+  // check here only avoids loading the agent-SDK tree in control-plane mode;
+  // shouldMount() remains the single predicate the deployment gates on.
+  const actor = substrateActor || (
+    process.env.SUBSTRATE_ACTOR_MODE === 'true' && process.env.SUBSTRATE_JWKS_URL
+      ? require('@ai-fleet/shared/agent/substrate-actor')
+      : null
+  );
+  if (actor && actor.shouldMount()) {
+    app.use(actor.createSubstrateActorRouter());
+  }
+  // The agent surface the Cloud Run planner service used to own (browser-facing
+  // /api routes via the gateway, /pubsub legacy push, pipeline plan-stage
+  // command endpoint).
+  if (config.agentSurface !== false) {
+    app.use(require('./agent-surface').createAgentSurface({
+      ...(config.agentSurfaceOptions || {}),
+    }));
+  }
   app.use(express.json({ limit: '256kb' }));
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');

@@ -53,6 +53,55 @@ test('upsertActorTemplate requires a digest-pinned planner image', async () => {
   );
 });
 
+// The ActorTemplate is the actor container's ONLY env: the image cannot
+// self-bootstrap SUBSTRATE_JWKS_URL (empty env by design) and without it the
+// actor answers 503 jwks_unconfigured for every prompt. So the control plane
+// must forward the JWT-verification names Terraform rendered onto it.
+test('upsertActorTemplate forwards the actor-JWT verification env into the container', async () => {
+  let captured;
+  const transport = (method, payload) => {
+    captured = { method, payload };
+    return Promise.resolve({ status: 0, message: '' });
+  };
+  const saved = {
+    jwks: process.env.SUBSTRATE_JWKS_URL,
+    audience: process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE,
+    trust: process.env.SUBSTRATE_TRUST_DOMAIN,
+  };
+  process.env.SUBSTRATE_JWKS_URL = 'https://idp.example.com/discovery/keys';
+  process.env.SUBSTRATE_ACTOR_JWT_AUDIENCE = 'substrate-router';
+  delete process.env.SUBSTRATE_TRUST_DOMAIN;
+  try {
+    await s.upsertActorTemplate({
+      url: 'http://substrate:8443',
+      atespace: 'tenant-a',
+      image: 'registry/substrate-actor@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      transport,
+    });
+  } finally {
+    for (const [key, value] of Object.entries({
+      SUBSTRATE_JWKS_URL: saved.jwks,
+      SUBSTRATE_ACTOR_JWT_AUDIENCE: saved.audience,
+      SUBSTRATE_TRUST_DOMAIN: saved.trust,
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  assert.equal(captured.method, 'CreateActorTemplate');
+  const template = decodeFields(captured.payload).get(1)[0].value;
+  const container = decodeFields(template).get(3)[0].value;
+  const envFields = decodeFields(container).get(5) || [];
+  const env = Object.fromEntries(envFields.map((e) => {
+    const varFields = decodeFields(e.value);
+    return [getString(varFields, 1), getString(varFields, 2)];
+  }));
+  assert.equal(env.SUBSTRATE_ACTOR_MODE, 'true');
+  assert.equal(env.SUBSTRATE_JWKS_URL, 'https://idp.example.com/discovery/keys');
+  assert.equal(env.SUBSTRATE_ACTOR_JWT_AUDIENCE, 'substrate-router');
+  assert.equal(env.SUBSTRATE_TRUST_DOMAIN, undefined);
+});
+
 test('CreateActor round-trips through encodeActor -> decodeActor', async () => {
   const reqs = [];
   const transport = (method, payload) => {
@@ -126,5 +175,86 @@ test('grpcCall throws when substrate is unconfigured', async () => {
   await assert.rejects(
     () => s.grpcCall('ListActors', Buffer.alloc(0), { url: '' }),
     /not configured/,
+  );
+});
+
+// ── ateapi credential (managed secret `substrateApiToken`) ───────────────────
+
+test('resolveSubstrateApiToken takes the S2S managed key, explicit wins, blank when absent', async () => {
+  const calls = [];
+  const fetchSecrets = async (opts) => {
+    calls.push(opts);
+    return { substrateApiToken: '  sa-projected-token  ', githubToken: 'gh' };
+  };
+  assert.equal(await s.resolveSubstrateApiToken({ organizationId: 'acme', projectId: 'p1', fetchSecrets }), 'sa-projected-token');
+  assert.equal(calls[0].organizationId, 'acme');
+  // An already-resolved value (the route's secrets map) short-circuits the fetch.
+  assert.equal(await s.resolveSubstrateApiToken({ token: 'explicit', fetchSecrets }), 'explicit');
+  assert.equal(calls.length, 1);
+  // Nothing published yet → '' (the wire layer reports it), never a throw.
+  assert.equal(await s.resolveSubstrateApiToken({ organizationId: 'acme', fetchSecrets: async () => ({}) }), '');
+  // A resolver outage degrades to '' too rather than failing the whole run early.
+  assert.equal(await s.resolveSubstrateApiToken({ organizationId: 'acme', fetchSecrets: async () => { throw new Error('settings down'); } }), '');
+});
+
+test('a resolved token reaches the gRPC authorization header', async () => {
+  const seen = [];
+  const transport = (method, payload, opts) => {
+    seen.push({ method, authorization: opts.authorization });
+    return Promise.resolve({ status: 0, message: '', headers: {}, trailers: {}, frames: [], firstFrame: Buffer.alloc(0) });
+  };
+  const token = await s.resolveSubstrateApiToken({
+    organizationId: 'acme',
+    fetchSecrets: async () => ({ substrateApiToken: 'sa-projected-token' }),
+  });
+  await s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', token, transport });
+  assert.equal(seen[0].authorization, 'Bearer sa-projected-token');
+  // A raw `Bearer …` value is not double-prefixed.
+  await s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', token: 'Bearer sa-2', transport });
+  assert.equal(seen[1].authorization, 'Bearer sa-2');
+});
+
+test('grpcCall fails closed naming substrateApiToken instead of sending an unauthenticated call', async () => {
+  const saved = process.env.SUBSTRATE_TOKEN;
+  delete process.env.SUBSTRATE_TOKEN;
+  try {
+    await assert.rejects(
+      () => s.grpcCall('ListActors', Buffer.alloc(0), { url: 'https://substrate.test', organizationId: 'acme' }),
+      /substrateApiToken/,
+    );
+  } finally {
+    if (saved !== undefined) process.env.SUBSTRATE_TOKEN = saved;
+  }
+});
+
+test('the legacy SUBSTRATE_TOKEN env fallback still authenticates local dev', async () => {
+  const saved = process.env.SUBSTRATE_TOKEN;
+  process.env.SUBSTRATE_TOKEN = 'local-dev-token';
+  try {
+    const seen = [];
+    const transport = (method, payload, opts) => {
+      seen.push(opts.authorization);
+      return Promise.resolve({ status: 0, message: '', headers: {}, trailers: {}, frames: [], firstFrame: Buffer.alloc(0) });
+    };
+    await s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', transport });
+    assert.deepEqual(seen, ['Bearer local-dev-token']);
+  } finally {
+    if (saved === undefined) delete process.env.SUBSTRATE_TOKEN;
+    else process.env.SUBSTRATE_TOKEN = saved;
+  }
+});
+
+test('a rejected credential is reported as such, not as a bare gRPC 16', async () => {
+  const transport = () => Promise.resolve({
+    status: 16,
+    message: 'missing bearer token',
+    headers: {},
+    trailers: {},
+    frames: [],
+    firstFrame: Buffer.alloc(0),
+  });
+  await assert.rejects(
+    () => s.listActors({ url: 'https://substrate.test', atespace: 'tenant-a', token: 'stale', transport }),
+    /substrateApiToken/,
   );
 });

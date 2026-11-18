@@ -1,6 +1,8 @@
 # -----------------------------------------------------------------------------
-# Cloud Run — gateway (public), planner (internal), coder-control (internal),
-# and the coder-worker Job.
+# Cloud Run — gateway (public). The planner/coder/tester services and the
+# coder-worker Job are retired: the browser agent surface + durable pipeline now
+# run on the orchestrator (pipeline.tf) and agent execution runs as substrate
+# actors (deploy/gcp/Dockerfile.substrate-actor).
 # -----------------------------------------------------------------------------
 # By default all services scale from zero to one instance, accept up to 1000
 # concurrent requests per instance, and throttle idle CPU. The defaults remain
@@ -9,8 +11,8 @@
 locals {
   # Skills registry (skills.tf). Terraform CREATES the bucket when skills_enabled.
   # The read-only gcsfuse MOUNT (+ SKILLS_ROOT env) is a SEPARATE toggle,
-  # skills_mount_enabled, default OFF: the fuse mount under gen2 currently
-  # fails the coder-control startup probe (heavy dual-role image), so the mount is
+  # skills_mount_enabled, default OFF: the fuse mount under gen2 previously
+  # failed the heavy dual-role coder-control startup probe, so the mount stayed
   # opt-in until that's validated. Mount off → services use the vendored skills
   # baked into the image (packages/shared/src/config.js resolveSkillsSrc). The
   # mount requires the bucket, so it is ANDed with skills_enabled.
@@ -22,9 +24,9 @@ locals {
   } : {}
 
   # Agent memory store (memory.tf) — Cloud SQL for PostgreSQL. Terraform CREATES
-  # the instance when memory_enabled. The planner/coder get a cloud_sql volume
-  # mounted at /cloudsql (the Auth Proxy socket) + MEMORY_DATABASE_URL as a
-  # secret env. MEMORY_ENABLED is intentionally NOT set here: a reachable
+  # the instance when memory_enabled. The orchestrator gets a cloud_sql volume
+  # mounted at /cloudsql (the Auth Proxy socket) + the connection string
+  # delivered below. MEMORY_ENABLED is intentionally NOT set here: a reachable
   # database only makes the store AVAILABLE; activation stays an explicit
   # per-org opt-in (the middleware also honors a per-org memoryEnabled setting).
   #
@@ -43,8 +45,11 @@ locals {
     TRUST_PROXY_HOPS = "1"        # direct Cloud Run ingress; req.ip is advisory locale only
     SPA_ORIGIN       = var.spa_origin
     API_BASE_URL     = local.gateway_url
-    PLANNER_URL      = local.planner_url # proxied read endpoints
-    CODER_URL        = local.coder_url
+    # The agent surface (browser-facing /api/agent/*, /api/coder/*) and the
+    # durable pipeline control plane are the SAME service now — the retired
+    # planner/coder URLs must not come back: CONFIG.SERVICES.agentUrl is what
+    # services/gateway proxies to.
+    AGENT_URL        = local.orchestrator_url
     ORCHESTRATOR_URL = local.orchestrator_url
     ORG_URL          = local.org_url      # org service (proxied at /api/org/*)
     SETTINGS_URL     = local.settings_url # settings service (proxied at /api/settings-policy/*)
@@ -134,78 +139,12 @@ locals {
     } : {},
   )
 
-  planner_env = merge(
-    local.common_env,
-    {
-      # The planner listens on PLANNER_PORT, not PORT — bind Cloud Run's port.
-      PLANNER_PORT         = "8080"
-      EMAIL_TOPIC          = google_pubsub_topic.email.name
-      PUBSUB_PUSH_AUDIENCE = local.planner_url
-      PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
-      ORCHESTRATOR_URL     = local.orchestrator_url
-      }, local.pipeline_on ? {
-      PUBSUB_PIPELINE_PLAN_RESULTS_TOPIC = var.pipeline_plan_results_topic
-      PIPELINE_STAGE_STORE_BACKEND       = "firestore"
-    } : {},
-    local.skills_env,
-    local.memory_env,
-    local.egress_env,
-    # The planner is the service that routes a run to an actor and answers an
-    # actor's own dispatch, so it gets the callback pair too (see substrate.tf).
-    local.substrate_env,
-  )
-
-  coder_control_env = merge(
-    local.common_env,
-    {
-      # The coder-control listens on CODER_SERVICE_PORT, not PORT.
-      CODER_SERVICE_PORT   = "8080"
-      CODER_ROLE           = "control"
-      CODER_JOB_NAME       = var.coder_job_name
-      PUBSUB_PUSH_AUDIENCE = local.coder_url
-      PUBSUB_PUSH_SA       = google_service_account.pubsub_push.email
-      CODER_REPO_URL       = var.coder_repo_url
-      # Peer-service URLs are PARAMETERS of the coder deployment (never browser-
-      # facing): the coder calls settings (effective config) and org/planner S2S.
-      # Without these the cloud coder falls back to localhost. A per-tenant coder is
-      # given its own PLANNER_URL + the SHARED ORG_URL/SETTINGS_URL the same way.
-      PLANNER_URL      = local.planner_url
-      ORG_URL          = local.org_url
-      SETTINGS_URL     = local.settings_url
-      ORCHESTRATOR_URL = local.orchestrator_url
-      }, local.pipeline_on ? {
-      PUBSUB_PIPELINE_CODE_RESULTS_TOPIC = var.pipeline_code_results_topic
-      PIPELINE_STAGE_STORE_BACKEND       = "firestore"
-    } : {},
-    local.skills_env,
-    local.memory_env,
-    local.egress_env,
-    # Control plane only: coder-control dispatches a substrate-coded run, and
-    # packages/shared/src/agent/framework.js reaches pattern-router from here.
-    local.substrate_control_env,
-  )
-
-  coder_worker_env = merge(local.common_env, {
-    CODER_ROLE = "worker"
-    # The worker clones/builds/tests under /tmp (the only reliably-writable path
-    # for the non-root container).
-    HOME                         = "/tmp"
-    CODER_WORKSPACE_ROOT         = "/tmp/coder-workspaces"
-    CODER_PLANNED_WORKSPACE_ROOT = "/tmp/coder-git-workspace"
-    CODER_REPO_URL               = var.coder_repo_url
-    # The worker also resolves effective settings + org/planner S2S (see above).
-    PLANNER_URL  = local.planner_url
-    ORG_URL      = local.org_url
-    SETTINGS_URL = local.settings_url
-    # ISSUE_ID (+ CONVERSATION_ID) are supplied per-execution by coder-control
-    # as container overrides — see packages/shared/src/messaging/jobs.js.
-    #
-    # Deliberately NO substrate env. This is the container that runs
-    # model-generated code, and under the substrate pattern it runs inside an
-    # actor: handing it SUBSTRATE_URL would hand the workload the control plane
-    # that creates, assigns and deletes actors in OTHER tenants' atespaces. A
-    # worker is addressed by the pattern, it does not drive the pattern.
-  }, local.skills_env, local.memory_env, local.egress_env)
+  # The agent workloads' env (the retired planner/coder_control/coder_worker
+  # maps) now lives in pipeline.tf as local.orchestrator_env — the orchestrator
+  # absorbed the planner's browser surface, the legacy planner queue, and the
+  # plan/code/test stage handlers. Deliberately absent here: nothing under
+  # deploy/gcp may reintroduce PLANNER_*/CODER_*/TESTER_* env names; the
+  # substrate-env contract tests pin which names exist on which service.
 }
 
 # --- Google One Tap client id (Secret Manager) --------------------------------
@@ -227,6 +166,15 @@ resource "google_secret_manager_secret" "google_one_tap_client_id" {
     auto {}
   }
 
+  # The count is driven by a repo variable, so an empty GOOGLE_ONE_TAP_CLIENT_ID
+  # reads as "turn One Tap off" and destroys the container — taking its versions
+  # and the gateway's accessor with it. The console-minted client id cannot be
+  # recovered from state, so refusing the plan is the cheaper failure. Deliberate
+  # removal: flip the lifecycle off or `terraform state rm` it first.
+  lifecycle {
+    prevent_destroy = true
+  }
+
   depends_on = [google_project_service.services]
 }
 
@@ -245,26 +193,14 @@ resource "google_secret_manager_secret_iam_member" "gateway_one_tap" {
 }
 
 # --- Egress-proxy sidecar IAM -------------------------------------------------
-# The sidecar runs under the planner/coder service accounts (Cloud Run v2 shares
-# the service SA across all its containers). Those identities get only
-# run.invoker on settings. The internal resolver token is placed directly on the
-# sidecar container below; granting Secret Manager access to the shared identity
-# would let model-generated app code retrieve it through the metadata server.
-locals {
-  proxy_sa_members = {
-    planner = google_service_account.planner.email
-    coder   = google_service_account.coder.email
-  }
-}
-
-resource "google_cloud_run_v2_service_iam_member" "proxy_invokes_settings" {
-  for_each = local.proxy_sa_members
-  project  = var.project_id
-  location = var.region
-  name     = google_cloud_run_v2_service.settings.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${each.value}"
-}
+# The sidecar runs under the workload's service account (Cloud Run v2 shares the
+# service SA across all its containers), so the settings-resolver invoker
+# bindings live with the services that carry a sidecar: see
+# google_cloud_run_v2_service_iam_member.pipeline_proxy_invokes_settings in
+# pipeline.tf (orchestrator). The internal resolver token is
+# placed directly on the sidecar container; granting Secret Manager access to
+# the shared identity would let model-generated app code retrieve it through
+# the metadata server.
 
 # --- Gateway (PUBLIC) ---------------------------------------------------------
 locals {
@@ -302,9 +238,9 @@ resource "google_cloud_run_v2_service" "gateway" {
   template {
     # The gateway serves long-lived SSE connections (/api/agent/stream,
     # /api/agent/workspace-stream — see services/gateway/src/sse.js) that must
-    # outlive Cloud Run's 300s default request timeout. Unconditional (unlike
-    # planner/coder_control's pipeline_on-gated timeout), since the gateway's
-    # streaming need is unrelated to the pipeline-orchestrator feature flag.
+    # outlive Cloud Run's 300s default request timeout. Unconditional, since the
+    # gateway's streaming need is unrelated to the pipeline-orchestrator feature
+    # flag.
     # 3600s is Cloud Run v2's maximum allowed request timeout for services.
     service_account = google_service_account.gateway.email
     timeout         = "3600s"
@@ -389,501 +325,3 @@ resource "google_cloud_run_v2_service" "gateway" {
   ]
 }
 
-# --- Planner (non-public, IAM-gated) ------------------------------------------
-# ingress defaults to INGRESS_TRAFFIC_ALL but there is NO allUsers invoker — only
-# gateway-sa and pubsub-push-sa hold roles/run.invoker (see iam.tf), so every
-# request must carry a valid OIDC token (Cloud Run platform auth, not app-level
-# token validation). This lets the gateway's OIDC-authenticated reverse-proxy
-# reach the read endpoints over run.app AND lets Pub/Sub push / Cloud Scheduler
-# in — all without a VPC (no cost). For network-layer isolation instead, set
-# var.internal_ingress = "INGRESS_TRAFFIC_INTERNAL_ONLY" and switch on the
-# gateway's Direct VPC egress (var.gateway_vpc_egress_enabled + var.vpc_network +
-# var.vpc_subnet; see the `vpc_access` block in the gateway resource above for
-# what that does and, in docs/SUBSTRATE_STATUS.md, what it does not yet reach).
-resource "google_cloud_run_v2_service" "planner" {
-  project             = var.project_id
-  name                = var.planner_service_name
-  location            = var.region
-  ingress             = var.internal_ingress # IAM-gated; see note above
-  labels              = merge(local.common_labels, { component = "planner" })
-  deletion_protection = false
-
-  lifecycle {
-    precondition {
-      condition     = !local.pipeline_on || var.min_instances <= 1
-      error_message = "min_instances cannot exceed 1 while pipeline orchestration is enabled."
-    }
-    precondition {
-      condition     = var.container_concurrency == 1 || try(tonumber(var.cloud_run_proxy_cpu) >= 1, false)
-      error_message = "container_concurrency values above 1 require cloud_run_proxy_cpu to be at least 1 vCPU when the egress proxy is enabled."
-    }
-  }
-
-  template {
-    service_account = google_service_account.planner.email
-    timeout         = local.pipeline_on ? "3600s" : null
-
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
-    max_instance_request_concurrency = var.container_concurrency
-
-    scaling {
-      min_instance_count = var.min_instances
-      max_instance_count = local.pipeline_on ? 1 : var.max_instances
-    }
-
-    # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
-    # present when a bucket is configured.
-    dynamic "volumes" {
-      for_each = local.skills_mount_enabled ? [1] : []
-      content {
-        name = "skills"
-        gcs {
-          bucket    = google_storage_bucket.skills[0].name
-          read_only = true
-        }
-      }
-    }
-
-    # Cloud SQL Auth Proxy socket + the connection-string secret file
-    # (memory.tf). The MemoryMiddleware reads MEMORY_DATABASE_URL_FILE and
-    # connects over /cloudsql/<connection_name>; the proxy is created by Cloud
-    # Run. A secret FILE (not secret env) keeps agent primaries secret-env-free.
-    dynamic "volumes" {
-      for_each = local.memory_enabled ? [1] : []
-      content {
-        name = "cloudsql"
-        cloud_sql {
-          instances = [google_sql_database_instance.memory[0].connection_name]
-        }
-      }
-    }
-
-    dynamic "volumes" {
-      for_each = local.memory_enabled ? [1] : []
-      content {
-        name = "memory-db-url"
-        secret {
-          secret = google_secret_manager_secret.memory_database_url[0].secret_id
-          items {
-            version = "latest"
-            path    = "url"
-          }
-        }
-      }
-    }
-
-    containers {
-      name       = "app"
-      image      = local.planner_image
-      depends_on = ["egress-proxy"]
-
-      ports {
-        container_port = 8080
-      }
-
-      dynamic "env" {
-        for_each = local.planner_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-      # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
-      # /skills/<SKILLS_VERSION>.
-      dynamic "volume_mounts" {
-        for_each = local.skills_mount_enabled ? [1] : []
-        content {
-          name       = "skills"
-          mount_path = "/skills"
-        }
-      }
-      # /cloudsql unix socket the connection-string host points at.
-      dynamic "volume_mounts" {
-        for_each = local.memory_enabled ? [1] : []
-        content {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-      }
-      # MEMORY_DATABASE_URL_FILE (/secrets/memory-db/url) — secret file mount.
-      dynamic "volume_mounts" {
-        for_each = local.memory_enabled ? [1] : []
-        content {
-          name       = "memory-db-url"
-          mount_path = "/secrets/memory-db"
-        }
-      }
-
-      resources {
-        limits = {
-          cpu    = var.cloud_run_service_cpu
-          memory = "512Mi"
-        }
-        cpu_idle          = true
-        startup_cpu_boost = true
-      }
-    }
-
-    containers {
-      name  = "egress-proxy"
-      image = local.proxy_image
-
-      dynamic "env" {
-        for_each = local.proxy_plain_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-      # Managed keys are resolved by the settings service (single source) and
-      # returned over the S2S below — the sidecar mounts no provider secret.
-      env {
-        name  = "INTERNAL_API_TOKEN"
-        value = var.internal_api_token
-      }
-      startup_probe {
-        http_get {
-          path = "/healthz"
-          port = 4030
-        }
-        initial_delay_seconds = 0
-        timeout_seconds       = 3
-        period_seconds        = 3
-        failure_threshold     = 20
-      }
-      resources {
-        limits = {
-          cpu    = var.cloud_run_proxy_cpu
-          memory = "512Mi"
-        }
-        cpu_idle = true
-      }
-    }
-  }
-
-  depends_on = [
-    google_project_service.services,
-    google_firestore_database.default,
-    google_project_iam_member.planner_datastore,
-    google_storage_bucket.skills,
-    google_sql_database_instance.memory,
-    google_secret_manager_secret_version.memory_database_url,
-    google_secret_manager_secret_iam_member.planner_memory_database_url,
-    google_project_iam_member.planner_memory_db_client,
-  ]
-}
-
-# --- Coder-control (non-public, IAM-gated — see the planner note) -------------
-resource "google_cloud_run_v2_service" "coder_control" {
-  project             = var.project_id
-  name                = var.coder_service_name
-  location            = var.region
-  ingress             = var.internal_ingress # IAM-gated; see the planner note above
-  labels              = merge(local.common_labels, { component = "coder-control" })
-  deletion_protection = false
-
-  template {
-    service_account = google_service_account.coder.email
-    timeout         = local.pipeline_on ? "3600s" : null
-
-    execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
-    max_instance_request_concurrency = var.container_concurrency
-
-    scaling {
-      min_instance_count = var.min_instances
-      max_instance_count = local.pipeline_on ? 1 : var.max_instances
-    }
-
-    # Versioned skills bundle mounted read-only via gcsfuse (skills.tf). Only
-    # present when a bucket is configured.
-    dynamic "volumes" {
-      for_each = local.skills_mount_enabled ? [1] : []
-      content {
-        name = "skills"
-        gcs {
-          bucket    = google_storage_bucket.skills[0].name
-          read_only = true
-        }
-      }
-    }
-
-    # Cloud SQL Auth Proxy socket + connection-string secret file (memory.tf).
-    # See the planner note.
-    dynamic "volumes" {
-      for_each = local.memory_enabled ? [1] : []
-      content {
-        name = "cloudsql"
-        cloud_sql {
-          instances = [google_sql_database_instance.memory[0].connection_name]
-        }
-      }
-    }
-
-    dynamic "volumes" {
-      for_each = local.memory_enabled ? [1] : []
-      content {
-        name = "memory-db-url"
-        secret {
-          secret = google_secret_manager_secret.memory_database_url[0].secret_id
-          items {
-            version = "latest"
-            path    = "url"
-          }
-        }
-      }
-    }
-
-    containers {
-      name       = "app"
-      image      = local.coder_image
-      depends_on = ["egress-proxy"]
-
-      ports {
-        container_port = 8080
-      }
-
-      dynamic "env" {
-        for_each = local.coder_control_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-      # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
-      # /skills/<SKILLS_VERSION>.
-      dynamic "volume_mounts" {
-        for_each = local.skills_mount_enabled ? [1] : []
-        content {
-          name       = "skills"
-          mount_path = "/skills"
-        }
-      }
-      # /cloudsql unix socket the connection-string host points at.
-      dynamic "volume_mounts" {
-        for_each = local.memory_enabled ? [1] : []
-        content {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
-      }
-      # MEMORY_DATABASE_URL_FILE (/secrets/memory-db/url) — secret file mount.
-      dynamic "volume_mounts" {
-        for_each = local.memory_enabled ? [1] : []
-        content {
-          name       = "memory-db-url"
-          mount_path = "/secrets/memory-db"
-        }
-      }
-
-      resources {
-        limits = {
-          cpu    = var.cloud_run_service_cpu
-          memory = "512Mi"
-        }
-        cpu_idle          = true
-        startup_cpu_boost = true
-      }
-    }
-
-    containers {
-      name  = "egress-proxy"
-      image = local.proxy_image
-
-      dynamic "env" {
-        for_each = local.proxy_plain_env
-        content {
-          name  = env.key
-          value = env.value
-        }
-      }
-      env {
-        name  = "INTERNAL_API_TOKEN"
-        value = var.internal_api_token
-      }
-      startup_probe {
-        http_get {
-          path = "/healthz"
-          port = 4030
-        }
-        initial_delay_seconds = 0
-        timeout_seconds       = 3
-        period_seconds        = 3
-        failure_threshold     = 20
-      }
-      resources {
-        limits = {
-          cpu    = var.cloud_run_proxy_cpu
-          memory = "512Mi"
-        }
-        cpu_idle = true
-      }
-    }
-  }
-
-  depends_on = [
-    google_project_service.services,
-    google_firestore_database.default,
-    google_project_iam_member.coder_datastore,
-    google_storage_bucket.skills,
-    google_sql_database_instance.memory,
-    google_secret_manager_secret_version.memory_database_url,
-    google_secret_manager_secret_iam_member.coder_memory_database_url,
-    google_project_iam_member.coder_memory_db_client,
-  ]
-}
-
-# --- Coder-worker (Cloud Run JOB) ---------------------------------------------
-# Same image as coder-control; CODER_ROLE=worker selects the job entrypoint.
-# Launched one execution per ticket by coder-control (with ISSUE_ID override);
-# runs the ticket to completion (up to 24h), then exits.
-resource "google_cloud_run_v2_job" "coder_worker" {
-  project             = var.project_id
-  name                = var.coder_job_name
-  location            = var.region
-  labels              = merge(local.common_labels, { component = "coder-worker" })
-  deletion_protection = false
-
-  template {
-    parallelism = 1 # one ticket per execution
-    task_count  = 1
-
-    template {
-      service_account = google_service_account.coder.email
-      timeout         = var.coder_job_task_timeout
-      max_retries     = 1
-
-      # gcsfuse GCS volume mounts run on the gen2 execution environment. The
-      # worker is where the coder agent installs skills, so it needs the same
-      # versioned mount as the services. null when the mount is disabled.
-      execution_environment = local.skills_mount_enabled ? "EXECUTION_ENVIRONMENT_GEN2" : null
-
-      dynamic "volumes" {
-        for_each = local.skills_mount_enabled ? [1] : []
-        content {
-          name = "skills"
-          gcs {
-            bucket    = google_storage_bucket.skills[0].name
-            read_only = true
-          }
-        }
-      }
-
-      # Cloud SQL Auth Proxy socket + connection-string secret file (memory.tf).
-      # See the planner note.
-      dynamic "volumes" {
-        for_each = local.memory_enabled ? [1] : []
-        content {
-          name = "cloudsql"
-          cloud_sql {
-            instances = [google_sql_database_instance.memory[0].connection_name]
-          }
-        }
-      }
-
-      dynamic "volumes" {
-        for_each = local.memory_enabled ? [1] : []
-        content {
-          name = "memory-db-url"
-          secret {
-            secret = google_secret_manager_secret.memory_database_url[0].secret_id
-            items {
-              version = "latest"
-              path    = "url"
-            }
-          }
-        }
-      }
-
-      containers {
-        name       = "app"
-        image      = local.coder_image
-        depends_on = ["egress-proxy"]
-
-        dynamic "env" {
-          for_each = local.coder_worker_env
-          content {
-            name  = env.key
-            value = env.value
-          }
-        }
-
-        # Mount the skills bundle at SKILLS_ROOT (/skills). resolveSkillsSrc pins
-        # /skills/<SKILLS_VERSION>.
-        dynamic "volume_mounts" {
-          for_each = local.skills_mount_enabled ? [1] : []
-          content {
-            name       = "skills"
-            mount_path = "/skills"
-          }
-        }
-        # /cloudsql unix socket the connection-string host points at.
-        dynamic "volume_mounts" {
-          for_each = local.memory_enabled ? [1] : []
-          content {
-            name       = "cloudsql"
-            mount_path = "/cloudsql"
-          }
-        }
-        # MEMORY_DATABASE_URL_FILE (/secrets/memory-db/url) — secret file mount.
-        dynamic "volume_mounts" {
-          for_each = local.memory_enabled ? [1] : []
-          content {
-            name       = "memory-db-url"
-            mount_path = "/secrets/memory-db"
-          }
-        }
-
-        resources {
-          limits = {
-            cpu    = var.coder_job_cpu
-            memory = var.coder_job_memory
-          }
-        }
-      }
-
-      containers {
-        name  = "egress-proxy"
-        image = local.proxy_image
-
-        dynamic "env" {
-          for_each = local.proxy_plain_env
-          content {
-            name  = env.key
-            value = env.value
-          }
-        }
-        env {
-          name  = "INTERNAL_API_TOKEN"
-          value = var.internal_api_token
-        }
-        startup_probe {
-          http_get {
-            path = "/healthz"
-            port = 4030
-          }
-          initial_delay_seconds = 0
-          timeout_seconds       = 3
-          period_seconds        = 3
-          failure_threshold     = 20
-        }
-        resources {
-          limits = {
-            cpu    = var.coder_job_proxy_cpu
-            memory = var.coder_job_memory
-          }
-        }
-      }
-    }
-  }
-
-  depends_on = [
-    google_project_service.services,
-    google_firestore_database.default,
-    google_project_iam_member.coder_datastore,
-    google_storage_bucket.skills,
-    google_sql_database_instance.memory,
-    google_secret_manager_secret_version.memory_database_url,
-    google_secret_manager_secret_iam_member.coder_memory_database_url,
-    google_project_iam_member.coder_memory_db_client,
-  ]
-}
