@@ -1,0 +1,2 @@
+skill,repo,commit,version,version_source,skill_path,image,dockerfile,current
+security-audit,https://github.com/cloudflare/security-audit-skill.git,c1c8a8c1471069fb0e188eeaff69b8e8db6564a8,c1c8a8c14710,none,skills/security-audit,ghcr.io/niravshah2705/symphony/security-audit-skill,deploy/kagent/skills/security-audit/Dockerfile.security-audit-skill,true

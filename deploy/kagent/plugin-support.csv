@@ -1,0 +1,9 @@
+kind,id,kagent,deepagent,codex,claude,antigravity,qodercli,opencode,pi,omp,dsh
+plugin,ecc,,,2.2.3,2.2.3,,,,,,
+plugin,agent-skills,,,0.6.16,0.6.16,,,,,,
+plugin,superpowers,,,7.0.2,7.0.2,,,,,,
+plugin,spec-kit,,,1.4.2,1.4.2,,,,,,
+plugin,graphify,0.9.112,,0.9.112,0.9.112,,,,,,
+plugin,code-review-graph,2.4.0,,2.4.0,2.4.0,,,,,,
+plugin,hallmark,,,2.0.0,2.0.0,,,,,,
+skill,security-audit,c1c8a8c14710,,c1c8a8c14710,c1c8a8c14710,,,,,,

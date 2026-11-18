@@ -1,0 +1,19 @@
+# Standalone-skill artifact for the security-audit row of ../../skills.csv.
+#
+# Data only, like the plugin bundles: Substrate mounts it read-only and kagent
+# reads skills/<name>/SKILL.md out of the mounted path. It differs from a plugin
+# bundle in having no plugin.json at the root and no skills allowlist — the
+# artifact IS one skill, and the AgentTemplate names it with
+# spec.skills[].source.path instead of spec.plugins[].
+#
+# The skill's own requirements (git, and a node >= 20 for validate-findings.cjs
+# and validate-coverage-ledger.cjs) belong in the harness runtime image, never
+# here: FROM scratch has no shell to run an install step in.
+FROM scratch
+
+COPY bundle/. /
+
+LABEL org.opencontainers.image.title="security-audit-skill" \
+      org.opencontainers.image.description="kagent standalone skill: cloudflare/security-audit-skill, mounted from upstream at a pinned commit" \
+      org.opencontainers.image.source="https://github.com/niravshah2705/symphony/tree/main/deploy/kagent/skills/security-audit" \
+      org.opencontainers.image.licenses="MIT"

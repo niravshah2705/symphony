@@ -545,6 +545,30 @@ checks `iss` against it), `SUBSTRATE_INGRESS_HOSTNAME` (what the closing probe d
 `SUBSTRATE_ATEAPI_AUDIENCE`, `SUBSTRATE_TOKEN_SECRET`, `SUBSTRATE_TOKEN_DURATION`. No token
 value is ever any of them.
 
+### 5.5 Plugin and skill mounts (the read-only artifact an Actor attaches)
+
+A pack is data the golden-snapshot Actor mounts, not a process it starts:
+
+- **Agent Plugins 1.0.0 bundle** → `AgentTemplate.spec.plugins[].source.oci`,
+  with an explicit `skills:` allowlist (attaching does not enable anything).
+- **Standalone skill** → `AgentTemplate.spec.skills[].{name, source.oci,
+  source.path}`, ≤50 entries, no allowlist and no root `plugin.json` — the
+  mounted directory name *is* the skill name.
+
+Both sources must be **digest-pinned**. The golden-snapshot Actor fetches a `git`
+or `bucket` source itself and has no egress policy, so it dies with
+`GoldenActorCrashed`; a bare tag is rejected outright. The image is `FROM
+scratch`, which is why a pack's toolchain requirements (`python`, `uv`, `git`)
+belong in the harness runtime image rather than in the mount. Inside the
+sandbox the artifact is read-only, so anything a skill writes (a graph cache, an
+audit report) goes to the workspace or a declared `requirements.writablePaths`
+entry.
+
+The pipeline, the manifest shape and the version rules are
+[PLUGIN_SUPPORT_MATRIX.md](./PLUGIN_SUPPORT_MATRIX.md); the four CRs are rendered
+by `packages/shared-core/src/agent/registry/agent-crset.js` and committed as
+`deploy/kagent/<pack>/<pack>-<cli>.yaml`.
+
 ## 6. Key files
 
 

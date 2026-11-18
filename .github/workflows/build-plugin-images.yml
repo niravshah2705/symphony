@@ -2,40 +2,63 @@ name: Build agent plugin images
 
 # Publishes the kagent Agent Plugins 1.0.0 bundle images to ghcr.io, driven by
 # deploy/kagent/plugins.csv. Each row pins an upstream repo to a full 40-hex
-# commit and names the version that commit ships upstream; a PR run only
-# resolves and validates the rows, and the merge to main publishes. Flip
-# `current` to move the :latest tag; add a row to stage a version.
+# commit and names the version that commit ships upstream, in the file the pack
+# states that version in (version_source); a PR run only resolves and validates
+# the rows, and the merge to main publishes. Flip `current` to move the :latest
+# tag; add a row to stage a version.
 #
-# Today one row (ecc) is deployed; the matrix keeps "add the second plugin"
-# a CSV edit rather than a workflow edit.
+# A push to main publishes only the rows whose bytes moved, like
+# build-runtime-images.yml: a bundle build is not byte-reproducible (multi-arch,
+# provenance and SBOM attach new timestamps), so rebuilding an unchanged pack
+# would republish it under the same tag and rewrite its committed manifest with
+# a digest nothing produced. deploy/kagent/select-published-rows.py does the
+# compare: a moved row or a change inside that pack's own directory selects it,
+# a change to a composer or an input resolver selects every row because it
+# changes the recipe for all of them, and a skill-track change selects none.
+# Run this workflow manually with `rebuild: all` after landing a composer change
+# that the diff could not see, e.g. a newer upstream image for the buildx layer.
+#
+# Every row in the CSV is a matrix entry, so adding a pack is a CSV edit plus a
+# pack directory (bundle.env, skills.txt, Dockerfile) rather than a workflow edit.
 #
 # kagent rejects a plugin source that is not immutable, so the product of a
 # build is the manifest digest: every push writes plugin-oci-ref-<plugin>.txt
-# holding <image>@<digest>, the exact value for an AgentTemplate's
-# spec.plugins[].source.oci.
+# holding <image>@<digest>, and the stamp job records it in the plugin catalog and
+# regenerates the committed manifests from it.
 
 on:
   push:
     branches: ["main"]
     paths:
-      - "deploy/kagent/plugins.csv"
-      - "deploy/kagent/ecc-plugin/Dockerfile.ecc-plugin"
-      - "deploy/kagent/ecc-plugin/compose-bundle.sh"
+      - "deploy/kagent/**"
+      - "packages/shared-core/src/agent/registry/**"
       - "scripts/verify-plugin-images.sh"
+      - "scripts/stamp-plugin-digest.js"
+      - "scripts/gen-kagent-manifests.js"
+      - "scripts/seed-plugin-catalog.js"
       - ".github/workflows/build-plugin-images.yml"
   pull_request:
     paths:
-      - "deploy/kagent/plugins.csv"
-      - "deploy/kagent/ecc-plugin/Dockerfile.ecc-plugin"
-      - "deploy/kagent/ecc-plugin/compose-bundle.sh"
+      - "deploy/kagent/**"
+      - "packages/shared-core/src/agent/registry/**"
       - "scripts/verify-plugin-images.sh"
+      - "scripts/gen-kagent-manifests.js"
+      - "scripts/seed-plugin-catalog.js"
       - ".github/workflows/build-plugin-images.yml"
   workflow_dispatch:
     inputs:
       plugin:
-        description: "Only build this plugin (ecc). Leave empty for all."
+        description: "Only build this plugin (e.g. ecc). Leave empty for all."
         required: false
         default: ""
+      rebuild:
+        description: "all = every manifest row (use after a composer change); changed = only rows whose bytes moved since the previous commit."
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - changed
 
 permissions:
   contents: read
@@ -56,58 +79,76 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.select-rows.outputs.matrix }}
+      reason: ${{ steps.select-rows.outputs.reason }}
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          # The selection diff needs the commit this run started from.
+          fetch-depth: 0
+
+      - name: Classify the change
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REBUILD: ${{ github.event.inputs.rebuild }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          case "$EVENT_NAME" in
+            # A PR publishes nothing, so it resolves every row and validates it:
+            # the diff would only weaken the one run that has to catch a bad row.
+            pull_request)
+              echo "mode=all" >> "$GITHUB_OUTPUT"
+              echo "reason=PR run validates every row" >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+            push)
+              # A force-push or a branch's first push reports an unusable `before`.
+              if [[ "$BEFORE_SHA" =~ ^[0-9a-f]+$ ]] && [ "${#BEFORE_SHA}" -eq 40 ] \
+                 && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+                base="$BEFORE_SHA"
+              else
+                base="$(git rev-parse "${HEAD_SHA}~1" 2>/dev/null || true)"
+              fi ;;
+            workflow_dispatch)
+              if [ "${REBUILD:-all}" != "changed" ]; then
+                echo "mode=all" >> "$GITHUB_OUTPUT"
+                echo "reason=dispatch rebuild=all" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              base="$(git rev-parse "${HEAD_SHA}~1" 2>/dev/null || true)" ;;
+          esac
+
+          if [ -z "$base" ] || ! git cat-file -e "$base:$MANIFEST" 2>/dev/null; then
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+            echo "reason=no usable baseline commit" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$base" "$HEAD_SHA" > "$RUNNER_TEMP/changed-paths.txt"
+          git show "$base:$MANIFEST" > "$RUNNER_TEMP/base.csv"
+          echo "mode=changed" >> "$GITHUB_OUTPUT"
+          echo "reason=changed since ${base:0:12}" >> "$GITHUB_OUTPUT"
 
       - name: Select rows from the manifest
         id: select-rows
         env:
+          MODE: ${{ steps.scope.outputs.mode }}
           ONLY_PLUGIN: ${{ github.event.inputs.plugin }}
+          BASE_CSV: ${{ runner.temp }}/base.csv
+          CHANGED: ${{ runner.temp }}/changed-paths.txt
           SELECTED: ${{ runner.temp }}/selected.txt
         run: |
           set -euo pipefail
-          python3 - "$ONLY_PLUGIN" "$MANIFEST" "$SELECTED" <<'PY' >> "$GITHUB_OUTPUT"
-          import csv, json, sys
-
-          only, manifest, selected_path = sys.argv[1:4]
-
-          with open(manifest, newline="") as fh:
-              rows = [{k: (v or "").strip() for k, v in r.items()} for r in csv.DictReader(fh)]
-          # An empty manifest is a mangled file, not a no-op: every row was
-          # dropped. Fail rather than let it publish nothing and look green.
-          if not rows:
-              sys.exit(f"{manifest} has no rows")
-
-          if only:
-              if only not in {r["plugin"] for r in rows}:
-                  sys.exit(f"no manifest rows for plugin {only!r}")
-              rows = [r for r in rows if r["plugin"] == only]
-
-          matrix = []
-          for r in rows:
-              if not r["dockerfile"]:
-                  sys.exit(f"row {r['plugin']} {r['version']}: empty dockerfile")
-              tags = [f"{r['image']}:{r['version']}"]
-              if r["current"] == "true":
-                  tags.append(f"{r['image']}:latest")
-              matrix.append({
-                  "plugin": r["plugin"],
-                  "repo": r["repo"],
-                  "commit": r["commit"],
-                  "version": r["version"],
-                  "image": r["image"],
-                  "dockerfile": r["dockerfile"],
-                  "tags": ",".join(tags),
-              })
-
-          with open(selected_path, "w") as selected:
-              for row in matrix:
-                  selected.write(f"{row['plugin']} {row['version']}\n")
-          print("matrix=" + json.dumps(matrix))
-          print("count=" + str(len(matrix)))
-          PY
+          python3 deploy/kagent/select-published-rows.py \
+            --track plugin \
+            --mode "$MODE" \
+            --manifest "$MANIFEST" \
+            --base-csv "$BASE_CSV" \
+            --paths "$CHANGED" \
+            --only "$ONLY_PLUGIN" \
+            --selected "$SELECTED" >> "$GITHUB_OUTPUT"
 
       - name: Preflight the manifest
         env:
@@ -121,16 +162,29 @@ jobs:
           fi
           scripts/verify-plugin-images.sh --selected "$SELECTED"
 
+      - name: Check the catalog, matrix and manifests are in date
+        # The same three --check gates a developer runs with
+        # `npm run plugins:check` / `plugins:manifests:check`. They belong here
+        # because this workflow is the only writer of the digests the manifests
+        # carry: a PR that edits a catalog record without regenerating the
+        # matrix or the manifests would publish bytes whose manifest still
+        # names the previous commit.
+        run: |
+          set -euo pipefail
+          node scripts/seed-plugin-catalog.js --check
+          node scripts/gen-kagent-manifests.js --check
+
       - name: Report the selection
         env:
+          REASON: ${{ steps.select-rows.outputs.reason }}
           COUNT: ${{ steps.select-rows.outputs.count }}
         run: |
           set -euo pipefail
           {
-            echo "### Agent plugin images"
+            echo "### Agent plugin images: ${REASON:-full manifest}"
             echo
             if [ "${COUNT:-0}" = "0" ]; then
-              echo "No manifest row matched, so nothing will be published."
+              echo "No manifest row moved, so nothing will be published."
             else
               echo "Publishing ${COUNT} plugin image(s):"
               echo
@@ -164,18 +218,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Same script the local kind build runs, so the published bytes are the
-      # tested bytes. Only bundle/ enters the build context — the upstream git
-      # checkout stays outside it.
+      # Same scripts the local kind build runs, through the same row resolver:
+      # pack-inputs.sh applies the pack's bundle.env (skills allowlist, overlay
+      # dir, mcp.json, version source), so a CI bundle and a tested bundle cannot
+      # differ by an input one side defaulted. Only bundle/ enters the build
+      # context — the upstream git checkout stays outside it.
       - name: Compose the plugin bundle
         env:
-          ECC_REPO: ${{ matrix.repo }}
-          ECC_COMMIT: ${{ matrix.commit }}
-          ECC_VERSION: ${{ matrix.version }}
-          PLUGIN_NAME: ${{ matrix.plugin }}
+          REPO_ROOT: ${{ github.workspace }}
           PLUGIN: ${{ matrix.plugin }}
         run: |
           set -euo pipefail
+          . deploy/kagent/pack-inputs.sh
           bundle="$(bash deploy/kagent/ecc-plugin/compose-bundle.sh "$RUNNER_TEMP/$PLUGIN")"
           mkdir -p "$RUNNER_TEMP/ctx-$PLUGIN"
           cp -R "$bundle" "$RUNNER_TEMP/ctx-$PLUGIN/bundle"
@@ -221,3 +275,45 @@ jobs:
         with:
           name: plugin-oci-ref-${{ matrix.plugin }}
           path: ${{ runner.temp }}/plugin-oci-ref-${{ matrix.plugin }}.txt
+
+  # The digests the build produced land back in the catalog, and the committed
+  # manifests are regenerated from it. One direction only — catalog -> manifests —
+  # so a manifest can never disagree with the row that names its bytes, and the
+  # write-back commit is one line per pack instead of a sed over twelve YAML files.
+  stamp:
+    needs: build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: plugin-oci-ref-*
+          path: oci-refs
+          merge-multiple: true
+
+      - name: Record the digests and regenerate the manifests
+        run: |
+          set -euo pipefail
+          ls oci-refs >/dev/null 2>&1 || { echo "no oci-ref artifacts; nothing to stamp" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          node scripts/stamp-plugin-digest.js --refs-dir oci-refs
+          node scripts/gen-kagent-manifests.js
+
+      - name: Commit the stamped digests
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- packages/shared-core/src/agent/registry deploy/kagent; then
+            echo "no digest changed" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/shared-core/src/agent/registry deploy/kagent
+          # [skip ci]: this commit changes no source, and re-running the publish
+          # jobs from it would loop on identical digests.
+          git commit -m "chore(kagent): record published plugin bundle digests [skip ci]"
+          git push

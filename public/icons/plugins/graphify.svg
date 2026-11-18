@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="Graphify plugin">
+  <path d="M12 10.6 6.2 7.4M12 10.6l5.8-3.2M12 13.4l-4.2 4.4M12 13.4l4.2 4.4" stroke="currentColor" stroke-width="1.4" fill="none"/>
+  <circle cx="12" cy="12" r="2.5"/>
+  <circle cx="5.6" cy="6.4" r="1.9"/>
+  <circle cx="18.4" cy="6.4" r="1.9" fill-opacity=".55"/>
+  <circle cx="7.4" cy="18.2" r="1.9" fill-opacity=".55"/>
+  <circle cx="16.6" cy="18.2" r="1.9"/>
+</svg>

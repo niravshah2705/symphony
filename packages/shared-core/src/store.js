@@ -2,6 +2,7 @@
 
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
+const util = require('node:util');
 const { CONFIG, namespaceCollection } = require('./config');
 const { SENTINEL_TOKEN } = require('./egress');
 const fileBackend = require('./store/file-backend');
@@ -312,6 +313,14 @@ const DEFAULT_STORE = Object.freeze({
   // ({ id, active: false }) rather than removal, or the next revision revives it.
   globalQuestions: [],
 
+  // Mirror of the reviewed agent-skill packs (packages/shared-core/src/agent/
+  // registry/{plugin,skill}-catalog.json), one doc per record keyed by `id`. The
+  // JSON is the source of truth and what CI's digests are stamped into; this
+  // collection is what the server hands the browser, because firestore.rules
+  // denies client reads of everything else here. Seeded with
+  // `node scripts/seed-plugin-catalog.js --store`.
+  plugins: [],
+
   // Billing / cost metering (see packages/shared-core/src/billing/*). All amounts
   // are integer paise. usageRecords are granular per-run events (pruned after a
   // retention window) and the outbox's source; ledgerEntries are a write-only
@@ -461,6 +470,7 @@ function normalizeStore(parsed) {
     stackLinks: Array.isArray(source.stackLinks) ? source.stackLinks : [],
     settingsHistory: Array.isArray(source.settingsHistory) ? source.settingsHistory : [],
     globalQuestions: Array.isArray(source.globalQuestions) ? source.globalQuestions : [],
+    plugins: Array.isArray(source.plugins) ? source.plugins : [],
     usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords : [],
     ledgerEntries: Array.isArray(source.ledgerEntries) ? source.ledgerEntries : [],
     billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
@@ -521,6 +531,10 @@ const STORE_COLLECTION_KEYS = [
   'globalQuestions',
   // Workflow designer v2: one doc per graph / agent profile / persona grant.
   'workflows', 'agents', 'personaGrants',
+  // Agent-skill pack mirror: one doc per catalog record (a record with its
+  // versions, icon, skills, requirements and prompt append is a few KB, and the
+  // catalog grows by packs rather than by events).
+  'plugins',
   // Billing: append-heavy records — each becomes one Firestore sub-collection doc
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
@@ -1089,6 +1103,60 @@ function removeGlobalQuestion(id) {
   const globalQuestions = (current.globalQuestions || []).filter((row) => row && row.id !== id);
   const removed = globalQuestions.length !== (current.globalQuestions || []).length;
   if (removed) writeStore({ ...current, globalQuestions });
+  return removed;
+}
+
+/* ------------------------ Agent plugin / skill catalog ------------------- */
+
+/**
+ * The mirror of the checked-in plugin and skill catalogs. Read-only for the
+ * browser by design (firestore.rules denies client reads of this collection), so
+ * the server mediates it; `scripts/seed-plugin-catalog.js --store` writes it from
+ * the catalogs. Stores without the field read as [].
+ */
+function listPlugins() {
+  return readStore().plugins || [];
+}
+
+/** Store-managed bookkeeping, excluded from the "did this change?" comparison. */
+function pluginContent(record) {
+  const { createdAt, updatedAt, revision, ...rest } = record || {};
+  return rest;
+}
+
+/**
+ * Insert or merge one pack record by id. `revision` counts real content edits
+ * and `updatedAt` is authoritative here — an unchanged re-seed returns the stored
+ * doc untouched, because boot seeds this collection on every start and a
+ * revision that churns would look like the catalog changed.
+ */
+function upsertPlugin(plugin) {
+  const current = readStore();
+  const now = new Date().toISOString();
+  const existing = (current.plugins || []).find((row) => row && row.id === plugin.id);
+  if (existing && util.isDeepStrictEqual(pluginContent(existing), pluginContent(plugin))) {
+    return existing;
+  }
+  const record = existing
+    ? { ...existing, ...plugin, createdAt: existing.createdAt || now, updatedAt: now, revision: (existing.revision || 1) + 1 }
+    : { ...plugin, createdAt: plugin.createdAt || now, updatedAt: now, revision: plugin.revision || 1 };
+  const plugins = existing
+    ? current.plugins.map((row) => (row && row.id === plugin.id ? record : row))
+    : [...(current.plugins || []), record];
+  writeStore({ ...current, plugins });
+  return record;
+}
+
+/**
+ * Drop a pack record by id. The catalogs are the source of truth, so this is for
+ * a pack that is being retired rather than for anything a re-seed would revive —
+ * a row removed here reappears on the next boot.
+ */
+function removePlugin(id) {
+  const current = readStore();
+  const plugins = (current.plugins || []).filter((row) => row && row.id !== id);
+  const removed = plugins.length !== (current.plugins || []).length;
+  if (removed) writeStore({ ...current, plugins });
   return removed;
 }
 
@@ -1721,6 +1789,9 @@ module.exports = {
   listGlobalQuestions,
   upsertGlobalQuestion,
   removeGlobalQuestion,
+  listPlugins,
+  upsertPlugin,
+  removePlugin,
   getBillingState,
   setBillingState,
   addUsageRecord,

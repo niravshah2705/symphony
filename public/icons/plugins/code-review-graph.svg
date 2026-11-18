@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="Code Review Graph plugin">
+  <circle cx="5.4" cy="6.2" r="2"/>
+  <circle cx="18.6" cy="6.2" r="2" fill-opacity=".55"/>
+  <circle cx="5.4" cy="17.8" r="2" fill-opacity=".55"/>
+  <path d="M9.2 14.4l2.6 2.8 5.4-6.4" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M7.4 6.2h9.2M5.6 8.4v7.2" stroke="currentColor" stroke-width="1.3" fill="none"/>
+</svg>

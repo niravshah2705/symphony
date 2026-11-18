@@ -7,12 +7,12 @@
 #   kubectl get crd agents.api.kagent.dev -o jsonpath='{.spec.versions[0].schema}'
 #
 # Apply order matters only for the plugin image: build-ecc-plugin-image.sh must have
-# pushed the bundle and stamped spec.plugins[].source.oci below before this applies,
-# or the Agent stalls on ResolvedRefs.
+# pushed the bundle and produced a stamped local copy of this file, or the Agent
+# stalls on ResolvedRefs.
 #
 #   bash deploy/kagent/ecc-plugin/build-ecc-plugin-image.sh
 #   bash deploy/kagent/ecc-plugin/patch-litellm-gemini.sh      # model + context params
-#   kubectl --context kind-kind apply -f deploy/kagent/ecc-plugin/ecc-agent.yaml
+#   kubectl --context kind-kind apply -f deploy/kagent/ecc-plugin/build/ecc-agent.local.yaml
 #   kubectl --context kind-kind wait agent/ecc-agent -n kagent --for=condition=Ready --timeout=10m
 ---
 # ---------------------------------------------------------------------------
@@ -189,9 +189,14 @@ spec:
   # `oci` is the only source that reaches Ready on Substrate: the golden-snapshot Actor
   # fetches a git or bucket source itself, has no egress policy, and crashes with
   # GoldenActorCrashed. Digest-pinned; a tag alone is rejected.
+  #
+  # The value below is the ghcr repository CI publishes with an all-zero placeholder
+  # (visible as zeroes), replaced by the stamp job once the bundle is pushed. A local
+  # kind build does NOT restamp this file: build-ecc-plugin-image.sh writes the
+  # kind-IP digest into the gitignored build/ecc-agent.local.yaml and applies that.
   plugins:
     - source:
-        oci: 172.20.0.3:5000/ecc-plugin@sha256:31c51d2ea9c77ade5ebd4eff7337996f874dd8ac9c59dcf788ca8d011d0869f2
+        oci: ghcr.io/niravshah2705/symphony/ecc-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000
         # Selects a subdirectory of the artifact when the manifest is not at its root.
         # Relative, and `..` segments are rejected. Unused: the bundle IS the root.
         # path: bundles/ecc

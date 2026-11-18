@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Packages the ECC plugin row of deploy/kagent/plugins.csv as an Agent Plugins
 # 1.0.0 bundle and publishes it as a digest-pinned OCI image into the local kind
-# registry, then stamps the digest into ecc-agent.yaml.
+# registry, then stamps the digest into gitignored build/*.local.yaml copies.
 #
 # kagent only accepts immutable plugin sources, and a bare tag is rejected, so the
 # digest is the product of this build. Two names point at the same repository:
@@ -111,14 +111,28 @@ if [ "${CODE}" != "200" ]; then
 fi
 log "in-cluster manifest check: 200 OK"
 
-# ---------------------------------------------------------- 6. stamp the YAML
-MANIFEST_YAML="${SCRIPT_DIR}/ecc-agent.yaml"
-if grep -qE '^[[:space:]]*oci:[[:space:]]' "${MANIFEST_YAML}"; then
-  sed -i.bak -E "s|^([[:space:]]*)oci:[[:space:]]+.*$|\1oci: ${OCI_REF}|" "${MANIFEST_YAML}"
-  rm -f "${MANIFEST_YAML}.bak"
-  log "wrote the digest into ${MANIFEST_YAML}"
-else
-  log "no oci: line in ${MANIFEST_YAML}; set spec.plugins[].source.oci to ${OCI_REF}"
-fi
+# ---------------------------------------------------------- 6. stamp LOCAL copies
+# The committed YAML carries the ghcr digest that CI writes back; a kind digest
+# flipped into it on every developer build would make the manifest unreviewable.
+# build/ is gitignored, so the stamped files are what `kubectl apply` runs and
+# nothing here shows up in a diff.
+log "stamping the local manifests"
+STAMPED=0
+for committed in "${SCRIPT_DIR}"/ecc-*.yaml; do
+  [ -f "${committed}" ] || continue
+  name="$(basename "${committed}" .yaml)"
+  local_copy="${BUILD_DIR}/${name}.local.yaml"
+  cp "${committed}" "${local_copy}"
+  if grep -qE '^[[:space:]]*oci:[[:space:]]' "${local_copy}"; then
+    sed -i.bak -E "s|^([[:space:]]*)oci:[[:space:]]+.*$|\1oci: ${OCI_REF}|" "${local_copy}"
+    rm -f "${local_copy}.bak"
+  else
+    log "no oci: line in ${name}.yaml; set spec.plugins[].source.oci to ${OCI_REF}"
+  fi
+  log "wrote ${local_copy}"
+  STAMPED=$((STAMPED + 1))
+done
+[ "${STAMPED}" -gt 0 ] || die "no ecc-*.yaml manifests found in ${SCRIPT_DIR}"
 
-log "done. Apply with: kubectl --context ${KCONTEXT} apply -f ${MANIFEST_YAML}"
+log "done. Apply a local build with:"
+log "  kubectl --context ${KCONTEXT} apply -f ${BUILD_DIR}/ecc-codex.local.yaml"

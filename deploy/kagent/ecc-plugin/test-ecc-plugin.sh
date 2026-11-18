@@ -40,7 +40,11 @@ ATE_NS="${ATE_NS:-ate-system}"
 LIVE_TIMEOUT="${LIVE_TIMEOUT:-5m}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFEST="${SCRIPT_DIR}/ecc-agent.yaml"
+# The builder stamps a gitignored local copy, so that is the file whose digest is
+# compared against the live AgentTemplate; the committed ecc-agent.yaml holds the
+# ghcr ref CI publishes and would always read as drift inside a kind cluster.
+MANIFEST="${MANIFEST:-${SCRIPT_DIR}/build/ecc-agent.local.yaml}"
+[ -f "${MANIFEST}" ] || MANIFEST="${SCRIPT_DIR}/ecc-agent.yaml"
 
 QUICK=false
 APPLY=false
@@ -103,12 +107,13 @@ done
 if [ -z "${LIVE_OCI}" ]; then
   bad "no spec.plugins[0].source.oci on ${TEMPLATE_NAME}"
 elif [ -z "${FILE_OCI}" ]; then
-  bad "no oci: line in ${MANIFEST##*/}"
+  bad "no kind-registry oci: in ${MANIFEST##*/} (the committed manifest holds the ghcr ref, which this cluster cannot pull)"
+  note "run bash ${SCRIPT_DIR}/build-ecc-plugin-image.sh, or point MANIFEST= at the stamped build/ecc-agent.local.yaml"
 elif [ "${LIVE_OCI}" = "${FILE_OCI}" ]; then
   ok "plugin source matches the manifest: ${LIVE_OCI}"
 else
   bad "drift: live AgentTemplate=${LIVE_OCI} but ${MANIFEST##*/}=${FILE_OCI}"
-  note "rebuilt the image without re-applying? bash build-ecc-plugin-image.sh && kubectl apply -f ecc-agent.yaml"
+  note "rebuilt the image without re-applying? bash build-ecc-plugin-image.sh && kubectl apply -f ${MANIFEST}"
 fi
 
 # ------------------------------------------------------------------- 2. artifact

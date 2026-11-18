@@ -4,8 +4,12 @@
 # For every row (or only the "plugin version" lines listed in --selected FILE):
 #   - the commit is a full 40-char lowercase hex pin, as kagent requires;
 #   - the row's Dockerfile exists in the checkout;
-#   - the VERSION file upstream at that commit equals the row's version, so an
-#     image is never labelled with bytes it does not contain.
+#   - the file named by version_source, read at that commit, states the row's
+#     version, so an image is never labelled with bytes it does not contain.
+#     Only ECC ships a VERSION file: the rest keep their version in
+#     package.json, pyproject.toml, plugin.json or .claude-plugin/plugin.json,
+#     and a row that names none of those is a preflight failure rather than a
+#     silent read of the wrong file.
 # After the rows: every plugin has exactly one current=true row (it owns the
 # :latest tag) and the manifest is not empty.
 #
@@ -47,10 +51,28 @@ in_selection() {
   grep -qxF "$1 $2" "$selected"
 }
 
+# Read the version a pack states about itself, out of the file it states it in.
+# VERSION is bare text; a JSON manifest is the first "version" key; a
+# pyproject.toml is the unindented project version, so a [tool.*] version that
+# happens to be spelled the same way cannot answer for the package.
+read_upstream_version() {
+  base_url="$1"
+  source="$2"
+  body="$(curl -fsS --max-time 30 "${base_url}/${source}" 2>/dev/null || true)"
+  [ -n "$body" ] || return 1
+  case "$source" in
+    *.json) printf '%s' "$body" \
+      | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 ;;
+    *.toml) printf '%s' "$body" \
+      | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 ;;
+    *) printf '%s' "$body" | tr -d '[:space:]' ;;
+  esac
+}
+
 awk -F',' 'NR==1{for(i=1;i<=NF;i++)h[$i]=i;next} NF{
-  print $h["plugin"], $h["repo"], $h["commit"], $h["version"], $h["dockerfile"], $h["current"]
+  print $h["plugin"], $h["repo"], $h["commit"], $h["version"], $h["version_source"], $h["dockerfile"], $h["current"]
 }' "$csv" |
-while IFS=' ' read -r plugin repo commit version dockerfile current; do
+while IFS=' ' read -r plugin repo commit version version_source dockerfile current; do
   printf '%s\n' "$plugin" >> "$rows_marker"
   if ! in_selection "$plugin" "$version"; then
     printf 'skip (not selected): %s %s\n' "$plugin" "$version"
@@ -72,13 +94,15 @@ while IFS=' ' read -r plugin repo commit version dockerfile current; do
     fail "$plugin: unsupported repo URL '${repo}' (expected https://github.com/owner/repo)"
     continue
   fi
-  upstream_version="$(curl -fsS --max-time 30 \
-    "https://raw.githubusercontent.com/${raw}/${commit}/VERSION" 2>/dev/null || true)"
-  upstream_version="$(printf '%s' "$upstream_version" | tr -d '[:space:]')"
+  case "$version_source" in
+    VERSION|package.json|pyproject.toml|plugin.json|*.json|*.toml) ;;
+    *) fail "$plugin $version: version_source '${version_source}' is not VERSION, a *.json manifest or a *.toml"; continue ;;
+  esac
+  upstream_version="$(read_upstream_version "https://raw.githubusercontent.com/${raw}/${commit}" "$version_source" || true)"
   if [ -z "$upstream_version" ]; then
-    fail "$plugin $version: no VERSION file at ${raw}@${commit} (bad pin?)"
+    fail "$plugin $version: no version readable from ${version_source} at ${raw}@${commit} (bad pin?)"
   elif [ "$upstream_version" != "$version" ]; then
-    fail "$plugin $version: upstream VERSION at the pinned commit is '${upstream_version}'"
+    fail "$plugin $version: upstream ${version_source} at the pinned commit is '${upstream_version}'"
   else
     printf 'ok: %s %s pinned at %s\n' "$plugin" "$version" "$commit"
   fi
