@@ -151,7 +151,8 @@ from asking it to, which is why it is the one still open.
 | 6 | `ate-api-server` applies Postgres migrations only at startup, so recreating the claim left a healthy-looking control plane on an empty schema. | every pod `Running`; every RPC erroring `relation "workers" does not exist`; workers stuck `Running` but not Ready | fixed by #271 |
 | 7 | The substrate GKE apply was gated behind a `terraform fmt` drift. | plan never ran, so no error surfaced | fixed by #268 |
 | 8 | #270 gave the worker pool a `pd-balanced` boot disk, and **N4 supports no Persistent Disk type at all** — the pool could not provision a node. | `terraform apply` planned clean, GKE accepted the pool config, and only the MIG's instance creation failed: `[UNSUPPORTED_OPERATION] pd-balanced disk type cannot be used by n4-standard-4 machine type`. The pool stayed on its old template, so capacity kept working and nothing looked broken | fixed: `boot_disk { disk_type = "hyperdisk-balanced" }` |
-| 9 | The public ateapi route sends to `Service ate-system/ateapi:8443`, but `ate-setup` v1.0.0 creates that Service as **`api` on port 443 (`grpc`)** — the backend the control-plane front routes to has never existed, so `substrateUrl` cannot be that host. | Every signal the old check read is green: Gateway `Programmed=True`, Route `Accepted=True`, DNS resolves, certificate issued. Only `ResolvedRefs=False / BackendNotFound` says otherwise, and nothing looked at that condition until #272 | **open** — the name and port are wrong in the module defaults, but correcting them switches on an *unauthenticated* public actor control plane; see pending 2 |
+| 9 | The public ateapi route sends to `Service ate-system/ateapi:8443`, but `ate-setup` v1.0.0 creates that Service as **`api` on port 443 (`grpc`)** — the backend the control-plane front routes to has never existed, so `substrateUrl` cannot be that host. | Every signal the old check read is green: Gateway `Programmed=True`, Route `Accepted=True`, DNS resolves, certificate issued. Only `ResolvedRefs=False / BackendNotFound` says otherwise, and nothing looked at that condition until #272 | **defaults corrected** — `substrate_ingress_gateway` also terminates TLS on 443 (`tls.mode: Terminate`, cert `substrate-server-external-tls`), so the hostname is a real HTTPS front once cause 10 is applied. Routing is fixed; reachability is not: `api` serves TLS from `/run/servicedns.podcert.ate.dev/credential-bundle.pem` and no `BackendTLSPolicy` exists in this repo, so the corrected route resolves and then fails the cleartext dial. See pending 2 for what still has to land before the front is usable *and* authenticated. |
+| 10 | The Envoy `Service` annotation `networking.gke.io/load-balancer-ip-addresses` was fed the static address's **value**. GKE forwards that string into the forwarding rule's `address` field, which validates against an address-*name* regex, so the rule create 400s and no front ever gets its IP. | `Service envoy-substrate-ingress` `EXTERNAL-IP <pending>` since the day it was created; Gateway `Programmed=False / AddressNotAssigned`; and every *other* signal read healthy — DNS pointed at `34.150.46.93`, the certificate was Ready, both Envoy pods were up — which is why the earlier diagnosis was "no free regional IP". The address is EXTERNAL, `status=IN_USE` and in `asia-south1`; capacity was never the problem. `gcloud compute addresses describe substrate-ip` answers it in one call. | fixed: the annotation takes `google_compute_address.*.name`, `loadBalancerIP` keeps `.address` (the two fields want different forms), and `agentgateway.tf` — same latent bug, still dark — with it. Pinned by `deploy/gcp/substrate-ingress-config.test.js` |
 
 ## Still pending
 
@@ -184,20 +185,30 @@ from asking it to, which is why it is the one still open.
      branch recovers (§5.4 of the integration doc): a 12 h credential minted by CI,
      stored in Secret Manager, read per request by the settings service, refused
      client-side when absent. Three things still stand between it and a usable route:
-     the backend name/port, a TLS hop for the backend (no `BackendTLSPolicy` exists
-     anywhere in this repo, and a GKE managed backend serving a self-signed
-     `istiod`-issued cert needs one), and the anonymous `grpc-status` probe that must
-     answer 16 and never 0 before the front is treated as authenticated.
-   Today the flag is on **and** the route is dead, which fails closed by accident: the
-   hostname is published, so whoever fixes the backend name and port without first
-   checking what the front enforces may expose an API that creates actors, deletes
-   them and mints actor JWTs. The cluster does demand a JWT — `ate-api-authentication`
-   carries exactly one jwtProvider and an anonymous dial is refused — but that has only
-   been observed on the cluster network, never through the Gateway. So the order is:
-   CA + `BackendTLSPolicy` + corrected backend, then the anonymous probe from outside,
-   then the two variables. `substrate_ateapi_service` / `substrate_ateapi_port`
-   therefore should not be corrected on their own — they are one change with the authN
-   verification.
+     the backend name/port (corrected), a TLS hop for the backend (no
+     `BackendTLSPolicy` exists anywhere in this repo, and the `api` backend serves
+     TLS from `/run/servicedns.podcert.ate.dev/credential-bundle.pem`, so a
+     cleartext dial to `api:443` resolves and then fails at the transport), and the
+     anonymous `grpc-status` probe that must answer 16 and never 0 before the front
+     is treated as authenticated.
+   Today the flag is on. It used to be dead in two independent ways — the front
+   never got a forwarding rule (cause 10) and the backend named a Service that does
+   not exist (cause 9) — so it failed closed by accident: the hostname was published
+   and nothing behind it could answer. Both halves are now corrected, and the order
+   this note used to prescribe ("CA + `BackendTLSPolicy` + corrected backend, then
+   the anonymous probe from outside, then the two variables") is deliberately **not**
+   followed. The variables go first because the failure mode they close is the
+   quieter one: with the front reaching `Programmed=True` after cause 10, a
+   `BackendNotFound` route is the only thing standing between a published hostname
+   and an API that creates actors, deletes them and mints actor JWTs. A route that
+   resolves to a TLS-only backend is the safe place to leave it in the meantime —
+   the dial fails before any credential is examined, and the cluster still demands
+   its one jwtProvider (`ate-api-authentication`), though that has only been observed
+   on the cluster network and never through the Gateway. What is left is the CA +
+   `BackendTLSPolicy`, then the anonymous probe from outside.
+   `substrate_control_plane_public`'s own description still asks for false until that
+   is settled, and the CI repo variable — currently true — is what decides it, not
+   this module's default.
 
    > **Half of the private branch now exists, dark.** The gateway service carries an
    > optional `vpc_access` block (`gateway_vpc_egress_enabled` + `vpc_network` +
