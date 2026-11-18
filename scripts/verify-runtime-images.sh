@@ -43,6 +43,12 @@ resolve_url() {
     codex)     printf 'https://github.com/openai/codex/releases/download/rust-v%s/codex-package-x86_64-unknown-linux-musl.tar.gz' "$2" ;;
     deepagent) printf 'https://pypi.org/pypi/deepagents-code/%s/json' "$2" ;;
     deepseek)  printf 'https://registry.npmjs.org/@deepseek-ai/dsh/%s' "$2" ;;
+    opencode)  printf 'https://registry.npmjs.org/opencode-ai/%s' "$2" ;;
+    gemini)    printf 'https://registry.npmjs.org/@google%%2Fgemini-cli/%s' "$2" ;;
+    pi)        printf 'https://registry.npmjs.org/@earendil-works%%2Fpi-coding-agent/%s' "$2" ;;
+    qoder)     printf 'https://registry.npmjs.org/@qoder-ai%%2Fqodercli/%s' "$2" ;;
+    kilo)      printf 'https://registry.npmjs.org/@kilocode%%2Fcli/%s' "$2" ;;
+    goose)     printf 'https://github.com/aaif-goose/goose/releases/tag/v%s' "$2" ;;
     *)         return 1 ;;
   esac
 }
