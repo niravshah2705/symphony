@@ -4,10 +4,10 @@
 
 ## Overview
 
-Community of 743 nodes
+Community of 744 nodes
 
-- **Size**: 743 nodes
-- **Cohesion**: 0.4928
+- **Size**: 744 nodes
+- **Cohesion**: 0.4915
 - **Dominant Language**: javascript
 
 ## Members
@@ -65,7 +65,7 @@ Community of 743 nodes
 | capitalize | Function | ./public/js/app.js | 901-904 |
 | start | Function | ./public/js/app.js | 908-916 |
 
-*... and 693 more members.*
+*... and 694 more members.*
 
 ## Execution Flows
 
@@ -91,10 +91,10 @@ Community of 743 nodes
 - `String` (114 edge(s))
 - `push` (102 edge(s))
 - `trim` (97 edge(s))
-- `equal` (90 edge(s))
+- `equal` (95 edge(s))
 - `filter` (82 edge(s))
 - `isArray` (72 edge(s))
-- `Boolean` (69 edge(s))
+- `Boolean` (70 edge(s))
 - `catch` (62 edge(s))
 - `setAttribute` (61 edge(s))
 - `has` (59 edge(s))
@@ -105,7 +105,7 @@ Community of 743 nodes
 
 - `./public/js/views/settings.js` (137 edge(s))
 - `./public/js/views/agent.js` (117 edge(s))
-- `equal` (90 edge(s))
+- `equal` (95 edge(s))
 - `./public/js/app.js` (86 edge(s))
 - `./public/js/views/workflows.js` (61 edge(s))
 - `./public/js/workflow-designer-model.mjs` (56 edge(s))
@@ -114,7 +114,7 @@ Community of 743 nodes
 - `./public/js/i18n.js` (34 edge(s))
 - `match` (29 edge(s))
 - `./public/js/views/organization.js` (28 edge(s))
-- `./public/js/auth.js` (23 edge(s))
+- `./public/js/auth.js` (24 edge(s))
 - `deepEqual` (21 edge(s))
 - `./public/js/workflow-designer-model.test.mjs` (17 edge(s))
 - `./public/js/views/cost.js` (15 edge(s))
