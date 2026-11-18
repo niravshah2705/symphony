@@ -119,6 +119,48 @@ test('renderAgentCrd emits a v1alpha3 Agent with an inline template', () => {
   assert.deepEqual(out.agent.spec.template.inline.modelConfig, { name: 'openrouter-model-config', namespace: 'kagent' });
 });
 
+// A tenant profile routed through the self-hosted LiteLLM gateway: the wire model
+// must stay the BARE id (LiteLLM matches model_name verbatim), the runtime is a
+// published harness, and egress refs / harnessRef carry through.
+const LITELLM_PROFILE = {
+  id: 'acme-coding',
+  name: 'Coding Agent',
+  category: 'Coding',
+  harness: 'claude-code',
+  systemPrompt: 'You are the coding agent.',
+  egressPolicyRefs: ['acme-deny-external'],
+  kagentSpec: {
+    modelConfig: { name: 'acme-litellm-claude' },
+    skills: [],
+    plugins: [],
+    tools: [],
+    env: [
+      { name: 'LOG_LEVEL', value: 'info' },
+      { name: 'AGENT_MODEL', value: 'claude-sonnet-4-5' },
+    ],
+  },
+};
+
+test('renderAgentCrd renders a LiteLLM-routed tenant agent with a bare model id', () => {
+  const out = renderAgentCrd(LITELLM_PROFILE, { namespace: 'tenant-acme' });
+  assert.equal(out.ok, true, JSON.stringify(out.errors));
+  assert.equal(out.agent.apiVersion, 'api.kagent.dev/v1alpha3');
+  assert.equal(out.agent.kind, 'Agent');
+  assert.equal(out.agent.metadata.namespace, 'tenant-acme');
+  assert.equal(out.agent.spec.harnessRef.name, 'claude-code');
+  assert.deepEqual(out.agent.spec.egressPolicyRefs, [{ name: 'acme-deny-external' }]);
+  assert.deepEqual(out.agent.spec.template.inline.modelConfig, { name: 'acme-litellm-claude' });
+  // The AGENT_MODEL env row must carry the bare id (no provider/ prefix). renderAgentCrd
+  // reports Harness env as harnessEnv — it never writes it into the shared Agent CR.
+  const modelEnv = (out.harnessEnv || []).find((e) => e.name === 'AGENT_MODEL');
+  assert.ok(modelEnv, 'AGENT_MODEL harness env is reported');
+  assert.equal(modelEnv.value, 'claude-sonnet-4-5');
+  assert.doesNotMatch(modelEnv.value, /\//, 'litellm wire model must be the bare id');
+  assert.equal(JSON.stringify(out.agent).includes('AGENT_MODEL'), false, 'env must not be smuggled into the Agent CR');
+  // No raw credential literal may reach the agent surface.
+  assert.doesNotMatch(JSON.stringify(out.agent), /sk-ant-|lsv2_|ghp_/);
+});
+
 test('renderAgentCrd composes promptAppend into the system prompt, in declaration order', () => {
   const out = renderAgentCrd(FULL_PROFILE, { namespace: 'kagent' });
   const prompt = out.agent.spec.template.inline.systemPrompt;

@@ -6,9 +6,11 @@ process, and translates native events into the shared runtime event model. The
 shared A2A executor then exposes those events through Kagent's private A2A
 endpoint.
 
-Controller-side compilation does not live here. It is under
+Controller-side compilation for the **native-full** runtimes does not live here. It is under
 [`core/internal/translator`](../core/internal/translator), where Kubernetes resources are
-resolved into an immutable runtime revision and a versioned harness config.
+resolved into an immutable runtime revision and a versioned harness config. Note: the translator
+packages are not vendored into every checkout; the `scaffold-experimental` runtimes below have
+no controller translator and no published image — they compile and unit-test only.
 
 ## Request flow
 
@@ -37,6 +39,7 @@ runtime events -> runtime/a2a      private A2A task stream
 | --- | --- |
 | [`claude`](claude/README.md) | Claude Code configuration, materialization, process protocol, and image |
 | [`codex`](codex/README.md) | Codex App Server configuration, JSON-RPC driver, and image |
+| [`opencode`](opencode), [`gemini`](gemini), [`pi`](pi), [`qoder`](qoder), [`kilo`](kilo), [`goose`](goose) | **experimental scaffolds** — bounded stdout-passthrough drivers mirroring `deepagent`. Not in `runtime-images.csv`, no controller translator, no upstream kagent CRD `spec.<runtime>` key, so they cannot run in-cluster yet. See [`docs/HARNESS_CAPABILITY_MATRIX.md`](../../docs/HARNESS_CAPABILITY_MATRIX.md) |
 | [`runtime/runtime.go`](runtime/runtime.go) | Public runtime-neutral turn, event, sink, and outcome model |
 | [`runtime/a2a`](runtime/a2a) | Serializes Actor execution and maps runtime events to upstream A2A events |
 | [`runtime/continuation`](runtime/continuation) | Atomically persists the one native continuation ID owned by an Actor |

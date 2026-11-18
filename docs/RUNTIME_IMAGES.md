@@ -12,6 +12,15 @@ own `deploy/gcp/Dockerfile.coder` or the GCP Artifact Registry pipeline — that
 intentional. Integrating them behind `substratePlannerImage` /
 `harness-catalog.json` is a separate effort.
 
+> **Dark Dockerfiles (not published).** Six additional experimental harness scaffolds —
+> `opencode`, `gemini`, `pi`, `qoder`, `kilo`, `goose` — ship a `go/harness/<id>/Dockerfile` that
+> is **manually buildable only**. They have **no row in `go/harness/runtime-images.csv`**, so
+> `build-runtime-images.yml` never publishes them and `scripts/verify-runtime-images.sh` never
+> resolves them. Before a row may land: confirm a pinned upstream CLI feed, set the runtime image
+> version, add the runtime to the `resolve_url`/`arch_url` selectors in
+> `scripts/verify-runtime-images.sh`, and replace each scaffold's `StrictVersion: false` with a
+> validated pin. Until then these runtimes compile and unit-test but cannot run in-cluster.
+
 ## Layout
 
 | Path | What |
