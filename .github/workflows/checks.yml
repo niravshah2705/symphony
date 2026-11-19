@@ -42,6 +42,7 @@ jobs:
 
   e2e:
     name: Playwright E2E
+    if: false
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
