@@ -49,6 +49,10 @@ const rootVariables = read('deploy', 'gcp', 'terraform', 'variables.tf');
 const rootBilling = read('deploy', 'gcp', 'terraform', 'billing_service.tf');
 const stagingScript = read('scripts', 'flexprice-stage-chart.js');
 const powerWorkflow = read('.github', 'workflows', 'substrate-cluster-power.yml');
+const nodepoolWorkflow = read('.github', 'workflows', 'flexprice-nodepools.yml');
+const cleanupScript = read('deploy', 'gcp', 'flexprice-cleanup.sh');
+const recreateScript = read('deploy', 'gcp', 'flexprice-recreate.sh');
+const nodePoolTf = readTf('node_pool.tf');
 
 // --- The gate that keeps this off the money path ------------------------------
 
@@ -214,6 +218,90 @@ test('the node pool is never one the substrate power workflow parks', () => {
   assert.ok(!parked.includes(pool), `${pool} must not be a pool the power workflow parks`);
   assert.match(block(variablesTf, 'variable "node_min_count"'), /condition\s+= var\.node_min_count >= 1/,
     'min 1: a parked pool cannot serve a cold quorum and the StatefulSets have nowhere else');
+});
+
+// --- CI face of the pool teardown (flexprice-nodepools.yml + cleanup/recreate) ---
+// Neither graph indexes YAML or shell, so these assertions are the only thing between a
+// flag rename in a script `case` and a workflow that silently stops passing it — the
+// same failure class substrate-workflow-config.test.js guards for the substrate pools.
+
+test('the node-pool teardown workflow is manual-only and rehearses by default', () => {
+  // One of these two scripts deletes the pool holding every FlexPrice database. A push
+  // or cron trigger here would make an unrelated merge a teardown.
+  const on = nodepoolWorkflow.match(/^on:\n([\s\S]*?)^\n/m)[1];
+  assert.match(on, /^ {2}workflow_dispatch:/m);
+  assert.doesNotMatch(on, /^\s{2}(push|schedule|pull_request|workflow_call|repository_dispatch):/m,
+    'flexprice-nodepools.yml gained a non-manual trigger');
+  assert.doesNotMatch(nodepoolWorkflow, /^\s+cron:/m);
+  assert.match(nodepoolWorkflow, /dry_run:\n(?:.*\n){1,4}        default: true/,
+    'dry_run defaulting to false is how a click becomes a teardown');
+});
+
+test('every flag the teardown workflow passes is one the script parses', () => {
+  const run = nodepoolWorkflow.match(/- name: Run\n        run: \|\n([\s\S]*?)\n\n      - name:/)[1];
+  const flags = [...new Set([...run.matchAll(/FLAGS\+=\((--[a-z-]+)/g)].map((m) => m[1]))];
+  assert.ok(flags.length >= 5, `expected the flag matrix, saw ${flags.join(' ')}`);
+  const accepts = (src) => new Set([...src.matchAll(/^\s*--([a-z-]+)[=*][^)]*\)|^\s*--([a-z-]+)\)/gm)]
+    .map((m) => `--${m[1] || m[2]}`));
+  const want = { '--dry-run': [cleanupScript, recreateScript], '--keep-pool': [cleanupScript],
+    '--backup-only': [cleanupScript], '--destroy-pvc': [cleanupScript], '--yes': [cleanupScript],
+    '--with-disk-snapshot': [cleanupScript], '--skip-backup': [cleanupScript],
+    '--snapshot': [recreateScript] };
+  for (const flag of flags) {
+    const scripts = want[flag];
+    assert.ok(scripts, `the workflow passes ${flag}, which nothing here declares — add it to the table`);
+    for (const src of scripts) {
+      assert.ok(accepts(src).has(flag.replace(/=$/, '')), `${flag} is not in that script's argument case`);
+    }
+  }
+});
+
+test('the teardown workflow names the pool, namespace and cluster the module owns', () => {
+  // The literals here are pinned to variables.tf because the staged chart's placement
+  // (helm_infra.tf flexprice_placement) reads the SAME names: a workflow pointing at
+  // another pool recreates compute nothing selects, and the stores stay Pending.
+  const pool = block(variablesTf, 'variable "node_pool_name"').match(/default\s+=\s+"([^"]+)"/)[1];
+  const ns = block(variablesTf, 'variable "namespace"').match(/default\s+=\s+"([^"]+)"/)[1];
+  assert.match(nodepoolWorkflow, new RegExp(`POOL: '${pool}'`), 'workflow pool literal is not the module default');
+  assert.match(nodepoolWorkflow, new RegExp(`FP_NS: '${ns}'`), 'workflow namespace literal is not the module default');
+  for (const key of ['CLUSTER', 'ZONE']) {
+    const wf = nodepoolWorkflow.match(new RegExp(`${key}: \\$\\{\\{ vars\\.[A-Z0-9_]+ \\|\\| '([^']+)' \\}\\}`));
+    const job = workflow.match(new RegExp(`^\\s+${key}: \\$\\{\\{ vars\\.[A-Z0-9_]+ \\|\\| '([^']+)' \\}\\}`, 'm'));
+    assert.ok(wf && job, `${key} is not bound to a vars fallback in both workflows`);
+    assert.equal(wf[1], job[1], `the teardown workflow and deploy.yml disagree on ${key}`);
+  }
+});
+
+test('the teardown workflow serialises with its own Terraform owner, not the power group', () => {
+  // The structural guarantee cuts both ways: naming flexprice-pool in the substrate
+  // power workflow is forbidden above, and JOINING its concurrency group here would
+  // queue a billing restore behind a 03:00 drain it must never wait for (and vice
+  // versa). The only other writer of this pool is deploy.yml's flexprice_reconcile job.
+  assert.match(nodepoolWorkflow, /^\s+group: flexprice-reconcile$/m);
+  assert.match(nodepoolWorkflow, /cancel-in-progress: false/);
+  assert.doesNotMatch(nodepoolWorkflow, /group: substrate-cluster-power/,
+    'joining the power group makes a pool the power workflow must never see a shared resource');
+});
+
+test('the recreate defaults and cleanup abort-gates mirror the module design', () => {
+  // The taint is what makes the pool dedicated rather than merely named; the module
+  // spells it in HCL form and the script in the gcloud form. Equal values, or a restore
+  // leaves every flexprice pod Pending on a toleration mismatch.
+  for (const part of ['fleet.dev/dedicated', 'flexprice', 'NO_SCHEDULE']) {
+    assert.ok(nodePoolTf.includes(part), `node_pool.tf no longer carries the taint part ${part}`);
+  }
+  assert.match(recreateScript, /POOL_TAINT_DEFAULT="fleet\.dev\/dedicated=flexprice:NoSchedule"/);
+  assert.match(recreateScript, /POOL_MIN_DEFAULT=1/, 'min 0 would violate the node_min_count validation');
+  // The two abort gates of the substrate design, restated for Retain volumes: no clear
+  // unless every PV is Retain, and the PVC tier needs the explicit --yes.
+  assert.match(cleanupScript, /are NOT Retain/, 'the reclaim-policy gate left the cleanup script');
+  assert.match(cleanupScript, /--destroy-pvc needs --yes/);
+  // A live run is typed-consent gated, strongest word wins.
+  const gate = nodepoolWorkflow.match(/- name: Check the inputs agree[\s\S]*?\n      - name: Run/)[0];
+  for (const word of ['teardown', 'destroy-pvc', 'restore']) {
+    assert.match(gate, new RegExp(`REQUIRED=${word.replace(/-/g, '\\-')}`), `no gate word ${word}`);
+  }
+  assert.match(gate, /\[ "\$CONFIRM" = "\$REQUIRED" \]/);
 });
 
 test('storage is chart-owned Retain/pd-ssd, and Terraform does not also declare the class', () => {

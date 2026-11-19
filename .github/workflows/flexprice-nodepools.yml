@@ -1,0 +1,327 @@
+name: FlexPrice node pool (cleanup / recreate)
+
+# Runs deploy/gcp/flexprice-cleanup.sh and flexprice-recreate.sh on a runner, the
+# FlexPrice twin of substrate-nodepools.yml: the teardown-and-restore of flexprice-pool
+# should not depend on someone having gcloud + kubectl + jq configured on the right
+# machine. Both actions are manual-only on purpose: neither has a schedule and neither
+# is triggered by a push, because one of them deletes the pool holding every FlexPrice
+# database.
+#
+# The substrate scripts' order of one thing at a time carries over — nothing is
+# destroyed before the backup is proven — but what "the backup" IS differs, and the
+# scripts encode that: FlexPrice's databases live on zonal pd-ssd PersistentDisks under
+# the chart-owned Retain StorageClass, so a node-pool delete takes the compute and leaves
+# the data. cleanup therefore proves every bound PV is Retain BEFORE clearing (a Delete
+# PV is an unrecoverable ClickHouse WAL and aborts the run), and the pg_dump is
+# belt-and-braces rather than the precondition it is for the substrate control plane.
+#
+# This workflow deliberately does NOT join the substrate-cluster-power concurrency
+# group, and the pool is deliberately absent from that workflow's inputs
+# (node_pool.tf: a parked pool holding a database quorum does not come back as a
+# quorum). It serialises instead on flexprice-reconcile — the group of the Terraform job
+# in deploy.yml that OWNS this pool — because that apply is the only other writer here.
+# cancel-in-progress: false: a half-run teardown is the state this script exists to
+# escape from.
+#
+# ── Required permissions, same deployer SA as substrate-nodepools.yml ──
+#
+#   Needed for                          Role
+#   ──────────────────────────────────  ──────────────────────────────────────────
+#   pool get/list/park/delete/create    roles/container.admin          (held)
+#   every kubectl call in the scripts    — GKE IAM-derived authorization covers it
+#   bucket read + backup write           roles/storage.admin           (held)
+#   disk/instance/address list           roles/compute.viewer          (held)
+#   --with-disk-snapshot                 roles/compute.storageAdmin    **MISSING**
+#   ──
+#   compute.snapshots.create is granted nowhere in this project for this SA (same gap
+#   substrate-nodepools.yml documents), so a cleanup run with --with-disk-snapshot
+#   fails that step with PERMISSION_DENIED. The Retain PDs are the real backup either
+#   way — do not enable the flag until the grant is made. "Report authorization"
+#   re-checks at run time and fails before anything starts.
+#
+# dry_run defaults to true, and a live destructive run additionally needs the `confirm`
+# input typed to the exact word the run prints. A green button with no words is a
+# rehearsal.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Which script to run
+        type: choice
+        required: true
+        default: recreate
+        options:
+          - recreate
+          - cleanup
+      dry_run:
+        description: "Print every step, change nothing"
+        type: boolean
+        required: true
+        default: true
+      confirm:
+        description: "Live runs only: type the word the run prints as REQUIRED (teardown | destroy-pvc | restore)"
+        type: string
+        required: false
+        default: ""
+      cleanup_mode:
+        description: "cleanup: what to do with the pool after the backup"
+        type: choice
+        required: false
+        default: delete
+        options:
+          - delete
+          - park
+          - backup
+      snapshot:
+        description: "recreate: snapshot to restore from. latest = newest pools.json in the backup bucket"
+        type: string
+        required: false
+        default: latest
+      destroy_pvc:
+        description: "cleanup: also delete every PVC in the flexprice namespace (irreversible: the Retain PDs are all billing data — plans, invoices, usage events)"
+        type: boolean
+        required: false
+        default: false
+      with_disk_snapshot:
+        description: "cleanup: also snapshot each Retain PD before clearing (needs roles/compute.storageAdmin — not granted)"
+        type: boolean
+        required: false
+        default: false
+      skip_backup:
+        description: "cleanup: skip the pg_dump (the Retain-PV proof is still mandatory; only the dump is skipped)"
+        type: boolean
+        required: false
+        default: false
+
+# Serialised with the only other writer of this pool: deploy.yml's flexprice_reconcile
+# applies the root that owns google_container_node_pool.flexprice. NOT
+# substrate-cluster-power — that workflow must never learn this pool's name
+# (deploy/gcp/flexprice-infra.test.js asserts it), and this one has nothing to do with
+# the substrate pools.
+concurrency:
+  group: flexprice-reconcile
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # Workload Identity Federation for the deployer SA
+
+jobs:
+  flexprice_node_pool:
+    name: ${{ inputs.action }} ${{ inputs.dry_run && '(dry run)' || '(LIVE)' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      # Same cluster and zone as the substrate workflows: the flexprice root READS
+      # substrate-multitenant (variables.tf: cluster_name default) and its pool must sit
+      # in the zone its zonal Retain PDs live in.
+      CLUSTER: ${{ vars.SUBSTRATE_CLUSTER_NAME || 'substrate-multitenant' }}
+      ZONE: ${{ vars.SUBSTRATE_CLUSTER_ZONE || 'asia-south1-a' }}
+      REGION: ${{ vars.SUBSTRATE_CLUSTER_REGION || 'asia-south1' }}
+      # FP_NS and POOL are literals, not repo variables: they are the terraform-flexprice
+      # module defaults (namespace, node_pool_name), the staged chart's placement reads
+      # the pool name through var.node_pool_name, and a repo variable here would be a
+      # second spelling a rename forgets to update. flexprice-infra.test.js pins both.
+      FP_NS: 'flexprice'
+      POOL: 'flexprice-pool'
+      ACTION: ${{ inputs.action }}
+      DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+      CONFIRM: ${{ inputs.confirm }}
+      CLEANUP_MODE: ${{ inputs.cleanup_mode }}
+      SNAPSHOT: ${{ inputs.snapshot }}
+      DESTROY_PVC: ${{ inputs.destroy_pvc && 'true' || 'false' }}
+      DISK_SNAPSHOT: ${{ inputs.with_disk_snapshot && 'true' || 'false' }}
+      SKIP_BACKUP: ${{ inputs.skip_backup && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.PROJECT }}
+
+      - name: Set up kubectl
+        run: |
+          set -euo pipefail
+          # GKE 1.30+ kubeconfigs authenticate by shelling out to this plugin; without
+          # it every kubectl call dies with "gke-gcloud-auth-plugin: not found" and both
+          # scripts read the cluster as gone.
+          gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+          gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT"
+          kubectl get nodes >/dev/null
+
+      - name: Report authorization
+        run: |
+          set -euo pipefail
+          # The SA email is the GCP_DEPLOYER_SA secret, so the runner masks it in every
+          # log; the grant command below therefore carries a placeholder, not a value.
+          SA="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+          echo "identity: $SA  (masked in logs: this is secrets.GCP_DEPLOYER_SA)"
+
+          # Read the live policy rather than trusting the header comment — the failure
+          # mode of a stale matrix is a teardown that aborts halfway with the backup
+          # unwritten and no undo.
+          # `bindings.members:` with a colon, not `=`: the `=` form matches nothing
+          # today and exits 0, which reads as "no roles at all" and fails a good run.
+          ROLES="$(gcloud projects get-iam-policy "$PROJECT" \
+                    --flatten='bindings[].members' \
+                    --filter="bindings.members:$SA" \
+                    --format='value(bindings.role)' | sort)"
+          if [ -z "$ROLES" ]; then
+            echo "::error::could not read $PROJECT's IAM policy for this identity — the role table below would be fiction"
+            exit 1
+          fi
+
+          MISSING=""
+          # The if-form matters: a bare `[ -z "$3" ] && MISSING=…` as the function's last
+          # statement returns non-zero on a held role and takes the whole step down.
+          need() {
+            if printf '%s\n' "$ROLES" | grep -qxF -- "$1"; then
+              echo "| $1 | $2 | yes |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| $1 | $2 | **no** |" >> "$GITHUB_STEP_SUMMARY"
+              MISSING="$MISSING $1"
+            fi
+          }
+          echo '### Authorization for this run' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Role | Needed for | Held |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---|---|---|' >> "$GITHUB_STEP_SUMMARY"
+          need roles/container.admin 'node-pool describe/update/delete/create + every kubectl verb (GKE authorization is IAM-derived)'
+          need roles/storage.admin   'the pools.json + pg_dump backup write, and reading --snapshot=latest'
+          need roles/compute.viewer  'disk / instance / address lookups in the teardown and restore reports'
+          if [ "$ACTION" = cleanup ] && [ "$DISK_SNAPSHOT" = true ]; then
+            # compute.snapshots.create lives only in compute.storageAdmin, which this
+            # project has never granted (see substrate-nodepools.yml). Fail here, not
+            # after the pool is already cleared.
+            need roles/compute.storageAdmin 'compute.snapshots.create for --with-disk-snapshot'
+          fi
+
+          # In-cluster half of the same question: the cleanup reads every PV's
+          # reclaimPolicy (its abort-if-not-Retain gate) and the recreate waits on
+          # rollouts. Say so explicitly in case the cluster ever moves off
+          # IAM-derived authorization.
+          {
+            echo ''
+            echo '| kubectl | Allowed |'
+            echo '|---|---|'
+            k8s_probe() {
+              printf '| %s %s %s | %s |\n' "$1" "$2" "$3" \
+                "$(kubectl auth can-i "$1" "$2" "$3" 2>/dev/null || echo no)"
+            }
+            k8s_probe get  'persistentvolume'   ''
+            k8s_probe get  'pods'               "-n $FP_NS"
+            k8s_probe exec 'pods'               "-n $FP_NS"
+            if [ "$ACTION" = cleanup ] && [ "$DESTROY_PVC" = true ]; then
+              k8s_probe delete 'persistentvolumeclaim' "-n $FP_NS"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$MISSING" ]; then
+            for role in $MISSING; do
+              {
+                echo ''
+                echo "This identity lacks \`$role\`."
+                echo ''
+                echo '```'
+                echo "gcloud projects add-iam-policy-binding $PROJECT \\"
+                echo '  --member="serviceAccount:<GCP_DEPLOYER_SA>" \'
+                echo "  --role=\"$role\""
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            done
+            # Granting is not automated here: an IAM write is a wider blast radius than
+            # a node-pool delete, because this runner runs the code of whatever branch
+            # is dispatched. The job stops and hands over the exact command.
+            echo "::error::missing role(s):$MISSING for this run; the grant command is in the summary"
+            exit 1
+          fi
+
+      - name: Check the inputs agree with each other
+        id: gate
+        run: |
+          set -euo pipefail
+          die() { echo "::error::$1"; exit 1; }
+
+          if [ "$ACTION" = recreate ]; then
+            for flag in DESTROY_PVC DISK_SNAPSHOT SKIP_BACKUP; do
+              if [ "${!flag}" = true ]; then
+                echo "::warning::$flag is a cleanup-only input and is ignored by recreate"
+              fi
+            done
+          fi
+
+          # Unlike substrate, skip_backup does NOT unarm the teardown by itself — the
+          # cleanup script's mandatory Retain-PV proof is the real gate and it still
+          # runs. But skip_backup + destroy_pvc deletes every PVC with no copy of the
+          # DBs anywhere: with Retain the PDs survive orphaned (recoverable by hand),
+          # and that is still every invoice written to disk being unreachable, so refuse.
+          if [ "$SKIP_BACKUP" = true ] && [ "$DESTROY_PVC" = true ]; then
+            die "skip_backup + destroy_pvc deletes every claim with no dump taken. The Retain PDs survive but unreferenced; run the backup first or restore the PVs by hand."
+          fi
+
+          # The typed word. Strongest applicable requirement wins, so an operator who
+          # ticks destroy_pvc cannot satisfy the gate with the word for a plain teardown.
+          REQUIRED=restore
+          [ "$ACTION" = cleanup ] && REQUIRED=teardown
+          [ "$ACTION" = cleanup ] && [ "$DESTROY_PVC" = true ] && REQUIRED=destroy-pvc
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: no confirmation needed, nothing will change."
+          else
+            [ "$CONFIRM" = "$REQUIRED" ] \
+              || die "LIVE $ACTION requires confirm=\"$REQUIRED\" (got \"$CONFIRM\"). Flip dry_run back on to rehearse."
+          fi
+          echo "required-confirm: $REQUIRED" >> "$GITHUB_STEP_SUMMARY"
+          # Exported instead of recomputed downstream: the word an operator must type has
+          # exactly one definition, and a second copy of the mapping is how a rehearsal
+          # and a live run start disagreeing about what counts as consent.
+          echo "required=$REQUIRED" >> "$GITHUB_OUTPUT"
+
+      - name: Run
+        run: |
+          set -euo pipefail
+          # Every conditional here is an if-block, not `[ cond ] && FLAGS+=(…)`: as the
+          # last command of the step a false test exits 1, and a real false — an
+          # unticked box — would then fail the job.
+          FLAGS=()
+          if [ "$DRY_RUN" = true ]; then FLAGS+=(--dry-run); fi
+          if [ "$ACTION" = cleanup ]; then
+            case "$CLEANUP_MODE" in
+              park)   FLAGS+=(--keep-pool) ;;
+              backup) FLAGS+=(--backup-only) ;;
+            esac
+            if [ "$DISK_SNAPSHOT" = true ]; then FLAGS+=(--with-disk-snapshot); fi
+            if [ "$SKIP_BACKUP" = true ]; then FLAGS+=(--skip-backup); fi
+            if [ "$DESTROY_PVC" = true ]; then FLAGS+=(--destroy-pvc --yes); fi
+            SCRIPT=deploy/gcp/flexprice-cleanup.sh
+          else
+            # `latest` is what makes this usable after a teardown nobody planned: the
+            # restore pulls the newest pools.json from the bucket instead of asking for
+            # a gs:// URI that only existed in the terminating operator's shell history.
+            FLAGS+=(--snapshot="$SNAPSHOT")
+            SCRIPT=deploy/gcp/flexprice-recreate.sh
+          fi
+          echo "::group::$SCRIPT ${FLAGS[*]}"
+          bash "$SCRIPT" "${FLAGS[@]}"
+          echo "::endgroup::"
+
+      - name: What to look at next
+        if: always()
+        env:
+          REQUIRED_WORD: ${{ steps.gate.outputs.required }}
+        run: |
+          {
+            if [ "$DRY_RUN" = true ]; then
+              echo "This was a rehearsal. Re-run with dry_run=false and confirm=\`${REQUIRED_WORD:-the word this run prints}\` to make it real."
+            elif [ "$ACTION" = cleanup ]; then
+              echo "Pool is gone; the Retain PDs and the namespace are waiting for it. Restore with this workflow (action=recreate, snapshot=latest)."
+            else
+              echo "The recreate step already proved every PVC Bound and every rollout converged on the pool."
+            fi
+            echo "Terraform still owns this pool: the next flexprice_reconcile refreshes and adopts whatever this run created."
+          } >> "$GITHUB_STEP_SUMMARY"
