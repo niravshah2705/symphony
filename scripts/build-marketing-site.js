@@ -31,6 +31,9 @@ const COMPANY_PAGES = ['pricing', 'about', 'careers', 'newsroom', 'contact'];
 const LEGAL_PAGE_SLUGS = ['terms', 'privacy', 'refund-policy', 'shipping-policy'];
 const PUBLISHED_PAGES = [...COMPANY_PAGES, ...LEGAL_PAGE_SLUGS];
 const DISCOVERY_FILES = ['robots.txt', 'llms.txt', 'llms-full.txt'];
+// Search Console verifies a URL-prefix property by fetching this token file from
+// the property's own host, so the app copy under public/ must be published too.
+const VERIFICATION_FILES = ['googleca0fdd26d71dc36f.html'];
 
 // Specific rewrites first; the generic path promotion last.
 const REWRITES = [
@@ -190,6 +193,7 @@ function buildMarketingSite(options) {
   for (var i = 0; i < promoted.length; i += 1) copyFile(adlcDir, outDir, promoted[i]);
   for (i = 0; i < PUBLISHED_PAGES.length; i += 1) copyFile(srcDir, outDir, PUBLISHED_PAGES[i] + '/index.html');
   for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i]);
+  for (i = 0; i < VERIFICATION_FILES.length; i += 1) copyFile(srcDir, outDir, VERIFICATION_FILES[i]);
   fs.writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemap(srcDir));
 
   return {
