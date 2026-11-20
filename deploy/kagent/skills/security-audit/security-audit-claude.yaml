@@ -69,7 +69,7 @@ spec:
   skills:
   - name: 'security-audit'
     source:
-      oci: 'ghcr.io/niravshah2705/symphony/security-audit-skill@sha256:d27753df800eb936ee9786776ee712171acdbf997071a0e79059a0de91534bbf'
+      oci: 'ghcr.io/niravshah2705/symphony/security-audit-skill@sha256:77424dc6a74d86b8874719b86ae92e39e0e734a4b80aa7d45f25a5edd665902b'
       path: 'skills/security-audit'
 ---
 # Agent: security-audit-claude-agent
