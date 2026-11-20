@@ -43,6 +43,28 @@ const kagentCapabilities = workflowCaps.createCapabilitiesReader({
   read: () => api.kagentCapabilities(),
 });
 
+// The platform-wide component catalog (runtime images, plugin/skill bundles)
+// and the global LLM preset list are the same for every org: one read each.
+const globalComponents = workflowCaps.createCatalogReader({
+  read: () => api.getWorkflowCatalog(),
+});
+let presetCache = null;
+function loadLlmPresets() {
+  if (presetCache) return Promise.resolve(presetCache);
+  return api.getLlmPresets()
+    .then((payload) => {
+      presetCache = Array.isArray(payload && payload.presets) ? payload.presets : [];
+      return presetCache;
+    })
+    .catch(() => {
+      presetCache = [];
+      return presetCache;
+    });
+}
+function peekLlmPresets() {
+  return presetCache;
+}
+
 let activeGateReview = null;
 
 function describePublishFailure(error) {
@@ -271,14 +293,17 @@ function nodeIconName(node) {
   return 'spark';
 }
 
-const MODEL_FAMILY_ICONS = Object.freeze({
-  anthropic: 'anthropic',
-  openai: 'openai',
-  gemini: 'gemini',
-  bedrock: 'graph',
-  vertexai: 'chart',
-  byok: 'byom',
-});
+/**
+ * The served family record behind one saved value, for the label/icon the card
+ * shows. Null when the catalog has not been read — the caller falls back to the
+ * bare id rather than to a list this file no longer carries.
+ */
+function modelFamilyRecord(id) {
+  if (!id) return null;
+  const catalog = globalComponents.peek();
+  const families = catalog && catalog.ok ? catalog.modelFamilies : [];
+  return (Array.isArray(families) ? families : []).find((family) => family && family.id === id) || null;
+}
 
 /**
  * Header chip. Every card carries exactly one `.workflow-node-status`: the
@@ -383,7 +408,12 @@ export async function renderWorkflows(view) {
   const sync = createWorkflowSync({
     client: api, model: designerModel, storage, organizationId: organization.id, canWrite: canEdit,
   });
-  const loaded = await sync.load();
+  // The graph and the platform catalog arrive together, deliberately: a node
+  // card labels its model family from the served records, so painting the
+  // canvas before that read answers would put bare ids on every card — and
+  // repainting once it lands would throw away the focus and any double-click
+  // the operator is mid-way through.
+  const [loaded] = await Promise.all([sync.load(), globalComponents.load()]);
   let state = loaded.state;
   // A step whose agent profile the canvas model refuses is dropped in silence,
   // but the server still holds it — so the first saved edit would write it away.
@@ -411,6 +441,8 @@ export async function renderWorkflows(view) {
   let workflowSelect = null;
   let statusHost = null;
   let summaryHost = null;
+  let saveButton = null;
+  let dirty = false;
 
   function currentWorkflow() {
     return workflowById(state, state.activeWorkflowId);
@@ -425,7 +457,9 @@ export async function renderWorkflows(view) {
   function applySyncStatus(result) {
     syncedWithServer = result.status === 'saved' || syncedWithServer;
     if (result.status === 'saved') {
-      setSaveStatus(`Saved · shared with your organization${persona ? ` · ${persona}` : ''}`, 'ok');
+      dirty = false;
+      setSaveStatus(`Saved · in database${persona ? ` · ${persona}` : ''}`, 'ok');
+      if (saveButton) saveButton.textContent = 'Saved';
       return;
     }
     if (result.status === 'readonly') {
@@ -446,30 +480,57 @@ export async function renderWorkflows(view) {
 
   let pushing = false;
   let pushAgain = false;
+  let lastSyncResult = null;
+  let pushSettled = Promise.resolve(null);
 
-  async function pushToServer() {
+  function pushToServer() {
     if (pushing) {
       pushAgain = true;
-      return;
+      return pushSettled;
     }
     pushing = true;
-    do {
-      pushAgain = false;
-      try {
-        applySyncStatus(await sync.flush(state));
-      } catch (error) {
-        // An auth refusal is the session handler's problem, not a save failure.
-        if (error && (error.status === 401 || error.status === 403)) {
-          setSaveStatus(error.status === 403 ? 'Not allowed to save this workflow' : 'Sign in again to save', 'error');
-        } else {
-          setSaveStatus('Could not reach the server · draft kept', 'error');
+    pushSettled = (async () => {
+      do {
+        pushAgain = false;
+        try {
+          lastSyncResult = await sync.flush(state);
+          applySyncStatus(lastSyncResult);
+        } catch (error) {
+          lastSyncResult = { status: 'error' };
+          // An auth refusal is the session handler's problem, not a save failure.
+          if (error && (error.status === 401 || error.status === 403)) {
+            setSaveStatus(error.status === 403 ? 'Not allowed to save this workflow' : 'Sign in again to save', 'error');
+          } else {
+            setSaveStatus('Could not reach the server · draft kept', 'error');
+          }
         }
-      }
-    } while (pushAgain);
-    pushing = false;
+      } while (pushAgain);
+      pushing = false;
+      return lastSyncResult;
+    })();
+    return pushSettled;
   }
 
-  function persistNow({ silent = false } = {}) {
+  /** Explicit save: flush the draft, then wait for the database to accept it. */
+  async function saveNow() {
+    persistPendingViewport();
+    if (persistTimer) persistNow({ silent: true, deferPush: true });
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = 'Saving…';
+    }
+    if (hiddenProfiles.length) {
+      setSaveStatus('Draft saved on this device · hidden steps block syncing', 'error');
+    }
+    const result = await pushToServer();
+    if (saveButton) {
+      saveButton.disabled = !canEdit;
+      if (!result || result.status !== 'saved') saveButton.textContent = 'Save';
+    }
+    return result;
+  }
+
+  function persistNow({ silent = false, deferPush = false } = {}) {
     if (persistTimer) window.clearTimeout(persistTimer);
     persistTimer = null;
     // Draft first, always: a failed request must never cost the user the edit.
@@ -477,6 +538,12 @@ export async function renderWorkflows(view) {
     if (!result.ok) {
       setSaveStatus('Could not save · session copy retained', 'error');
       if (!silent) toast(result.error || 'Browser storage is unavailable. Your current session is still usable.', 'err');
+      return result;
+    }
+    if (deferPush) {
+      dirty = true;
+      if (saveButton) saveButton.textContent = 'Save';
+      setSaveStatus('Draft saved on this device · press Save to sync', 'error');
       return result;
     }
     if (!syncedWithServer && !sync.isOffline()) setSaveStatus('Saving…');
@@ -495,9 +562,11 @@ export async function renderWorkflows(view) {
   }
 
   function schedulePersist() {
-    setSaveStatus(syncedWithServer ? 'Saving…' : 'Saving locally…');
+    dirty = true;
+    if (saveButton) saveButton.textContent = 'Save';
+    setSaveStatus(syncedWithServer ? 'Unsaved changes · press Save' : 'Saving locally…', syncedWithServer ? '' : 'error');
     if (persistTimer) window.clearTimeout(persistTimer);
-    persistTimer = window.setTimeout(() => persistNow(), SAVE_DELAY_MS);
+    persistTimer = window.setTimeout(() => persistNow({ deferPush: true }), SAVE_DELAY_MS);
   }
 
   const capabilities = kagentCapabilities;
@@ -941,7 +1010,8 @@ export async function renderWorkflows(view) {
 
     if (node.harness) out.push(metaRow('Harness', node.harness, node.harness === 'deepagent' ? 'deepagent' : 'code'));
     if (node.modelFamily) {
-      out.push(metaRow('Model family', node.modelFamily, MODEL_FAMILY_ICONS[node.modelFamily] || 'byom'));
+      const family = modelFamilyRecord(node.modelFamily);
+      out.push(metaRow('Model family', family ? family.label : node.modelFamily, (family && family.icon) || 'byom'));
     }
     if (node.taskTier) {
       out.push(el('div', { class: 'workflow-node-field workflow-node-field--tiers' }, [
@@ -1307,9 +1377,9 @@ export async function renderWorkflows(view) {
       segmented.append(button);
     }
 
-    const choice = (label, values, current, key, emptyLabel) => {
+    const choice = (label, values, current, key, emptyLabel, { redraw = false, thenFocus = '' } = {}) => {
       const items = values.map((item) => (typeof item === 'string' ? { value: item, label: item, source: 'platform' } : item));
-      const select = el('select', { disabled: !canEdit }, [
+      const select = el('select', { disabled: !canEdit, dataset: { choice: key } }, [
         ...(emptyLabel ? [option('', emptyLabel, !current)] : []),
         ...items.map((item) => option(
           item.value,
@@ -1317,7 +1387,15 @@ export async function renderWorkflows(view) {
           item.value === current,
         )),
       ]);
-      select.addEventListener('change', () => patch({ [key]: select.value }));
+      select.addEventListener('change', () => {
+        patch({ [key]: select.value }, { redraw });
+        // A redraw replaces the inspector, so focus would land on the body and
+        // a keyboard operator would have to tab back through the whole panel to
+        // reach the dependent field this choice just made possible.
+        if (redraw && thenFocus) {
+          inspectorHost.querySelector(`select[data-choice="${thenFocus}"]`)?.focus();
+        }
+      });
       return field(label, select);
     };
 
@@ -1459,6 +1537,28 @@ export async function renderWorkflows(view) {
       });
     });
 
+    // The global component catalog and the LLM preset list populate the
+    // Harness / family / model dropdowns. First read is session-wide; when it
+    // answers, redraw this inspector once so the choices appear.
+    const catalog = globalComponents.peek();
+    if (!catalog) {
+      globalComponents.load().then(() => {
+        if (selected.kind !== 'node' || selected.id !== node.id) return;
+        const active = document.activeElement;
+        if (active && active.closest && active.closest('.workflow-env-rows')) return;
+        renderInspector();
+      });
+    }
+    const presets = peekLlmPresets();
+    if (!presets) {
+      loadLlmPresets().then(() => {
+        if (selected.kind !== 'node' || selected.id !== node.id) return;
+        const active = document.activeElement;
+        if (active && active.closest && active.closest('.workflow-env-rows')) return;
+        renderInspector();
+      });
+    }
+
     const specOf = () => {
       const spec = live().kagentSpec;
       return spec && typeof spec === 'object' ? spec : {};
@@ -1507,14 +1607,102 @@ export async function renderWorkflows(view) {
       });
     });
 
+    const packSourceKey = (source) => {
+      if (!source || typeof source !== 'object') return '';
+      if (source.oci) return `oci:${source.oci}`;
+      if (source.git) return `git:${source.git.url}@${source.git.commit}`;
+      if (source.bucket && source.bucket.s3) return `s3:${source.bucket.s3.key}`;
+      return '';
+    };
+    const boundPlugins = () => (Array.isArray(specOf().plugins) ? specOf().plugins : []);
+    const boundSkills = () => (Array.isArray(specOf().skills) ? specOf().skills : []);
+    const pluginList = el('div', { class: 'workflow-check-list' });
+    const skillList = el('div', { class: 'workflow-check-list' });
+    for (const record of (catalog && catalog.ok ? catalog.plugins : [])) {
+      const key = packSourceKey(record.source);
+      const box = el('input', { type: 'checkbox', disabled: !canEdit || !key });
+      box.checked = Boolean(key) && boundPlugins().some((entry) => packSourceKey(entry.source) === key);
+      box.addEventListener('change', () => {
+        const kept = boundPlugins().filter((entry) => packSourceKey(entry.source) !== key);
+        const entry = {
+          source: record.source,
+          ...(Array.isArray(record.skills) && record.skills.length ? { skills: record.skills } : {}),
+          ...(record.promptAppend ? { promptAppend: record.promptAppend } : {}),
+        };
+        patchSpec({ plugins: box.checked ? [...kept, entry] : kept });
+      });
+      pluginList.append(el('label', { class: 'workflow-check' }, [
+        box,
+        el('span', {}, record.label || record.id),
+        el('small', { class: 'muted' }, key
+          ? `${record.version || 'unversioned'} · ${(record.skills || []).length} skills`
+          : 'not published yet'),
+      ]));
+    }
+    for (const record of (catalog && catalog.ok ? catalog.skills : [])) {
+      const key = packSourceKey(record.source);
+      const box = el('input', { type: 'checkbox', disabled: !canEdit || !key });
+      box.checked = boundSkills().some((entry) => entry && entry.name === record.id);
+      box.addEventListener('change', () => {
+        const kept = boundSkills().filter((entry) => !(entry && entry.name === record.id));
+        const entry = {
+          name: record.id,
+          source: { ...record.source, ...(record.path ? { path: record.path } : {}) },
+          ...(record.promptAppend ? { promptAppend: record.promptAppend } : {}),
+        };
+        patchSpec({ skills: box.checked ? [...kept, entry] : kept });
+      });
+      skillList.append(el('label', { class: 'workflow-check' }, [
+        box,
+        el('span', {}, record.label || record.id),
+        el('small', { class: 'muted' }, key ? String(record.version || '') : 'not published yet'),
+      ]));
+    }
+    if (!catalog) {
+      pluginList.append(el('p', { class: 'muted' }, 'Reading the global component catalog…'));
+    } else if (!catalog.ok) {
+      pluginList.append(el('p', { class: 'muted' }, `The global catalog could not be read (${catalog.error || 'no response'}).`));
+    } else if (!catalog.plugins.length) {
+      pluginList.append(el('p', { class: 'muted' }, 'The platform has published no plugin bundles yet.'));
+    }
+    if (!catalog) {
+      skillList.append(el('p', { class: 'muted' }, 'Reading the global component catalog…'));
+    } else if (catalog.ok && !catalog.skills.length) {
+      skillList.append(el('p', { class: 'muted' }, 'The platform has published no skill bundles yet.'));
+    }
+
+    // The family list is served data (registry/model-families.json), so an
+    // unread catalog means an empty dropdown — not a browser-side guess.
+    const families = (catalog && catalog.ok && catalog.modelFamilies) || [];
     const sections = [
       el('section', { class: 'workflow-inspector-section' }, [
         el('h3', {}, 'Runtime binding'),
         field('Execution backend', segmented),
-        choice('Harness', workflowCaps.harnessChoices(caps, designerModel.HARNESS_OPTIONS), node.harness, 'harness', 'Platform default'),
-        choice('Model family', designerModel.MODEL_FAMILIES, node.modelFamily, 'modelFamily', 'Inherit from the profile'),
+        choice('Harness', workflowCaps.harnessChoices(caps, designerModel.HARNESS_OPTIONS, catalog && catalog.ok ? catalog.harnesses : []), node.harness, 'harness', 'Platform default'),
+        // The Model list is filtered by this family, and `patch()` does not redraw
+        // on its own — without the redraw the operator picks a family and the
+        // Model field keeps showing nothing.
+        choice('Model family', workflowCaps.modelFamilyChoices(families, node.modelFamily), node.modelFamily, 'modelFamily', 'Inherit from the profile', { redraw: true, thenFocus: 'model' }),
+        choice('Model', workflowCaps.modelChoices(presets || [], node.modelFamily, families), node.model, 'model', 'Inherit from the profile'),
+        // An empty family dropdown is otherwise indistinguishable from a
+        // deployment that really lists no families, and the refused read is
+        // remembered for the session — so say so, and offer the way back.
+        catalog && !catalog.ok ? el('p', { class: 'muted' }, [
+          `The model catalog could not be read (${catalog.error || 'no response'}), so only the value this node already holds is shown.`,
+          ' ',
+          el('button', {
+            type: 'button', class: 'workflow-caps-reread',
+            onClick: (event) => {
+              event.target.disabled = true;
+              globalComponents.forget();
+              globalComponents.load().then(() => {
+                if (selected.kind === 'node' && selected.id === node.id) renderInspector();
+              });
+            },
+          }, 'Read the catalog again'),
+        ]) : null,
         choice('Task tier', designerModel.TASK_TIERS, node.taskTier || 'medium', 'taskTier', ''),
-        el('p', { class: 'muted' }, 'A kagent publish renders from this node. Substrate runs the curated profile as an actor, so its kagent bindings are ignored.'),
+        el('p', { class: 'muted' }, 'Harness and model names come from the platform runtime images and the global model catalog. A kagent publish renders from this node; Substrate runs the curated profile as an actor, so its kagent bindings are ignored.'),
         // Not field(): a <label for> would rename the button to "Runtime" and
         // the only thing saying what the click does would be its own title.
         el('div', { class: 'workflow-field' }, [
@@ -1522,6 +1710,12 @@ export async function renderWorkflows(view) {
           publishButton,
         ]),
         publishResult,
+      ]),
+      el('section', { class: 'workflow-inspector-section' }, [
+        el('h3', {}, 'Plugins & skills'),
+        field('Plugin bundles', pluginList),
+        field('Skill bundles', skillList),
+        el('p', { class: 'muted' }, 'Selected from the global bundle catalog, pinned by digest; a kagent publish carries them into the Agent CR.'),
       ]),
     ];
 
@@ -1870,6 +2064,11 @@ export async function renderWorkflows(view) {
       designer?.classList.remove('is-palette-open');
       designer?.classList.add('is-inspector-open');
     });
+    saveButton = el('button', {
+      type: 'button', class: 'btn primary', disabled: !canEdit,
+      title: 'Save this workflow to the organization database',
+    }, 'Save');
+    saveButton.addEventListener('click', () => { saveNow(); });
     statusHost = el('span', { class: 'workflow-toolbar-status', role: 'status', 'aria-live': 'polite' }, 'Loading…');
     summaryHost = el('span', { class: 'workflow-summary' });
     paletteHost = el('aside', { class: 'workflow-panel workflow-palette', 'aria-label': 'Agent palette' });
@@ -1884,7 +2083,7 @@ export async function renderWorkflows(view) {
         summaryHost,
       ]),
       el('div', { class: 'workflow-toolbar' }, [
-        el('div', { class: 'workflow-toolbar-group' }, [workflowSelect, newWorkflowButton, duplicateButton, resetButton]),
+        el('div', { class: 'workflow-toolbar-group' }, [workflowSelect, newWorkflowButton, duplicateButton, resetButton, saveButton]),
         statusHost,
       ]),
     ]);
@@ -1919,7 +2118,7 @@ export async function renderWorkflows(view) {
     if (loaded.sync) applySyncStatus(loaded.sync);
     else if (loaded.source === 'offline') setSaveStatus('Offline · saved on this device', 'error');
     else if (loaded.source === 'seed') setSaveStatus('Example workflow · not saved yet');
-    else setSaveStatus(`Shared with your organization${persona ? ` · ${persona}` : ''}`, 'ok');
+    else setSaveStatus(`Saved · in database${persona ? ` · ${persona}` : ''}`, 'ok');
   }
 
   mount();

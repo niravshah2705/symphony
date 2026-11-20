@@ -515,7 +515,13 @@ test('v2 gate, prompt-append, connector and persona helpers agree with the serve
   assert.deepEqual([...v2.WORKFLOW_NODE_KINDS_V2], [...serverModel.WORKFLOW_NODE_KINDS_V2]);
   assert.deepEqual([...v2.WORKFLOW_NODE_BACKENDS], [...serverModel.WORKFLOW_NODE_BACKENDS]);
   assert.deepEqual([...v2.TASK_TIERS], [...serverModel.TASK_TIERS]);
-  assert.deepEqual([...v2.MODEL_FAMILIES], [...serverModel.MODEL_FAMILIES]);
+  // The family vocabulary is served data now (agent/registry/model-families.json),
+  // so the parity that matters is the validator, not a list in each module.
+  assert.equal(v2.MODEL_FAMILIES, undefined);
+  assert.equal(serverModel.MODEL_FAMILIES, undefined);
+  for (const value of ['anthropic', 'GPT-4o', 'mistral', 'not an id!', '', null]) {
+    assert.equal(v2.normalizeModelFamily(value), serverModel.normalizeModelFamily(value), `normalizeModelFamily(${JSON.stringify(value)}) drifted`);
+  }
   assert.deepEqual([...v2.HARNESS_OPTIONS], [...serverModel.HARNESS_OPTIONS]);
   assert.equal(v2.GATE_CARD_MAX, serverModel.GATE_CARD_MAX);
   assert.equal(v2.GATE_ITEM_MAX, serverModel.GATE_ITEM_MAX);

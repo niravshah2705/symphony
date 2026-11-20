@@ -282,6 +282,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      # Workload Identity federation for the Firestore catalog mirror below.
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -349,3 +351,25 @@ jobs:
           done
           echo "Lost the push race 5 times: the artifacts are published and unstamped." >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+      # Tag every pack with its AgentCard types and mirror the stamped
+      # catalog into the Firestore `plugins` collection (idempotent across
+      # the plugin and skill tracks; content-compared per record).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies for the store mirror
+        run: npm ci --ignore-scripts --omit=dev
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Mirror the tagged skill catalog to Firestore
+        env:
+          STORE_BACKEND: firestore
+        run: node scripts/seed-plugin-catalog.js --store

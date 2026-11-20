@@ -207,8 +207,12 @@ function upsertAgentProfile(input, { actor = null } = {}) {
     guardrails: Array.isArray(input.guardrails) ? input.guardrails.map((v) => model.plainText(v, 240)).filter(Boolean).slice(0, 20) : [],
     tools: Array.isArray(input.tools) ? input.tools.map((v) => model.plainText(v, 80)).filter(Boolean).slice(0, 40) : [],
     backend: model.WORKFLOW_NODE_BACKENDS.includes(input.backend) ? input.backend : 'substrate',
-    harness: model.HARNESS_OPTIONS.includes(input.harness) ? input.harness : '',
-    modelFamily: model.MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '',
+    // Same rule as the graph node: the dropdown is populated from the cluster
+    // and the global runtime-image registry, so any DNS-shaped name is valid.
+    harness: model.HARNESS_OPTIONS.includes(input.harness) ? input.harness
+      : (/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(String(input.harness || '')) ? String(input.harness).slice(0, 63) : ''),
+    modelFamily: model.normalizeModelFamily(input.modelFamily),
+    model: model.plainText(input.model, 128),
     taskTier: model.TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium',
     connectors: input.connectors || [],
     systemPrompt: model.plainText(input.systemPrompt, 16000),

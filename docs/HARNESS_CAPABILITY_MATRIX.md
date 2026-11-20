@@ -81,8 +81,10 @@ Notes:
 
 ## 2. Model-family & provider compatibility
 
-Model families: `MODEL_FAMILIES = ['anthropic','openai','bedrock','vertexai','gemini','byok']`
-(`workflow/model.js:12`).
+Model families are data, not a constant: `agent/registry/model-families.json`
+(lists `anthropic`, `openai`, `bedrock`, `vertexai`, `gemini`, `qoder`, `byok`)
+loaded by `agent/model-families.js` and served to the designer through
+`GET /api/workflows/catalog`.
 
 | Harness | Native model family(s) | Managed-provider notes |
 |---|---|---|

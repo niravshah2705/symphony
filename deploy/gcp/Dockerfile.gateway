@@ -26,6 +26,9 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY packages/shared-core/ ./packages/shared-core/
 COPY services/gateway/ ./services/gateway/
+# The workflow designer's global catalog reads the current runtime-image rows
+# from this CSV (see packages/shared-core/src/agent/global-catalog.js).
+COPY go/harness/runtime-images.csv ./go/harness/runtime-images.csv
 
 # Reproducible production-only install, explicitly scoped even though only the
 # two permitted workspaces are present in this build context layer.

@@ -15,6 +15,7 @@ const express = require('express');
 const { asyncHandler } = require('@software-factory/shared-core/util');
 const wfStore = require('@software-factory/shared-core/workflow/store');
 const { PERSONAS, personaAllowsCategory } = require('@software-factory/shared-core/workflow/model');
+const { globalCatalog } = require('@software-factory/shared-core/agent/global-catalog');
 const { cleanContextId } = require('../request-context');
 
 function callerUid(req) {
@@ -209,6 +210,14 @@ function createWorkflowsRouter({ kagentAdapter = null, substrateAdapter = null }
   }));
 
   // ------------------------------------------------- kagent / substrate surface
+
+  // The platform-wide component list the designer populates its dropdowns
+  // from: current harness runtime images plus the plugin/skill bundle
+  // catalogs. Read-only and identical for every org — the same files CI
+  // stamps when it publishes the bundles.
+  router.get('/catalog', asyncHandler(async (req, res) => {
+    res.set('Cache-Control', 'no-store').json(globalCatalog());
+  }));
 
   router.get('/kagent/capabilities', asyncHandler(async (req, res) => {
     if (!kagentAdapter || !kagentAdapter.enabled || !kagentAdapter.enabled()) {
