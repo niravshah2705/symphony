@@ -2,9 +2,9 @@
 
 const express = require('express');
 const path = require('path');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const { sendError } = require('@ai-fleet/shared-core/util');
-const log = require('@ai-fleet/shared-core/logger');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const { sendError } = require('@software-factory/shared-core/util');
+const log = require('@software-factory/shared-core/logger');
 
 const { requireBillingCaller, billingTrustedHeaders } = require('./billing-access');
 const eulaRoutes = require('./routes/eula');
@@ -17,12 +17,12 @@ const { mountGlobalQuestionsRoutes } = require('./global-questions-routes');
 const { createAuthenticationMiddleware, requirePermission, requireAuthenticated, publicAuthConfig, bearerToken } = require('./auth');
 const { callJson } = require('./service-client');
 const { createConfigResolver } = require('./config-resolver');
-const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared-core/billing/gate');
+const { reportBoot: reportBillingGateBoot } = require('@software-factory/shared-core/billing/gate');
 const { requireEulaAccepted } = require('./eula');
 const { createCorsMiddleware } = require('./cors');
-const { initStore, getConversation } = require('@ai-fleet/shared-core/store');
-const kagent = require('@ai-fleet/shared-core/agent/kagent');
-const events = require('@ai-fleet/shared-core/messaging/events');
+const { initStore, getConversation } = require('@software-factory/shared-core/store');
+const kagent = require('@software-factory/shared-core/agent/kagent');
+const events = require('@software-factory/shared-core/messaging/events');
 const { createCompatibilityHandlers } = require('./publish');
 const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
@@ -169,7 +169,7 @@ app.get('/api/auth/me', (req, res) => {
 app.get('/api/config', createConfigResolver());
 
 // Mint a short-lived stream token for the authenticated user to open an SSE
-// connection for a specific conversation. AI Fleet is single-tenant by design —
+// connection for a specific conversation. Software Factory is single-tenant by design —
 // all fleet:access operators share one store/conversations (see README), so there
 // is no per-user ownership boundary to enforce here. We still require the
 // conversation to EXIST so tokens can't be minted for arbitrary/guessed ids.
@@ -420,7 +420,7 @@ app.use((err, req, res, next) => {
 initStore()
   .then(() => {
     app.listen(CONFIG.SERVICES.gatewayPort, () => {
-      log.info(`AI Fleet gateway running at http://localhost:${CONFIG.SERVICES.gatewayPort}`);
+      log.info(`Software Factory gateway running at http://localhost:${CONFIG.SERVICES.gatewayPort}`);
       log.info(`  → proxying /api/agent and /api/coder to ${CONFIG.SERVICES.agentUrl}`);
       // Which admission rule this process will apply, stated at boot. A named
       // `enforced` with no FlexPrice throws, and an uncaught throw in here stops

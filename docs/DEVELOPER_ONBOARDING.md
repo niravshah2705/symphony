@@ -1,9 +1,9 @@
-# AI Fleet — Developer Onboarding
+# Software Factory — Developer Onboarding
 
 Welcome! This guide gets a new developer from a fresh clone to a running app,
 explains what the software does, and points you at the code you'll be working in.
 
-> **What is this?** AI Fleet (repo `tech-symphony`) is a **single-user** tool with
+> **What is this?** Software Factory (repo `tech-symphony`) is a **single-user** tool with
 > a dependency-free vanilla-JS single-page frontend, decomposed into **three
 > isolated Node.js + Express services over one shared library** (an npm-workspaces
 > monorepo — see §6). It manages **Linear** projects/issues **and** runs two AI
@@ -59,7 +59,7 @@ PORT=5000 npm start    # gateway → http://localhost:5000
 ```
 
 If the agent services run on other hosts, tell the gateway where with `PLANNER_URL`
-and `CODER_URL`. Move the shared store with `AI_FLEET_DATA_DIR`.
+and `CODER_URL`. Move the shared store with `SOFTWARE_FACTORY_DATA_DIR`.
 
 Then open **<http://localhost:4000>** in a browser. Select an organization and
 project, then provision its Linear credential through the encrypted scope vault.
@@ -86,7 +86,7 @@ and their local infrastructure processes with prefixed output:
   actors** — per-run gVisor sandboxes dispatched by the orchestrator; the
   retired coder board monitor no longer polls (the durable pipeline owns dispatch).
 
-The application services import the same `@ai-fleet/shared` library, so there
+The application services import the same `@software-factory/shared` library, so there
 is exactly one copy of every module (config, store, Linear client, deep-agent
 runtime).
 
@@ -230,10 +230,10 @@ unavailable; local non-production tests do not use it unless explicitly requeste
 
 The repo is an **npm-workspaces monorepo**: one shared library, three isolated
 service processes. `data/store.json` and `public/` live at the repo root and are
-shared by all services (resolved via `@ai-fleet/shared/config`).
+shared by all services (resolved via `@software-factory/shared/config`).
 
 ```
-packages/shared/              @ai-fleet/shared — ONE copy of all business logic
+packages/shared/              @software-factory/shared — ONE copy of all business logic
   index.js                    barrel (CONFIG, store, linear, log, util)
   src/
     config.js                 constants + repo-root paths + SERVICES topology + OAuth/CODER config

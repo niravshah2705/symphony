@@ -1,15 +1,15 @@
 'use strict';
 
 const { createHash, randomUUID } = require('node:crypto');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const harnessCatalog = require('@ai-fleet/shared-core/agent/harness-catalog.json');
-const { repoParts } = require('@ai-fleet/shared-core/agent/repo-url');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const harnessCatalog = require('@software-factory/shared-core/agent/harness-catalog.json');
+const { repoParts } = require('@software-factory/shared-core/agent/repo-url');
 const {
   customPresetForSettings,
   presetForModel,
   publicCatalog,
-} = require('@ai-fleet/shared-core/agent/model-presets');
-const { billingStatus } = require('@ai-fleet/shared-core/billing/gate');
+} = require('@software-factory/shared-core/agent/model-presets');
+const { billingStatus } = require('@software-factory/shared-core/billing/gate');
 const {
   MAX_STAGE_COMMAND_REQUEST_BYTES,
   MAX_STAGE_RESULT_OUTPUT_BYTES,
@@ -19,8 +19,8 @@ const {
   createPreflightSnapshot,
   createStageCommandV1,
   normalizeRequestedStages,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
-const store = require('@ai-fleet/shared-core/store');
+} = require('@software-factory/shared-core/pipeline/contracts');
+const store = require('@software-factory/shared-core/store');
 const { callJson } = require('./service-client');
 const { bearerToken } = require('./auth');
 const { requestContext } = require('./request-context');

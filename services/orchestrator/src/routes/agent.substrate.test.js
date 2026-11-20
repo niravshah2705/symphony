@@ -3,11 +3,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const SUBSTRATE_PATH = require.resolve('@ai-fleet/shared/agent/substrate');
-const RUNNER_PATH = require.resolve('@ai-fleet/shared/agent/substrate-runner');
+const SUBSTRATE_PATH = require.resolve('@software-factory/shared/agent/substrate');
+const RUNNER_PATH = require.resolve('@software-factory/shared/agent/substrate-runner');
 const ROUTER_PATH = require.resolve('./agent');
 
-const store = require('@ai-fleet/shared/store');
+const store = require('@software-factory/shared/store');
 
 /**
  * Replace the ateapi client with a fake so the route can be exercised without a

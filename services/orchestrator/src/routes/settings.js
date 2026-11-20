@@ -1,10 +1,10 @@
 'use strict';
 
 const express = require('express');
-const { getSettings, patchSettings, addSettingsHistory } = require('@ai-fleet/shared/store');
-const { asyncHandler } = require('@ai-fleet/shared/util');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { repoParts } = require('@ai-fleet/shared/agent/repo-url');
+const { getSettings, patchSettings, addSettingsHistory } = require('@software-factory/shared/store');
+const { asyncHandler } = require('@software-factory/shared/util');
+const { CONFIG } = require('@software-factory/shared/config');
+const { repoParts } = require('@software-factory/shared/agent/repo-url');
 const {
   publicCatalog,
   presetForRole,
@@ -19,16 +19,16 @@ const {
   neutralLocalPreset,
   isPurposeRole,
   MODEL_ROLES,
-} = require('@ai-fleet/shared/agent/model-presets');
+} = require('@software-factory/shared/agent/model-presets');
 const {
   normalizeAgentRuntime,
   normalizeWorkflowPattern,
-} = require('@ai-fleet/shared/agent/runtimes');
+} = require('@software-factory/shared/agent/runtimes');
 const {
   sanitizeSettingsPatch,
   snapshotEditable,
   describeEditableSettings,
-} = require('@ai-fleet/shared/agent/settings-patch');
+} = require('@software-factory/shared/agent/settings-patch');
 
 const router = express.Router();
 const LEGACY_PLAINTEXT_SECRET_FIELDS = Object.freeze([
@@ -371,7 +371,7 @@ async function selectionPreset(provider, model) {
   // unavailable during startup or an installation upgrade.
   let discovery;
   try {
-    discovery = require('@ai-fleet/shared/agent/model-discovery');
+    discovery = require('@software-factory/shared/agent/model-discovery');
   } catch (_) {
     return null;
   }

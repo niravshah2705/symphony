@@ -55,6 +55,30 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.archagentix.com/terms/</loc>
+    <lastmod>2026-11-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.archagentix.com/privacy/</loc>
+    <lastmod>2026-11-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.archagentix.com/refund-policy/</loc>
+    <lastmod>2026-11-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://www.archagentix.com/shipping-policy/</loc>
+    <lastmod>2026-11-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.archagentix.com/adlc/blog/getting-started/</loc>
     <lastmod>2026-11-03</lastmod>
     <changefreq>monthly</changefreq>

@@ -1,6 +1,6 @@
 # Access & Tenancy Model
 
-How AI Fleet decides **who can do what** across three access tiers, and how a
+How Software Factory decides **who can do what** across three access tiers, and how a
 user moves from a private personal workspace to a shared organization. This is
 the product contract; the server is always the enforcement boundary (the SPA
 only mirrors it to hide UI).

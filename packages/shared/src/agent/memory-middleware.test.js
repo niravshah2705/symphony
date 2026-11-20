@@ -132,7 +132,7 @@ function memoryPool() {
 }
 
 test('capture then inject round-trips through the real Postgres-backed store', async () => {
-  const { runWithWorkspaceContext } = require('@ai-fleet/shared-core/store/workspace-context');
+  const { runWithWorkspaceContext } = require('@software-factory/shared-core/store/workspace-context');
   const { createPostgresBackend } = require('./memory-store/postgres-backend');
   const { recallMemories } = require('./memory-store/recall');
   const store = createPostgresBackend({ pool: memoryPool() });

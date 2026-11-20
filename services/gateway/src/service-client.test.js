@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 delete process.env.MESSAGING_MODE;
 delete process.env.INTERNAL_API_TOKEN;
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-service-client-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
 const { callJson, bearerHeader } = require('./service-client');
 

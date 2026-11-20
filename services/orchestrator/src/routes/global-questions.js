@@ -16,8 +16,8 @@
 const express = require('express');
 const { randomUUID } = require('node:crypto');
 
-const defaultStore = require('@ai-fleet/shared/store');
-const { asyncHandler } = require('@ai-fleet/shared/util');
+const defaultStore = require('@software-factory/shared/store');
+const { asyncHandler } = require('@software-factory/shared/util');
 const {
   QuestionError,
   assertWithinCustomLimit,
@@ -26,9 +26,9 @@ const {
   mergeBank,
   normalizeQuestion,
   validateQuestionPatch,
-} = require('@ai-fleet/shared/agent/global-questions');
-const coverageService = require('@ai-fleet/shared/agent/coverage-service');
-const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
+} = require('@software-factory/shared/agent/global-questions');
+const coverageService = require('@software-factory/shared/agent/coverage-service');
+const localIntelligence = require('@software-factory/shared/agent/local-intelligence');
 
 const AI_ASSIST_MODES = ['suggest', 'rewrite', 'import'];
 const MAX_PROPOSALS = 40;

@@ -5,24 +5,24 @@
  * retrieval and an LLM-synthesized "ask" endpoint. Split out of agent.js
  * (already large) since this is a fully self-contained, newly-added surface.
  *
- * Ingestion/retrieval logic lives in @ai-fleet/shared/attachments/service.js
+ * Ingestion/retrieval logic lives in @software-factory/shared/attachments/service.js
  * (no LLM-calling code there — that package has no agent-SDK dependency); the
  * /ask endpoint's LLM synthesis is implemented here instead, where
  * resolveLlm/createChatModel are already available.
  */
 
 const express = require('express');
-const { getConversation } = require('@ai-fleet/shared/store');
-const { asyncHandler } = require('@ai-fleet/shared/util');
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { SENTINEL_TOKEN } = require('@ai-fleet/shared/egress');
-const { getSettings } = require('@ai-fleet/shared/store');
-const { resolveLlm, createChatModel } = require('@ai-fleet/shared/agent/llm');
-const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
-const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
-const attachmentsService = require('@ai-fleet/shared/attachments/service');
-const attachmentTypes = require('@ai-fleet/shared/attachments/types');
-const { isValidAttachmentId } = require('@ai-fleet/shared/attachments/model');
+const { getConversation } = require('@software-factory/shared/store');
+const { asyncHandler } = require('@software-factory/shared/util');
+const { CONFIG } = require('@software-factory/shared/config');
+const { SENTINEL_TOKEN } = require('@software-factory/shared/egress');
+const { getSettings } = require('@software-factory/shared/store');
+const { resolveLlm, createChatModel } = require('@software-factory/shared/agent/llm');
+const { normalizeEventContext, matchesEventContext } = require('@software-factory/shared/messaging/events');
+const { redactSecrets } = require('@software-factory/shared/agent/tools/exec');
+const attachmentsService = require('@software-factory/shared/attachments/service');
+const attachmentTypes = require('@software-factory/shared/attachments/types');
+const { isValidAttachmentId } = require('@software-factory/shared/attachments/model');
 
 const CONV_ID_PATTERN = /^conv_[A-Za-z0-9_-]{1,64}$/;
 const MAX_REDACT_BYTES = 1_000_000; // matches agent.js's redactUserText cap

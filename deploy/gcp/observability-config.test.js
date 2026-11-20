@@ -23,7 +23,7 @@ const proxySrc = read('services', 'proxy', 'src', 'proxy.js');
 const notifySrc = read('packages', 'shared-core', 'src', 'billing', 'notify.js');
 const usageSrc = read('packages', 'shared-core', 'src', 'billing', 'usage.js');
 const loggerSrc = read('packages', 'shared-core', 'src', 'logger.js');
-const pricing = require('@ai-fleet/shared-core/billing/pricing');
+const pricing = require('@software-factory/shared-core/billing/pricing');
 const gen = require('../../scripts/gen-observability-inputs.js');
 
 /** The `jsonPayload.meta.<field>="<value>"` equalities a metric filter asserts. */

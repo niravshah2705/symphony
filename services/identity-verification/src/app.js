@@ -2,7 +2,7 @@
 
 const crypto = require('node:crypto');
 const express = require('express');
-const log = require('@ai-fleet/shared-core/logger');
+const log = require('@software-factory/shared-core/logger');
 const { createRepositoryFromEnv } = require('./repository');
 const { createDigiLockerProvider } = require('./provider');
 const {

@@ -1,6 +1,6 @@
 # Security Policy
 
-AI Fleet is a local-first tool that brokers third-party credentials (Linear,
+Software Factory is a local-first tool that brokers third-party credentials (Linear,
 GitHub/GitLab, and LLM providers) and runs autonomous agents against your projects.
 We take its security posture seriously and appreciate responsible disclosure.
 
@@ -50,7 +50,7 @@ as compromised and rotate it immediately** — the Linear key, GitHub/GitLab tok
 provider key, and any Codex/Claude OAuth tokens. Never paste a live secret into an
 issue, advisory, or email; redact it first.
 
-## Security model (how AI Fleet protects credentials)
+## Security model (how Software Factory protects credentials)
 
 The README's [**Security notes**](./README.md#security-notes) are the authoritative,
 detailed description of the design. In summary:

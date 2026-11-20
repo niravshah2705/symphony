@@ -1,11 +1,11 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const oauth = require('@ai-fleet/shared-core/agent/oauth');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const oauth = require('@software-factory/shared-core/agent/oauth');
 const {
   ensureFreshClaudeTokens,
   ensureFreshCodexTokens,
-} = require('@ai-fleet/shared-core/agent/oauth-tokens');
+} = require('@software-factory/shared-core/agent/oauth-tokens');
 const { fetchOrgSecrets, rotateOrgCodexTokens } = require('./secrets-client');
 const { configuredProxyOrgId, FailClosed } = require('./credentials');
 

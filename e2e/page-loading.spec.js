@@ -445,7 +445,7 @@ test('authenticated Firebase session adds a bearer token and reports only gatewa
   // on the event itself.
   authenticationExpired = true;
   await page.evaluate(() => {
-    window.dispatchEvent(new CustomEvent('ai-fleet:auth-required'));
+    window.dispatchEvent(new CustomEvent('software-factory:auth-required'));
   });
   await expect.poll(() => page.evaluate(() => (
     window.dataLayer?.filter(([command]) => command === 'set').length || 0

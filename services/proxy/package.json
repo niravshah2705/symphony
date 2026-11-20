@@ -1,7 +1,7 @@
 {
-  "name": "@ai-fleet/proxy",
+  "name": "@software-factory/proxy",
   "version": "1.0.0",
-  "description": "AI Fleet security proxy — credential-injecting agent sidecars plus an isolated stream-token broker entrypoint.",
+  "description": "Software Factory security proxy — credential-injecting agent sidecars plus an isolated stream-token broker entrypoint.",
   "private": true,
   "main": "src/index.js",
   "scripts": {
@@ -13,7 +13,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared-core": "*",
+    "@software-factory/shared-core": "*",
     "google-auth-library": "^11.0.1"
   }
 }

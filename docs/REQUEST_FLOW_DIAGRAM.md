@@ -50,7 +50,7 @@ flowchart TB
   User["User browser"]
 
   subgraph Browser["Browser"]
-    SPA["AI Fleet SPA\npublic/ vanilla-JS"]
+    SPA["Software Factory SPA\npublic/ vanilla-JS"]
     EventSource["EventSource / SSE\nagent progress"]
   end
 
@@ -95,7 +95,7 @@ flowchart TB
   Scheduler -->|"OIDC POST /pubsub/planner-tick"| Planner
   Scheduler -->|"OIDC POST /pubsub/coder-tick"| CoderControl
 
-  subgraph Shared["Shared application runtime: @ai-fleet/shared"]
+  subgraph Shared["Shared application runtime: @software-factory/shared"]
     Store[("Local: data/store.json\nCloud: Firestore")]
     Events[("Local: in-process event bus\nCloud: Firestore event relay")]
     Runtime["DeepAgent runtime\nplanner/coder workflows · skills · LLM router"]

@@ -6,7 +6,7 @@
 resource "google_service_account" "clm_inference" {
   project      = var.project_id
   account_id   = "clm-inference-sa"
-  display_name = "AI Fleet CLM Inference Service"
+  display_name = "Software Factory CLM Inference Service"
 }
 
 resource "google_cloud_run_v2_service" "clm" {

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 
 const SERVICE_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(SERVICE_ROOT, '..', '..');
-const heavyWorkspace = ['@ai-fleet', 'shared'].join('/');
+const heavyWorkspace = ['@software-factory', 'shared'].join('/');
 const coreWorkspace = `${heavyWorkspace}-core`;
 
 function javascriptFiles(directory) {
@@ -51,8 +51,8 @@ test('billing service image copies only its service and shared-core workspaces',
   const dockerfile = fs.readFileSync(path.join(REPO_ROOT, 'deploy/gcp/Dockerfile.billing'), 'utf8');
   assert.match(dockerfile, /^COPY packages\/shared-core\/ \.\/packages\/shared-core\/$/m);
   assert.match(dockerfile, /^COPY services\/billing\/ \.\/services\/billing\/$/m);
-  assert.match(dockerfile, /--workspace=@ai-fleet\/shared-core/);
-  assert.match(dockerfile, /--workspace=@ai-fleet\/billing/);
+  assert.match(dockerfile, /--workspace=@software-factory\/shared-core/);
+  assert.match(dockerfile, /--workspace=@software-factory\/billing/);
   assert.match(dockerfile, /--include-workspace-root=false/);
   assert.doesNotMatch(dockerfile, /^COPY packages\/ \.\/packages\/$/m);
   assert.doesNotMatch(dockerfile, /^COPY services\/ \.\/services\/$/m);

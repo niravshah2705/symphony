@@ -2,19 +2,19 @@
 
 // Isolate the durable store on a throwaway dir BEFORE requiring anything that
 // binds CONFIG: the file backend and the legacy root both live under
-// AI_FLEET_DATA_DIR, and every test here asserts through them.
+// SOFTWARE_FACTORY_DATA_DIR, and every test here asserts through them.
 const os = require('node:os');
 const fs = require('node:fs');
 
 process.env.STORE_BACKEND = 'file';
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'gw-workflows-'));
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'gw-workflows-'));
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const express = require('express');
 const { createWorkflowsRouter } = require('./workflows');
-const wfStore = require('@ai-fleet/shared-core/workflow/store');
+const wfStore = require('@software-factory/shared-core/workflow/store');
 
 const IDENTITIES = {
   builder: { authenticated: true, mode: 'firebase', role: 'operator', user: { sub: 'uid-builder', email: 'build@t.test' } },

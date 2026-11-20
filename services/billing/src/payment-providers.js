@@ -17,8 +17,8 @@
  */
 
 const crypto = require('node:crypto');
-const { decimalFromPaise } = require('@ai-fleet/shared-core/billing/money-wire');
-const cashfree = require('@ai-fleet/shared-core/billing/cashfree-client');
+const { decimalFromPaise } = require('@software-factory/shared-core/billing/money-wire');
+const cashfree = require('@software-factory/shared-core/billing/cashfree-client');
 
 const PROVIDERS = Object.freeze(['cashfree', 'razorpay']);
 

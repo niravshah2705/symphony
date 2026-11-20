@@ -21,7 +21,7 @@ For the architecture and trust-boundary details see
 
 1. [portal.azure.com](https://portal.azure.com) → **Microsoft Entra ID** →
    **App registrations** → **New registration**.
-2. **Name**: e.g. `AI Fleet Web`.
+2. **Name**: e.g. `Software Factory Web`.
 3. **Supported account types** — pick to match your intended tenant scope (must
    agree with `MICROSOFT_TENANT` in Phase 3):
    - *Accounts in any org directory **and** personal Microsoft accounts* →

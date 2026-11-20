@@ -100,7 +100,7 @@ function createStreamTokenRpcHandler({
   if (accessMode !== ACCESS_MODE_LOOPBACK && accessMode !== ACCESS_MODE_CLOUD_RUN_IAM) {
     throw new Error(`Unsupported stream-token RPC access mode: ${accessMode}`);
   }
-  const log = logger || require('@ai-fleet/shared-core/logger');
+  const log = logger || require('@software-factory/shared-core/logger');
 
   return async function handleStreamTokenRpc(req, res) {
     const path = requestPath(req);

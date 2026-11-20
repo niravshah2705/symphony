@@ -9,7 +9,7 @@ const { mountGlobalQuestionsRoutes, callerIdentity, BASE_PATH } = require('./glo
 const { requireAuthenticated, requirePermission } = require('./auth');
 const { requireOrganizationContext } = require('./request-context');
 const { requireEulaAccepted } = require('./eula');
-const { PUBLIC_PERMISSIONS, ROLE_PERMISSIONS } = require('@ai-fleet/shared-core/authz');
+const { PUBLIC_PERMISSIONS, ROLE_PERMISSIONS } = require('@software-factory/shared-core/authz');
 
 const IDENTITIES = {
   anonymous: { authenticated: false, mode: 'firebase', user: null, permissions: PUBLIC_PERMISSIONS },

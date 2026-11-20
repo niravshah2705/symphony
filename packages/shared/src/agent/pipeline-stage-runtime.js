@@ -237,7 +237,7 @@ function repositoryReference(command) {
   };
 }
 
-/** Bind an external Linear project to the exact native AI Fleet project that
+/** Bind an external Linear project to the exact native Software Factory project that
  * admitted the command. Organization-scoped storage alone is insufficient: an
  * organization may contain several native projects and several Linear links. */
 function assertLinearProjectScope(command, linearProjectId, storeImpl = store) {
@@ -258,7 +258,7 @@ function assertLinearProjectScope(command, linearProjectId, storeImpl = store) {
     || (actualOrganizationId && actualOrganizationId !== expectedOrganizationId)
   ) {
     throw new StageExecutionError(
-      'The Linear project is not linked to the admitted AI Fleet project.',
+      'The Linear project is not linked to the admitted Software Factory project.',
       'linear_project_scope_mismatch',
     );
   }

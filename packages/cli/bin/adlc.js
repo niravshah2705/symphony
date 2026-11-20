@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * adlc — command-line client for the AI Fleet life cycle.
+ * adlc — command-line client for the Software Factory life cycle.
  *
  * A thin HTTP client to the running gateway (the only intended client-facing
  * origin). Boot the fleet first with `npm start`. In firebase auth mode, set
@@ -22,7 +22,7 @@ const out = require('../src/output');
 
 function topUsage() {
   const lines = [
-    'adlc — drive the AI Fleet life cycle (business → plan → issues → coder → PR)',
+    'adlc — drive the Software Factory life cycle (business → plan → issues → coder → PR)',
     '',
     'Usage: adlc <command> [args] [--flags]',
     '',

@@ -5,7 +5,7 @@
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs');
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'aifleet-store-'));
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'aifleet-store-'));
 process.env.STORE_BACKEND = 'file';
 
 const test = require('node:test');

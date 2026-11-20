@@ -9,7 +9,7 @@
 resource "google_service_account" "laya_inference" {
   project      = var.project_id
   account_id   = "laya-inference-sa"
-  display_name = "AI Fleet Laya Inference Service"
+  display_name = "Software Factory Laya Inference Service"
 }
 
 resource "google_cloud_run_v2_service" "laya" {

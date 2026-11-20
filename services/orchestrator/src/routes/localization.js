@@ -1,8 +1,8 @@
 'use strict';
 
 const express = require('express');
-const { getSettings } = require('@ai-fleet/shared/store');
-const { asyncHandler } = require('@ai-fleet/shared/util');
+const { getSettings } = require('@software-factory/shared/store');
+const { asyncHandler } = require('@software-factory/shared/util');
 const {
   parseLanguageHints,
   normalizeGeoResult,
@@ -13,7 +13,7 @@ const {
   locateCurrentIp,
   translateTexts,
   LocalizationError,
-} = require('@ai-fleet/shared/agent/localization');
+} = require('@software-factory/shared/agent/localization');
 
 function queryLanguages(value) {
   if (Array.isArray(value)) return value.filter((item) => typeof item === 'string');

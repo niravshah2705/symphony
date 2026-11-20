@@ -46,7 +46,7 @@ resource "google_service_account" "provisioner" {
   count        = local.tenant_jobs_on ? 1 : 0
   project      = var.project_id
   account_id   = "provisioner-sa"
-  display_name = "AI Fleet provisioner (per-tenant Cloud Run lifecycle)"
+  display_name = "Software Factory provisioner (per-tenant Cloud Run lifecycle)"
 }
 
 # run.admin: create/delete per-tenant services + jobs and set their IAM.

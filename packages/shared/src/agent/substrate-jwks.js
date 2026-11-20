@@ -19,7 +19,7 @@
  * honest answer is an error, because a key set we cannot refresh is also a key set
  * we cannot rotate into.
  */
-const log = require('@ai-fleet/shared/logger');
+const log = require('@software-factory/shared/logger');
 
 const STALE_GRACE_MS = 60 * 1000;
 

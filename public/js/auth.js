@@ -140,7 +140,7 @@ function mergeDisplayProfile(serverUser, browserUser) {
 // Runs after confirmIdentity so the /api/config call carries the bearer.
 function emitDeploymentStatus(status) {
   try {
-    window.dispatchEvent(new CustomEvent('ai-fleet:deployment-status', { detail: { status: status || 'shared' } }));
+    window.dispatchEvent(new CustomEvent('software-factory:deployment-status', { detail: { status: status || 'shared' } }));
   } catch (_) {
     /* non-browser / no CustomEvent */
   }

@@ -64,7 +64,7 @@ export async function payRecharge({ amountInr, provider = 'cashfree', customer =
         order_id: checkout.razorpayOrderId,
         amount: order.quote.totalPaise,
         currency: 'INR',
-        name: 'AI Fleet',
+        name: 'Software Factory',
         callback: (result) => {
           onStatus('Verifying payment with Razorpay…');
           api.billing.verifyRazorpayOrder({

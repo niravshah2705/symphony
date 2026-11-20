@@ -3,9 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const store = require('@ai-fleet/shared/store');
-const localIntelligence = require('@ai-fleet/shared/agent/local-intelligence');
-const businessPipeline = require('@ai-fleet/shared/agent/business-pipeline');
+const store = require('@software-factory/shared/store');
+const localIntelligence = require('@software-factory/shared/agent/local-intelligence');
+const businessPipeline = require('@software-factory/shared/agent/business-pipeline');
 
 function routeHandler(router, path) {
   const layer = router.stack.find((candidate) => candidate.route && candidate.route.path === path);
@@ -317,7 +317,7 @@ test('conversation routes reject malformed ids and unknown threads', async () =>
 
 test('deleting a conversation cascades to its attachments (best-effort) before removing it', async (t) => {
   const modulePath = require.resolve('./agent');
-  const attachmentsService = require('@ai-fleet/shared/attachments/service');
+  const attachmentsService = require('@software-factory/shared/attachments/service');
   const original = {
     getConversation: store.getConversation,
     removeConversation: store.removeConversation,
@@ -346,7 +346,7 @@ test('deleting a conversation cascades to its attachments (best-effort) before r
 
 test('a cascade failure never blocks the conversation delete itself', async (t) => {
   const modulePath = require.resolve('./agent');
-  const attachmentsService = require('@ai-fleet/shared/attachments/service');
+  const attachmentsService = require('@software-factory/shared/attachments/service');
   const original = {
     getConversation: store.getConversation,
     removeConversation: store.removeConversation,
@@ -373,7 +373,7 @@ test('a cascade failure never blocks the conversation delete itself', async (t) 
 
 test('a conversation with no org/project context skips the cascade entirely (nothing could have been attached without it)', async (t) => {
   const modulePath = require.resolve('./agent');
-  const attachmentsService = require('@ai-fleet/shared/attachments/service');
+  const attachmentsService = require('@software-factory/shared/attachments/service');
   const original = {
     getConversation: store.getConversation,
     removeConversation: store.removeConversation,
@@ -399,7 +399,7 @@ test('a conversation with no org/project context skips the cascade entirely (not
 
 test('enqueue is role-gated, validates projectId, and queues exactly one project', async (t) => {
   const modulePath = require.resolve('./agent');
-  const scheduler = require('@ai-fleet/shared/agent/scheduler');
+  const scheduler = require('@software-factory/shared/agent/scheduler');
   const original = { getAssumedRole: store.getAssumedRole, enqueue: scheduler.enqueue, processPending: scheduler.processPending, getStatus: scheduler.getStatus };
   let role = null;
   const enqueued = [];
@@ -438,7 +438,7 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
   // is tested where it lives (packages/shared-core/src/billing/gate.test.js); this
   // test only covers the 402 seam, which is why the gate is stubbed here rather than
   // a first-party balance being written (nothing reads that any more).
-  const gate = require('@ai-fleet/shared/billing/gate');
+  const gate = require('@software-factory/shared/billing/gate');
   const originalFundStatus = gate.getOrgFundStatus;
   gate.getOrgFundStatus = (orgId) => (orgId === 'org_broke'
     ? {
@@ -465,8 +465,8 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
 
 test('planner job and status routes honor the exact selected organization and project', async (t) => {
   const modulePath = require.resolve('./agent');
-  const scheduler = require('@ai-fleet/shared/agent/scheduler');
-  const workspaceEvents = require('@ai-fleet/shared/agent/workspace-events');
+  const scheduler = require('@software-factory/shared/agent/scheduler');
+  const workspaceEvents = require('@software-factory/shared/agent/workspace-events');
   const original = {
     listJobs: store.listJobs,
     removeJob: store.removeJob,
@@ -585,7 +585,7 @@ test('planner job and status routes honor the exact selected organization and pr
 
 test('redacts secrets in inbound user text server-side across every ingest path (defense in depth)', async (t) => {
   const modulePath = require.resolve('./agent');
-  const knowledgeSearch = require('@ai-fleet/shared/agent/knowledge-search');
+  const knowledgeSearch = require('@software-factory/shared/agent/knowledge-search');
   const REDACTED = '«redacted»';
   const GH = 'ghp_0123456789abcdefghijABCDEFGHIJ0123'; // fake, shape-valid GitHub token
 

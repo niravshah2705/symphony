@@ -23,7 +23,7 @@ variable "firestore_location" {
 
 variable "artifact_repo" {
   type        = string
-  description = "Artifact Registry Docker repository name for all AI Fleet service images."
+  description = "Artifact Registry Docker repository name for all Software Factory service images."
   default     = "ai-fleet"
 }
 

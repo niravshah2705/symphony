@@ -57,7 +57,7 @@ test('rejects arbitrary templates, invalid mailboxes, controls, and unsafe keys'
 test('renders a fixed invitation template and escapes values and token URL', () => {
   const job = parseInvitationJob(message());
   const rendered = renderInvitation(job, 'https://fleet.example.com/');
-  assert.equal(rendered.subject, 'Invitation to join Acme & Sons on AI Fleet');
+  assert.equal(rendered.subject, 'Invitation to join Acme & Sons on Software Factory');
   assert.match(rendered.text, /Accept the invitation: https:\/\/fleet\.example\.com\/#\/invite\?token=token%2Fwith%3Freserved%3Dchars/);
   assert.match(rendered.html, /Alice &lt;Admin&gt;/);
   assert.match(rendered.html, /Acme &amp; Sons/);
@@ -89,7 +89,7 @@ test('parses and server-renders a bounded billing alert', () => {
   assert.equal(job.to, 'owner@example.com');
   assert.equal(job.template, 'billing_alert');
   const rendered = renderBillingAlert(job);
-  assert.equal(rendered.subject, '[AI Fleet Billing] Balance < low');
+  assert.equal(rendered.subject, '[Software Factory Billing] Balance < low');
   assert.match(rendered.text, /Organization reference: org-1/);
   assert.match(rendered.html, /Balance &lt; low/);
   assert.match(rendered.html, /Balance is low\.<br>Add credits\./);

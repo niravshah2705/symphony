@@ -1,11 +1,11 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "AI Fleet Gateway API",
-    "description": "Agent-free AI Fleet API gateway — browser auth, billing, EULA, SSE, publishing, and authorized reverse proxies.",
+    "title": "Software Factory Gateway API",
+    "description": "Agent-free Software Factory API gateway — browser auth, billing, EULA, SSE, publishing, and authorized reverse proxies.",
     "version": "1.0.0",
     "contact": {
-      "name": "AI Fleet Team"
+      "name": "Software Factory Team"
     }
   },
   "servers": [

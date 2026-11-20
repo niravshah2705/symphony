@@ -1,3 +1,3 @@
-// Re-export shim: real implementation moved to @ai-fleet/shared-core.
-// Kept so '@ai-fleet/shared/attachments/gcs' imports keep resolving.
-module.exports = require('@ai-fleet/shared-core/attachments/gcs');
+// Re-export shim: real implementation moved to @software-factory/shared-core.
+// Kept so '@software-factory/shared/attachments/gcs' imports keep resolving.
+module.exports = require('@software-factory/shared-core/attachments/gcs');

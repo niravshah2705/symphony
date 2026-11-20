@@ -7,13 +7,13 @@ const os = require('node:os');
 const fs = require('node:fs');
 
 process.env.STORE_BACKEND = 'file';
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'gw-workflows-seed-'));
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'gw-workflows-seed-'));
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const express = require('express');
-const core = require('@ai-fleet/shared-core/store');
+const core = require('@software-factory/shared-core/store');
 const { createWorkflowsRouter } = require('./workflows');
 
 const IDENTITY = {

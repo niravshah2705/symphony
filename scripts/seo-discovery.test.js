@@ -7,6 +7,7 @@ const test = require('node:test');
 
 const ROOT = path.resolve(__dirname, '..');
 const readPublic = (name) => fs.readFileSync(path.join(ROOT, 'public', name), 'utf8');
+const { LEGAL_PAGE_SLUGS, PUBLISHED_PAGES } = require('./build-marketing-site.js');
 
 test('SPA publishes complete ADLC search metadata and valid JSON-LD', () => {
   const html = readPublic('index.html');
@@ -33,7 +34,7 @@ test('SPA publishes complete ADLC search metadata and valid JSON-LD', () => {
   const application = jsonLd['@graph'].find((item) => item['@type'] === 'SoftwareApplication');
   assert.equal(term.name, 'ADLC');
   assert.match(term.description, /Agentic Development Life Cycle/);
-  assert.equal(application.name, 'AI Fleet');
+  assert.equal(application.name, 'Software Factory');
   assert.equal(application.about['@id'], term['@id']);
 
   // The app host describes itself, and links to — never re-declares — the single
@@ -80,7 +81,8 @@ test('sitemap and language-model documents expose one canonical public source', 
   // The SPA is hash-routed, so /#/agent etc. must never appear as their own <url>.
   // Only the root SPA and real, statically-served pages (each backed by a
   // literal index.html on disk) may be listed.
-  const marketingPages = ['/pricing/', '/about/', '/careers/', '/newsroom/', '/contact/'];
+  const marketingPages = [...PUBLISHED_PAGES.map((slug) => `/${slug}/`)];
+  const legalPages = LEGAL_PAGE_SLUGS.map((slug) => `/${slug}/`);
   const adlcPages = [
     '/adlc/', '/adlc/blog/', '/adlc/brief/',
     '/adlc/blog/governance/', '/adlc/blog/isolation/', '/adlc/blog/evidence/',
@@ -95,6 +97,11 @@ test('sitemap and language-model documents expose one canonical public source', 
     adlcPages.length + marketingPages.length + 1,
     'hash routes must not masquerade as crawlable URLs',
   );
+  // The four mandatory payment-compliance documents must be in the sitemap: an
+  // underwriter looks for them there before crawling the footer.
+  for (const page of legalPages) {
+    assert.ok(marketingPages.includes(page), `legal page ${page} is not published to the sitemap`);
+  }
   for (const content of [concise, full]) {
     assert.match(content, /ADLC/);
     assert.match(content, /Agentic Development Life Cycle/);

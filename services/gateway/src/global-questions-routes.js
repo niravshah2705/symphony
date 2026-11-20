@@ -17,7 +17,7 @@
  * builds its headers from scratch, so a browser cannot spoof it.
  */
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 const { requireAuthenticated, requirePermission } = require('./auth');
 const { requireOrganizationContext } = require('./request-context');
 const { requireEulaAccepted } = require('./eula');

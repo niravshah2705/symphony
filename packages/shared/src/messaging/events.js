@@ -1,4 +1,4 @@
 'use strict';
 
-// Re-export shim: real implementation moved to @ai-fleet/shared-core.
-module.exports = require('@ai-fleet/shared-core/messaging/events');
+// Re-export shim: real implementation moved to @software-factory/shared-core.
+module.exports = require('@software-factory/shared-core/messaging/events');

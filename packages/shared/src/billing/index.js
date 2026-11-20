@@ -1,3 +1,3 @@
 'use strict';
 
-module.exports = require('@ai-fleet/shared-core/billing');
+module.exports = require('@software-factory/shared-core/billing');

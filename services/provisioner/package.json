@@ -1,7 +1,7 @@
 {
-  "name": "@ai-fleet/provisioner",
+  "name": "@software-factory/provisioner",
   "version": "1.0.0",
-  "description": "AI Fleet provisioner service — internal, IAM-gated; provisions/tears down per-tenant Cloud Run stacks on tenant-provision events.",
+  "description": "Software Factory provisioner service — internal, IAM-gated; provisions/tears down per-tenant Cloud Run stacks on tenant-provision events.",
   "private": true,
   "main": "src/index.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared-core": "*",
+    "@software-factory/shared-core": "*",
     "express": "^5.2.1",
     "google-auth-library": "^11.0.1"
   }

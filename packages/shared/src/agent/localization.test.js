@@ -187,7 +187,7 @@ test('translation protection preserves placeholders, URLs, HTML, printf values, 
   );
   assert.throws(
     () => normalizeTranslationModel(
-      { translations: ['__AI_FLEET_L10N_The repository needs attention.__'] },
+      { translations: ['__SOFTWARE_FACTORY_L10N_The repository needs attention.__'] },
       [protectText('The repository needs attention.')]
     ),
     /unknown protected token/
@@ -199,7 +199,7 @@ test('Gujarati prompt explicitly requests all UI and internal-status communicati
   assert.match(prompt, /Gujarati \(ગુજરાતી\), locale gu-IN/);
   assert.match(prompt, /including internal status messages/);
   assert.match(prompt, /untrusted_ui_strings/);
-  assert.doesNotMatch(prompt, /beginning __AI_FLEET_L10N_/);
+  assert.doesNotMatch(prompt, /beginning __SOFTWARE_FACTORY_L10N_/);
 
   const protectedPrompt = translationPrompt('gu-IN', [protectText('Open {project}')]);
   assert.match(protectedPrompt, /Only copy tokens already present/);

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFleetGrossGSTInvoiceContract locks AI Fleet's Probe C invoice shape to
+// TestFleetGrossGSTInvoiceContract locks Software Factory's Probe C invoice shape to
 // the native Zoho request produced by the pinned FlexPrice implementation.
 func TestFleetGrossGSTInvoiceContract(t *testing.T) {
 	inv := buildTestInvoice("INR", "0", "", "", []testLineItem{
@@ -42,8 +42,8 @@ func TestFleetGrossGSTInvoiceContract(t *testing.T) {
 		assert.Equal(t, wantNames[i], line.Name)
 		assert.Truef(t, wantRates[i].Equal(line.Rate), "line %d rate = %s, want %s", i, line.Rate, wantRates[i])
 		assert.Truef(t, decimal.NewFromInt(1).Equal(line.Quantity), "line %d quantity = %s, want 1", i, line.Quantity)
-		assert.Empty(t, line.TaxID, "AI Fleet GST lines are gross amounts, not Zoho tax overrides")
-		assert.Empty(t, line.TaxExemptionID, "AI Fleet GST lines must not carry a Zoho tax exemption")
+		assert.Empty(t, line.TaxID, "Software Factory GST lines are gross amounts, not Zoho tax overrides")
+		assert.Empty(t, line.TaxExemptionID, "Software Factory GST lines must not carry a Zoho tax exemption")
 		total = total.Add(line.Rate.Mul(line.Quantity))
 	}
 	assert.Truef(t, decimal.NewFromInt(590).Equal(total), "native Zoho line total = %s, want 590", total)

@@ -12,9 +12,9 @@
  */
 
 const express = require('express');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
-const wfStore = require('@ai-fleet/shared-core/workflow/store');
-const { PERSONAS, personaAllowsCategory } = require('@ai-fleet/shared-core/workflow/model');
+const { asyncHandler } = require('@software-factory/shared-core/util');
+const wfStore = require('@software-factory/shared-core/workflow/store');
+const { PERSONAS, personaAllowsCategory } = require('@software-factory/shared-core/workflow/model');
 const { cleanContextId } = require('../request-context');
 
 function callerUid(req) {

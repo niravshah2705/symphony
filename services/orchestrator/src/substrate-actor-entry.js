@@ -16,11 +16,11 @@
  */
 
 const express = require('express');
-const log = require('@ai-fleet/shared-core/logger');
+const log = require('@software-factory/shared-core/logger');
 const {
   createSubstrateActorRouter,
   actorModeFault,
-} = require('@ai-fleet/shared/agent/substrate-actor');
+} = require('@software-factory/shared/agent/substrate-actor');
 
 // Half-configured actor mode refuses to start rather than serving a route that
 // cannot say what a token must be for: the container comes up dead and looks like a

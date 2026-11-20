@@ -13,17 +13,17 @@
  */
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const { initStore } = require('@ai-fleet/shared/store');
-const scheduler = require('@ai-fleet/shared/agent/scheduler');
-const { reportBoot: reportBillingGateBoot } = require('@ai-fleet/shared/billing/gate');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const { initStore } = require('@software-factory/shared/store');
+const scheduler = require('@software-factory/shared/agent/scheduler');
+const { reportBoot: reportBillingGateBoot } = require('@software-factory/shared/billing/gate');
 const { createAgentSurface } = require('./agent-surface');
 const {
   createSubstrateActorRouter,
   shouldMount: shouldMountSubstrateActor,
   actorModeFault: actorModeMisconfigured,
-} = require('@ai-fleet/shared/agent/substrate-actor');
+} = require('@software-factory/shared/agent/substrate-actor');
 
 const app = express();
 
@@ -51,7 +51,7 @@ function start() {
   return initStore()
     .then(() => new Promise((resolve) => {
       const server = app.listen(port, () => {
-        log.info(`AI Fleet agent service running at http://localhost:${port}`);
+        log.info(`Software Factory agent service running at http://localhost:${port}`);
         // The scheduler and /enqueue both ask the gate, so say which rule is in force.
         reportBillingGateBoot();
         if (CONFIG.MESSAGING_MODE !== 'pubsub' && !CONFIG.PIPELINE.orchestratorEnabled) {

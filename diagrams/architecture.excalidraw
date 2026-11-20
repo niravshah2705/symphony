@@ -351,11 +351,11 @@
       "locked": false,
       "fontSize": 14,
       "fontFamily": 1,
-      "text": "📦 @ai-fleet/shared — config · store · Linear client · deep-agent runtime\nthe single library imported by every service",
+      "text": "📦 @software-factory/shared — config · store · Linear client · deep-agent runtime\nthe single library imported by every service",
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
-      "originalText": "📦 @ai-fleet/shared — config · store · Linear client · deep-agent runtime\nthe single library imported by every service",
+      "originalText": "📦 @software-factory/shared — config · store · Linear client · deep-agent runtime\nthe single library imported by every service",
       "lineHeight": 1.25
     },
     {

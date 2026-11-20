@@ -1,7 +1,7 @@
 {
-  "name": "@ai-fleet/cli",
+  "name": "@software-factory/cli",
   "version": "1.0.0",
-  "description": "adlc — a command-line client that drives the AI Fleet life cycle (business → plan → issues → coder → PR) over the gateway REST API.",
+  "description": "adlc — a command-line client that drives the Software Factory life cycle (business → plan → issues → coder → PR) over the gateway REST API.",
   "private": true,
   "type": "commonjs",
   "bin": {
@@ -19,7 +19,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared": "*",
+    "@software-factory/shared": "*",
     "google-auth-library": "^11.0.1"
   }
 }

@@ -26,7 +26,7 @@ function memoryStorage(entries = {}) {
 function fakeBrowser({
   measurementId = 'G-ABC123',
   hash = '#/agent',
-  title = 'Agent | AI Fleet',
+  title = 'Agent | Software Factory',
 } = {}) {
   const scripts = [];
   const documentRef = {
@@ -150,7 +150,7 @@ test('loads gtag once and configures privacy-safe manual page views', () => {
   assert.equal(scripts.length, 1);
   assert.deepEqual(scripts[0], {
     tagName: 'script',
-    id: 'ai-fleet-google-analytics',
+    id: 'software-factory-google-analytics',
     async: true,
     src: 'https://www.googletagmanager.com/gtag/js?id=G-ABC123',
   });
@@ -378,7 +378,7 @@ test('the analytics allowlist covers every application route and nothing else', 
   const routes = [
     'agent', 'workflows', 'agent-jobs', 'calls', 'business', 'projects', 'board',
     'analytics', 'cost', 'troubleshooting', 'settings', 'organization', 'invite',
-    'privacy', 'terms',
+    'privacy', 'terms', 'refund', 'shipping',
   ];
   for (const route of routes) assert.equal(normalizeTopLevelRoute(route), route);
   for (const route of ['unknown', 'user-123', 'project-private', '']) {

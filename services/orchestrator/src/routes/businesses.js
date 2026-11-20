@@ -2,11 +2,11 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { readStore, writeStore, getApiKey, getAgentConfig } = require('@ai-fleet/shared/store');
-const { getProjects, createProject, getOrCreateProjectLabels } = require('@ai-fleet/shared/linear');
-const { asyncHandler } = require('@ai-fleet/shared/util');
-const { repoParts } = require('@ai-fleet/shared/agent/repo-url');
-const { normalizeEventContext, matchesEventContext } = require('@ai-fleet/shared/messaging/events');
+const { readStore, writeStore, getApiKey, getAgentConfig } = require('@software-factory/shared/store');
+const { getProjects, createProject, getOrCreateProjectLabels } = require('@software-factory/shared/linear');
+const { asyncHandler } = require('@software-factory/shared/util');
+const { repoParts } = require('@software-factory/shared/agent/repo-url');
+const { normalizeEventContext, matchesEventContext } = require('@software-factory/shared/messaging/events');
 
 const router = express.Router();
 

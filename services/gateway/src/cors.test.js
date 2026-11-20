@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createCorsMiddleware } = require('./cors');
-const { parseSpaOrigins } = require('@ai-fleet/shared-core/config');
+const { parseSpaOrigins } = require('@software-factory/shared-core/config');
 
 function makeRes() {
   return {
