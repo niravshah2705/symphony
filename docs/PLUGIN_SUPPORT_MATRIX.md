@@ -251,13 +251,18 @@ Three consequences worth knowing before you debug a "why didn't it publish":
 - **A moved branch does not lose a stamp.** A publish takes minutes, so another
   PR can reach `main` between the run's checkout and the stamp job's push — and
   the images are already in the registry by then, with the tags moved and the
-  digests recorded nowhere. The stamp commit therefore rebases onto the new tip
-  and retries (bounded at 5 attempts, never `--force`), refuses to rebase if
-  `plugins.csv` itself moved (those digests belong to a row no longer current —
-  re-dispatch with `rebuild: all`), and aborts with a failure if the rebase
-  conflicts, because two runs stamping one row differently is a human call.
-  `deploy/kagent/stamp-push-race.test.js` runs that block against a throwaway
-  origin for all three cases.
+  digests recorded nowhere. The stamp commit is *derived* output, so the retry
+  re-derives it rather than replaying it: reset onto the new tip, re-run
+  `stamp-plugin-digest.js` and `gen-kagent-manifests.js` against the `oci-refs`
+  artifacts this run built, commit, and push again (bounded at 5 attempts, never
+  `--force`). Replaying the diff was the flaw — two publishes of the same row
+  rewrite the same catalog line and the same generated manifest, so the rebase
+  conflicted and a human had to pick a winner while both runs' bytes sat in the
+  registry; re-deriving lets the newer publish own the pin and leaves every other
+  row's stamp intact. One case it still refuses: `plugins.csv` itself moved,
+  because those digests belong to a row no longer current — re-dispatch with
+  `rebuild: all`. `deploy/kagent/stamp-push-race.test.js` runs that block,
+  verbatim from the workflow, against a throwaway origin for each outcome.
 - **`workflow_dispatch` has `rebuild: all`** for the case the diff cannot see — a
   newer upstream image under the buildx layer, or a selector fix you want applied
   to every pack at once.
