@@ -26,7 +26,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:f356600e58e5f0fb88e32566ca0e177362503d92dee5eda1702bba73d098e4ef"
       },
       "versions": [
         { "version": "2.2.3", "releasedAt": "2026-11-17", "commit": "3f14a103a8694e51c1df9a806217a6d0b5f7a6f7" }
@@ -112,7 +112,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:6bb3efe116c98cb2de51bf976978b6e42cad4eeb99518a24ebe3738afa409806"
       },
       "versions": [
         { "version": "0.6.16", "releasedAt": "2026-11-14", "commit": "39b723ceebf81474d0557c1fecd01eddab585563" }
@@ -198,7 +198,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:0f071e593a783aaca4bb03dfb1515be92754e4714cf64763c43f700605832887"
       },
       "versions": [
         { "version": "7.0.2", "releasedAt": "2026-11-03", "commit": "22f0b463e7a5e579904dd6211a520321035526f7" }
@@ -274,7 +274,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null,
+        "digest": "sha256:1d619d181e80914b840175a028f039cf868e8c080408e5f66a5fb3fbe9021680",
         "synthesized": true
       },
       "versions": [
@@ -346,7 +346,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": true,
-        "digest": null,
+        "digest": "sha256:072b06d28538147e337a45bfcaa1e9505ad076d29066d88ede4b76297c8e2dfd",
         "synthesized": true
       },
       "versions": [
@@ -425,7 +425,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": true,
-        "digest": null
+        "digest": "sha256:4d9a1c05418e740bd91d1d7c3f3bd9a32ff08de65587ee8a21f65416ddd49365"
       },
       "versions": [
         { "version": "2.4.0", "releasedAt": "2026-11-11", "commit": "b3f1285965a1337b3821e4423da03b65d70ee423" }
@@ -522,7 +522,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:d75d9be1dedd79b2be86bea2d6dc53fa4bb61bc92438a74fe389c2e6da9096c2"
       },
       "versions": [
         { "version": "2.0.0", "releasedAt": "2026-11-11", "commit": "04977e15f3dfd6ee4b74c887dac3eb52665d6c92" }
@@ -594,7 +594,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:47a724d319d86df6dc1ff69956593871b268334eabb7d8e71234fc36c1bb3d5f"
       },
       "versions": [
         { "version": "0.1.1", "releasedAt": "2026-11-06", "commit": "dea7761de06ce5b51c177ebb9bba0469f24af5a4" }

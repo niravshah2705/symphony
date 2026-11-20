@@ -68,7 +68,7 @@ spec:
     a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/graphify-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/graphify-plugin@sha256:072b06d28538147e337a45bfcaa1e9505ad076d29066d88ede4b76297c8e2dfd'
     skills:
     - graphify
 ---

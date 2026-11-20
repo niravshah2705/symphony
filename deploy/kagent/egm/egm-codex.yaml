@@ -76,7 +76,7 @@ spec:
     file, a command you echo, or a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/egm-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/egm-plugin@sha256:47a724d319d86df6dc1ff69956593871b268334eabb7d8e71234fc36c1bb3d5f'
     skills:
     - 'egm-bootstrap'
     - 'egm-brainstorm'

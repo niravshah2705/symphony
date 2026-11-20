@@ -66,7 +66,7 @@ spec:
     credential into a file, a command you echo, or a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/hallmark-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/hallmark-plugin@sha256:d75d9be1dedd79b2be86bea2d6dc53fa4bb61bc92438a74fe389c2e6da9096c2'
     skills:
     - hallmark
 ---
