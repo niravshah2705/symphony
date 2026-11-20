@@ -73,7 +73,7 @@ spec:
     you echo, or a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/superpowers-plugin@sha256:0f071e593a783aaca4bb03dfb1515be92754e4714cf64763c43f700605832887'
+      oci: 'ghcr.io/niravshah2705/symphony/superpowers-plugin@sha256:f657abbc97a81461230a16399109a6cd0e5e4da56ead82e32d3782f222cf3ffa'
     skills:
     - brainstorming
     - 'dispatching-parallel-agents'
