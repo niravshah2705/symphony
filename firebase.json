@@ -24,6 +24,10 @@
           "headers": [{ "key": "Cache-Control", "value": "no-store" }]
         },
         {
+          "source": "/googleca0fdd26d71dc36f.html",
+          "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+        },
+        {
           "source": "/adlc/config.js",
           "headers": [{ "key": "Cache-Control", "value": "no-store" }]
         },
