@@ -74,3 +74,8 @@ docs/code-graph/
 # deploy/kagent/build-plugin-image.sh <plugin>, deploy/kagent/build-skill-image.sh <skill>
 deploy/kagent/*/build/
 deploy/kagent/skills/*/build/
+
+# Python bytecode caches. Nothing in this repo should ship them; the one that
+# slipped in was committed before this rule existed.
+__pycache__/
+*.pyc

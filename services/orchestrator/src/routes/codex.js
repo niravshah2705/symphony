@@ -16,8 +16,7 @@ const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
  * model/params config, sign-out, and a live token test.
  *
  * The browser OAuth redirect/login flow (authorize URL + /auth/callback token
- * exchange) was REMOVED from the gateway — see
- * archive/gateway-agent-endpoints/codex-oauth-redirect.js. Codex tokens are
+ * exchange) was REMOVED from the gateway. Codex tokens are
  * provided out-of-band; these routes only read/validate them.
  */
 
