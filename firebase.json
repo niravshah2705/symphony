@@ -116,6 +116,10 @@
           "headers": [{ "key": "Cache-Control", "value": "no-store" }]
         },
         {
+          "source": "/googleca0fdd26d71dc36f.html",
+          "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+        },
+        {
           "source": "/manifest.webmanifest",
           "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
         },

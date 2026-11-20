@@ -292,7 +292,10 @@ test('the brand query has a landing page: every public title names Archagentix',
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) walk(path.join(dir, entry.name));
-      else if (entry.name.endsWith('.html')) pages.push(path.relative(PUBLIC, path.join(dir, entry.name)));
+      else if (entry.name.endsWith('.html') && !/^google[a-z0-9]+\.html$/.test(entry.name)) {
+        // Search Console token files are verbatim bytes; adding markup breaks verification.
+        pages.push(path.relative(PUBLIC, path.join(dir, entry.name)));
+      }
     }
   };
   walk(PUBLIC);

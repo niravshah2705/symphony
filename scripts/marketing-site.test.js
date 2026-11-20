@@ -37,6 +37,7 @@ test('the marketing tree promotes every ADLC page to the root', () => {
     'pricing/index.html', 'about/index.html', 'careers/index.html',
     'newsroom/index.html', 'contact/index.html',
     'robots.txt', 'llms.txt', 'llms-full.txt', 'sitemap.xml',
+    'googleca0fdd26d71dc36f.html',
   ]) {
     assert.ok(files.has(rel), `marketing/${rel} is missing`);
   }
