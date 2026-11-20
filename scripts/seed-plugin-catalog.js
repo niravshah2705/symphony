@@ -163,15 +163,20 @@ function writeMatrix() {
  * renders, and a projection that drops a field is a field the UI cannot show
  * until someone edits this script.
  *
+ * `tags` are the AgentCard types each pack surfaces on
+ * (registry/agent-card-tags.json), so the mirrored doc says which agent card
+ * should show it without a second lookup.
+ *
  * `upsertPlugin` is content-compared, so re-seeding on every boot reports
  * `0 changed` instead of bumping every revision.
  */
 async function mirrorStore() {
   const store = require(path.join(ROOT, 'packages/shared-core/src/store'));
+  const { tags: cardTags } = registry('agent-card-tags.json');
   await store.initStore();
   const records = [
-    ...CATALOG.plugins.map((record) => ({ ...record, kind: 'plugin' })),
-    ...SKILLS.skills.map((record) => ({ ...record, kind: 'skill' })),
+    ...CATALOG.plugins.map((record) => ({ ...record, kind: 'plugin', tags: cardTags[record.id] || [] })),
+    ...SKILLS.skills.map((record) => ({ ...record, kind: 'skill', tags: cardTags[record.id] || [] })),
   ];
   const ids = new Set();
   for (const record of records) {

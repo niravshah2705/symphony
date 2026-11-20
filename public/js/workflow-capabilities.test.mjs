@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 
 import {
   createCapabilitiesReader,
+  createCatalogReader,
   harnessChoices,
   modelConfigChoices,
   mcpChoices,
   modelConfigEmptyLabel,
+  modelFamilyChoices,
+  modelChoices,
   capabilitiesSummary,
 } from './workflow-capabilities.mjs';
 
@@ -102,4 +105,54 @@ test('an empty namespace and an unread one are described differently', () => {
   assert.match(capabilitiesSummary(null), /Reading the cluster/);
   assert.match(capabilitiesSummary({ enabled: false, reason: 'kagent_not_configured' }), /503/);
   assert.deepEqual(harnessChoices(null, ['codex']), [{ value: 'codex', label: 'codex', source: 'platform' }]);
+});
+
+test('global runtime images slot between cluster names and the static list', () => {
+  const caps = { harnesses: ['my-first-harness'] };
+  const globalImages = [{ runtime: 'claude', image: 'ghcr.io/x/claude-runtime', version: '2.1.326' }, { runtime: 'codex', image: '', version: '' }];
+  const choices = harnessChoices(caps, ['claude-code', 'codex', 'openspec'], globalImages);
+  assert.deepEqual(choices.map((item) => [item.value, item.source]), [
+    ['my-first-harness', 'cluster'],
+    ['claude', 'global'],
+    ['codex', 'global'],
+    ['claude-code', 'platform'],
+    ['openspec', 'platform'],
+  ]);
+});
+
+test('model families and models come from the global preset catalog', () => {
+  const presets = [
+    { id: 'claude-opus-4-8', provider: 'claude', model: 'claude-opus-4-8', label: 'Claude Opus' },
+    { id: 'gpt-5-codex', provider: 'codex', model: 'gpt-5-codex', label: 'GPT-5 Codex' },
+    { id: 'ollama-gpt-oss-20b', provider: 'ollama', model: 'gpt-oss:20b', label: 'GPT-OSS 20B' },
+  ];
+  const families = modelFamilyChoices(presets, ['anthropic', 'bedrock']);
+  assert.deepEqual(families.map((item) => [item.value, item.source]), [
+    ['anthropic', 'global'],
+    ['openai', 'global'],
+    ['byok', 'global'],
+    ['bedrock', 'platform'],
+  ]);
+  assert.deepEqual(modelChoices(presets, 'anthropic'), [{ value: 'claude-opus-4-8', label: 'Claude Opus · claude-opus-4-8', source: 'global' }]);
+  assert.deepEqual(modelChoices(presets, ''), []);
+});
+
+test('the catalog reader reads once and retries only on demand', async () => {
+  let calls = 0;
+  const catalog = createCatalogReader({
+    read: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('offline');
+      return { harnesses: [{ runtime: 'claude' }], plugins: [{ id: 'ecc' }], skills: [] };
+    },
+  });
+  const refused = await catalog.load();
+  assert.equal(refused.ok, false);
+  assert.equal(catalog.peek().ok, false);
+  await catalog.load();
+  assert.equal(calls, 1, 'a refused read is remembered, not re-issued');
+  const settled = await catalog.load({ force: true });
+  assert.equal(settled.ok, true);
+  assert.equal(settled.plugins.length, 1);
+  assert.equal(calls, 2);
 });

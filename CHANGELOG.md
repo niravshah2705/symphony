@@ -4,6 +4,35 @@ All notable changes to AI Fleet (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
+## 2026-11-20
+
+### Added
+
+- **Workflow designer: explicit Save with database confirm.** The `#/workflows`
+  toolbar gains a **Save** button that flushes the draft and waits for the
+  gateway to accept the graph; the status chip now reads "Saved · in database"
+  only after the server write settles. Auto-save stays as a device-local draft
+  safety net.
+- **Global component catalog endpoint** `GET /api/workflows/catalog`
+  (`packages/shared-core/src/agent/global-catalog.js`): current rows of
+  `go/harness/runtime-images.csv` plus the plugin/skill bundle catalogs. The
+  designer's **Harness** dropdown is populated from it (cluster names first,
+  then global runtime images), and the new **Plugins & skills** inspector
+  section binds `kagentSpec.plugins`/`skills` from the catalog, pinned by
+  digest.
+- **Model family & model details populated from the global LLM preset
+  catalog.** The family dropdown derives from `llm-presets.json` providers
+  (claude→anthropic, codex→openai, antigravity→gemini, local/BYOM
+  providers→byok; `qoder` added to the family vocabulary), and a new **Model**
+  dropdown offers that family's presets. Nodes persist `model`, which
+  `renderAgentCrd` passes to the Agent CR template.
+- **Publish pipeline tags packs with AgentCard types and mirrors them to
+  Firestore.** `registry/agent-card-tags.json` records which agent card kinds
+  surface each pack; `scripts/seed-plugin-catalog.js --store` merges the tags
+  onto every mirrored record, and the `stamp` jobs of
+  `build-plugin-images.yml` / `build-skill-images.yml` now run the mirror
+  against Firestore (Workload Identity) right after the digest-stamp commit.
+
 ## 2026-11-18
 
 ### Removed

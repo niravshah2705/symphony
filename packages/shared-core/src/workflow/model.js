@@ -9,7 +9,7 @@ const WORKFLOW_SCHEMA_VERSION_V2 = 2;
 const WORKFLOW_NODE_KINDS_V2 = Object.freeze(['agent', 'approval', 'environment', 'gate']);
 const WORKFLOW_NODE_BACKENDS = Object.freeze(['substrate', 'kagent']);
 const TASK_TIERS = Object.freeze(['complex', 'medium', 'easy']);
-const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'byok']);
+const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'qoder', 'byok']);
 const HARNESS_OPTIONS = Object.freeze(['claude-code', 'codex', 'deepagent', 'opencode', 'gemini-cli', 'pi', 'qoder', 'kilo', 'goose', 'openspec', 'github-actions', 'otel']);
 const GATE_CARD_MAX = 6;
 const GATE_ITEM_MAX = 3;
@@ -357,8 +357,13 @@ function normalizeNode(input) {
   }
   if (node.kind === 'agent') {
     node.backend = WORKFLOW_NODE_BACKENDS.includes(input.backend) ? input.backend : 'substrate';
-    node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness : '';
+    // The dropdown is populated from the cluster and the global runtime-image
+    // registry, so a name outside the static list is valid as long as it is a
+    // DNS-shaped name; a garbage string still cannot become a CR name.
+    node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness
+      : (K8S_NAME.test(String(input.harness || '')) ? String(input.harness).slice(0, 63) : '');
     node.modelFamily = MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '';
+    node.model = plainText(input.model, 128);
     node.taskTier = TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium';
     node.systemPrompt = plainText(input.systemPrompt, 16000);
     node.connectors = normalizeConnectorList(input.connectors);

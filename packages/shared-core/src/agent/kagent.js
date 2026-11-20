@@ -121,6 +121,9 @@ function renderAgentCrd(input, { namespace } = {}) {
   const ns = namespace || (kagentConfig() || { namespace: 'kagent' }).namespace;
 
   const inline = { modelConfig: spec.modelConfig || { name: 'default-model-config' } };
+  // The designer's Model dropdown names a preset id from the global catalog;
+  // it overrides the ModelConfig default on the agent template.
+  if (input.model) inline.model = String(input.model).slice(0, 128);
   const cr = {
     apiVersion: 'api.kagent.dev/v1alpha3',
     kind: 'Agent',

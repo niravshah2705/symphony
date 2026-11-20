@@ -30,7 +30,7 @@ export const WORKFLOW_SCHEMA_VERSION_V2 = 2;
 export const WORKFLOW_NODE_KINDS_V2 = Object.freeze(['agent', 'approval', 'environment', 'gate']);
 export const WORKFLOW_NODE_BACKENDS = Object.freeze(['substrate', 'kagent']);
 export const TASK_TIERS = Object.freeze(['complex', 'medium', 'easy']);
-export const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'byok']);
+export const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'qoder', 'byok']);
 export const HARNESS_OPTIONS = Object.freeze(['claude-code', 'codex', 'deepagent', 'opencode', 'gemini-cli', 'pi', 'qoder', 'kilo', 'goose', 'openspec', 'github-actions', 'otel']);
 export const GATE_CARD_MAX = 6;
 export const GATE_ITEM_MAX = 3;
@@ -743,8 +743,12 @@ function normalizeNode(input, { usedIds = new Set(), deps = {}, allowedAgentIds,
   }
   if (kind === 'agent') {
     node.backend = WORKFLOW_NODE_BACKENDS.includes(input.backend) ? input.backend : 'substrate';
-    node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness : '';
+    // Populated dropdowns may offer names beyond the static list (cluster
+    // Harness CRDs, global runtime images); any DNS-shaped name is valid.
+    node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness
+      : (K8S_NAME.test(String(input.harness || '')) ? String(input.harness).slice(0, 63) : '');
     node.modelFamily = MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '';
+    node.model = plainText(input.model, 128);
     node.taskTier = TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium';
     node.systemPrompt = plainText(input.systemPrompt, 16_000);
     node.connectors = normalizeConnectorList(input.connectors);

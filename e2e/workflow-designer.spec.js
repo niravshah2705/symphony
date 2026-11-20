@@ -332,6 +332,16 @@ async function selectCanvasNode(page, name) {
 }
 
 /**
+ * Autosave keeps a draft on this device only; the organization's copy changes
+ * when Save is pressed. A test that reads the recorded server state presses it.
+ */
+async function pressSave(page) {
+  const save = page.getByRole('button', { name: 'Save', exact: true });
+  await expect(save).toBeEnabled();
+  await save.click();
+}
+
+/**
  * The designer reads the organization's graphs on open. It must not write
  * anything the operator did not ask for: no import of the built-in examples,
  * no re-create of a graph the server already has. Reads are allowed to include
@@ -489,6 +499,7 @@ test('organization admin creates a safe custom agent, links nodes, and shares th
 
   // The organization's copy, not just this browser's: the graph the admin drew
   // is what a teammate would load.
+  await pressSave(page);
   await expect.poll(() => {
     const shared = recording.store.graphs(PRIMARY_ORG.id).find((graph) => graph.name === 'Immediate persistence flow');
     return shared ? { nodes: shared.nodes.length, edges: shared.edges.length, viewport: shared.viewport } : null;
@@ -518,6 +529,7 @@ test('organization admin creates a safe custom agent, links nodes, and shares th
   expect(recording.store.graphs(SECONDARY_ORG.id).map((graph) => graph.name)).not.toContain('Immediate persistence flow');
   await page.getByRole('button', { name: 'New blank', exact: true }).click();
   await expect.poll(() => page.evaluate((key) => Boolean(localStorage.getItem(key)), secondaryKey)).toBe(true);
+  await pressSave(page);
   await expect.poll(() => recording.store.graphs(SECONDARY_ORG.id).some((graph) => graph.name === 'Untitled workflow')).toBe(true);
   const isolated = await page.evaluate(([firstKey, secondKey]) => {
     const first = JSON.parse(localStorage.getItem(firstKey));
@@ -589,6 +601,7 @@ test('an agent node binds to a runtime and its harness environment survives the 
 
   const boundNode = () => (recording.store.graphs(PRIMARY_ORG.id)
     .flatMap((graph) => graph.nodes || []).find((node) => node.id === 'io-devops') || {});
+  await pressSave(page);
   await expect.poll(boundNode).toHaveProperty('backend', 'kagent');
   await expect.poll(() => boundNode().taskTier).toBe('complex');
   await expect.poll(() => boundNode().kagentSpec?.env).toEqual([{ name: 'LOG_LEVEL', value: 'debug' }]);
@@ -644,6 +657,7 @@ test('a teammate saving first surfaces a conflict instead of being overwritten',
   await page.getByRole('button', { name: 'New blank', exact: true }).click();
   const inspector = page.getByRole('complementary', { name: 'Workflow inspector' });
   await inspector.getByLabel('Name', { exact: true }).fill('Contested flow');
+  await pressSave(page);
   await expect.poll(() => recording.store.graphs(PRIMARY_ORG.id)
     .find((graph) => graph.name === 'Contested flow')).toBeTruthy();
 
@@ -652,6 +666,7 @@ test('a teammate saving first surfaces a conflict instead of being overwritten',
   recording.store.update(PRIMARY_ORG.id, { ...contested, name: 'Renamed by a teammate' }, 1);
 
   await inspector.getByLabel('Description', { exact: true }).fill('Edited from the first tab.');
+  await pressSave(page);
   await expect(page.locator('.workflow-toolbar-status')).toContainText('Someone saved a newer copy');
 
   // Last-write-wins is the wrong answer here: the teammate's name stays on the
@@ -760,6 +775,7 @@ test('a kagent node offers the names the cluster reported, and publishing saves 
   await modelConfig.selectOption('default-model-config');
   const bound = () => (publishing.store.graphs(PRIMARY_ORG.id)
     .flatMap((graph) => graph.nodes || []).find((node) => node.id === 'io-devops') || {});
+  await pressSave(page);
   await expect.poll(bound).toHaveProperty('backend', 'kagent');
   await expect.poll(() => bound().kagentSpec?.modelConfig).toEqual({ name: 'default-model-config' });
   await expect.poll(() => bound().kagentSpec?.tools).toEqual([{ kind: 'mcp', server: 'kagent-tool-server', tools: [] }]);
@@ -812,6 +828,7 @@ test('a decision gate seeds the platform cards and locks approve until every thr
 
   await page.getByRole('button', { name: 'New blank', exact: true }).click();
   await page.getByRole('button', { name: 'Add Decision gate to workflow' }).click();
+  await pressSave(page);
 
   const gateNode = page.locator('.workflow-node[data-node-kind="gate"]');
   await expect(gateNode).toHaveCount(1);
@@ -868,6 +885,7 @@ test('a decision gate seeds the platform cards and locks approve until every thr
   await approve.click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(gateNode.locator('.workflow-node-footer')).toContainText('6 cards met');
+  await pressSave(page);
   await expect.poll(savedGate).toMatchObject({ assessed: 6 });
 
   // Cancel and Escape both discard the draft: the dialog edits a copy, and the
@@ -892,6 +910,7 @@ test('an untitled card is refused by the gate review instead of deleting the gat
   await page.getByRole('button', { name: 'New blank', exact: true }).click();
   await page.getByRole('button', { name: 'Add Decision gate to workflow' }).click();
   const gateNode = page.locator('.workflow-node[data-node-kind="gate"]');
+  await pressSave(page);
 
   await gateNode.dblclick();
   const dialog = page.getByRole('dialog');

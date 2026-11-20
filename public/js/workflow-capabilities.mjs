@@ -108,17 +108,25 @@ export function createCapabilitiesReader({ read } = {}) {
 }
 
 /**
- * Cluster names first, then the platform's own list underneath: a harness that
- * exists in the namespace is the one a publish will accept, while the platform
- * list is what an operator is about to install. Marked so the card can say which
- * is which rather than presenting an unlabelled union.
+ * Cluster names first, then the platform's current runtime images, then the
+ * platform's own static list underneath: a harness that exists in the
+ * namespace is the one a publish will accept, the global image registry says
+ * what the platform ships, while the static list is what an operator is about
+ * to install. Marked so the card can say which is which rather than
+ * presenting an unlabelled union.
  */
-export function harnessChoices(caps, platformHarnesses = []) {
+export function harnessChoices(caps, platformHarnesses = [], globalImages = []) {
   const cluster = nameList(caps && caps.harnesses);
+  const globalNames = (Array.isArray(globalImages) ? globalImages : [])
+    .map((row) => String((row && row.runtime) || '').trim())
+    .filter(Boolean);
   return [
     ...cluster.map((value) => ({ value, label: value, source: 'cluster' })),
-    ...nameList(platformHarnesses)
+    ...globalNames
       .filter((value) => !cluster.includes(value))
+      .map((value) => ({ value, label: value, source: 'global' })),
+    ...nameList(platformHarnesses)
+      .filter((value) => !cluster.includes(value) && !globalNames.includes(value))
       .map((value) => ({ value, label: value, source: 'platform' })),
   ];
 }
@@ -158,3 +166,90 @@ export function capabilitiesSummary(caps) {
 }
 
 export const EMPTY_CAPABILITIES = EMPTY;
+
+/**
+ * The platform-wide component catalog (runtime images, plugin and skill
+ * bundles) is identical for every organization, so one session-level read
+ * covers the whole designer. A failed read is remembered like a refused
+ * capabilities read — the inspector re-renders on every keystroke and must
+ * not turn a dead endpoint into a request loop — and `force` retries it.
+ */
+export function createCatalogReader({ read } = {}) {
+  let settled = null;
+  let pending = null;
+
+  function load({ force = false } = {}) {
+    if (force) settled = null;
+    if (settled) return Promise.resolve(settled);
+    if (pending) return pending;
+    const request = (async () => {
+      try {
+        const payload = await read();
+        settled = {
+          ok: true,
+          harnesses: Array.isArray(payload && payload.harnesses) ? payload.harnesses : [],
+          plugins: Array.isArray(payload && payload.plugins) ? payload.plugins : [],
+          skills: Array.isArray(payload && payload.skills) ? payload.skills : [],
+        };
+      } catch (cause) {
+        settled = { ok: false, error: String((cause && cause.message) || cause), harnesses: [], plugins: [], skills: [] };
+      } finally {
+        pending = null;
+      }
+      return settled;
+    })();
+    pending = request;
+    return request;
+  }
+
+  return {
+    load,
+    peek: () => settled,
+    forget: () => { settled = null; },
+  };
+}
+
+/**
+ * Model families from the global LLM preset catalog: each preset's provider
+ * maps onto the designer's family vocabulary, so the dropdown offers the
+ * families the platform actually ships models for, plus the static list for
+ * anything saved before it (bedrock/vertexai stay selectable even though no
+ * preset lands there).
+ */
+const PRESET_FAMILIES = Object.freeze({
+  claude: 'anthropic',
+  codex: 'openai',
+  antigravity: 'gemini',
+  qoder: 'qoder',
+  ollama: 'byok',
+  lmstudio: 'byok',
+  omlx: 'byok',
+  huggingface: 'byok',
+});
+
+export function presetFamily(preset) {
+  return PRESET_FAMILIES[String((preset && preset.provider) || '')] || '';
+}
+
+export function modelFamilyChoices(presets, staticFamilies = []) {
+  const items = [];
+  for (const preset of Array.isArray(presets) ? presets : []) {
+    const family = presetFamily(preset);
+    if (family && !items.some((item) => item.value === family)) items.push({ value: family, label: family, source: 'global' });
+  }
+  for (const family of nameList(staticFamilies)) {
+    if (!items.some((item) => item.value === family)) items.push({ value: family, label: family, source: 'platform' });
+  }
+  return items;
+}
+
+/** The concrete models behind one family, straight from the preset catalog. */
+export function modelChoices(presets, family) {
+  return (Array.isArray(presets) ? presets : [])
+    .filter((preset) => family && presetFamily(preset) === family)
+    .map((preset) => ({
+      value: String(preset.id),
+      label: `${preset.label || preset.id} · ${preset.model}`,
+      source: 'global',
+    }));
+}

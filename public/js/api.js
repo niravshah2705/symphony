@@ -358,6 +358,9 @@ export const api = {
   // Which Harness / ModelConfig / RemoteMCPServer names the kagent namespace
   // actually holds. Read-only, and answered even when kagent is off.
   kagentCapabilities: () => request('/workflows/kagent/capabilities'),
+  // Platform-wide component list: current harness runtime images plus the
+  // published plugin/skill bundle catalogs. Read-only.
+  getWorkflowCatalog: () => request('/workflows/catalog'),
   publishWorkflowNode: (workflowId, nodeId) => request(
     `/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/publish`,
     { method: 'POST' },

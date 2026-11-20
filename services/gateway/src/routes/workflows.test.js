@@ -353,6 +353,54 @@ test('a substrate node publishes the profile behind it, and the persona gate sti
   } finally { server.close(); }
 });
 
+test('GET /catalog serves the global component catalog with AgentCard tags', async () => {
+  const { app } = buildApp();
+  const { server, url } = await start(app);
+  try {
+    const res = await call(url, 'GET', '/api/workflows/catalog');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.harnesses) && res.body.harnesses.length, 'runtime images present');
+    assert.ok(res.body.harnesses.every((row) => row.runtime && row.image && row.version));
+    assert.ok(res.body.plugins.every((row) => row.id && Array.isArray(row.tags)));
+    assert.ok(res.body.skills.every((row) => row.id && Array.isArray(row.tags)));
+    const ecc = res.body.plugins.find((row) => row.id === 'ecc');
+    assert.ok(ecc && ecc.tags.includes('coding'));
+  } finally { server.close(); }
+});
+
+test('an agent node keeps a global runtime harness and a preset model id', async () => {
+  const { app } = buildApp();
+  const { server, url } = await start(app);
+  try {
+    const saved = await call(url, 'POST', '/api/workflows', {
+      body: graph({
+        id: 'catalog-node-flow',
+        nodes: [{
+          id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0,
+          backend: 'kagent', harness: 'deepseek', modelFamily: 'anthropic', model: 'claude-opus-4-8',
+          kagentSpec: { plugins: [{ source: { oci: `ghcr.io/x/ecc@sha256:${'a'.repeat(64)}` }, skills: ['tdd-workflow'] }] },
+        }],
+      }),
+    });
+    assert.equal(saved.status, 201);
+    const read = await call(url, 'GET', '/api/workflows');
+    const node = read.body.workflows.find((row) => row.id === 'catalog-node-flow').nodes[0];
+    assert.equal(node.harness, 'deepseek');
+    assert.equal(node.model, 'claude-opus-4-8');
+    assert.equal(node.kagentSpec.plugins.length, 1);
+    assert.deepEqual(node.kagentSpec.plugins[0].skills, ['tdd-workflow']);
+
+    // A name that cannot be a CR name is still refused.
+    const bad = await call(url, 'POST', '/api/workflows', {
+      body: graph({ id: 'bad-harness-flow', nodes: [{ id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0, harness: 'Not A Name!' }] }),
+    });
+    assert.equal(bad.status, 201);
+    const badRead = await call(url, 'GET', '/api/workflows');
+    const badNode = badRead.body.workflows.find((row) => row.id === 'bad-harness-flow').nodes[0];
+    assert.equal(badNode.harness, '');
+  } finally { server.close(); }
+});
+
 test('a live kagent adapter receives publishes and surfaces capabilities', async () => {
   const published = [];
   const kagentAdapter = {
