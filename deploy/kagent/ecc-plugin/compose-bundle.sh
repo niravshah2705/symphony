@@ -8,14 +8,22 @@
 #
 # The output dir receives:
 #   <out>/<plugin>-<commit>/   the upstream checkout (cached; kept for repeat runs)
-#   <out>/bundle/              plugin.json at the root + skills/ (+ mcp.json) — the
-#                              docker build context for Dockerfile.<plugin>-plugin
+#   <out>/bundle/              plugin.json at the root + skills/ (+ mcp.json, + the
+#                              paths named by PLUGIN_EXTRA_PATHS) — the docker build
+#                              context for Dockerfile.<plugin>-plugin
 #
 # Upstream packs are not shaped alike, so the shape comes in as inputs rather
 # than being assumed: ECC, agent-skills, superpowers and code-review-graph ship
 # skills/*/SKILL.md; graphify ships one graphify/skill.md; spec-kit ships no
 # skills at all. The last two are supplied as a reviewed overlay committed
 # beside the pack's bundle.env, so this script never rewrites a prompt file.
+#
+# A skill is not always the whole pack. A review-and-design pack keeps its
+# reviewer prompts and scoring standards in sibling trees and cites them from
+# the plugin root, so mounting skills/ alone yields prompts that read files
+# which are not in the mount. PLUGIN_EXTRA_PATHS is how a pack declares those
+# companions; it is not a general file shipper, and the ref check in step 4
+# exists because "copied" and "reachable" are different claims.
 #
 # Usage:  compose-bundle.sh <out-dir>
 # Env:    PLUGIN_REPO       upstream git URL                 (required)
@@ -32,6 +40,8 @@
 #         PLUGIN_EXCLUDES        space-separated names/paths to drop from the
 #                              copied skills (a pack's own test fixtures and
 #                              sample apps travel with its skills/ tree)
+#         PLUGIN_EXTRA_PATHS     space-separated UPSTREAM-relative dirs or
+#                              files to copy to the bundle root beside skills/
 #         PLUGIN_DESCRIPTION     text for the plugin.json description
 #         MAX_ENTRIES / MAX_BYTES  kagent bundle limits
 #
@@ -49,6 +59,7 @@ PLUGIN_SKILLS_LIST="${PLUGIN_SKILLS_LIST:-}"
 PLUGIN_OVERLAY_DIR="${PLUGIN_OVERLAY_DIR:-}"
 PLUGIN_MCP_FILE="${PLUGIN_MCP_FILE:-}"
 PLUGIN_EXCLUDES="${PLUGIN_EXCLUDES:-}"
+PLUGIN_EXTRA_PATHS="${PLUGIN_EXTRA_PATHS:-}"
 PLUGIN_DESCRIPTION="${PLUGIN_DESCRIPTION:-${PLUGIN_NAME} skills, packaged for kagent}"
 MAX_ENTRIES="${MAX_ENTRIES:-10000}"
 MAX_BYTES="${MAX_BYTES:-104857600}"
@@ -86,6 +97,26 @@ case "$PLUGIN_VERSION_SOURCE" in
   *.json | *.toml | VERSION) ;;
   *) die "PLUGIN_VERSION_SOURCE '${PLUGIN_VERSION_SOURCE}' must be VERSION, a *.json manifest or a *.toml" ;;
 esac
+
+# An extra lands at the bundle root, beside the three names this script authors
+# there itself. A pack whose upstream tree carries its own root plugin.json
+# would otherwise replace the manifest kagent reads with one in the format of
+# whichever CLI shipped it — the exact failure the root-manifest step at 2
+# exists to avoid — and naming skills/ would slip past PLUGIN_EXCLUDES, whose
+# find is rooted at bundle/skills. So the collision is denied by name here, on
+# the entry's shape alone, before anything is fetched.
+EXTRAS=()
+read -r -a EXTRAS <<<"${PLUGIN_EXTRA_PATHS}"
+for spec in ${EXTRAS[@]+"${EXTRAS[@]}"}; do
+  case "$spec" in
+    /* | .* | -* | *..* | *[!a-zA-Z0-9._/-]*)
+      die "PLUGIN_EXTRA_PATHS entry '${spec}' must be upstream-relative: no leading / . or -, no .., and only letters, digits, '.', '_' '-' or '/'" ;;
+  esac
+  case "${spec%%/*}" in
+    skills | plugin.json | mcp.json)
+      die "PLUGIN_EXTRA_PATHS may not name '${spec%%/*}': the composer authors that name at the bundle root" ;;
+  esac
+done
 
 # ------------------------------------------------------------------ 1. fetch the pin
 if [ ! -d "${SRC_DIR}/.git" ]; then
@@ -213,6 +244,79 @@ for name in ${WANTED[@]+"${WANTED[@]}"}; do
   [ -f "${BUNDLE_DIR}/skills/${name}/SKILL.md" ] || MISSING_SKILLS="${MISSING_SKILLS}${MISSING_SKILLS:+ }${name}"
 done
 [ -z "$MISSING_SKILLS" ] || die "skills listed but not shipped with a SKILL.md: ${MISSING_SKILLS}"
+
+# ------------------------------------------------- 3b. root-level companions
+# Two passes, as with the skills allowlist: name every missing path at once,
+# then copy. A half-populated root is the worst outcome, because the bundle
+# still composes and the skill only fails at the step that reads the missing
+# file, which is a long way from the pack's bundle.env.
+MISSING_EXTRA=""
+for spec in ${EXTRAS[@]+"${EXTRAS[@]}"}; do
+  [ -e "${SRC_DIR}/${spec}" ] || MISSING_EXTRA="${MISSING_EXTRA}${MISSING_EXTRA:+ }${spec}"
+done
+[ -z "$MISSING_EXTRA" ] \
+  || die "PLUGIN_EXTRA_PATHS names paths absent upstream at ${ACTUAL_SHA:0:12}: ${MISSING_EXTRA}"
+
+for spec in ${EXTRAS[@]+"${EXTRAS[@]}"}; do
+  mkdir -p "$(dirname "${BUNDLE_DIR}/${spec}")"
+  if [ -d "${SRC_DIR}/${spec}" ]; then
+    cp -R "${SRC_DIR}/${spec}" "${BUNDLE_DIR}/${spec}"
+  else
+    # Depth is load-bearing: a skill cites the file as docs/claude.md from the
+    # plugin root, so a single-file entry keeps its directory instead of
+    # flattening to the bundle root.
+    cp "${SRC_DIR}/${spec}" "${BUNDLE_DIR}/${spec}"
+  fi
+done
+
+# Copying plain is deliberate for skills/ — an allowlisted tree this script has
+# already vetted — but not for an arbitrary upstream directory, which reaches a
+# published image. cp -R preserves symlinks on GNU and macOS alike, and a link
+# into a scratch mount dangles; and nothing else on this path applies the
+# secret-name filters the harness-rootfs bundle writer uses. Scoped to the
+# entries this input declares, so no other pack's bytes or error surface move.
+for spec in ${EXTRAS[@]+"${EXTRAS[@]}"}; do
+  target="${BUNDLE_DIR}/${spec}"
+  LINKS="$(find "${target}" -type l 2>/dev/null || true)"
+  [ -z "${LINKS}" ] || die "PLUGIN_EXTRA_PATHS '${spec}' contains a symlink, which would mount dangling: $(printf '%s' "${LINKS}" | head -n 3 | tr '\n' ' ')"
+  SECRETISH="$(find "${target}" \( -name 'auth.json' -o -name 'credentials.json' -o -name '.netrc' \
+      -o -name '.env*' -o -name '*.pem' -o -name '*.key' -o -name '*secret*' -o -name '*credential*' \
+      -o -name '*apikey*' -o -name '*api-key*' \) -print 2>/dev/null || true)"
+  [ -z "${SECRETISH}" ] || die "PLUGIN_EXTRA_PATHS '${spec}' would publish a secret-shaped entry: $(printf '%s' "${SECRETISH}" | head -n 3 | tr '\n' ' ')"
+done
+
+# "Copied" is not "reachable". A skill cites a companion as <root>/<path> from
+# the plugin root, or as ../../<root>/<path> from inside its own directory, and
+# the same string can mean the user's workspace. So only a citation covered by
+# a declared spec is required to resolve — that is what catches a copy that
+# landed at the wrong depth — and everything else under the same root is
+# reported rather than failed, because the composer cannot tell an upstream
+# file from a path the agent will be handed at run time.
+EXTRA_ROOTS=""
+for spec in ${EXTRAS[@]+"${EXTRAS[@]}"}; do
+  case " ${EXTRA_ROOTS} " in *" ${spec%%/*} "*) ;; *) EXTRA_ROOTS="${EXTRA_ROOTS}${EXTRA_ROOTS:+ }${spec%%/*}" ;; esac
+done
+REF_ALTS=""
+for root in ${EXTRA_ROOTS}; do REF_ALTS="${REF_ALTS}${REF_ALTS:+|}${root}"; done
+UNRESOLVED=""
+UNCOVERED=""
+if [ -n "${REF_ALTS}" ]; then
+  while IFS= read -r ref; do
+    [ -n "${ref}" ] || continue
+    covered=no
+    for spec in ${EXTRAS[@]+"${EXTRAS[@]}"}; do
+      case "${ref}" in "${spec}"|"${spec}"/*) covered=yes ;; esac
+    done
+    if [ "${covered}" = yes ]; then
+      [ -e "${BUNDLE_DIR}/${ref}" ] || UNRESOLVED="${UNRESOLVED}${UNRESOLVED:+ }${ref}"
+    else
+      UNCOVERED="${UNCOVERED}${UNCOVERED:+ }${ref}"
+    fi
+  done < <(find "${BUNDLE_DIR}/skills" -name SKILL.md -exec grep -hoE "(${REF_ALTS%|})/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*" {} + 2>/dev/null | sort -u || true)
+fi
+[ -z "${UNRESOLVED}" ] \
+  || die "skills cite these declared companion paths but the bundle does not carry them: ${UNRESOLVED}"
+[ -z "${UNCOVERED}" ] || log "companions cited by the skills but not declared in PLUGIN_EXTRA_PATHS (upstream file, or the user's own workspace): ${UNCOVERED}"
 
 # Two packs are primarily MCP servers, and their mcp.json is the part that is
 # worth mounting. It is emitted at the bundle root, where the kagent engine

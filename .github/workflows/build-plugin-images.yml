@@ -3,9 +3,9 @@ name: Build agent plugin images
 # Publishes the kagent Agent Plugins 1.0.0 bundle images to ghcr.io, driven by
 # deploy/kagent/plugins.csv. Each row pins an upstream repo to a full 40-hex
 # commit and names the version that commit ships upstream, in the file the pack
-# states that version in (version_source); a PR run only resolves and validates
-# the rows, and the merge to main publishes. Flip `current` to move the :latest
-# tag; add a row to stage a version.
+# states that version in (version_source); a PR run resolves, validates and
+# dry-composes the rows without publishing, and the merge to main publishes. Flip
+# `current` to move the :latest tag; add a row to stage a version.
 #
 # A push to main publishes only the rows whose bytes moved, like
 # build-runtime-images.yml: a bundle build is not byte-reproducible (multi-arch,
@@ -173,6 +173,33 @@ jobs:
           set -euo pipefail
           node scripts/seed-plugin-catalog.js --check
           node scripts/gen-kagent-manifests.js --check
+
+      - name: Dry-compose every selected bundle
+        # PR legs only, and only as far as `compose-bundle.sh`: no build, no
+        # push. The reason is where the publish failure would otherwise land.
+        # `build` is skipped on a pull_request, so a bad `skills.txt` name or a
+        # `PLUGIN_EXTRA_PATHS` entry absent upstream first dies on the merge —
+        # the build job fails, the stamp job never runs, and the committed
+        # manifest keeps an all-zero digest that only an in-cluster apply
+        # notices. Composing into the runner temp turns that into a red PR.
+        # Each row composes in its own subshell because `pack-inputs.sh`
+        # defaults `PLUGIN_*` over the CSV values, so a leaked export from the
+        # previous row would resolve the next pack against the wrong repo.
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          SELECTED: ${{ runner.temp }}/selected.txt
+        run: |
+          set -euo pipefail
+          while read -r plugin _version; do
+            [ -n "${plugin:-}" ] || continue
+            echo "::group::$plugin"
+            (
+              export REPO_ROOT="$GITHUB_WORKSPACE" PLUGIN="$plugin"
+              . deploy/kagent/pack-inputs.sh
+              bash deploy/kagent/ecc-plugin/compose-bundle.sh "$RUNNER_TEMP/dry-$plugin"
+            )
+            echo "::endgroup::"
+          done < "$SELECTED"
 
       - name: Report the selection
         env:
