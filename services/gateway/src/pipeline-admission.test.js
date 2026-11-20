@@ -15,7 +15,7 @@ const {
   localRepositorySnapshot,
   requestedStages,
 } = require('./pipeline-admission');
-const { createPipelineStart } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { createPipelineStart } = require('@software-factory/shared-core/pipeline/contracts');
 const { createCompatibilityHandlers } = require('./publish');
 const { createPipelineRouter } = require('./routes/pipeline');
 

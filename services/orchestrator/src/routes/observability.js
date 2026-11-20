@@ -1,11 +1,11 @@
 'use strict';
 
 const express = require('express');
-const { getSettings } = require('@ai-fleet/shared/store');
-const { asyncHandler } = require('@ai-fleet/shared/util');
-const { loadAnalytics } = require('@ai-fleet/shared/agent/analytics');
-const { runDiagnostics } = require('@ai-fleet/shared/agent/diagnostics');
-const { catalog, validateWorkflowPattern } = require('@ai-fleet/shared/agent/workflow-patterns');
+const { getSettings } = require('@software-factory/shared/store');
+const { asyncHandler } = require('@software-factory/shared/util');
+const { loadAnalytics } = require('@software-factory/shared/agent/analytics');
+const { runDiagnostics } = require('@software-factory/shared/agent/diagnostics');
+const { catalog, validateWorkflowPattern } = require('@software-factory/shared/agent/workflow-patterns');
 
 const router = express.Router();
 

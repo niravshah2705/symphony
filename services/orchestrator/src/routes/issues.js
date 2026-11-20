@@ -1,9 +1,9 @@
 'use strict';
 
 const express = require('express');
-const { getApiKey } = require('@ai-fleet/shared/store');
-const linear = require('@ai-fleet/shared/linear');
-const { asyncHandler } = require('@ai-fleet/shared/util');
+const { getApiKey } = require('@software-factory/shared/store');
+const linear = require('@software-factory/shared/linear');
+const { asyncHandler } = require('@software-factory/shared/util');
 
 const router = express.Router();
 const taskRequests = new Map();

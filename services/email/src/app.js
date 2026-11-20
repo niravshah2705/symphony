@@ -1,9 +1,9 @@
 'use strict';
 
 const express = require('express');
-const log = require('@ai-fleet/shared-core/logger');
-const { decodePushMessage } = require('@ai-fleet/shared-core/messaging/publisher');
-const { pushAuth } = require('@ai-fleet/shared-core/messaging/oidc');
+const log = require('@software-factory/shared-core/logger');
+const { decodePushMessage } = require('@software-factory/shared-core/messaging/publisher');
+const { pushAuth } = require('@software-factory/shared-core/messaging/oidc');
 const { loadConfig } = require('./config');
 const { createMailer } = require('./mailer');
 const { createIdempotencyStore } = require('./idempotency');

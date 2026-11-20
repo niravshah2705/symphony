@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-wallet-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.STORE_BACKEND = 'file';
 // The local profile must not decide these tests: every case names its own policy.
 delete process.env.BILLING_SWEEP_ENABLED;

@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'core-billing-sweep-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.BILLING_SWEEP_ENABLED = 'true';
 process.env.INITIAL_CREDIT_INR = '500';
 process.env.USD_TO_INR = '100';

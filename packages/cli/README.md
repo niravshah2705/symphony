@@ -1,6 +1,6 @@
-# adlc — AI Fleet CLI
+# adlc — Software Factory CLI
 
-A command-line client that drives the AI Fleet life cycle from a terminal:
+A command-line client that drives the Software Factory life cycle from a terminal:
 **business → plan → issues → coder → PR**. It's a thin HTTP client to the
 running **gateway** (the only client-facing origin), so it reuses the same
 auth/RBAC, scheduler, and coder monitor as the web UI.
@@ -105,7 +105,7 @@ The version must be semver (`MAJOR.MINOR.PATCH`); the tag form is `adlc-v<versio
 ```bash
 npm ci
 node --test "packages/cli/src/**/*.test.js"          # unit tests (Node 22+ glob)
-npm pack -w @ai-fleet/cli --dry-run                  # inspect tarball contents
+npm pack -w @software-factory/cli --dry-run                  # inspect tarball contents
 npx --yes esbuild@0.24.2 packages/cli/bin/adlc.js \
   --bundle --platform=node --target=node22 --format=cjs --outfile=dist/adlc.js
 node dist/adlc.js --help                             # bundle smoke test

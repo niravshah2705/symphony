@@ -21,7 +21,7 @@ const {
 } = require('./policy-runtime');
 const workspaceEvents = require('./workspace-events');
 const { processBillingSweep } = require('../billing/sweep');
-const { drainOnce: drainBillingOutbox } = require('@ai-fleet/shared-core/billing/outbox-drain');
+const { drainOnce: drainBillingOutbox } = require('@software-factory/shared-core/billing/outbox-drain');
 const { billingStatus, getOrgFundStatus } = require('../billing/gate');
 const {
   normalizeWorkspaceContext,

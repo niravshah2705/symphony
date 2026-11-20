@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'workspace-store-'));
 process.env.STORE_BACKEND = 'file';
-process.env.AI_FLEET_DATA_DIR = DATA_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = DATA_DIR;
 delete process.env.STORE_NAMESPACE;
 delete process.env.FLEET_ORG_ID;
 delete process.env.AIFLEET_ORG_ID;
@@ -147,8 +147,8 @@ test('a pinned namespace retains the legacy location and rejects another org', (
       }
       process.stdout.write(JSON.stringify({
         mismatch,
-        legacyExists: fs.existsSync(path.join(process.env.AI_FLEET_DATA_DIR, 'store.json')),
-        workspaceDirExists: fs.existsSync(path.join(process.env.AI_FLEET_DATA_DIR, 'workspaces')),
+        legacyExists: fs.existsSync(path.join(process.env.SOFTWARE_FACTORY_DATA_DIR, 'store.json')),
+        workspaceDirExists: fs.existsSync(path.join(process.env.SOFTWARE_FACTORY_DATA_DIR, 'workspaces')),
       }));
     })().catch((error) => { console.error(error); process.exitCode = 1; });
   `;
@@ -157,7 +157,7 @@ test('a pinned namespace retains the legacy location and rejects another org', (
     env: {
       ...process.env,
       STORE_BACKEND: 'file',
-      AI_FLEET_DATA_DIR: pinnedDir,
+      SOFTWARE_FACTORY_DATA_DIR: pinnedDir,
       STORE_NAMESPACE: 'tenant123',
       FLEET_ORG_ID: 'org:pinned',
       AIFLEET_ORG_ID: '',

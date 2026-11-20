@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 const { loadConfig } = require('./config');
 
 test('PIPELINE_ORCHESTRATOR_ENABLED is an explicit rollback switch and defaults off', () => {

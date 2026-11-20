@@ -1,7 +1,7 @@
 # Firestore structure
 
 This is a code-derived structural export of the Firestore Native database used
-by AI Fleet. It documents collection paths, document identifiers, and persisted
+by Software Factory. It documents collection paths, document identifiers, and persisted
 field shapes; it does **not** contain live document values or credentials.
 
 Firestore is schemaless, so the serializers and repository write paths linked

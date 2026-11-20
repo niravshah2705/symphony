@@ -1,7 +1,7 @@
 const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
 const GA4_USER_ID_MAX_LENGTH = 256;
 const GA4_USER_ID_FORBIDDEN = /[\s@/?#]/u;
-const GTAG_SCRIPT_ID = 'ai-fleet-google-analytics';
+const GTAG_SCRIPT_ID = 'software-factory-google-analytics';
 const GTAG_SCRIPT_URL = 'https://www.googletagmanager.com/gtag/js';
 export const ANALYTICS_CONSENT_KEY = 'ai-fleet.analytics-consent';
 const ANALYTICS_ENABLED = 'enabled';
@@ -23,6 +23,8 @@ const TRACKED_ROUTES = new Set([
   'invite',
   'privacy',
   'terms',
+  'refund',
+  'shipping',
 ]);
 
 // Shared state keeps initialization and page-view deduplication stable even if
@@ -145,7 +147,7 @@ export function setAnalyticsConsent(value, {
 }
 
 // GA4 permits an operator-defined, non-PII user_id of at most 256 characters.
-// AI Fleet supplies only the gateway-verified Firebase subject. Reject common
+// Software Factory supplies only the gateway-verified Firebase subject. Reject common
 // PII/URL shapes defensively so a future caller cannot accidentally substitute
 // an email address, page URL, token-bearing query, or display label.
 export function normalizeGa4UserId(value) {

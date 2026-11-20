@@ -93,16 +93,16 @@ jobs:
       - name: Set package version
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-        run: npm version "$VERSION" --no-git-tag-version --allow-same-version -w @ai-fleet/cli
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version -w @software-factory/cli
 
       - name: Pack npm tarball
         run: |
           set -euo pipefail
           mkdir -p dist
-          npm pack -w @ai-fleet/cli --pack-destination dist
+          npm pack -w @software-factory/cli --pack-destination dist
           ls -l dist
 
-      # Bundle the CLI + its only dependency (@ai-fleet/shared/config, which pulls
+      # Bundle the CLI + its only dependency (@software-factory/shared/config, which pulls
       # in just config.js + authz.js) into one runnable file. esbuild preserves
       # the entry file's `#!/usr/bin/env node` shebang, so no banner is needed.
       # Pinned esbuild for reproducibility; matches the repo's `npx --yes <tool>@<ver>`.

@@ -34,7 +34,7 @@ function toastType(level) {
 /** Render one notification event: native Notification when allowed, always a toast. */
 export function showNotification(event) {
   if (!event || event.type !== 'notification') return;
-  const title = event.title || 'AI Fleet';
+  const title = event.title || 'Software Factory';
   const body = event.message || '';
   const key = `${event.channel || ''}:${title}:${body}`;
   const now = Date.now();

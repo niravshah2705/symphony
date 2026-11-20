@@ -3,9 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const store = require('@ai-fleet/shared/store');
-const attachmentsService = require('@ai-fleet/shared/attachments/service');
-const llm = require('@ai-fleet/shared/agent/llm');
+const store = require('@software-factory/shared/store');
+const attachmentsService = require('@software-factory/shared/attachments/service');
+const llm = require('@software-factory/shared/agent/llm');
 
 function handlerFor(router, method, path) {
   const layer = router.stack.find((c) => c.route && c.route.path === path && c.route.methods[method]);

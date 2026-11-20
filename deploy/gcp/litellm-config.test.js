@@ -17,8 +17,8 @@ const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
 const litellmConfig = YAML.parse(read('deploy', 'litellm', 'config.yaml'));
 const litellmTf = read('deploy', 'gcp', 'terraform', 'litellm.tf');
-const { EGRESS_ROUTES } = require('@ai-fleet/shared-core/egress');
-const mp = require('@ai-fleet/shared/agent/model-presets');
+const { EGRESS_ROUTES } = require('@software-factory/shared-core/egress');
+const mp = require('@software-factory/shared/agent/model-presets');
 
 // Every model id `enforceLlmModel` can hand a claude/codex harness: the `model`
 // field of each catalog preset for those providers.

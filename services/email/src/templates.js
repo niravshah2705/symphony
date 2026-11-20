@@ -114,11 +114,11 @@ function renderInvitation(job, publicAppUrl) {
   const expiry = job.expiresInMinutes
     ? ` This invitation expires in ${job.expiresInMinutes} minute${job.expiresInMinutes === 1 ? '' : 's'}.`
     : '';
-  const subject = `Invitation to join ${job.organizationName} on AI Fleet`;
+  const subject = `Invitation to join ${job.organizationName} on Software Factory`;
   const text = [
     hello,
     '',
-    `${inviter} to join ${job.organizationName} on AI Fleet.${expiry}`,
+    `${inviter} to join ${job.organizationName} on Software Factory.${expiry}`,
     '',
     `Accept the invitation: ${url}`,
     '',
@@ -126,7 +126,7 @@ function renderInvitation(job, publicAppUrl) {
   ].join('\n');
   const html = [
     `<p>${escapeHtml(hello)}</p>`,
-    `<p>${escapeHtml(inviter)} to join <strong>${escapeHtml(job.organizationName)}</strong> on AI Fleet.${escapeHtml(expiry)}</p>`,
+    `<p>${escapeHtml(inviter)} to join <strong>${escapeHtml(job.organizationName)}</strong> on Software Factory.${escapeHtml(expiry)}</p>`,
     `<p><a href="${escapeHtml(url)}">Accept invitation</a></p>`,
     '<p>If you were not expecting this invitation, you can ignore this email.</p>',
   ].join('');
@@ -134,9 +134,9 @@ function renderInvitation(job, publicAppUrl) {
 }
 
 function renderBillingAlert(job) {
-  const subject = `[AI Fleet Billing] ${job.subject}`;
+  const subject = `[Software Factory Billing] ${job.subject}`;
   const referenceText = job.orgId ? `\n\nOrganization reference: ${job.orgId}` : '';
-  const text = `${job.message}${referenceText}\n\nReview billing in AI Fleet.`;
+  const text = `${job.message}${referenceText}\n\nReview billing in Software Factory.`;
   const referenceHtml = job.orgId
     ? `<p><small>Organization reference: ${escapeHtml(job.orgId)}</small></p>`
     : '';
@@ -144,7 +144,7 @@ function renderBillingAlert(job) {
     `<h2>${escapeHtml(job.subject)}</h2>`,
     `<p>${escapeHtml(job.message).replaceAll('\n', '<br>')}</p>`,
     referenceHtml,
-    '<p>Review billing in AI Fleet.</p>',
+    '<p>Review billing in Software Factory.</p>',
   ].join('');
   return Object.freeze({ subject, text, html });
 }

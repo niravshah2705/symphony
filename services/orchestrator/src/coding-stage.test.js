@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const {
   createPreflightSnapshot,
   createStageCommandV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
-const { mergeReceiptDigest } = require('@ai-fleet/shared/agent/repository-broker');
+} = require('@software-factory/shared-core/pipeline/contracts');
+const { mergeReceiptDigest } = require('@software-factory/shared/agent/repository-broker');
 const {
   MAX_PIPELINE_CODING_WORK_ITEMS,
   assertRepositorySnapshot,

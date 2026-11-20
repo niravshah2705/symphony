@@ -11,11 +11,11 @@ const { buildBackend, installSkills, configuredResourceNames, runWorkflow } = re
 const { resolveSkillsSrc } = require('../config');
 
 // The vendored default skills live next to config.js, which now resides in
-// @ai-fleet/shared-core (the split that keeps the agent SDKs out of the
+// @software-factory/shared-core (the split that keeps the agent SDKs out of the
 // non-agent images). Derive the expected path from where config actually
 // resolves so this test stays correct regardless of the package layout.
 const VENDORED_SKILLS = path.join(
-  path.dirname(require.resolve('@ai-fleet/shared-core/config')),
+  path.dirname(require.resolve('@software-factory/shared-core/config')),
   'agent',
   'skills',
 );
@@ -107,7 +107,7 @@ test('installSkills reads the vendored default skills when SKILLS_ROOT is unset 
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  // resolveSkillsSrc falls back to the vendored skills in @ai-fleet/shared-core.
+  // resolveSkillsSrc falls back to the vendored skills in @software-factory/shared-core.
   assert.equal(resolveSkillsSrc(), VENDORED_SKILLS);
 
   const paths = installSkills(root, ['software-planning']);

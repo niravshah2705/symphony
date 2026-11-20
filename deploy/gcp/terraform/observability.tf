@@ -238,7 +238,7 @@ resource "google_monitoring_alert_policy" "observability" {
   for_each = local.observability_alerts
 
   project               = var.project_id
-  display_name          = "AI Fleet: ${each.key}"
+  display_name          = "Software Factory: ${each.key}"
   combiner              = "OR"
   notification_channels = var.observability_notification_channels
 

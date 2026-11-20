@@ -21,13 +21,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-auto-recharge-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 // 1000 INR of opening credit so the dataset's initialCreditPaise is reproducible.
 process.env.INITIAL_CREDIT_INR = '1000';
 
-const store = require('@ai-fleet/shared-core/store');
-const ledger = require('@ai-fleet/shared-core/billing/ledger');
-const notify = require('@ai-fleet/shared-core/billing/notify');
+const store = require('@software-factory/shared-core/store');
+const ledger = require('@software-factory/shared-core/billing/ledger');
+const notify = require('@software-factory/shared-core/billing/notify');
 const job = require('./auto-recharge-job');
 
 const DATASET = JSON.parse(

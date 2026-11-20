@@ -118,7 +118,7 @@ async function main() {
     // Config is frozen at require time, so all service inputs are installed first.
     process.env.NODE_ENV = 'test';
     process.env.STORE_BACKEND = 'file';
-    process.env.AI_FLEET_DATA_DIR = dataDir;
+    process.env.SOFTWARE_FACTORY_DATA_DIR = dataDir;
     process.env.FLEXPRICE_ENABLED = 'true';
     process.env.FLEXPRICE_BASE_URL = baseUrl;
     process.env.FLEXPRICE_ENVIRONMENT_ID = process.env.FLEXPRICE_ENVIRONMENT_ID
@@ -133,15 +133,15 @@ async function main() {
     for (const name of ['CASHFREE_APP_ID', 'CASHFREE_SECRET_KEY', 'CASHFREE_ENV',
       'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_BASE_URL']) delete process.env[name];
 
-    const store = require('@ai-fleet/shared-core/store');
-    const flexpriceConfig = require('@ai-fleet/shared-core/billing/flexprice-config');
-    const { createFlexpriceClient } = require('@ai-fleet/shared-core/billing/flexprice-client');
+    const store = require('@software-factory/shared-core/store');
+    const flexpriceConfig = require('@software-factory/shared-core/billing/flexprice-config');
+    const { createFlexpriceClient } = require('@software-factory/shared-core/billing/flexprice-client');
     const { chargeAccount, keysFor, invoiceSearch } = require('../services/billing/src/platform-charge-job');
     const client = createFlexpriceClient({ config: flexpriceConfig.FLEXPRICE });
     const gateApi = { invalidate() {} };
 
     await store.initStore();
-    console.log('AI Fleet — Phase 5 live FlexPrice verification');
+    console.log('Software Factory — Phase 5 live FlexPrice verification');
     console.log(`FlexPrice enabled; plane keys ${moneyKey && ingestKey ? 'present' : 'missing'}`);
     console.log(`expiry timeout ${flags.expiryTimeoutMs}ms`);
 

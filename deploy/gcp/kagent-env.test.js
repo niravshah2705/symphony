@@ -321,7 +321,7 @@ test('the names the gateway emits are read by a gateway that is wired to a clien
   // The third link, and the one no env-map test can see: the router refuses
   // unless it was handed an adapter. Passing none makes KAGENT_* dead config
   // even though config.js parses them and kagent.js would work.
-  assert.match(gatewayIndex, /require\('@ai-fleet\/shared-core\/agent\/kagent'\)/);
+  assert.match(gatewayIndex, /require\('@software-factory\/shared-core\/agent\/kagent'\)/);
   assert.match(
     gatewayIndex,
     /createWorkflowsRouter\(\{[\s\S]{0,120}kagentAdapter:\s*kagent,/,

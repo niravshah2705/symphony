@@ -1,9 +1,9 @@
-# Contributing to AI Fleet
+# Contributing to Software Factory
 
-Thanks for your interest in AI Fleet. This guide covers how to set the project up,
+Thanks for your interest in Software Factory. This guide covers how to set the project up,
 the conventions we follow, and how to propose changes.
 
-> **AI Fleet is proprietary software.** It is licensed under the
+> **Software Factory is proprietary software.** It is licensed under the
 > [End User License Agreement](./EULA.md), not an open-source license. Contributions
 > are welcome from authorized collaborators, but by submitting one you agree it may be
 > incorporated into the Software under the terms of the EULA. Outside contributors may

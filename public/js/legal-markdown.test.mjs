@@ -146,3 +146,35 @@ test('renderer source contains no HTML string insertion sink', () => {
   assert.doesNotMatch(source, /insertAdjacentHTML/u);
   assert.doesNotMatch(source, /document\.write/u);
 });
+
+// The privacy notice states its data-per-purpose mapping as a table, which is the
+// one place in the documents that needs one. Both renderers — this browser one and
+// scripts/build-legal-pages.js — must agree, or the signed-in view shows raw pipes
+// where the static crawler-facing page shows a table.
+test('renders a pipe table into thead and tbody cells', () => {
+  const source = readFileSync(new URL('../../public/legal/privacy.md', import.meta.url), 'utf8');
+  const blocks = parseLegalMarkdown(source);
+  const tables = blocks.filter((block) => block.type === 'table');
+  assert.equal(tables.length, 1, 'the privacy notice must carry exactly one table');
+  assert.equal(tables[0].head.length, 2, 'the data/purpose table has two columns');
+  assert.ok(tables[0].rows.length >= 8, 'every data category must be itemised, not summarised');
+  assert.ok(
+    tables[0].rows.every((row) => row.length === 2),
+    'each row must pair personal data with its purpose',
+  );
+
+  const fragment = renderLegalMarkdown('| a | b |\n| --- | --- |\n| <x> | **y** |\n', { documentRef: fakeDocument });
+  const table = fragment.children[0];
+  assert.equal(table.tagName, 'TABLE');
+  const [head, body] = table.children;
+  assert.deepEqual(head.children[0].children.map((cell) => cell.tagName), ['TH', 'TH']);
+  const cells = body.children[0].children;
+  assert.deepEqual(cells.map((cell) => cell.tagName), ['TD', 'TD']);
+  assert.equal(cells[0].children[0].value, '<x>', 'markup in a cell stays text');
+  assert.equal(cells[1].children[0].tagName, 'STRONG');
+});
+
+test('a pipe line without a divider row stays a paragraph', () => {
+  const blocks = parseLegalMarkdown('one | two\nthree | four\n');
+  assert.deepEqual(blocks.map((block) => block.type), ['paragraph']);
+});

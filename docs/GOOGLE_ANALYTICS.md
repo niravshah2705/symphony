@@ -1,6 +1,6 @@
 # Google Analytics 4
 
-AI Fleet supports an optional Google Analytics 4 web data stream. A deployment
+Software Factory supports an optional Google Analytics 4 web data stream. A deployment
 does not load the Google tag or queue events unless the SPA receives a valid
 `G-...` measurement ID at deploy time. On a configured deployment, analytics is
 enabled by default for each browser and can be disabled at any time through the
@@ -14,7 +14,7 @@ persistent **Cookie Preferences** control in the application footer.
 2. Copy the stream's [measurement
    ID](https://support.google.com/analytics/answer/12270356) (`G-...`).
 3. Under the stream's **Enhanced measurement → Page views → advanced settings**,
-   disable **Page changes based on browser history events**. AI Fleet uses a
+   disable **Page changes based on browser history events**. Software Factory uses a
    fragment router and sends its own virtual `page_view` event for each route;
    enabling both mechanisms can double-count navigation. This follows Google's
    guidance for [manual SPA page
@@ -111,7 +111,7 @@ only on the GA configuration command. In reports, compare the custom
 **Authentication status** dimension or GA4's built-in **Signed in with user ID**
 dimension. Historical events are not reprocessed after either feature is added.
 
-AI Fleet intentionally does not show a first-visit banner because the selected
+Software Factory intentionally does not show a first-visit banner because the selected
 model is opt-out by default. The footer control and Privacy Notice do not replace
 deployment-specific legal review. The operator remains responsible for any
 additional consent, disclosure (including the stable authenticated identifier),

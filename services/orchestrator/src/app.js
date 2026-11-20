@@ -2,14 +2,14 @@
 
 const crypto = require('node:crypto');
 const express = require('express');
-const { verifyPushToken } = require('@ai-fleet/shared-core/messaging/oidc');
-const { decodePipelinePushMessage } = require('@ai-fleet/shared-core/pipeline/bus');
+const { verifyPushToken } = require('@software-factory/shared-core/messaging/oidc');
+const { decodePipelinePushMessage } = require('@software-factory/shared-core/pipeline/bus');
 const {
   MAX_STAGE_RESULT_BYTES,
   PIPELINE_STAGES,
   PipelineContractError,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
-const { PipelineRepositoryError } = require('@ai-fleet/shared-core/pipeline/repository');
+} = require('@software-factory/shared-core/pipeline/contracts');
+const { PipelineRepositoryError } = require('@software-factory/shared-core/pipeline/repository');
 
 const ORGANIZATION_HEADER = 'x-ai-fleet-organization-id';
 const PROJECT_HEADER = 'x-ai-fleet-project-id';
@@ -153,7 +153,7 @@ function createApp({ orchestrator, config, logger, authenticatePush, verifyResul
   // shouldMount() remains the single predicate the deployment gates on.
   const actor = substrateActor || (
     process.env.SUBSTRATE_ACTOR_MODE === 'true' && process.env.SUBSTRATE_JWKS_URL
-      ? require('@ai-fleet/shared/agent/substrate-actor')
+      ? require('@software-factory/shared/agent/substrate-actor')
       : null
   );
   if (actor && actor.shouldMount()) {

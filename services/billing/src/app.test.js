@@ -11,7 +11,7 @@ const path = require('node:path');
 // Isolate the file store BEFORE the store is required: without this the suite
 // writes real JSON into the repo's ./data directory.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-app-test-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 // A quote needs a supplier state to compute CGST/SGST at all. FLEXPRICE_ENABLED
 // stays off on purpose: it is the state every local test runs in, and "nothing is
 // credited while there is no wallet" is itself one of the assertions below.
@@ -22,7 +22,7 @@ delete process.env.FLEXPRICE_API_KEY_INGEST;
 delete process.env.BILLING_ALLOW_MOCK_PAYMENTS;
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
-const store = require('@ai-fleet/shared-core/store');
+const store = require('@software-factory/shared-core/store');
 const { createApp } = require('./app');
 
 const ORG = 'org-test-svc';
@@ -59,7 +59,7 @@ test('billing standalone UI dashboard serves HTML', async () => {
     const res = await fetch(`${server.url}/`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get('content-type'), /text\/html/);
-    assert.match(await res.text(), /AI Fleet · Billing Control Center/);
+    assert.match(await res.text(), /Software Factory · Billing Control Center/);
   } finally {
     await server.close();
   }

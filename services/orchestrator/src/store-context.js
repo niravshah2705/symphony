@@ -1,10 +1,10 @@
 'use strict';
 
-const store = require('@ai-fleet/shared/store');
+const store = require('@software-factory/shared/store');
 const {
   normalizeWorkspaceContext,
   runWithWorkspaceContext,
-} = require('@ai-fleet/shared/store/workspace-context');
+} = require('@software-factory/shared/store/workspace-context');
 
 const ORGANIZATION_HEADER = 'x-ai-fleet-organization-id';
 const PROJECT_HEADER = 'x-ai-fleet-project-id';

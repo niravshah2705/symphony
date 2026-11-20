@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AI Fleet (tech-symphony). Format follows
+All notable changes to Software Factory (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
 
@@ -67,19 +67,19 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
     control plane. The remaining gaps (podcert CA + `BackendTLSPolicy`, the
     anonymous `grpc-status` probe that must answer 16) are tracked in
     `docs/SUBSTRATE_STATUS.md` pending 2.
-- **The orchestrator image contains `@ai-fleet/shared`, so it can boot.** #283
+- **The orchestrator image contains `@software-factory/shared`, so it can boot.** #283
   retired the Cloud Run planner and absorbed its HTTP surface into
   `services/orchestrator/src/agent-surface.js`, mounted from `app.js`, and added
-  `"@ai-fleet/shared": "*"` to `services/orchestrator/package.json` — but left
+  `"@software-factory/shared": "*"` to `services/orchestrator/package.json` — but left
   `deploy/gcp/Dockerfile.orchestrator` packaging only `packages/shared-core/`.
   The image therefore built green and died at the first shared require
-  (`Cannot find module '@ai-fleet/shared/agent/pipeline-stage-service'`,
+  (`Cannot find module '@software-factory/shared/agent/pipeline-stage-service'`,
   `agent-surface.js:15`), because `npm ci --workspace=…` never resolves local
   `require()`s and no test boots the image. Cloud Run marked the revision
   `HealthCheckContainerError`, and since Terraform was *creating*
   `pipeline-orchestrator` there was no earlier revision to fall back on: the
   service came up with no URL at all. The build now copies `packages/shared/`
-  and selects `--workspace=@ai-fleet/shared` so the library's own dependencies
+  and selects `--workspace=@software-factory/shared` so the library's own dependencies
   install, not just its symlink.
   - **This is a deliberate change to the image's dependency surface, not an
     incident hotfix.** The old header claimed the orchestrator "must never
@@ -210,18 +210,18 @@ Manager v7 / firebase-admin v14 read-only against real GCP.
 
 - **Node runtime baseline 20 → 22** (#94) — the latest Google Cloud SDK,
   `google-auth-library`, and `firebase-admin` majors all require Node ≥ 22.
-  Raised `engines.node` across root + `@ai-fleet/shared` + every Node service,
+  Raised `engines.node` across root + `@software-factory/shared` + every Node service,
   repinned the `deploy/gcp` Docker base images (`node:20-alpine` →
   `node:22-alpine`, multi-arch digest), CI runners, and the cloudbuild
   SPA-obfuscation step. The `adlc` CLI intentionally stays **Node 18+** (a
   standalone distributable that only bundles `shared/config`).
-- **Google Cloud SDK + auth majors** (#96) — in `@ai-fleet/shared`:
+- **Google Cloud SDK + auth majors** (#96) — in `@software-factory/shared`:
   `@google-cloud/run` 1→4, `@google-cloud/pubsub` 4→6, `@google-cloud/scheduler`
   4→6, and `google-auth-library` 9→11. Also **declared `google-auth-library`
   explicitly** in gateway/proxy/provisioner, which had been requiring it as a
   phantom transitive dep (they were resolving an old v9 while shared used v11).
 - **Firestore data layer** (#97) — `@google-cloud/firestore` 7→8
-  (`@ai-fleet/shared`) and `firebase-admin` 13→14 (`@ai-fleet/gateway`), bumped
+  (`@software-factory/shared`) and `firebase-admin` 13→14 (`@software-factory/gateway`), bumped
   together since `firebase-admin` bundles Firestore, so the tree carries a single
   Firestore major. No code changes (stable core Firestore + modular
   `firebase-admin/app`+`/auth` APIs).
@@ -261,7 +261,7 @@ Manager v7 / firebase-admin v14 read-only against real GCP.
 ### Removed
 
 - **Unused `@google-cloud/secret-manager`** (#102) — declared in
-  `@ai-fleet/shared` but never imported anywhere (secret resolution flows through
+  `@software-factory/shared` but never imported anywhere (secret resolution flows through
   the settings service + KMS-encrypted vault + egress proxy, not this client).
   Dropped it plus 3 orphaned transitives; zero code impact.
 
@@ -357,7 +357,7 @@ supporting CI/infra. Delivered as focused PRs (numbers in parentheses).
 
 ### Fixed
 
-- npm lockfile out of sync with the `@ai-fleet/cli` workspace, which broke every
+- npm lockfile out of sync with the `@software-factory/cli` workspace, which broke every
   Docker image build (#51).
 - org service `Dockerfile` ran `pip install .` before copying the source (#53).
 - Terraform-managed seeding of `org-jwt-secret` and the One Tap client id (#52);

@@ -148,10 +148,21 @@ function isThematicBreak(line) {
   return /^-{3,}$/u.test(trimmed) || /^\*{3,}$/u.test(trimmed) || /^_{3,}$/u.test(trimmed);
 }
 
+function isTableStart(lines, index) {
+  const row = (lines[index] || '').trim();
+  const divider = (lines[index + 1] || '').trim();
+  return row.startsWith('|') && /-/.test(divider) && /^\|?[\s:|-]+\|?$/.test(divider);
+}
+
+function tableCells(line) {
+  return line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim());
+}
+
 function startsBlock(line) {
   return /^ {0,3}#{1,6}(?:[\t ]+|$)/u.test(line)
     || /^ {0,3}>/u.test(line)
     || Boolean(listLine(line))
+    || line.trim().startsWith('|')
     || isThematicBreak(line);
 }
 
@@ -231,6 +242,22 @@ export function parseLegalMarkdown(value) {
       continue;
     }
 
+    if (isTableStart(lines, index)) {
+      const head = tableCells(lines[index]);
+      index += 2;
+      const body = [];
+      while (index < lines.length && lines[index].trim().startsWith('|') && !isThematicBreak(lines[index])) {
+        body.push(tableCells(lines[index]));
+        index += 1;
+      }
+      blocks.push({
+        type: 'table',
+        head: head.map((cell) => inlineTokens(cell)),
+        rows: body.map((row) => row.map((cell) => inlineTokens(cell))),
+      });
+      continue;
+    }
+
     const paragraph = [line.trim()];
     index += 1;
     while (index < lines.length && lines[index].trim() && !startsBlock(lines[index])) {
@@ -299,6 +326,31 @@ function appendBlock(documentRef, parent, block) {
     const quote = documentRef.createElement('blockquote');
     for (const child of block.children) appendBlock(documentRef, quote, child);
     parent.append(quote);
+    return;
+  }
+
+  if (block.type === 'table') {
+    const table = documentRef.createElement('table');
+    const head = documentRef.createElement('thead');
+    const headRow = documentRef.createElement('tr');
+    for (const cell of block.head) {
+      const th = documentRef.createElement('th');
+      appendInline(documentRef, th, cell);
+      headRow.append(th);
+    }
+    head.append(headRow);
+    const body = documentRef.createElement('tbody');
+    for (const row of block.rows) {
+      const tr = documentRef.createElement('tr');
+      for (const cell of row) {
+        const td = documentRef.createElement('td');
+        appendInline(documentRef, td, cell);
+        tr.append(td);
+      }
+      body.append(tr);
+    }
+    table.append(head, body);
+    parent.append(table);
     return;
   }
 

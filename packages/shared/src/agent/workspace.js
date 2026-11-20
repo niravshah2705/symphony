@@ -57,8 +57,8 @@ function plannedTaskWorkdir(root, projectSlug, projectId, taskBranch) {
 
 // repoParts (repo-reference parsing) is SDK-free and now lives in shared-core so
 // the router gateway can parse repo URLs without the agent/workspace tree. It is
-// re-exported below, so `@ai-fleet/shared/agent/workspace` callers are unaffected.
-const { repoParts } = require('@ai-fleet/shared-core/agent/repo-url');
+// re-exported below, so `@software-factory/shared/agent/workspace` callers are unaffected.
+const { repoParts } = require('@software-factory/shared-core/agent/repo-url');
 
 function createBroker({ root, workDir, branch, parts, repositoryToken, stackCandidates = [], onStep }) {
   return new RepositoryBroker({

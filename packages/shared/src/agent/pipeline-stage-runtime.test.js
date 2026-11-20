@@ -9,7 +9,7 @@ const crypto = require('node:crypto');
 const {
   createPreflightSnapshot,
   createStageCommandV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
+} = require('@software-factory/shared-core/pipeline/contracts');
 const {
   parseStageVerdict,
   repositoryReference,

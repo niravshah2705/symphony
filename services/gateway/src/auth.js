@@ -1,6 +1,6 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 const {
   resolveRole,
   permissionsForRole,
@@ -8,7 +8,7 @@ const {
   requiredLevel,
   PUBLIC_PERMISSIONS,
   ADMIN_PERMISSIONS,
-} = require('@ai-fleet/shared-core/authz');
+} = require('@software-factory/shared-core/authz');
 
 /**
  * Application authentication — Firebase Google SSO.
@@ -53,7 +53,7 @@ function bearerToken(req) {
 function denyAccess(res, error) {
   const status = error?.status === 403 ? 403 : 401;
   res.status(status).set('Cache-Control', 'no-store');
-  if (status === 401) res.set('WWW-Authenticate', 'Bearer realm="AI Fleet"');
+  if (status === 401) res.set('WWW-Authenticate', 'Bearer realm="Software Factory"');
   res.json({
     error: error?.message || (status === 403 ? 'Access denied' : 'Authentication required'),
     code: error?.code || (status === 403 ? 'access_denied' : 'authentication_required'),

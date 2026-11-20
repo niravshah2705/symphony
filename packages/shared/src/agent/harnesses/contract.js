@@ -111,7 +111,7 @@ function assertWorkingDirectory(value) {
 
 function optionalPackageError(label, packageName, error) {
   const suffix = error && error.code === 'ERR_MODULE_NOT_FOUND'
-    ? ` Install ${packageName} in @ai-fleet/shared and restart the service.`
+    ? ` Install ${packageName} in @software-factory/shared and restart the service.`
     : '';
   return new AgentRuntimeError(
     `${label} is unavailable.${suffix}`,

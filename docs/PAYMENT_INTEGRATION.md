@@ -155,7 +155,7 @@ The dedicated billing microservice exposes two ways to control auto-renew thresh
 
 1. **Standalone Basic UI (`GET /` or `GET /ui`)**:
    - Access directly on the billing Cloud Run service (e.g. `http://localhost:4050` or `https://billing-<suffix>.run.app`).
-   - Offers real-time service health, store backend status, Cashfree environment indicator, and an interactive form to toggle Auto-Renew, switch between Fixed Amount (₹) and Percentage (%) modes, set trigger thresholds. The auto-recharge sweep runs only as the scheduled Job (locally: `npm run job:recharge -w @ai-fleet/billing`).
+   - Offers real-time service health, store backend status, Cashfree environment indicator, and an interactive form to toggle Auto-Renew, switch between Fixed Amount (₹) and Percentage (%) modes, set trigger thresholds. The auto-recharge sweep runs only as the scheduled Job (locally: `npm run job:recharge -w @software-factory/billing`).
 
 2. **Main Application SPA (`/#cost`)**:
    - Integrated into the Symphony web dashboard (`public/js/views/cost.js`).

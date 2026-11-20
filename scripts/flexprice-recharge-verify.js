@@ -121,7 +121,7 @@ async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-recharge-verify-'));
   process.env.NODE_ENV = 'test';
   process.env.STORE_BACKEND = 'file';
-  process.env.AI_FLEET_DATA_DIR = dataDir;
+  process.env.SOFTWARE_FACTORY_DATA_DIR = dataDir;
   process.env.FLEXPRICE_ENABLED = 'true';
   process.env.FLEXPRICE_BASE_URL = baseUrl;
   process.env.FLEXPRICE_ENVIRONMENT_ID = process.env.FLEXPRICE_ENVIRONMENT_ID || stack.FLEXPRICE_ENVIRONMENT_ID || SEED_ENVIRONMENT_ID;
@@ -136,15 +136,15 @@ async function main() {
     'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_BASE_URL']) delete process.env[name];
 
   const { createApp } = require(path.join(ROOT, 'services/billing/src/app.js'));
-  const store = require('@ai-fleet/shared-core/store');
-  const flexpriceConfig = require('@ai-fleet/shared-core/billing/flexprice-config');
-  const { createFlexpriceClient } = require('@ai-fleet/shared-core/billing/flexprice-client');
+  const store = require('@software-factory/shared-core/store');
+  const flexpriceConfig = require('@software-factory/shared-core/billing/flexprice-config');
+  const { createFlexpriceClient } = require('@software-factory/shared-core/billing/flexprice-client');
   const { FLEXPRICE } = flexpriceConfig;
   const client = createFlexpriceClient({ config: FLEXPRICE });
 
   const orgId = `org-recharge-verify-${Date.now().toString(36)}`;
 
-  console.log('AI Fleet — Phase 2 recharge spine, verified against the live FlexPrice stack');
+  console.log('Software Factory — Phase 2 recharge spine, verified against the live FlexPrice stack');
   console.log(`  flexprice ${flexpriceConfig.describe(FLEXPRICE)}`);
   console.log(`  org        ${orgId}`);
   console.log(`  store dir  ${dataDir}`);

@@ -7,7 +7,7 @@ resource "google_artifact_registry_repository" "docker" {
   location      = var.region
   repository_id = var.artifact_repo
   format        = "DOCKER"
-  description   = "AI Fleet service images."
+  description   = "Software Factory service images."
   labels        = merge(local.common_labels, { component = "registry" })
 
   # Delete versions older than 1 hour that aren't protected by the keep policy

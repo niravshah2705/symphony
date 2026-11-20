@@ -30,7 +30,7 @@ Once `how-it-works.png` exists, the README's **How it works** section can point 
 with:
 
 ```markdown
-![How AI Fleet works](diagrams/how-it-works.png)
+![How Software Factory works](diagrams/how-it-works.png)
 ```
 
 ## Re-editing

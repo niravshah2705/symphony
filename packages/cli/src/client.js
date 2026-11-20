@@ -1,11 +1,11 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG } = require('@software-factory/shared/config');
 const credentials = require('./credentials');
 const { version: VERSION } = require('../package.json');
 
 /**
- * Thin HTTP client for the AI Fleet gateway — the only intended client-facing
+ * Thin HTTP client for the Software Factory gateway — the only intended client-facing
  * origin. Uses global fetch (Node 22+), matching the supported runtime for
  * this workspace
  * (no axios/node-fetch anywhere). The gateway owns auth/RBAC and reverse-proxies

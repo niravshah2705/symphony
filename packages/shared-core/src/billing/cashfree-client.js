@@ -94,7 +94,7 @@ async function createOnDemandSubscription({
       customer_phone: customerPhone,
     },
     plan_details: {
-      plan_name: 'AI Fleet Auto Reload Plan',
+      plan_name: 'Software Factory Auto Reload Plan',
       plan_type: 'ON_DEMAND',
       plan_currency: 'INR',
       plan_max_amount: Number(planMaxAmountInr) || 100000,

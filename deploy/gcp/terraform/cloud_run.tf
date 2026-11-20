@@ -100,7 +100,7 @@ locals {
   # each service below. There is intentionally no direct-mode fallback.
   egress_env = { EGRESS_PROXY_URL = "http://127.0.0.1:4030" }
 
-  # Plain env for the proxy sidecar. It imports @ai-fleet/shared/config (which
+  # Plain env for the proxy sidecar. It imports @software-factory/shared/config (which
   # requires AUTH_MODE + the Firebase web config at load) and reads the
   # per-namespace store for OAuth token sets, so it needs the common cloud env
   # plus its own port and the shared settings URL for the per-org secret S2S.

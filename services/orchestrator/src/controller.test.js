@@ -3,9 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { MemoryPipelineStore } = require('@ai-fleet/shared-core/pipeline/storage');
-const { PipelineRunRepository } = require('@ai-fleet/shared-core/pipeline/repository');
-const { createStageResultV1, createPreflightSnapshot } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { MemoryPipelineStore } = require('@software-factory/shared-core/pipeline/storage');
+const { PipelineRunRepository } = require('@software-factory/shared-core/pipeline/repository');
+const { createStageResultV1, createPreflightSnapshot } = require('@software-factory/shared-core/pipeline/contracts');
 const { PipelineOrchestrator } = require('./controller');
 const { SnapshotPreflight } = require('./preflight');
 const { fakeLangGraph } = require('./fake-langgraph.test-helper');

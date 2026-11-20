@@ -39,7 +39,7 @@ module.exports = defineConfig({
       PORT: String(gatewayPort),
       AGENT_SERVICE_PORT: String(agentPort),
       AGENT_URL: `http://127.0.0.1:${agentPort}`,
-      AI_FLEET_DATA_DIR: path.join(__dirname, 'test-results', 'runtime-data'),
+      SOFTWARE_FACTORY_DATA_DIR: path.join(__dirname, 'test-results', 'runtime-data'),
     },
   },
 });

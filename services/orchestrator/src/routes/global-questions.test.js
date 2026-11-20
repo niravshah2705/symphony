@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { LIMITS } = require('@ai-fleet/shared/agent/local-intelligence');
+const { LIMITS } = require('@software-factory/shared/agent/local-intelligence');
 
 const {
   createGlobalQuestionsRouter,

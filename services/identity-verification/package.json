@@ -1,5 +1,5 @@
 {
-  "name": "@ai-fleet/identity-verification",
+  "name": "@software-factory/identity-verification",
   "version": "1.0.0",
   "description": "Consent-driven DigiLocker, PAN, age proof, APAAR, and academic verification service.",
   "private": true,
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.7.1",
-    "@ai-fleet/shared-core": "*",
+    "@software-factory/shared-core": "*",
     "express": "^5.2.1"
   }
 }

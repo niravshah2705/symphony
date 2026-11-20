@@ -5,8 +5,8 @@ const fs = require('node:fs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(os.tmpdir() + '/substrate-atespace-');
-test.after(() => { try { fs.rmSync(process.env.AI_FLEET_DATA_DIR, { recursive: true, force: true }); } catch (_) {} });
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(os.tmpdir() + '/substrate-atespace-');
+test.after(() => { try { fs.rmSync(process.env.SOFTWARE_FACTORY_DATA_DIR, { recursive: true, force: true }); } catch (_) {} });
 
 const SUBSTRATE_ENV = [
   'SUBSTRATE_ATESPACE',

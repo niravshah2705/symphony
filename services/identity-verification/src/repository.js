@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 
 function emptyState() {
   return { sessions: {}, results: {}, claims: {} };
