@@ -31,6 +31,19 @@ test('packSource pins only published digests', () => {
   assert.equal(packSource({ image: 'ghcr.io/x/ecc-plugin', digest: 'not-a-digest' }), null);
 });
 
+test('the catalog serves the model-family registry to the designer', () => {
+  const catalog = globalCatalog();
+  assert.deepEqual(catalog.modelFamilyProblems, [], 'the family registry has record problems');
+  const orders = catalog.modelFamilies.map((family) => family.order);
+  assert.deepEqual(orders, [...orders].sort((a, b) => a - b), 'the designer lists families in file order');
+  const anthropic = catalog.modelFamilies.find((family) => family.id === 'anthropic');
+  assert.deepEqual(anthropic.providers, ['claude'], 'the provider list is what filters the Model dropdown');
+  assert.equal(anthropic.icon, 'anthropic', 'the card icon travels with the record, not a browser map');
+  for (const family of catalog.modelFamilies) {
+    assert.equal(typeof family.enabled, 'boolean', `${family.id} must say whether it is selectable`);
+  }
+});
+
 test('the shipped catalogs carry AgentCard tags through', () => {
   const catalog = globalCatalog();
   assert.ok(catalog.harnesses.length >= 10);

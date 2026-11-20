@@ -9,6 +9,7 @@ import {
   mcpChoices,
   modelConfigEmptyLabel,
   modelFamilyChoices,
+  familyProviders,
   modelChoices,
   capabilitiesSummary,
 } from './workflow-capabilities.mjs';
@@ -120,21 +121,48 @@ test('global runtime images slot between cluster names and the static list', () 
   ]);
 });
 
-test('model families and models come from the global preset catalog', () => {
+test('model families come from the served registry, models from the preset providers it claims', () => {
   const presets = [
     { id: 'claude-opus-4-8', provider: 'claude', model: 'claude-opus-4-8', label: 'Claude Opus' },
     { id: 'gpt-5-codex', provider: 'codex', model: 'gpt-5-codex', label: 'GPT-5 Codex' },
     { id: 'ollama-gpt-oss-20b', provider: 'ollama', model: 'gpt-oss:20b', label: 'GPT-OSS 20B' },
   ];
-  const families = modelFamilyChoices(presets, ['anthropic', 'bedrock']);
-  assert.deepEqual(families.map((item) => [item.value, item.source]), [
-    ['anthropic', 'global'],
-    ['openai', 'global'],
-    ['byok', 'global'],
-    ['bedrock', 'platform'],
+  const families = [
+    { id: 'anthropic', label: 'Anthropic Claude', icon: 'anthropic', providers: ['claude'], order: 10, enabled: true },
+    { id: 'openai', label: 'OpenAI', icon: 'openai', providers: ['codex'], order: 20, enabled: true },
+    { id: 'bedrock', label: 'AWS Bedrock', icon: 'graph', providers: [], order: 30, enabled: true },
+    { id: 'byok', label: 'Bring your own model', icon: 'byom', providers: ['ollama', 'lmstudio'], order: 40, enabled: true },
+    { id: 'vertexai', label: 'Google Vertex AI', icon: 'chart', providers: [], order: 50, enabled: false },
+  ];
+  assert.deepEqual(modelFamilyChoices(families).map((item) => [item.value, item.label, item.source]), [
+    ['anthropic', 'Anthropic Claude', 'global'],
+    ['openai', 'OpenAI', 'global'],
+    ['bedrock', 'AWS Bedrock', 'global'],
+    ['byok', 'Bring your own model', 'global'],
+  ], 'a disabled family leaves the new-selection list, and the label is the registry\'s');
+
+  // A graph saved on a family that has since been hidden or deleted still shows
+  // what it holds: the field must not silently rewrite the value. A hidden
+  // family keeps its registry label on that node; only a family the file no
+  // longer lists at all falls back to the bare saved id.
+  assert.deepEqual(modelFamilyChoices(families, 'vertexai').map((item) => [item.value, item.label, item.source]), [
+    ['anthropic', 'Anthropic Claude', 'global'],
+    ['openai', 'OpenAI', 'global'],
+    ['bedrock', 'AWS Bedrock', 'global'],
+    ['byok', 'Bring your own model', 'global'],
+    ['vertexai', 'Google Vertex AI', 'global'],
   ]);
-  assert.deepEqual(modelChoices(presets, 'anthropic'), [{ value: 'claude-opus-4-8', label: 'Claude Opus · claude-opus-4-8', source: 'global' }]);
-  assert.deepEqual(modelChoices(presets, ''), []);
+  assert.deepEqual(modelFamilyChoices(families, 'mistral').map((item) => item.value).slice(-1), ['mistral']);
+  assert.deepEqual(modelFamilyChoices([], 'mistral'), [{ value: 'mistral', label: 'mistral', icon: '', source: 'saved' }]);
+  assert.deepEqual(modelFamilyChoices([]), [], 'an unread catalog offers no families rather than an invented list');
+
+  assert.deepEqual(modelChoices(presets, 'anthropic', families), [{ value: 'claude-opus-4-8', label: 'Claude Opus · claude-opus-4-8', source: 'global' }]);
+  assert.deepEqual(modelChoices(presets, 'byok', families).map((item) => item.value), ['ollama-gpt-oss-20b']);
+  assert.deepEqual(modelChoices(presets, 'bedrock', families), [], 'a family that claims no provider has no preset models');
+  assert.deepEqual(modelChoices(presets, 'anthropic', []), [], 'without the registry there is no provider mapping to filter by');
+  assert.deepEqual(modelChoices(presets, '', families), []);
+  assert.deepEqual(familyProviders(families, 'byok'), ['ollama', 'lmstudio']);
+  assert.deepEqual(familyProviders(families, 'nope'), []);
 });
 
 test('the catalog reader reads once and retries only on demand', async () => {
@@ -143,16 +171,24 @@ test('the catalog reader reads once and retries only on demand', async () => {
     read: async () => {
       calls += 1;
       if (calls === 1) throw new Error('offline');
-      return { harnesses: [{ runtime: 'claude' }], plugins: [{ id: 'ecc' }], skills: [] };
+      return {
+        harnesses: [{ runtime: 'claude' }],
+        modelFamilies: [{ id: 'anthropic', label: 'Anthropic Claude', providers: ['claude'] }],
+        modelFamilyProblems: [],
+        plugins: [{ id: 'ecc' }],
+        skills: [],
+      };
     },
   });
   const refused = await catalog.load();
   assert.equal(refused.ok, false);
+  assert.deepEqual(refused.modelFamilies, [], 'a refused read carries an empty family list, not undefined');
   assert.equal(catalog.peek().ok, false);
   await catalog.load();
   assert.equal(calls, 1, 'a refused read is remembered, not re-issued');
   const settled = await catalog.load({ force: true });
   assert.equal(settled.ok, true);
   assert.equal(settled.plugins.length, 1);
+  assert.deepEqual(settled.modelFamilies.map((family) => family.id), ['anthropic'], 'the reader must not drop the family registry');
   assert.equal(calls, 2);
 });

@@ -2,10 +2,12 @@
 
 /**
  * Global catalog — the platform-wide component list the workflow designer
- * populates its dropdowns from: current harness runtime images, plugin
- * bundles and skill bundles. The three shipped source-of-truth files are the
- * data (the same ones CI stamps and the seed script mirrors), so the designer
- * never invents a name the publish would refuse.
+ * populates its dropdowns from: current harness runtime images, model
+ * families, plugin bundles and skill bundles. The shipped source-of-truth
+ * files are the data (the same ones CI stamps and the seed script mirrors, plus
+ * registry/model-families.json, which is hand-edited), so the designer never
+ * invents a name the publish would refuse and never carries its own copy of a
+ * vocabulary.
  */
 
 const fs = require('node:fs');
@@ -14,6 +16,7 @@ const path = require('node:path');
 const pluginCatalog = require('./registry/plugin-catalog.json');
 const skillCatalog = require('./registry/skill-catalog.json');
 const agentCardTags = require('./registry/agent-card-tags.json');
+const { modelFamilies, modelFamilyProblems } = require('./model-families.js');
 
 const RUNTIME_CSV = path.join(__dirname, '..', '..', '..', '..', 'go', 'harness', 'runtime-images.csv');
 
@@ -99,6 +102,8 @@ function globalCatalog() {
   });
   return {
     harnesses,
+    modelFamilies: modelFamilies(),
+    modelFamilyProblems: modelFamilyProblems(),
     plugins,
     skills,
     updatedAt: new Date().toISOString(),

@@ -168,9 +168,9 @@ export function capabilitiesSummary(caps) {
 export const EMPTY_CAPABILITIES = EMPTY;
 
 /**
- * The platform-wide component catalog (runtime images, plugin and skill
- * bundles) is identical for every organization, so one session-level read
- * covers the whole designer. A failed read is remembered like a refused
+ * The platform-wide component catalog (runtime images, model families, plugin
+ * and skill bundles) is identical for every organization, so one session-level
+ * read covers the whole designer. A failed read is remembered like a refused
  * capabilities read — the inspector re-renders on every keystroke and must
  * not turn a dead endpoint into a request loop — and `force` retries it.
  */
@@ -183,16 +183,27 @@ export function createCatalogReader({ read } = {}) {
     if (settled) return Promise.resolve(settled);
     if (pending) return pending;
     const request = (async () => {
+      const list = (payload, key) => (Array.isArray(payload && payload[key]) ? payload[key] : []);
       try {
         const payload = await read();
         settled = {
           ok: true,
-          harnesses: Array.isArray(payload && payload.harnesses) ? payload.harnesses : [],
-          plugins: Array.isArray(payload && payload.plugins) ? payload.plugins : [],
-          skills: Array.isArray(payload && payload.skills) ? payload.skills : [],
+          harnesses: list(payload, 'harnesses'),
+          modelFamilies: list(payload, 'modelFamilies'),
+          modelFamilyProblems: list(payload, 'modelFamilyProblems'),
+          plugins: list(payload, 'plugins'),
+          skills: list(payload, 'skills'),
         };
       } catch (cause) {
-        settled = { ok: false, error: String((cause && cause.message) || cause), harnesses: [], plugins: [], skills: [] };
+        settled = {
+          ok: false,
+          error: String((cause && cause.message) || cause),
+          harnesses: [],
+          modelFamilies: [],
+          modelFamilyProblems: [],
+          plugins: [],
+          skills: [],
+        };
       } finally {
         pending = null;
       }
@@ -210,43 +221,48 @@ export function createCatalogReader({ read } = {}) {
 }
 
 /**
- * Model families from the global LLM preset catalog: each preset's provider
- * maps onto the designer's family vocabulary, so the dropdown offers the
- * families the platform actually ships models for, plus the static list for
- * anything saved before it (bedrock/vertexai stay selectable even though no
- * preset lands there).
+ * Model families, straight from the served registry
+ * (packages/shared-core/src/agent/registry/model-families.json): the file owns
+ * the id, the display label, the card icon, which LLM-preset providers belong
+ * to the family, and the order. There is no fallback list in the browser — an
+ * empty input means the catalog has not been read, which the inspector shows as
+ * such rather than inventing a vocabulary.
+ *
+ * A family marked `enabled: false` disappears from new selections but stays
+ * visible on the node that already uses it, so hiding a family never erases the
+ * value an operator saved.
  */
-const PRESET_FAMILIES = Object.freeze({
-  claude: 'anthropic',
-  codex: 'openai',
-  antigravity: 'gemini',
-  qoder: 'qoder',
-  ollama: 'byok',
-  lmstudio: 'byok',
-  omlx: 'byok',
-  huggingface: 'byok',
-});
-
-export function presetFamily(preset) {
-  return PRESET_FAMILIES[String((preset && preset.provider) || '')] || '';
-}
-
-export function modelFamilyChoices(presets, staticFamilies = []) {
+export function modelFamilyChoices(families, current = '') {
   const items = [];
-  for (const preset of Array.isArray(presets) ? presets : []) {
-    const family = presetFamily(preset);
-    if (family && !items.some((item) => item.value === family)) items.push({ value: family, label: family, source: 'global' });
+  for (const family of Array.isArray(families) ? families : []) {
+    if (!family || !family.id) continue;
+    if (family.enabled === false && family.id !== current) continue;
+    items.push({
+      value: String(family.id),
+      label: String(family.label || family.id),
+      icon: String(family.icon || ''),
+      source: 'global',
+    });
   }
-  for (const family of nameList(staticFamilies)) {
-    if (!items.some((item) => item.value === family)) items.push({ value: family, label: family, source: 'platform' });
+  const saved = String(current || '');
+  if (saved && !items.some((item) => item.value === saved)) {
+    items.push({ value: saved, label: saved, icon: '', source: 'saved' });
   }
   return items;
 }
 
-/** The concrete models behind one family, straight from the preset catalog. */
-export function modelChoices(presets, family) {
+/** The preset providers one family claims; empty when the family is unknown. */
+export function familyProviders(families, family) {
+  const record = (Array.isArray(families) ? families : []).find((item) => item && item.id === family);
+  return Array.isArray(record && record.providers) ? record.providers : [];
+}
+
+/** The concrete models behind one family: the presets whose provider it claims. */
+export function modelChoices(presets, family, families = []) {
+  const providers = familyProviders(families, family);
+  if (!providers.length) return [];
   return (Array.isArray(presets) ? presets : [])
-    .filter((preset) => family && presetFamily(preset) === family)
+    .filter((preset) => providers.includes(String((preset && preset.provider) || '').toLowerCase()))
     .map((preset) => ({
       value: String(preset.id),
       label: `${preset.label || preset.id} · ${preset.model}`,

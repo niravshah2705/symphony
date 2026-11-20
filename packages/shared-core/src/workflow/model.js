@@ -9,7 +9,10 @@ const WORKFLOW_SCHEMA_VERSION_V2 = 2;
 const WORKFLOW_NODE_KINDS_V2 = Object.freeze(['agent', 'approval', 'environment', 'gate']);
 const WORKFLOW_NODE_BACKENDS = Object.freeze(['substrate', 'kagent']);
 const TASK_TIERS = Object.freeze(['complex', 'medium', 'easy']);
-const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'qoder', 'byok']);
+// The model-family vocabulary is data, not an array duplicated here and in the
+// browser: registry/model-families.json is the source of truth, served to the
+// designer through the global catalog and read here on the write path.
+const { modelFamilies, normalizeModelFamily } = require('../agent/model-families.js');
 const HARNESS_OPTIONS = Object.freeze(['claude-code', 'codex', 'deepagent', 'opencode', 'gemini-cli', 'pi', 'qoder', 'kilo', 'goose', 'openspec', 'github-actions', 'otel']);
 const GATE_CARD_MAX = 6;
 const GATE_ITEM_MAX = 3;
@@ -362,7 +365,7 @@ function normalizeNode(input) {
     // DNS-shaped name; a garbage string still cannot become a CR name.
     node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness
       : (K8S_NAME.test(String(input.harness || '')) ? String(input.harness).slice(0, 63) : '');
-    node.modelFamily = MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '';
+    node.modelFamily = normalizeModelFamily(input.modelFamily);
     node.model = plainText(input.model, 128);
     node.taskTier = TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium';
     node.systemPrompt = plainText(input.systemPrompt, 16000);
@@ -514,7 +517,8 @@ module.exports = {
   WORKFLOW_NODE_KINDS_V2,
   WORKFLOW_NODE_BACKENDS,
   TASK_TIERS,
-  MODEL_FAMILIES,
+  modelFamilies,
+  normalizeModelFamily,
   HARNESS_OPTIONS,
   GATE_CARD_MAX,
   GATE_ITEM_MAX,

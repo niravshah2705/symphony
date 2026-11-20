@@ -143,6 +143,11 @@ async function installDesignerStubs(page, {
   // is a normal deployment, so that is the default a spec opts out of.
   kagent = { enabled: false, reason: 'kagent_not_configured' },
   publish = null,
+  // The platform-wide component catalog and the LLM preset list. The designer
+  // has no fallback vocabulary of its own any more, so a spec that looks at
+  // Harness / Model family / Model needs these to answer.
+  catalog = {},
+  presets = null,
 } = {}) {
   const apiMutations = [];
   const workflowApiRequests = [];
@@ -206,6 +211,34 @@ async function installDesignerStubs(page, {
         remoteMcpServers: [],
         agentTemplates: [],
         ...kagent,
+      });
+    }
+    // The gateway serves these straight from the shipped files
+    // (go/harness/runtime-images.csv, agent/registry/model-families.json,
+    // agent/llm-presets.json), so the stub mirrors one family per shape the
+    // designer has to handle: a claimed provider, an unclaimed family, and a
+    // disabled row that must not be offered for a new selection.
+    if (pathname === '/api/workflows/catalog') {
+      return json(route, {
+        harnesses: [{ runtime: 'claude-code', image: 'ghcr.io/x/claude-code', version: '1.2.3' }],
+        modelFamilies: [
+          { id: 'anthropic', label: 'Anthropic Claude', icon: 'anthropic', providers: ['claude'], order: 10, enabled: true },
+          { id: 'byok', label: 'Bring your own model', icon: 'byom', providers: ['ollama'], order: 20, enabled: true },
+          { id: 'bedrock', label: 'AWS Bedrock', icon: 'graph', providers: [], order: 30, enabled: true },
+          { id: 'vertexai', label: 'Google Vertex AI', icon: 'chart', providers: [], order: 40, enabled: false },
+        ],
+        modelFamilyProblems: [],
+        plugins: [],
+        skills: [],
+        ...catalog,
+      });
+    }
+    if (pathname === '/api/settings/llm-presets') {
+      return json(route, {
+        presets: presets === null ? [
+          { id: 'claude-opus-4-8', provider: 'claude', model: 'claude-opus-4-8', label: 'Claude Opus' },
+          { id: 'ollama-gpt-oss-20b', provider: 'ollama', model: 'gpt-oss:20b', label: 'GPT-OSS 20B' },
+        ] : presets,
       });
     }
     const nodePublish = pathname.match(/^\/api\/workflows\/([^/]+)\/nodes\/([^/]+)\/publish$/);
@@ -575,6 +608,24 @@ test('an agent node binds to a runtime and its harness environment survives the 
   await labelled('Harness').selectOption('claude-code');
   await labelled('Task tier').selectOption('complex');
 
+  // Model family and Model are served vocabulary (registry/model-families.json +
+  // agent/llm-presets.json): the labels, their order, a family marked
+  // `enabled: false` staying off the list, and which presets a family claims all
+  // come from the catalog — nothing here falls back to a browser-side list.
+  const fieldSelect = (label) => runtime.locator('.workflow-field')
+    .filter({ has: page.getByText(label, { exact: true }) })
+    .locator('select');
+  await expect(fieldSelect('Model family').locator('option')).toHaveText([
+    'Inherit from the profile', 'Anthropic Claude', 'Bring your own model', 'AWS Bedrock',
+  ]);
+  await expect(fieldSelect('Model').locator('option')).toHaveText(['Inherit from the profile'],
+    'no family is chosen, so no preset belongs to any family yet');
+  await fieldSelect('Model family').selectOption('anthropic');
+  await expect(fieldSelect('Model').locator('option')).toHaveText([
+    'Inherit from the profile', 'Claude Opus · claude-opus-4-8',
+  ]);
+  await fieldSelect('Model').selectOption('claude-opus-4-8');
+
   const environment = inspector.locator('.workflow-inspector-section', { hasText: /^Harness environment/ });
   const envRows = environment.locator('.workflow-env-row');
   const scratch = environment.locator('.workflow-env-row--new');
@@ -605,6 +656,8 @@ test('an agent node binds to a runtime and its harness environment survives the 
   await expect.poll(boundNode).toHaveProperty('backend', 'kagent');
   await expect.poll(() => boundNode().taskTier).toBe('complex');
   await expect.poll(() => boundNode().kagentSpec?.env).toEqual([{ name: 'LOG_LEVEL', value: 'debug' }]);
+  await expect.poll(() => [boundNode().modelFamily, boundNode().model]).toEqual(['anthropic', 'claude-opus-4-8'],
+    'a served family id and a preset model id are what the graph persists');
 
   // A new document, not a hash change, and with the local draft cache dropped:
   // what the tab shows afterwards can only have come from the server copy.
@@ -614,12 +667,55 @@ test('an agent node binds to a runtime and its harness environment survives the 
   await selectCanvasNode(page, 'DevOps readiness');
   await expect(inspector.getByRole('button', { name: 'Kagent (in-cluster CRDs)' })).toHaveAttribute('aria-pressed', 'true');
   await expect(labelled('Harness')).toHaveValue('claude-code');
+  await expect(fieldSelect('Model family')).toHaveValue('anthropic');
+  await expect(fieldSelect('Model')).toHaveValue('claude-opus-4-8');
   await expect(inspector.locator('.workflow-env-row').first().locator('input').nth(0)).toHaveValue('LOG_LEVEL');
   await expect(inspector.locator('.workflow-env-row').first().locator('input').nth(1)).toHaveValue('debug');
 
   // The card says which runtime a publish would target, because the four
   // standalone lanes look otherwise identical.
   await expect(page.locator('.workflow-node').filter({ hasText: 'DevOps readiness' })).toContainText('kagent · claude-code · complex');
+  // and it spells the family the way the registry labels it, not the bare id.
+  await expect(page.locator('.workflow-node').filter({ hasText: 'DevOps readiness' })).toContainText('Anthropic Claude');
+});
+
+test('a model catalog that cannot be read says so and retries on demand', async ({ page }) => {
+  const recording = await installDesignerStubs(page);
+  // Registered after the stubs, so this handler wins for the catalog URL: the
+  // one read the family/model fields depend on fails, then recovers.
+  let catalogDown = true;
+  const families = [
+    { id: 'anthropic', label: 'Anthropic Claude', icon: 'anthropic', providers: ['claude'], order: 10, enabled: true },
+    { id: 'byok', label: 'Bring your own model', icon: 'byom', providers: ['ollama'], order: 20, enabled: true },
+  ];
+  await page.route('**/api/workflows/catalog', (route) => route.fulfill(catalogDown ? {
+    status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'catalog unavailable' }),
+  } : {
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ harnesses: [], modelFamilies: families, modelFamilyProblems: [], plugins: [], skills: [] }),
+  }));
+  await openDesigner(page);
+  await page.getByRole('combobox', { name: 'Active workflow' })
+    .selectOption({ label: 'Independent operations · example' });
+  await selectCanvasNode(page, 'DevOps readiness');
+
+  const runtime = page.getByRole('complementary', { name: 'Workflow inspector' })
+    .locator('.workflow-inspector-section', { hasText: /^Runtime binding/ });
+  const fieldSelect = (label) => runtime.locator('.workflow-field')
+    .filter({ has: page.getByText(label, { exact: true }) })
+    .locator('select');
+  await expect(fieldSelect('Model family').locator('option')).toHaveText(['Inherit from the profile'],
+    'a refused catalog read invents no vocabulary');
+  await expect(runtime.getByText('The model catalog could not be read')).toBeVisible();
+
+  catalogDown = false;
+  await runtime.getByRole('button', { name: 'Read the catalog again' }).click();
+  await expect(fieldSelect('Model family').locator('option')).toHaveText([
+    'Inherit from the profile', 'Anthropic Claude', 'Bring your own model',
+  ]);
+  await expect(runtime.getByText('The model catalog could not be read')).toHaveCount(0);
+  expect(recording.apiMutations, 'recovering from a refused read writes nothing').toEqual([]);
 });
 
 test('organization members read the shared workflows and cannot change them for anyone', async ({ page }) => {

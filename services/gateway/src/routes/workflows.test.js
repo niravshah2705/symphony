@@ -363,6 +363,9 @@ test('GET /catalog serves the global component catalog with AgentCard tags', asy
     assert.ok(res.body.harnesses.every((row) => row.runtime && row.image && row.version));
     assert.ok(res.body.plugins.every((row) => row.id && Array.isArray(row.tags)));
     assert.ok(res.body.skills.every((row) => row.id && Array.isArray(row.tags)));
+    assert.ok(res.body.modelFamilies.some((row) => row.id === 'anthropic' && row.providers.includes('claude')),
+      'model families come from the registry file, not a browser constant');
+    assert.deepEqual(res.body.modelFamilyProblems, []);
     const ecc = res.body.plugins.find((row) => row.id === 'ecc');
     assert.ok(ecc && ecc.tags.includes('coding'));
   } finally { server.close(); }

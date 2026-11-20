@@ -30,7 +30,9 @@ export const WORKFLOW_SCHEMA_VERSION_V2 = 2;
 export const WORKFLOW_NODE_KINDS_V2 = Object.freeze(['agent', 'approval', 'environment', 'gate']);
 export const WORKFLOW_NODE_BACKENDS = Object.freeze(['substrate', 'kagent']);
 export const TASK_TIERS = Object.freeze(['complex', 'medium', 'easy']);
-export const MODEL_FAMILIES = Object.freeze(['anthropic', 'openai', 'bedrock', 'vertexai', 'gemini', 'qoder', 'byok']);
+// No MODEL_FAMILIES array here on purpose: the vocabulary is
+// packages/shared-core/src/agent/registry/model-families.json, which the gateway
+// serves with the global component catalog and the designer reads from there.
 export const HARNESS_OPTIONS = Object.freeze(['claude-code', 'codex', 'deepagent', 'opencode', 'gemini-cli', 'pi', 'qoder', 'kilo', 'goose', 'openspec', 'github-actions', 'otel']);
 export const GATE_CARD_MAX = 6;
 export const GATE_ITEM_MAX = 3;
@@ -56,6 +58,7 @@ const KAGENT_TOOL_MAX = 50;
 const KAGENT_OCI_VOLUME_MAX = 29;
 const RESERVED_ENV_NAMES = Object.freeze(['PLUGIN_ROOT', 'PLUGIN_DATA']);
 const K8S_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/;
+const FAMILY_NAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const K8S_NS = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const OCI_PINNED = /^[^\s@]+@sha256:[0-9a-f]{64}$/;
@@ -747,7 +750,7 @@ function normalizeNode(input, { usedIds = new Set(), deps = {}, allowedAgentIds,
     // Harness CRDs, global runtime images); any DNS-shaped name is valid.
     node.harness = HARNESS_OPTIONS.includes(input.harness) ? input.harness
       : (K8S_NAME.test(String(input.harness || '')) ? String(input.harness).slice(0, 63) : '');
-    node.modelFamily = MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '';
+    node.modelFamily = normalizeModelFamily(input.modelFamily);
     node.model = plainText(input.model, 128);
     node.taskTier = TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium';
     node.systemPrompt = plainText(input.systemPrompt, 16_000);
@@ -848,6 +851,18 @@ function normalizeWorkflowInternal(input, options = {}) {
 }
 
 /** Normalize one workflow. Custom reference validation is intentionally left to normalizeState. */
+/**
+ * Mirror of model-families.js `normalizeModelFamily`. The family list itself
+ * comes from the server, so an unlisted-but-well-formed name survives (deleting
+ * a row must not rewrite the value out of every graph that re-saves) and only a
+ * string that could never be an id is dropped.
+ */
+export function normalizeModelFamily(value) {
+  const text = String(value == null ? '' : value).trim().toLowerCase().slice(0, 63);
+  if (!text) return '';
+  return FAMILY_NAME.test(text) ? text : '';
+}
+
 export function normalizeWorkflow(input, deps = {}) {
   return normalizeWorkflowInternal(input, { deps });
 }

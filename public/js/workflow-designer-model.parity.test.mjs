@@ -27,7 +27,6 @@ test('v2 vocabulary constants match the shared-core model', () => {
     'WORKFLOW_NODE_KINDS_V2',
     'WORKFLOW_NODE_BACKENDS',
     'TASK_TIERS',
-    'MODEL_FAMILIES',
     'HARNESS_OPTIONS',
     'GATE_CARD_MAX',
     'GATE_ITEM_MAX',
@@ -37,6 +36,22 @@ test('v2 vocabulary constants match the shared-core model', () => {
   ]) {
     assert.deepEqual(browser[name], server[name], `${name} drifted between browser and server`);
   }
+});
+
+/**
+ * Model families are served data (agent/registry/model-families.json), so a
+ * duplicated vocabulary is the failure this pins against: neither module may
+ * carry a list again, and the two `normalizeModelFamily` implementations must
+ * agree on every shape a saved graph can hold.
+ */
+test('model families are no longer a constant in either model', () => {
+  assert.equal(browser.MODEL_FAMILIES, undefined);
+  assert.equal(server.MODEL_FAMILIES, undefined);
+  for (const value of ['anthropic', 'Anthropic ', ' mistral', 'byok', 'Not a family!', 'a'.repeat(70), '', null, undefined, 42]) {
+    assert.equal(browser.normalizeModelFamily(value), server.normalizeModelFamily(value), `normalizeModelFamily(${JSON.stringify(value)}) drifted`);
+  }
+  assert.equal(server.normalizeModelFamily('mistral'), 'mistral', 'an unlisted family must survive a save on both sides');
+  assert.equal(browser.normalizeModelFamily('Not a family!'), '');
 });
 
 /**

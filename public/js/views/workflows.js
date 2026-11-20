@@ -293,14 +293,17 @@ function nodeIconName(node) {
   return 'spark';
 }
 
-const MODEL_FAMILY_ICONS = Object.freeze({
-  anthropic: 'anthropic',
-  openai: 'openai',
-  gemini: 'gemini',
-  bedrock: 'graph',
-  vertexai: 'chart',
-  byok: 'byom',
-});
+/**
+ * The served family record behind one saved value, for the label/icon the card
+ * shows. Null when the catalog has not been read — the caller falls back to the
+ * bare id rather than to a list this file no longer carries.
+ */
+function modelFamilyRecord(id) {
+  if (!id) return null;
+  const catalog = globalComponents.peek();
+  const families = catalog && catalog.ok ? catalog.modelFamilies : [];
+  return (Array.isArray(families) ? families : []).find((family) => family && family.id === id) || null;
+}
 
 /**
  * Header chip. Every card carries exactly one `.workflow-node-status`: the
@@ -405,7 +408,12 @@ export async function renderWorkflows(view) {
   const sync = createWorkflowSync({
     client: api, model: designerModel, storage, organizationId: organization.id, canWrite: canEdit,
   });
-  const loaded = await sync.load();
+  // The graph and the platform catalog arrive together, deliberately: a node
+  // card labels its model family from the served records, so painting the
+  // canvas before that read answers would put bare ids on every card — and
+  // repainting once it lands would throw away the focus and any double-click
+  // the operator is mid-way through.
+  const [loaded] = await Promise.all([sync.load(), globalComponents.load()]);
   let state = loaded.state;
   // A step whose agent profile the canvas model refuses is dropped in silence,
   // but the server still holds it — so the first saved edit would write it away.
@@ -1002,7 +1010,8 @@ export async function renderWorkflows(view) {
 
     if (node.harness) out.push(metaRow('Harness', node.harness, node.harness === 'deepagent' ? 'deepagent' : 'code'));
     if (node.modelFamily) {
-      out.push(metaRow('Model family', node.modelFamily, MODEL_FAMILY_ICONS[node.modelFamily] || 'byom'));
+      const family = modelFamilyRecord(node.modelFamily);
+      out.push(metaRow('Model family', family ? family.label : node.modelFamily, (family && family.icon) || 'byom'));
     }
     if (node.taskTier) {
       out.push(el('div', { class: 'workflow-node-field workflow-node-field--tiers' }, [
@@ -1368,9 +1377,9 @@ export async function renderWorkflows(view) {
       segmented.append(button);
     }
 
-    const choice = (label, values, current, key, emptyLabel) => {
+    const choice = (label, values, current, key, emptyLabel, { redraw = false, thenFocus = '' } = {}) => {
       const items = values.map((item) => (typeof item === 'string' ? { value: item, label: item, source: 'platform' } : item));
-      const select = el('select', { disabled: !canEdit }, [
+      const select = el('select', { disabled: !canEdit, dataset: { choice: key } }, [
         ...(emptyLabel ? [option('', emptyLabel, !current)] : []),
         ...items.map((item) => option(
           item.value,
@@ -1378,7 +1387,15 @@ export async function renderWorkflows(view) {
           item.value === current,
         )),
       ]);
-      select.addEventListener('change', () => patch({ [key]: select.value }));
+      select.addEventListener('change', () => {
+        patch({ [key]: select.value }, { redraw });
+        // A redraw replaces the inspector, so focus would land on the body and
+        // a keyboard operator would have to tab back through the whole panel to
+        // reach the dependent field this choice just made possible.
+        if (redraw && thenFocus) {
+          inspectorHost.querySelector(`select[data-choice="${thenFocus}"]`)?.focus();
+        }
+      });
       return field(label, select);
     };
 
@@ -1654,13 +1671,36 @@ export async function renderWorkflows(view) {
       skillList.append(el('p', { class: 'muted' }, 'The platform has published no skill bundles yet.'));
     }
 
+    // The family list is served data (registry/model-families.json), so an
+    // unread catalog means an empty dropdown — not a browser-side guess.
+    const families = (catalog && catalog.ok && catalog.modelFamilies) || [];
     const sections = [
       el('section', { class: 'workflow-inspector-section' }, [
         el('h3', {}, 'Runtime binding'),
         field('Execution backend', segmented),
         choice('Harness', workflowCaps.harnessChoices(caps, designerModel.HARNESS_OPTIONS, catalog && catalog.ok ? catalog.harnesses : []), node.harness, 'harness', 'Platform default'),
-        choice('Model family', workflowCaps.modelFamilyChoices(presets || [], designerModel.MODEL_FAMILIES), node.modelFamily, 'modelFamily', 'Inherit from the profile'),
-        choice('Model', workflowCaps.modelChoices(presets || [], node.modelFamily), node.model, 'model', 'Inherit from the profile'),
+        // The Model list is filtered by this family, and `patch()` does not redraw
+        // on its own — without the redraw the operator picks a family and the
+        // Model field keeps showing nothing.
+        choice('Model family', workflowCaps.modelFamilyChoices(families, node.modelFamily), node.modelFamily, 'modelFamily', 'Inherit from the profile', { redraw: true, thenFocus: 'model' }),
+        choice('Model', workflowCaps.modelChoices(presets || [], node.modelFamily, families), node.model, 'model', 'Inherit from the profile'),
+        // An empty family dropdown is otherwise indistinguishable from a
+        // deployment that really lists no families, and the refused read is
+        // remembered for the session — so say so, and offer the way back.
+        catalog && !catalog.ok ? el('p', { class: 'muted' }, [
+          `The model catalog could not be read (${catalog.error || 'no response'}), so only the value this node already holds is shown.`,
+          ' ',
+          el('button', {
+            type: 'button', class: 'workflow-caps-reread',
+            onClick: (event) => {
+              event.target.disabled = true;
+              globalComponents.forget();
+              globalComponents.load().then(() => {
+                if (selected.kind === 'node' && selected.id === node.id) renderInspector();
+              });
+            },
+          }, 'Read the catalog again'),
+        ]) : null,
         choice('Task tier', designerModel.TASK_TIERS, node.taskTier || 'medium', 'taskTier', ''),
         el('p', { class: 'muted' }, 'Harness and model names come from the platform runtime images and the global model catalog. A kagent publish renders from this node; Substrate runs the curated profile as an actor, so its kagent bindings are ignored.'),
         // Not field(): a <label for> would rename the button to "Runtime" and

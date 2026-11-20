@@ -20,18 +20,41 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
   then global runtime images), and the new **Plugins & skills** inspector
   section binds `kagentSpec.plugins`/`skills` from the catalog, pinned by
   digest.
-- **Model family & model details populated from the global LLM preset
-  catalog.** The family dropdown derives from `llm-presets.json` providers
-  (claude→anthropic, codex→openai, antigravity→gemini, local/BYOM
-  providers→byok; `qoder` added to the family vocabulary), and a new **Model**
-  dropdown offers that family's presets. Nodes persist `model`, which
-  `renderAgentCrd` passes to the Agent CR template.
+- **Model family & model details populated from the served catalogs.** The
+  family dropdown lists `registry/model-families.json` and the new **Model**
+  dropdown the `llm-presets.json` presets that family claims (via its
+  `providers`). Nodes persist `model`, which `renderAgentCrd` passes to the
+  Agent CR template.
 - **Publish pipeline tags packs with AgentCard types and mirrors them to
   Firestore.** `registry/agent-card-tags.json` records which agent card kinds
   surface each pack; `scripts/seed-plugin-catalog.js --store` merges the tags
   onto every mirrored record, and the `stamp` jobs of
   `build-plugin-images.yml` / `build-skill-images.yml` now run the mirror
   against Firestore (Workload Identity) right after the digest-stamp commit.
+
+### Changed
+
+- **Model families are a file the service reads, not a constant in code.**
+  `packages/shared-core/src/agent/registry/model-families.json` is now the
+  single source of truth for a family's id, label, icon, which `llm-presets`
+  providers it claims and its order; `agent/model-families.js` loads it and
+  `GET /api/workflows/catalog` serves it. The four duplicated arrays
+  (`MODEL_FAMILIES` in `workflow/model.js` and its browser mirror,
+  `PRESET_FAMILIES`, `MODEL_FAMILY_ICONS`) are deleted — adding or renaming a
+  family is one JSON row and a deploy. `registry/model-families.test.js` gates
+  the file: unique DNS-shaped ids, every preset provider claimed by exactly one
+  family, icons that exist in `public/js/icons.js`. Validation stays permissive
+  for an unknown-but-well-formed family id, so deleting a row never rewrites
+  `modelFamily` out of the graphs that still use it, and a family marked
+  `enabled: false` leaves new selections while still rendering its label on the
+  nodes that hold it.
+- **The designer opens with the catalog in hand.** `renderWorkflows` awaits the
+  component catalog alongside the graph read, so the first canvas paint already
+  labels a node's model family the way the registry does instead of showing the
+  bare id until the next edit. Picking a family now also redraws the inspector,
+  which is what fills the dependent Model dropdown, and a catalog read that
+  fails says so beside the family field with a **Read the catalog again** button
+  instead of quietly showing an empty list.
 
 ## 2026-11-18
 

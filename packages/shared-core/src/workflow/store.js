@@ -211,7 +211,7 @@ function upsertAgentProfile(input, { actor = null } = {}) {
     // and the global runtime-image registry, so any DNS-shaped name is valid.
     harness: model.HARNESS_OPTIONS.includes(input.harness) ? input.harness
       : (/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(String(input.harness || '')) ? String(input.harness).slice(0, 63) : ''),
-    modelFamily: model.MODEL_FAMILIES.includes(input.modelFamily) ? input.modelFamily : '',
+    modelFamily: model.normalizeModelFamily(input.modelFamily),
     model: model.plainText(input.model, 128),
     taskTier: model.TASK_TIERS.includes(input.taskTier) ? input.taskTier : 'medium',
     connectors: input.connectors || [],
