@@ -248,6 +248,16 @@ Three consequences worth knowing before you debug a "why didn't it publish":
 - **A skipped build skips its stamp.** The stamp job reads the
   `plugin-oci-ref-<pack>.txt` artifacts, and an unselected pack produces none, so
   its committed manifest keeps the digest that was actually published.
+- **A moved branch does not lose a stamp.** A publish takes minutes, so another
+  PR can reach `main` between the run's checkout and the stamp job's push — and
+  the images are already in the registry by then, with the tags moved and the
+  digests recorded nowhere. The stamp commit therefore rebases onto the new tip
+  and retries (bounded at 5 attempts, never `--force`), refuses to rebase if
+  `plugins.csv` itself moved (those digests belong to a row no longer current —
+  re-dispatch with `rebuild: all`), and aborts with a failure if the rebase
+  conflicts, because two runs stamping one row differently is a human call.
+  `deploy/kagent/stamp-push-race.test.js` runs that block against a throwaway
+  origin for all three cases.
 - **`workflow_dispatch` has `rebuild: all`** for the case the diff cannot see — a
   newer upstream image under the buildx layer, or a selector fix you want applied
   to every pack at once.

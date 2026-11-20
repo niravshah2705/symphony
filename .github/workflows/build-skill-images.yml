@@ -309,4 +309,35 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/shared-core/src/agent/registry deploy/kagent
           git commit -m "chore(kagent): record published skill artifact digests [skip ci]"
-          git push
+          # Any other PR merged while this publish ran moves the branch under
+          # this checkout, and a plain push from a stale base is a
+          # non-fast-forward: the artifact is already in the registry, the tag
+          # has already moved, and the digest that proves it is recorded
+          # nowhere. Rebase onto the new tip and retry.
+          BASE_SHA="$(git rev-parse HEAD^)"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
+              echo "Stamped the digests on attempt ${attempt}." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            # A row that moved under this run means these digests describe bytes
+            # the current manifest no longer names. Rebasing that would record a
+            # pin for the wrong row, so it asks for a re-run instead.
+            if ! git diff --quiet "${BASE_SHA}" "origin/${GITHUB_REF_NAME}" -- "${MANIFEST}"; then
+              echo "${MANIFEST} moved while this run published: re-run with \`rebuild: all\`." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            # And never --force. This commit only carries catalog digests and the
+            # generated manifests, so it rebases cleanly over a source change; a
+            # conflict means two runs stamped the same row to different bytes,
+            # which is a human decision, not something to silently drop.
+            if ! git rebase "origin/${GITHUB_REF_NAME}"; then
+              git rebase --abort
+              echo "The stamped digests conflict with what landed on ${GITHUB_REF_NAME}: resolve by hand." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            sleep "${attempt}"
+          done
+          echo "Lost the push race 5 times: the artifacts are published and unstamped." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
