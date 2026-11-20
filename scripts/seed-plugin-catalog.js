@@ -195,6 +195,10 @@ async function mirrorStore() {
   }
   const stale = [...before.keys()].filter((id) => !ids.has(id));
   for (const id of stale) store.removePlugin(id);
+  // The store persists in the background and keeps live Firestore listeners:
+  // without this the mirror is logged, the writes are still in flight, and the
+  // process sits on those handles until CI's job timeout cancels it.
+  await store.closeStore();
   console.log(
     `${STORE_LABEL}: ${records.length} record(s), ${changed} changed, ${stale.length} removed`,
   );

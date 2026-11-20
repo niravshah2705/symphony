@@ -56,6 +56,19 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
   fails says so beside the family field with a **Read the catalog again** button
   instead of quietly showing an empty list.
 
+### Fixed
+
+- **The Firestore pack mirror no longer hangs the publish job to a timeout.**
+  The stamp jobs of `build-plugin-images.yml` / `build-skill-images.yml` printed
+  `firestore plugins: 9 record(s), 9 changed` and then sat until the job's
+  10-minute timeout cancelled the run: `write()` persists in the background and
+  the store keeps `onSnapshot` listeners open, so nothing told the exiting
+  process its handles were still alive. The Firestore backend now has
+  `close()` — await the commits still in flight, drop the listeners, terminate
+  the client — `store.closeStore()` exposes it and
+  `scripts/seed-plugin-catalog.js --store` awaits it, so the mirror finishes in
+  seconds and its writes are known-durable before the process leaves.
+
 ## 2026-11-18
 
 ### Removed

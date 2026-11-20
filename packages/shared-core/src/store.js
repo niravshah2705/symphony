@@ -671,6 +671,21 @@ async function initStore() {
   if (entry !== legacyBackendEntry) await initializeBackendEntry(entry);
 }
 
+/**
+ * Release every hydrated backend: awaited flush of the background writes plus
+ * the Firestore listeners/clients. A long-running service never calls this —
+ * the listeners are how it stays fresh. A script that writes and exits must,
+ * or it hangs on those handles and its last writes may never commit. Re-calling
+ * `initStore()` afterwards hydrates again.
+ */
+async function closeStore() {
+  for (const entry of [...backendRegistry.values()]) {
+    entry.initialized = false;
+    entry.initPromise = null;
+    if (typeof entry.backend.close === 'function') await entry.backend.close();
+  }
+}
+
 /** Back-compat: convert legacy single `enrichLabel` into `enrichLabels[]`. */
 function migrateAgentConfig(config) {
   const next = { ...config };
@@ -1744,6 +1759,7 @@ module.exports = {
   readLegacyStore,
   writeLegacyStore,
   initStore,
+  closeStore,
   normalizeWorkspaceContext: workspaceContext.normalizeWorkspaceContext,
   runWithWorkspaceContext: workspaceContext.runWithWorkspaceContext,
   currentWorkspaceContext: workspaceContext.currentWorkspaceContext,

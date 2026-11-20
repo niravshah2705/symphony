@@ -56,6 +56,11 @@ function create({
 }) {
   let db = null;
   let rootDoc = null;
+  // In-flight `batch.commit()`s. `write()` is synchronous by contract, so the
+  // only way a short-lived process (the catalog mirror) can know its writes are
+  // durable is to await these before shutting the client down.
+  const pending = new Set();
+  const unsubscribes = [];
   // Raw (pre-normalize) parts kept live so any snapshot can re-assemble the store.
   const rawParts = { main: {}, collections: {} };
   for (const key of collectionKeys) rawParts.collections[key] = [];
@@ -92,9 +97,16 @@ function create({
   }
 
   function background(promise) {
-    Promise.resolve(promise).catch((err) => {
-      log.error(`firestore store write failed: ${err && err.message ? err.message : err}`);
-    });
+    // The set entry removes itself whichever way the commit lands: a rejected
+    // write is logged here and must not stay on the ledger `close()` awaits.
+    const tracked = Promise.resolve(promise).then(
+      () => { pending.delete(tracked); },
+      (err) => {
+        pending.delete(tracked);
+        log.error(`firestore store write failed: ${err && err.message ? err.message : String(err)}`);
+      },
+    );
+    pending.add(tracked);
   }
 
   /** Persist one collection by diffing the previous mirror against the new store. */
@@ -141,7 +153,7 @@ function create({
   }
 
   function subscribe() {
-    rootDoc.onSnapshot(
+    unsubscribes.push(rootDoc.onSnapshot(
       (snap) => {
         if (snap.exists) {
           rawParts.main = snap.data() || {};
@@ -149,15 +161,15 @@ function create({
         }
       },
       (err) => log.error(`firestore main onSnapshot error: ${err && err.message ? err.message : err}`)
-    );
+    ));
     for (const key of collectionKeys) {
-      rootDoc.collection(key).onSnapshot(
+      unsubscribes.push(rootDoc.collection(key).onSnapshot(
         (snap) => {
           rawParts.collections[key] = snap.docs.map((doc) => doc.data());
           rebuildMirror();
         },
         (err) => log.error(`firestore ${key} onSnapshot error: ${err && err.message ? err.message : err}`)
-      );
+      ));
     }
   }
 
@@ -183,7 +195,32 @@ function create({
     ready = true;
   }
 
-  return { read, write, init };
+  /**
+   * Flush and release: await the commits still in flight, drop the snapshot
+   * listeners, then close the client's gRPC pool. Without this a process that
+   * only mirrors and exits — `scripts/seed-plugin-catalog.js --store` — sits on
+   * the open handles until something kills it, which reads as a hang and hides
+   * whether the writes actually landed.
+   */
+  async function close() {
+    while (pending.size) await Promise.allSettled([...pending]);
+    for (const stop of unsubscribes.splice(0)) {
+      if (typeof stop === 'function') stop();
+    }
+    const client = db;
+    db = null;
+    rootDoc = null;
+    ready = false;
+    if (client && typeof client.terminate === 'function') {
+      try {
+        await client.terminate();
+      } catch (err) {
+        log.error(`firestore store terminate failed: ${err && err.message ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  return { read, write, init, close };
 }
 
 module.exports = { create, encodeDocId };
