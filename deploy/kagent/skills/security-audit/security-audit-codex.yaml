@@ -72,7 +72,7 @@ spec:
   skills:
   - name: 'security-audit'
     source:
-      oci: 'ghcr.io/niravshah2705/symphony/security-audit-skill@sha256:77424dc6a74d86b8874719b86ae92e39e0e734a4b80aa7d45f25a5edd665902b'
+      oci: 'ghcr.io/niravshah2705/symphony/security-audit-skill@sha256:2789d09d1e556496e6bce7e72b100f032a4746ee7168361d7294913a2e3e692c'
       path: 'skills/security-audit'
 ---
 # Agent: security-audit-codex-agent

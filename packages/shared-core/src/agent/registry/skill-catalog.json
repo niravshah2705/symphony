@@ -24,7 +24,7 @@
         "skillPath": "skills/security-audit",
         "entryFile": "SKILL.md",
         "excludes": ["*.test.cjs"],
-        "digest": "sha256:77424dc6a74d86b8874719b86ae92e39e0e734a4b80aa7d45f25a5edd665902b",
+        "digest": "sha256:2789d09d1e556496e6bce7e72b100f032a4746ee7168361d7294913a2e3e692c",
         "manifests": {
           "codex": "deploy/kagent/skills/security-audit/security-audit-codex.yaml",
           "claude": "deploy/kagent/skills/security-audit/security-audit-claude.yaml",
