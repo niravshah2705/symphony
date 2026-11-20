@@ -1,0 +1,31 @@
+{
+  "defaults": { "accent": "slate", "opponent": "local", "extra": "none" },
+  "knobs": {
+    "accent": {
+      "options": {
+        "indigo": "#4f46e5",
+        "emerald": "#059669",
+        "amber": "#d97706",
+        "slate": "#334155"
+      }
+    },
+    "opponent": {
+      "options": { "local": "Two players", "ai": "Play the computer" }
+    },
+    "extra": { "options": { "none": null, "page": null, "footer": null } }
+  },
+  "derived": {
+    "FOOTER": {
+      "knob": "extra",
+      "values": {
+        "footer": "<footer class=\"site-footer\">Built by the Software Factory guest demo · {{TITLE}}</footer>"
+      }
+    },
+    "ABOUT_LINK": {
+      "knob": "extra",
+      "values": {
+        "page": "<a href=\"about.html\">About this game</a>"
+      }
+    }
+  }
+}

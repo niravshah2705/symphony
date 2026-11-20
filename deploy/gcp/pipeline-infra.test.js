@@ -39,6 +39,10 @@ test('all Cloud Run services use the gen2 execution environment', () => {
     ['pipeline.tf', ['orchestrator']],
     ['provisioner.tf', ['provisioner']],
     ['stream_token_service.tf', ['stream_token_broker']],
+    // The guest preview broker is a third standalone IAM-gated writer: like the
+    // stream-token broker it holds a credential no other workload may read, and
+    // unlike it, that credential reaches a DIFFERENT project (var.guest_firebase_project).
+    ['guest_deployer_service.tf', ['guest_deployer']],
     ['laya_inference.tf', ['laya']],
     ['clm_inference.tf', ['clm']],
     // Three containers, one service: LiteLLM + its Postgres/Redis sidecars share a
@@ -48,7 +52,7 @@ test('all Cloud Run services use the gen2 execution environment', () => {
   const expectedInventory = [...servicesByFile]
     .flatMap(([file, services]) => services.map((service) => [file, service]))
     .sort(([fileA, serviceA], [fileB, serviceB]) => `${fileA}:${serviceA}`.localeCompare(`${fileB}:${serviceB}`));
-  assert.equal(expectedInventory.length, 12);
+  assert.equal(expectedInventory.length, 13);
 
   const terraformDir = path.join(ROOT, 'deploy/gcp/terraform');
   const actualInventory = fs.readdirSync(terraformDir)

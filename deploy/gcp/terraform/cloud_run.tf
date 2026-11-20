@@ -55,6 +55,25 @@ locals {
     SETTINGS_URL     = local.settings_url # settings service (proxied at /api/settings-policy/*)
     IDENTITY_URL     = local.identity_url # identity verification service (proxied at /api/identity/*)
     BILLING_URL      = local.billing_url  # billing service (proxied at /api/billing/*)
+    # Guest guided demo (services/gateway/src/routes/guest-demo.js). The gateway
+    # answers these routes LOCALLY — no orchestrator hop, no tenant read — so the
+    # only thing it needs is the catalogue's own knobs. GUEST_WORKER_POOL is a
+    # string written into rendered CR-set YAML, not a capability: the gateway
+    # gains no SUBSTRATE_* env from this (see substrate.tf), and nothing here may
+    # be merged into the agent workloads' env.
+    GUEST_DEMO_ENABLED      = tostring(var.guest_demo_enabled)
+    GUEST_WORKER_POOL       = var.guest_worker_pool
+    GUEST_SNAPSHOT_LOCATION = var.guest_snapshot_location
+    GUEST_MAX_MESSAGES      = tostring(var.guest_max_messages)
+    GUEST_MAX_SESSIONS      = tostring(var.guest_max_sessions)
+    GUEST_SESSION_TTL_MS    = tostring(var.guest_session_ttl_ms)
+    GUEST_PREVIEW_TTL_MS    = tostring(var.guest_preview_ttl_ms)
+    # Per-IP limits on the unauthenticated surface (services/gateway/src/rate-limit.js).
+    # Advisory by construction; the caps in config.js GUEST_DEMO are the bound.
+    RATE_LIMIT_GUEST_WINDOW_MS     = tostring(var.rate_limit_guest_window_ms)
+    RATE_LIMIT_GUEST_MAX           = tostring(var.rate_limit_guest_max)
+    RATE_LIMIT_KNOWLEDGE_WINDOW_MS = tostring(var.rate_limit_knowledge_window_ms)
+    RATE_LIMIT_KNOWLEDGE_MAX       = tostring(var.rate_limit_knowledge_max)
     # Use the provider-returned origin rather than reconstructing the run.app
     # hostname: Cloud Run ID-token audiences must match the deployed service
     # URL exactly, including projects that still use a legacy hash-style URL.
@@ -78,6 +97,18 @@ locals {
     # gateway keeps its default (Google-only) otherwise.
     var.auth_microsoft_enabled ? { AUTH_MICROSOFT_ENABLED = "true" } : {},
     var.microsoft_tenant != "" ? { MICROSOFT_TENANT = var.microsoft_tenant } : {},
+    # The guest preview broker, when it exists. Absent is a real state, not a
+    # broken one: with no URL the runner publishes nothing and marks the demo's
+    # preview step skipped, and GUEST_PREVIEW_BASE_URL is withheld with it so the
+    # gateway cannot hand out a URL on a site nobody has released.
+    #
+    # The URL comes from the service's own .uri, not the derived run.app form,
+    # because Cloud Run's ID-token audience must match the deployed origin
+    # exactly (same reason as above).
+    var.guest_deployer_enabled ? {
+      GUEST_DEPLOYER_URL     = google_cloud_run_v2_service.guest_deployer[0].uri
+      GUEST_PREVIEW_BASE_URL = local.guest_preview_origin
+    } : {},
     # GOOGLE_ONE_TAP_CLIENT_ID is NOT here — it is delivered from Secret Manager
     # (google_secret_manager_secret.google_one_tap_client_id) as a secret env on
     # the gateway container below, only when a value is configured.
@@ -294,6 +325,24 @@ resource "google_cloud_run_v2_service" "gateway" {
         }
       }
 
+      # The guest broker's shared secret. It rides as a secret env because the
+      # gateway must present it and must never hold the hosting credential —
+      # that lives only on the broker's own service account. Deliberately not
+      # INTERNAL_API_TOKEN: with that value a guest-facing caller could reach
+      # the org and settings services.
+      dynamic "env" {
+        for_each = var.guest_deployer_enabled ? [1] : []
+        content {
+          name = "GUEST_DEPLOYER_INTERNAL_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.guest_deployer_internal_token[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
       resources {
         limits = {
           cpu    = var.cloud_run_service_cpu
@@ -330,6 +379,12 @@ resource "google_cloud_run_v2_service" "gateway" {
     google_secret_manager_secret_iam_member.gateway_one_tap,
     google_cloud_run_v2_service.stream_token_broker,
     google_cloud_run_v2_service_iam_member.gateway_invokes_stream_token_broker,
+    # Counted collections: depending on the address covers the 0-element case,
+    # which is the point — a gateway with no broker to call still must not come
+    # up presenting a token for a secret that was never created.
+    google_cloud_run_v2_service.guest_deployer,
+    google_cloud_run_v2_service_iam_member.gateway_invokes_guest_deployer,
+    google_secret_manager_secret_iam_member.gateway_guest_deployer_token,
     google_cloud_run_v2_service.identity,
     google_cloud_run_v2_service_iam_member.gateway_invokes_identity,
   ]

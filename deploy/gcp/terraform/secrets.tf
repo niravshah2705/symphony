@@ -19,6 +19,31 @@ resource "google_secret_manager_secret" "stream_token_secret" {
   depends_on = [google_project_service.services]
 }
 
+# --- Guest preview broker shared secret ---------------------------------------
+# The gateway presents this value and the broker compares it in constant time.
+# It is deliberately NOT stream-token-secret and NOT the platform-wide
+# INTERNAL_API_TOKEN: that token opens the org and settings services, so
+# reusing it here would put a fifth copy of a credential in a workload whose
+# only privilege is writing preview paths on one hosting site.
+#
+# PREREQUISITE: `guest-deployer-internal-token` MUST have an enabled version
+# before the broker revision is created — the service fails closed without it
+# (`services/guest-deployer/src/deploy-config.js` requires >= 16 characters),
+# and Cloud Run will not start a container whose secret has no version.
+resource "google_secret_manager_secret" "guest_deployer_internal_token" {
+  count = var.guest_deployer_enabled ? 1 : 0
+
+  project   = var.project_id
+  secret_id = "guest-deployer-internal-token"
+  labels    = merge(local.common_labels, { component = "guest-deployer" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.services]
+}
+
 # Extra managed-provider secrets are created empty and consumed only through
 # the settings-service resolver; application containers never receive them.
 resource "google_secret_manager_secret" "extra" {

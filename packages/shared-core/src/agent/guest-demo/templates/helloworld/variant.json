@@ -1,0 +1,29 @@
+{
+  "defaults": { "stack": "static", "accent": "indigo", "extra": "none" },
+  "knobs": {
+    "stack": { "options": { "static": null, "node": null } },
+    "accent": {
+      "options": {
+        "indigo": "#4f46e5",
+        "emerald": "#059669",
+        "amber": "#d97706",
+        "slate": "#334155"
+      }
+    },
+    "extra": { "options": { "none": null, "page": null, "footer": null } }
+  },
+  "derived": {
+    "FOOTER": {
+      "knob": "extra",
+      "values": {
+        "footer": "<footer class=\"site-footer\">Questions? hello@guest-demo.invalid — built by the Software Factory demo.</footer>"
+      }
+    },
+    "ABOUT_LINK": {
+      "knob": "extra",
+      "values": {
+        "page": "<a href=\"about.html\">About this site</a>"
+      }
+    }
+  }
+}

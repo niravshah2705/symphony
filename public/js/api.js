@@ -517,6 +517,21 @@ export const api = {
     request('/agent/guardrail', { method: 'POST', body: JSON.stringify({ spec }) }),
   searchAgentKnowledge: (payload) =>
     request('/agent/knowledge-search', { method: 'POST', body: JSON.stringify(payload) }),
+  // The guided demo an unauthenticated visitor gets (services/gateway/src/routes
+  // /guest-demo.js). Every value sent is an id the server issued, and the only
+  // input the guest composer has; a signed-in caller is refused with 403 by
+  // requireGuestOnly, so these stay unused in that case rather than deleted.
+  getGuestCommands: () => request('/guest/demo/commands'),
+  runGuestCommand: (commandId) =>
+    request('/guest/demo/command', { method: 'POST', body: JSON.stringify({ commandId: String(commandId || '') }) }),
+  answerGuestDemo: ({ sessionId, nodeId, answerId } = {}) =>
+    request('/guest/demo/answer', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: String(sessionId || ''), nodeId: String(nodeId || ''), answerId: String(answerId || ''),
+      }),
+    }),
+  getGuestSession: (sessionId) => request(`/guest/demo/session/${encodeURIComponent(String(sessionId || ''))}`),
   // Typed workspace memory (user | business | project | task | workspace).
   searchMemory: (payload) =>
     request('/agent/memory-search', { method: 'POST', body: JSON.stringify(payload) }),

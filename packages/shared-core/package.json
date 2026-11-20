@@ -14,6 +14,7 @@
     "./store/*": "./src/store/*.js",
     "./pipeline/*": "./src/pipeline/*.js",
     "./agent/*": "./src/agent/*.js",
+    "./agent/guest-demo/templates": "./src/agent/guest-demo/templates/index.js",
     "./agent/harness-catalog.json": "./src/agent/harness-catalog.json",
     "./workflow/*": "./src/workflow/*.js",
     "./workflow-defaults": "./src/workflow-defaults.js",

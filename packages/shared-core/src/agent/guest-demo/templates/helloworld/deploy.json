@@ -1,0 +1,17 @@
+{
+  "label": "Hello world",
+  "tokens": {
+    "TITLE": "Hello world",
+    "SUBTITLE": "A one-page starter: markup, a stylesheet, and the smallest possible script. The demo assembled it from your two clicks.",
+    "RUNTIME": "The preview is served as static files from the guest hosting site. Choosing Node.js adds server.js to the release so you can run the same page yourself; the preview itself never executes it.",
+    "ABOUT_BODY": "One HTML page, one stylesheet, one script. That is the whole hello-world starter.",
+    "ABOUT_HOW": "Assembled from two clicks in the guest demo: the stack, then the accent colour. Nothing here was typed."
+  },
+  "files": [
+    { "path": "index.html", "src": "index.html" },
+    { "path": "app.js", "src": "app.js" },
+    { "path": "styles.css", "src": "../_shared/styles.css" },
+    { "path": "server.js", "src": "server.js", "when": { "stack": ["node"] } },
+    { "path": "about.html", "src": "../_shared/about.html", "when": { "extra": ["page"] } }
+  ]
+}

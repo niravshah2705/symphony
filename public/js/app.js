@@ -28,6 +28,18 @@ import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
 import { dismissGuestBanner, guestBannerVisible } from './guest-banner.mjs';
+import {
+  guestOnboardingVisible,
+  markGuestOnboardingReviewed,
+  markGuestOnboardingSkipped,
+} from './guest-onboarding.mjs';
+import {
+  firstLoginEulaStorage,
+  markFirstLoginEulaSeen,
+  readFirstLoginEulaSeen,
+  setPendingFirstLoginEula,
+  shouldPromptFirstLoginEula,
+} from './first-login-eula.mjs';
 import { canAccessRoute, menuRouteVisible, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
@@ -271,6 +283,10 @@ function syncShell(name, view, { analyticsIdentity = null } = {}) {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
+
+  // Route changes do not pass through renderAuthControl, so the guest dialog is
+  // mounted here: it answers "is this the route a guest needs explained?".
+  renderGuestOnboarding();
 
   const session = getAuthenticationState();
   // A user can change the hash while Firebase session restoration is pending.
@@ -598,6 +614,7 @@ function renderAuthControl() {
   // The topbar control and the guest banner answer the same question — what is
   // this session — and every caller of this function is a moment where that
   // changed. Painting them together is what keeps them from disagreeing.
+  renderGuestOnboarding();
   renderGuestBanner();
   const host = document.getElementById('auth-control');
   if (!host) return;
@@ -786,6 +803,70 @@ function guestBannerStorage() {
   }
 }
 
+function guestOnboardingStores() {
+  try {
+    return { local: window.localStorage, tab: window.sessionStorage };
+  } catch (_) {
+    // Neither store can be trusted to answer, which the module reads as "never
+    // shown" — the dialog appears again rather than going quiet forever.
+    return { local: null, tab: null };
+  }
+}
+
+// The dialog is painted from index.html and only opened or closed here, so the
+// copy stays translatable by data-i18n and the logic that decides whether to show
+// it stays a pure module (guest-onboarding.mjs) with no DOM in it.
+let guestOnboardingOpen = false;
+
+function renderGuestOnboarding() {
+  const dialog = document.getElementById('guest-onboarding-dialog');
+  const { local, tab } = guestOnboardingStores();
+  // The dialog explains the click-only guest composer, so it belongs on the one
+  // route that has it. Opened on the sign-in card or a legal page it is a modal
+  // over the visitor's primary action, describing a feature they are not looking at.
+  const visible = Boolean(dialog) && currentRoute() === 'agent' && guestOnboardingVisible({
+    session: getAuthenticationState(),
+    localStorage: local,
+    sessionStorage: tab,
+  });
+  if (!visible) {
+    if (dialog?.open && guestOnboardingOpen) dialog.close('superseded');
+    guestOnboardingOpen = false;
+    return;
+  }
+  if (guestOnboardingOpen) return;
+  guestOnboardingOpen = true;
+
+  const checkbox = dialog.querySelector('#guest-onboarding-reviewed');
+  const done = dialog.querySelector('[data-guest-onboarding-done]');
+  const skip = dialog.querySelector('[data-guest-onboarding-skip]');
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+
+  const close = (reviewed) => {
+    if (reviewed) markGuestOnboardingReviewed(local, tab);
+    else markGuestOnboardingSkipped(tab);
+    guestOnboardingOpen = false;
+    if (dialog.open) dialog.close(reviewed ? 'reviewed' : 'skipped');
+    // The strip below is the same message in a smaller form; it has to come back
+    // the moment the dialog that was covering it goes away.
+    renderGuestBanner();
+  };
+  done?.addEventListener('click', () => close(checkbox?.checked === true), { once: true });
+  skip?.addEventListener('click', () => close(false), { once: true });
+  // Esc and a click outside are a skip, not a review: nobody consents to a EULA-
+  // like "I have read this" by pressing Escape.
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    close(false);
+  }, { once: true });
+  dialog.addEventListener('close', () => {
+    guestOnboardingOpen = false;
+    renderGuestBanner();
+  }, { once: true });
+  window.requestAnimationFrame(() => checkbox?.focus());
+}
+
 // A guest is already inside the workspace, not outside it: the gateway answers a
 // missing or invalid token with the public permissions rather than a 401, so
 // nothing refuses them and nothing tells them what they are missing. The toolbar
@@ -795,7 +876,9 @@ function renderGuestBanner() {
   if (!host) return;
   const session = getAuthenticationState();
   const storage = guestBannerStorage();
-  if (!guestBannerVisible({ session, storage })) {
+  // One message, one place at a time: the dialog is the banner's content with
+  // room to explain it, so painting both is two copies of the same sentence.
+  if (!guestBannerVisible({ session, storage }) || guestOnboardingOpen) {
     host.hidden = true;
     host.replaceChildren();
     return;
@@ -821,6 +904,52 @@ function renderGuestBanner() {
       }, t('guestBannerDismiss', 'Dismiss')),
     ]),
   );
+}
+
+/**
+ * Whether this signed-in session should open with the EULA card, and if so which
+ * version it is about. Runs at boot because that is the only point where a
+ * just-completed sign-in is observable: the popup path ends in a reload
+ * (public/js/auth.js completeSignIn), so the first boot after the reload is the
+ * earliest "right after login" there is.
+ */
+async function resolveFirstLoginEula(session) {
+  if (!session.enabled || !session.authenticated) return;
+  const local = firstLoginEulaStorage();
+  let status = null;
+  try {
+    status = await api.getEulaStatus();
+  } catch (_) {
+    // An unreachable agreement record is not a reason to show a card whose
+    // accept button would fail; the server gate still blocks the work.
+    return;
+  }
+  const version = status && status.version;
+  if (status && status.accepted) {
+    markFirstLoginEulaSeen(local, session, version);
+    return;
+  }
+  // The workspace context was fetched by the session restore (auth.js
+  // initializeWorkspaceContext), so membership is already in hand — asking
+  // /api/auth/me again would add a boot request for a fact we are holding.
+  const hasOrganization = getWorkspaceContext().organizations.length > 0;
+  if (hasOrganization) {
+    // Not asked, and not recorded here either. An org member's `via:'org-member'`
+    // record belongs to the work intent that earns it (views/agent.js), not to
+    // boot: a page view that writes a legal acceptance on the visitor's behalf is
+    // exactly what "opening X must never mutate the organization" tests refuse.
+    markFirstLoginEulaSeen(local, session, version);
+    return;
+  }
+  if (!shouldPromptFirstLoginEula({
+    mode: session.mode,
+    authenticated: session.authenticated,
+    eulaStatus: status,
+    hasOrganization,
+    seenVersion: readFirstLoginEulaSeen(local, session),
+    currentVersion: version,
+  })) return;
+  setPendingFirstLoginEula(version);
 }
 
 function renderAuthenticationGate({ loading = false, error = '' } = {}) {
@@ -1090,9 +1219,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Public visitors AND signed-in users both get a first paint; render() applies
   // per-route authorization (public → read-only Agent workspace). Optional
   // connection/role discovery runs only when the session holds the permission.
+  const firstLoginEula = resolveFirstLoginEula(session);
   const readiness = Promise.allSettled([
     maybeRefreshConnection(session),
     maybeRefreshRole(session),
+    firstLoginEula,
   ]);
   const activeRoute = currentRoute();
   const activeView = document.getElementById('view');
@@ -1109,6 +1240,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     syncShell(activeRoute, activeView);
     syncSidebar(false);
   } else {
+    // The Agent view consumes the pending flag when it mounts, so the decision
+    // has to be in hand first — otherwise a first login renders no card.
+    await firstLoginEula;
     await render();
   }
 

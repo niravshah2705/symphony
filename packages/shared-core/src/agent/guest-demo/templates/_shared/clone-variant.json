@@ -1,0 +1,41 @@
+{
+  "defaults": { "depth": "full", "accent": "indigo", "extra": "none" },
+  "knobs": {
+    "depth": { "options": { "map": null, "full": null } },
+    "accent": {
+      "options": {
+        "indigo": "#4f46e5",
+        "emerald": "#059669",
+        "amber": "#d97706",
+        "slate": "#334155"
+      }
+    },
+    "extra": { "options": { "none": null, "page": null, "footer": null } }
+  },
+  "derived": {
+    "FOOTER": {
+      "knob": "extra",
+      "values": {
+        "footer": "<footer class=\"site-footer\">Rebuilt from the {{TITLE}} sample in the Software Factory guest demo.</footer>"
+      }
+    },
+    "ABOUT_LINK": {
+      "knob": "extra",
+      "values": {
+        "page": "<a href=\"about.html\">About this rebuild</a>"
+      }
+    },
+    "MAP_LINK": {
+      "knob": "depth",
+      "values": {
+        "map": "<a href=\"site.html\">Open the rebuilt page instead</a>"
+      }
+    },
+    "PAGE_LINK": {
+      "knob": "depth",
+      "values": {
+        "full": "<a href=\"components.html\">See the component map this was built from</a>"
+      }
+    }
+  }
+}

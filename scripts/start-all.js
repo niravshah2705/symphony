@@ -35,11 +35,22 @@ const localInternalToken = String(process.env.INTERNAL_API_TOKEN || '').trim()
 // stable; zero-config `npm start` still gets an ephemeral secret.
 const localStreamSecret = String(process.env.STREAM_TOKEN_SECRET || '').trim()
   || crypto.randomBytes(32).toString('base64url');
+// The guest broker's own S2S secret, never INTERNAL_API_TOKEN: on the broker
+// side the name is GUEST_DEPLOY_INTERNAL_TOKEN, so a shared platform token would
+// both fail its check and grant the org/settings services to a guest-facing path.
+const localGuestDeploySecret = String(process.env.GUEST_DEPLOYER_INTERNAL_TOKEN || '').trim()
+  || crypto.randomBytes(32).toString('base64url');
+// Publishing a preview needs a real Firebase project, so a zero-config
+// `npm start` ships without the broker: the gateway then gets no
+// GUEST_DEPLOYER_URL and the demo renders the preview step as skipped — the same
+// degraded shape the cloud uses when the feature flag is off.
+const guestDeployerEnabled = String(process.env.GUEST_FIREBASE_PROJECT || '').trim() !== '';
 const egressProxyPort = Number(process.env.LOCAL_EGRESS_PROXY_PORT) || 4030;
 const streamTokenPort = Number(
   process.env.LOCAL_STREAM_TOKEN_PORT || process.env.LOCAL_STREAM_PROXY_PORT,
 ) || 4031;
 const agentServicePort = Number(process.env.AGENT_SERVICE_PORT) || 4010;
+const guestDeployerPort = Number(process.env.LOCAL_GUEST_DEPLOYER_PORT) || 4032;
 
 const LOCAL_DEPENDENCIES = [
   { name: 'egress-proxy', entry: 'services/proxy/src/index.js', healthPort: egressProxyPort },
@@ -48,6 +59,9 @@ const LOCAL_DEPENDENCIES = [
     entry: 'services/proxy/src/stream-token-server.js',
     healthPort: streamTokenPort,
   },
+  ...(guestDeployerEnabled ? [
+    { name: 'guest-deployer', entry: 'services/guest-deployer/src/server.js', healthPort: guestDeployerPort },
+  ] : []),
 ];
 
 // Start the agent services first so the gateway's proxy targets are likely up
@@ -106,8 +120,20 @@ function envFor(name) {
     delete env.INTERNAL_API_TOKEN;
     env.PORT = String(streamTokenPort);
     env.STREAM_TOKEN_SECRET = localStreamSecret;
+  } else if (name === 'guest-deployer') {
+    // Same rule as the stream broker: no platform token in the process that
+    // holds a publishing credential.
+    delete env.INTERNAL_API_TOKEN;
+    env.PORT = String(guestDeployerPort);
+    env.GUEST_DEPLOY_INTERNAL_TOKEN = localGuestDeploySecret;
   } else if (name === 'gateway') {
     env.STREAM_TOKEN_SERVICE_URL = `http://127.0.0.1:${streamTokenPort}`;
+    if (guestDeployerEnabled) {
+      env.GUEST_DEPLOYER_URL = `http://127.0.0.1:${guestDeployerPort}`;
+      // Re-injected because the filter above drops anything credential-shaped,
+      // and the guest routes need the broker's secret to reach it at all.
+      env.GUEST_DEPLOYER_INTERNAL_TOKEN = localGuestDeploySecret;
+    }
   } else if (name === 'agent') {
     env.EGRESS_PROXY_URL = `http://127.0.0.1:${egressProxyPort}`;
     env.PORT = String(agentServicePort);

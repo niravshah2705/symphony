@@ -631,6 +631,64 @@
 .coverage-evidence summary { color: var(--accent-2); font-size: 8px; cursor: pointer; }
 .coverage-evidence ul { margin: 5px 0 0; padding-left: 14px; color: var(--muted); font-size: 8px; line-height: 1.5; }
 
+/* The guest demo view. The composer has no textarea by design, so it borrows the
+   omnibox's slot and the suggestion row's shape rather than the composer surface —
+   an empty input frame with nothing to type into reads as a broken page. */
+.guest-hero .guest-restricted-note {
+  max-width: 650px; margin: 14px auto 0; padding: 9px 13px; border: 1px solid var(--border-strong);
+  border-radius: 10px; background: var(--surface-subtle); color: var(--muted);
+  font-family: var(--font-sans); font-size: 10px; line-height: 1.55; text-align: left;
+}
+.guest-composer { display: flex; flex-direction: column; gap: 11px; }
+.guest-composer-hint { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; text-align: center; }
+.guest-starter-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.guest-starter-row button {
+  padding: 9px 15px; border: 1px solid var(--border-strong); border-radius: 99px;
+  background: var(--panel); color: var(--text); font-size: 11px; font-weight: 620;
+  box-shadow: 0 8px 28px rgba(23, 32, 51, .08); cursor: pointer;
+}
+.guest-starter-row button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-2); }
+.guest-starter-row button:disabled { opacity: .55; cursor: default; box-shadow: none; }
+.guest-starter-loading { color: var(--muted); font-size: 10px; }
+.guest-footer-note { margin: 0 auto; max-width: 620px; color: var(--muted); font-size: 9px; line-height: 1.5; text-align: center; }
+.guest-question .message-copy, .guest-flow .message-copy { display: flex; flex-direction: column; gap: 8px; }
+.guest-followup-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.guest-followup-actions button { min-height: 30px; padding: 6px 12px; border-radius: 8px; font-size: 9px; }
+.guest-followup-actions button:not(.primary) { border: 1px solid var(--border-strong); background: var(--panel); color: var(--text); cursor: pointer; }
+.guest-followup-actions button:not(.primary):hover:not(:disabled) { border-color: var(--accent); color: var(--accent-2); }
+.guest-followup-actions button:disabled { opacity: .5; cursor: default; }
+.guest-demo-simulated {
+  padding: 8px 11px; border: 1px dashed var(--border-strong); border-radius: 9px;
+  background: var(--amber-soft); color: var(--amber); font-family: var(--font-sans); font-size: 9px; line-height: 1.5;
+}
+.guest-demo-steps { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; counter-reset: guest-step; }
+.guest-demo-step {
+  display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel); color: var(--text); font-family: var(--font-sans); font-size: 10px; line-height: 1.5;
+}
+.guest-demo-step strong { font-size: 11px; font-weight: 650; }
+.guest-demo-step p { margin: 0; color: var(--muted); font-size: 9px; }
+.guest-demo-step.status-skipped { background: var(--surface-subtle); opacity: .8; }
+.guest-demo-artifact summary { color: var(--accent-2); font-size: 9px; cursor: pointer; }
+.guest-demo-artifact pre {
+  max-height: 300px; overflow: auto; margin: 7px 0 0; padding: 11px;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--surface-subtle);
+  color: var(--text); font-family: var(--font-mono); font-size: 9px; line-height: 1.5; white-space: pre;
+}
+.guest-preview-expiry { color: var(--muted); font-family: var(--font-sans); font-size: 9px; line-height: 1.5; }
+.guest-docs-searching { color: var(--muted); font-style: italic; }
+.guest-docs-results { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.guest-docs-results li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.guest-docs-results strong { display: block; font-size: 11px; }
+.guest-docs-results p { margin: 3px 0 0; color: var(--muted); font-family: var(--font-sans); font-size: 9px; line-height: 1.55; }
+.guest-restricted-card p { color: var(--muted); font-family: var(--font-sans); font-size: 10px; line-height: 1.6; }
+.guest-restricted-card .rail-action-link { display: inline-block; margin-top: 6px; }
+
+@media (max-width: 620px) {
+  .guest-starter-row { flex-direction: column; align-items: stretch; }
+  .guest-starter-row button { border-radius: 12px; text-align: left; }
+}
+
 /* Keep route breakpoints after the lazily loaded base rules so their cascade
    matches the former single-stylesheet order. */
 @media (max-width: 1180px) {

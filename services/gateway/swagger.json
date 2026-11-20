@@ -562,6 +562,228 @@
           }
         }
       }
+    },
+    "/api/guest/demo/commands": {
+      "get": {
+        "summary": "List the guest demo starter commands",
+        "description": "The click-only catalogue for an unauthenticated visitor: opaque server-issued command ids, copy keys, and the retention numbers. Every response of every /api/guest/demo route carries Cache-Control: no-store and is rate limited per client address. A signed-in caller is refused with 403 — the demo is the restricted view, and the signed-in workspace is the full one.",
+        "tags": ["GuestDemo"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The starter list, the demo agent identity, the guest notices, and the retention limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": { "type": "string" },
+                    "agent": {
+                      "type": "object",
+                      "properties": { "id": { "type": "string" }, "label": { "type": "string" } }
+                    },
+                    "commands": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string", "example": "gcmd.helloworld" },
+                          "label": { "type": "string" },
+                          "labelKey": { "type": "string" }
+                        }
+                      }
+                    },
+                    "notice": { "type": "object", "description": "Restricted-access, retrievability, and retention copy, keyed for the SPA's dictionary" },
+                    "maxMessages": { "type": "integer", "description": "Messages a single guest session holds before the flow stops with a sign-in step" },
+                    "sessionTtlMs": { "type": "integer", "description": "How long a guest transcript lives" },
+                    "previewTtlMs": { "type": "integer", "description": "How long a generated preview stays reachable" }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/GuestDemoAuthenticated" },
+          "429": { "$ref": "#/components/responses/GuestDemoRateLimited" }
+        }
+      }
+    },
+    "/api/guest/demo/command": {
+      "post": {
+        "summary": "Start a guest demo session from a clicked command",
+        "description": "Always creates a new session; guests may open as many as they like. commandId is the only accepted input and must be an id from GET /api/guest/demo/commands — every other body field (prompt, model, workerPool, orgId, template) is ignored, never forwarded. Nothing is applied to a cluster, no actor runs, and no model is called.",
+        "tags": ["GuestDemo"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "commandId": { "type": "string", "example": "gcmd.helloworld" }
+                },
+                "required": ["commandId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created session and the first fixed-answer question",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": { "$ref": "#/components/schemas/GuestDemoSession" },
+                    "turn": {
+                      "type": "object",
+                      "description": "The server's own echo of the click — transcript text is never taken from the browser",
+                      "properties": { "role": { "type": "string" }, "text": { "type": "string" }, "kind": { "type": "string" } }
+                    },
+                    "next": { "$ref": "#/components/schemas/GuestDemoNext" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown, malformed, or absent commandId (code guest_command_unknown) — checked before the tree is consulted"
+          },
+          "403": { "$ref": "#/components/responses/GuestDemoAuthenticated" },
+          "429": { "$ref": "#/components/responses/GuestDemoRateLimited" }
+        }
+      }
+    },
+    "/api/guest/demo/answer": {
+      "post": {
+        "summary": "Click a fixed answer on the session's current node",
+        "description": "The one mutation a guest can make. nodeId must equal where the session actually is, so skipping ahead to a node that was never offered, or replaying an answer, is refused rather than re-run. Answering moves the session on to the next question; reaching a flow step renders the genuine kagent four-CR set as a read-only string artifact and releases the preview.",
+        "tags": ["GuestDemo"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionId": { "type": "string", "example": "gcs_11111111-1111-4111-8111-111111111111" },
+                  "nodeId": { "type": "string", "example": "helloworld.stack" },
+                  "answerId": { "type": "string", "example": "gans.helloworld.stack.node" }
+                },
+                "required": ["sessionId", "nodeId", "answerId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The next turn: a question, a knowledge-search hand-off with a server-supplied query, a terminal flow with steps, artifacts and a preview URL, or the message-cap sign-in step",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": { "$ref": "#/components/schemas/GuestDemoSession" },
+                    "turn": {
+                      "type": "object",
+                      "description": "The server's own echo of the click, so the browser paints the copy that was stored rather than text invented from the button label",
+                      "properties": { "role": { "type": "string" }, "text": { "type": "string" }, "kind": { "type": "string" } }
+                    },
+                    "next": { "$ref": "#/components/schemas/GuestDemoNext" },
+                    "flow": {
+                      "type": "object",
+                      "description": "Present when the answer reached a flow step",
+                      "properties": {
+                        "id": { "type": "string" },
+                        "steps": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string" },
+                              "label": { "type": "string" },
+                              "status": { "type": "string", "enum": ["done", "skipped"] },
+                              "note": { "type": "string", "description": "preview-publishing-disabled when no deployer is configured" },
+                              "url": { "type": "string", "description": "The 1-day preview address, or null" },
+                              "artifacts": {
+                                "type": "object",
+                                "additionalProperties": { "type": "string" },
+                                "description": "agent-crset.yaml — a simulated preview; nothing was applied to a cluster"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "preview": { "type": "string", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The answer is not one of this node's options (guest_answer_unknown), or the session id is malformed (guest_session_id_invalid)"
+          },
+          "409": {
+            "description": "nodeId is not the session's current node (guest_node_stale) — the step has already moved on"
+          },
+          "410": {
+            "description": "The session never existed or has aged out (guest_session_expired). One code for both, so ids cannot be probed; the SPA recovers by starting a fresh session."
+          },
+          "403": { "$ref": "#/components/responses/GuestDemoAuthenticated" },
+          "429": { "$ref": "#/components/responses/GuestDemoRateLimited" }
+        }
+      }
+    },
+    "/api/guest/demo/session/{id}": {
+      "get": {
+        "summary": "Rehydrate a guest demo session",
+        "description": "Reads back the transcript of a tab's session and the position it stopped at, so a reload re-offers the pending question instead of stranding the visitor on a transcript with no buttons. An expired or unknown id reads as empty rather than broken (200 with session null and next null), so a reload after the retention window is not an error page.",
+        "tags": ["GuestDemo"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The session id issued by POST /api/guest/demo/command",
+            "schema": { "type": "string", "example": "gcs_11111111-1111-4111-8111-111111111111" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session, or null, plus its server-echoed messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "session": { "nullable": true, "allOf": [ { "$ref": "#/components/schemas/GuestDemoSession" } ] },
+                    "next": { "nullable": true, "allOf": [ { "$ref": "#/components/schemas/GuestDemoNext" } ] },
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "role": { "type": "string", "enum": ["user", "assistant"] },
+                          "kind": { "type": "string" },
+                          "text": { "type": "string" },
+                          "ts": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/GuestDemoAuthenticated" },
+          "429": { "$ref": "#/components/responses/GuestDemoRateLimited" }
+        }
+      }
     }
   },
   "components": {
@@ -589,6 +811,73 @@
           "email": { "type": "string" },
           "name": { "type": "string" },
           "picture": { "type": "string" }
+        }
+      },
+      "GuestDemoSession": {
+        "type": "object",
+        "description": "An ephemeral, org-less guest transcript. There is deliberately no visitor identity, organization, project, or user field on it, and answering a step never moves expiresAt.",
+        "properties": {
+          "id": { "type": "string", "example": "gcs_11111111-1111-4111-8111-111111111111" },
+          "commandId": { "type": "string" },
+          "nodeId": { "type": "string", "description": "Where the session is; POST /answer must name this node" },
+          "flowId": { "type": "string", "nullable": true },
+          "template": { "type": "string", "nullable": true, "description": "Server-chosen from the catalogue — a body field cannot set it" },
+          "variant": { "type": "object", "description": "Fixed customisation selections merged from the clicked answers" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "previewUrl": { "type": "string", "nullable": true, "description": "Null until the flow has deployed a preview; a customisation re-releases the same address" },
+          "previewExpiresAt": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "GuestDemoNext": {
+        "description": "What the visitor may do after this turn. A question carries only enumerated answers; a knowledge-search carries a query the server wrote.",
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "enum": ["question", "flow", "knowledge-search", "terminal", "restart"] },
+          "id": { "type": "string" },
+          "question": { "type": "string" },
+          "questionKey": { "type": "string" },
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "example": "gans.helloworld.stack.node" },
+                "label": { "type": "string" },
+                "labelKey": { "type": "string" },
+                "redeploy": { "type": "boolean", "description": "True when clicking this option re-releases the preview with its variant" }
+              }
+            }
+          },
+          "query": { "type": "string", "description": "kind knowledge-search: the server-owned search text" },
+          "then": { "$ref": "#/components/schemas/GuestDemoNext" },
+          "label": { "type": "string", "description": "kind terminal: the sign-in or end-of-demo copy" },
+          "labelKey": { "type": "string" },
+          "stopped": { "type": "string", "enum": ["message_cap"], "description": "Present when the session reached its message cap and the tree stopped advancing" }
+        }
+      }
+    },
+    "responses": {
+      "GuestDemoAuthenticated": {
+        "description": "Refused because the caller is signed in (code access_denied). The click-only demo is the visitor surface; an account uses the signed-in workspace.",
+        "headers": {
+          "Cache-Control": { "schema": { "type": "string" }, "description": "no-store on every guest response" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "GuestDemoRateLimited": {
+        "description": "Too many requests from this client address within the window (code rate_limited). Advisory and per-address: behind CGNAT or a corporate network, unrelated visitors share one bucket.",
+        "headers": {
+          "Retry-After": { "schema": { "type": "integer" }, "description": "Seconds until the window closes" },
+          "Cache-Control": { "schema": { "type": "string" }, "description": "no-store" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
         }
       }
     }
@@ -637,6 +926,10 @@
     {
       "name": "Organization",
       "description": "Organization and workspace management"
+    },
+    {
+      "name": "GuestDemo",
+      "description": "Click-only guided demo for unauthenticated visitors — server-owned catalogue, ephemeral org-less sessions, simulated kagent rendering"
     }
   ]
 }

@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+#
+# Guest preview broker image (INTERNAL Cloud Run service).
+# Build from the monorepo root so npm workspaces resolve @software-factory/shared-core:
+#   docker build -f deploy/gcp/Dockerfile.guest-deployer -t <tag> .
+#
+# The broker is the only workload that can write the guest hosting site, so the
+# image carries the smallest possible closure: shared-core (for the template
+# bundles it renders — the bundle is the single source of a released file, never
+# a request body), the service itself, and google-auth-library for the Hosting
+# API token. No agent SDK, no LLM client, no gateway code.
+#
+# Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
+# multi-arch index digest for node:22-alpine.
+ARG NODE_IMAGE=node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
+
+FROM ${NODE_IMAGE} AS builder
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package.json package-lock.json ./
+COPY packages/shared-core/package.json ./packages/shared-core/package.json
+COPY services/guest-deployer/package.json ./services/guest-deployer/package.json
+
+RUN npm ci --omit=dev \
+      --workspace=@software-factory/shared-core \
+      --workspace=@software-factory/guest-deployer \
+      --include-workspace-root=false \
+    && npm cache clean --force
+
+COPY packages/shared-core/ ./packages/shared-core/
+COPY services/guest-deployer/ ./services/guest-deployer/
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    SOFTWARE_FACTORY_DATA_DIR=/tmp
+
+COPY --from=builder --chown=node:node /app /app
+
+USER node
+
+EXPOSE 8080
+
+CMD ["node", "services/guest-deployer/src/server.js"]

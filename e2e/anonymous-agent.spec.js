@@ -1,6 +1,7 @@
 'use strict';
 
 const { test, expect } = require('@playwright/test');
+const { GUEST_DEMO } = require('../packages/shared-core/src/agent/guest-demo/catalog');
 
 function json(route, body, status = 200) {
   return route.fulfill({
@@ -74,6 +75,14 @@ function isShellRequest(call) {
     || call.pathname.startsWith('/api/locale/');
 }
 
+// The guest demo is served by the real gateway in these runs: the catalogue, the
+// id validation and the CR rendering are server-side decisions, and a browser
+// stub would only prove the SPA agrees with itself. It is still not a tenant
+// call, so it is excluded from the workspace-only assertions below.
+function isGuestDemoRequest(call) {
+  return call.pathname.startsWith('/api/guest/demo/');
+}
+
 function isTenantPrivateRequest(call) {
   if (call.pathname === '/api/agent/knowledge-search') return false;
   return call.pathname.startsWith('/api/agent/')
@@ -108,18 +117,21 @@ async function settlePublishedWork(page) {
   }));
 }
 
-async function installSignedOutHarness(page, { firstPrivateRequestIs401 = false } = {}) {
+async function installSignedOutHarness(page, { firstPrivateRequestIs401 = false, reviewed = true } = {}) {
   const requests = [];
   let sentAuthenticationRequired = false;
 
-  await page.addInitScript(() => {
+  await page.addInitScript(([skipOnboarding]) => {
     localStorage.setItem('ai-fleet.locale', 'en');
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
+    // The first-visit dialog is a modal and it is covered by its own test below;
+    // the rest of the file wants the workspace underneath it.
+    if (skipOnboarding) localStorage.setItem('aiFleetGuestOnboarding', 'reviewed');
     window.__anonymousAuthRequiredEvents = 0;
     window.addEventListener('software-factory:auth-required', () => {
       window.__anonymousAuthRequiredEvents += 1;
     });
-  });
+  }, [reviewed]);
   await installFirebaseAssets(page, SIGNED_OUT_FIREBASE_STUB);
 
   await page.route('**/api/**', (route) => {
@@ -127,6 +139,7 @@ async function installSignedOutHarness(page, { firstPrivateRequestIs401 = false 
     requests.push(call);
 
     if (call.pathname === '/api/auth/config') return json(route, authConfig());
+    if (isGuestDemoRequest(call)) return route.fallback();
     if (call.pathname === '/api/config') {
       return json(route, { authenticated: false, status: 'shared', gatewayUrl: '', orgName: '' });
     }
@@ -178,14 +191,41 @@ async function openPublicAgent(page) {
   await expect(workspace).toBeVisible();
   await expect(workspace).toHaveAttribute('data-agent-scaffold', 'public');
   await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
-  await expect(page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' })).toBeEnabled();
+  // The contract this view exists for: a guest clicks, and cannot type.
+  await expect(page.locator('[data-guest-composer]')).toBeVisible();
+  await expect(page.locator('[data-guest-composer] [role=textbox]')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' })).toHaveCount(0);
+  await expect(page.locator('[data-guest-command-id]').first()).toBeVisible();
   await settlePublishedWork(page);
 }
 
-async function sendAgentRequest(page, text) {
-  const composer = page.getByRole('textbox', { name: 'Ask or act from the Agent omnibox' });
-  await composer.fill(text);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+function starter(page, commandId) {
+  return page.locator(`[data-guest-command-id="${commandId}"]`);
+}
+
+function answer(page, answerId) {
+  return page.locator(`.guest-followup-actions [data-guest-answer-id="${answerId}"]`);
+}
+
+/** Click a starter, then each answer in turn, to walk the scripted tree. */
+async function clickGuestPath(page, commandId, answerIds = []) {
+  await starter(page, commandId).click();
+  await expect(page.locator('.guest-question').last()).toBeVisible();
+  for (const answerId of answerIds) {
+    await answer(page, answerId).click();
+    await settlePublishedWork(page);
+  }
+}
+
+/** The query the catalogue ships for a documentation answer — a drift guard, not a copy. */
+function docsQuery(answerId) {
+  const answer = GUEST_DEMO.nodes['docs.topic'].answers.find((option) => option.id === answerId);
+  if (!answer || !answer.query) throw new Error(`the guest catalogue no longer offers "${answerId}" as a documentation answer`);
+  return answer.query;
+}
+
+function guestSessionId(page) {
+  return page.evaluate(() => sessionStorage.getItem('aiFleetGuestSession'));
 }
 
 test.describe('anonymous Firebase Agent boundary', () => {
@@ -200,38 +240,130 @@ test.describe('anonymous Firebase Agent boundary', () => {
     await expect(page).toHaveURL(/#\/agent$/);
   });
 
-  test('public knowledge search uses only the reviewed documentation endpoint', async ({ page }) => {
+  test('the documentation starter reaches the one public read endpoint with the server query', async ({ page }) => {
     const harness = await installSignedOutHarness(page);
     await openPublicAgent(page);
     harness.resetRequests();
 
-    const query = 'Search the docs for ADLC human approval';
-    await sendAgentRequest(page, query);
-    await expect(page.locator('.intent-message[data-agent-intent="knowledge"]')).toBeVisible();
-    await settlePublishedWork(page);
+    await clickGuestPath(page, 'gcmd.docs-search', ['gans.docs.topic.egress']);
+    await expect(page.locator('.guest-docs-results').first()).toBeVisible();
 
-    const workspaceCalls = harness.requests.filter((call) => !isShellRequest(call));
+    const workspaceCalls = harness.requests.filter((call) => !isShellRequest(call) && !isGuestDemoRequest(call));
     expect(workspaceCalls.map(callLabel)).toEqual(['POST /api/agent/knowledge-search']);
-    expect(workspaceCalls[0].body).toEqual({ query });
-    await expect(page.locator('#agent-details-panel [data-panel-section="matches"]')).toContainText('Public ADLC guide');
+    // The visitor never typed this: the query is the catalogue's own, so the one
+    // open endpoint cannot be pointed at anything the demo did not choose.
+    expect(workspaceCalls[0].body).toEqual({ query: docsQuery('gans.docs.topic.egress') });
   });
 
-  test('public implementation intent stays read-only and explains that sign-in is required', async ({ page }) => {
+  test('a starter click runs the scripted flow and renders the CR set without a tenant call', async ({ page }) => {
     const harness = await installSignedOutHarness(page);
     await openPublicAgent(page);
     harness.resetRequests();
 
-    await sendAgentRequest(page, 'Implement a retry button in the failed-run screen');
-    await expect(page.locator('.intent-message[data-agent-intent="implementation"]')).toBeVisible();
-    await settlePublishedWork(page);
+    await clickGuestPath(page, 'gcmd.helloworld', ['gans.helloworld.stack.node', 'gans.helloworld.theme.indigo']);
+
+    const flow = page.locator('.guest-flow');
+    await expect(flow).toBeVisible();
+    await expect(flow.locator('[data-guest-demo-step="deploy"]')).toContainText('Deploy as a webapp');
+    await expect(flow.locator('.guest-demo-simulated')).toContainText('nothing was applied to a cluster');
+    await expect(flow.locator('[data-guest-crset]')).toContainText('kind: AgentTemplate');
+    // No preview broker is configured on the local stack, so the honest answer is
+    // "skipped" — the step must not invent an address that goes nowhere.
+    await expect(flow.locator('[data-guest-demo-step="live-url"]')).toHaveClass(/status-skipped/);
+    await expect(flow.locator('[data-guest-preview-link]')).toHaveCount(0);
 
     const protectedOrMutating = harness.requests.filter((call) => (
-      isTenantPrivateRequest(call) || (call.method !== 'GET' && call.pathname !== '/api/agent/knowledge-search')
+      isTenantPrivateRequest(call)
+      || (call.method !== 'GET' && !isGuestDemoRequest(call) && call.pathname !== '/api/agent/knowledge-search')
     ));
     expect(protectedOrMutating.map(callLabel)).toEqual([]);
-    await expect(
-      page.locator('.conversation-stream, #agent-details-panel').getByText(/sign in/i).first()
-    ).toBeVisible();
+  });
+
+  test('two starter clicks are two sessions, and neither one errors', async ({ page }) => {
+    await installSignedOutHarness(page);
+    await openPublicAgent(page);
+
+    await starter(page, 'gcmd.helloworld').click();
+    await expect(page.locator('[data-guest-answer-id="gans.helloworld.stack.node"]')).toBeVisible();
+    const first = await guestSessionId(page);
+
+    await starter(page, 'gcmd.tictactoe').click();
+    // One id, not the prefix: the theme question renders two fixed answers, and a
+    // prefix locator fails strict mode rather than proving anything.
+    await expect(answer(page, 'gans.tictactoe.theme.classic')).toBeVisible();
+    const second = await guestSessionId(page);
+
+    expect(first).toMatch(/^gcs_/);
+    expect(second).toMatch(/^gcs_/);
+    expect(second).not.toEqual(first, 'a second click opens a second session rather than erroring');
+  });
+
+  test('a hand-crafted command id is refused by the server and stores no session', async ({ page }) => {
+    await installSignedOutHarness(page);
+    await openPublicAgent(page);
+
+    const outcome = await page.evaluate(async () => {
+      const response = await fetch('/api/guest/demo/command', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ commandId: '../../etc/passwd' }),
+      });
+      return { status: response.status, cacheControl: response.headers.get('cache-control'), body: await response.json() };
+    });
+    expect(outcome.status).toBe(400);
+    expect(outcome.body.code).toBe('guest_command_unknown');
+    expect(outcome.cacheControl).toBe('no-store');
+    expect(await guestSessionId(page)).toBe(null);
+    await expect(starter(page, 'gcmd.helloworld')).toBeEnabled();
+  });
+
+  test('the guest notices state the restriction, the non-retrieval, and the retention window', async ({ page }) => {
+    await installSignedOutHarness(page);
+    await openPublicAgent(page);
+
+    await expect(page.locator('[data-guest-notice="restricted"]').first()).toContainText(/guest/i);
+    await expect(page.locator('.guest-footer-note')).toContainText(/cannot be retrieved/i);
+    // The number is the server's, quoted from the configured window: the copy a
+    // visitor reads has to be the retention the sweep actually honours.
+    await expect(page.locator('[data-guest-notice="retention"]').first()).toContainText(/1 day/);
+    await expect(page.locator('[data-guest-notice]')).not.toHaveCount(0);
+  });
+
+  test('the first-visit dialog explains the demo and its two exits mean what they say', async ({ page }) => {
+    await installSignedOutHarness(page, { reviewed: false });
+    await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+
+    const dialog = page.locator('#guest-onboarding-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('#guest-onboarding-reviewed')).toBeVisible();
+
+    // Esc is a skip: nobody consents to "I have read this" by pressing Escape.
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await expect(page.locator('[data-guest-composer]')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('aiFleetGuestOnboarding'))).toBe(null,
+      'a skip must not be written to the device store');
+
+    // Skipped is per-tab, so the same tab reloading stays quiet and the composer
+    // is immediately usable.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(dialog).not.toBeVisible();
+    await expect(starter(page, 'gcmd.helloworld')).toBeVisible();
+  });
+
+  test('ticking reviewed closes the dialog for the device', async ({ page }) => {
+    await installSignedOutHarness(page, { reviewed: false });
+    await page.goto('/#/agent', { waitUntil: 'domcontentloaded' });
+
+    const dialog = page.locator('#guest-onboarding-dialog');
+    await expect(dialog).toBeVisible();
+    await page.check('#guest-onboarding-reviewed');
+    await dialog.locator('[data-guest-onboarding-done]').click();
+    await expect(dialog).not.toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('aiFleetGuestOnboarding'))).toBe('reviewed');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#guest-onboarding-dialog')).not.toBeVisible();
   });
 
   test('direct Agent jobs navigation is hidden and gated for a public visitor', async ({ page }) => {

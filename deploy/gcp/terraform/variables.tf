@@ -319,6 +319,155 @@ variable "proxy_image_tag" {
   default     = ""
 }
 
+variable "guest_demo_enabled" {
+  type        = bool
+  description = "Serve the click-only guest demo routes (/api/guest/demo/*). ON is the code default (packages/shared-core/src/config.js GUEST_DEMO.enabled); the routes stay guest-only either way, so this only hides the catalogue."
+  default     = true
+}
+
+variable "guest_deployer_enabled" {
+  type        = bool
+  description = "Deploy the standalone guest preview broker and let the gateway publish demo sites through it. OFF is deliberate: it needs a dedicated Firebase project (var.guest_firebase_project) and a versioned guest-deployer-internal-token secret before it can serve anything, and with the URL absent the gateway renders the preview step as skipped rather than half-deploying."
+  default     = false
+}
+
+variable "guest_service_name" {
+  type        = string
+  description = "Private Cloud Run service that owns the guest hosting credential and exposes only the IAM-gated guest-deploy RPCs. The gateway is its only caller."
+  default     = "guest-deployer"
+}
+
+variable "guest_image_tag" {
+  type        = string
+  description = "Image tag override for the guest preview broker. Empty falls back to image_tag."
+  default     = ""
+}
+
+variable "guest_deployer_min_instances" {
+  type        = number
+  description = "Minimum warm guest-broker instances. 0 is fine: a preview is a convenience and the gateway already degrades the step when the broker is cold, so unlike the stream-token broker this path has no strict deadline to miss."
+  default     = 0
+
+  validation {
+    condition     = var.guest_deployer_min_instances >= 0 && floor(var.guest_deployer_min_instances) == var.guest_deployer_min_instances
+    error_message = "guest_deployer_min_instances must be a non-negative integer."
+  }
+}
+
+variable "guest_firebase_project" {
+  type        = string
+  description = "Dedicated Firebase project for guest previews — NOT the app project. Hosting sites are capped per project and every preview is unauthenticated public content, so it lives on its own project where the broker's roles/firebase.hostingAdmin is scoped to one place. Required when guest_deployer_enabled."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.guest_firebase_project) == "" || can(regex("^[a-z][a-z0-9-]{4,61}[a-z0-9]$", trimspace(var.guest_firebase_project)))
+    error_message = "guest_firebase_project must be empty or a lowercase Firebase project id (5-63 characters, letters/digits/hyphens)."
+  }
+}
+
+variable "guest_firebase_site" {
+  type        = string
+  description = "Firebase Hosting site id inside guest_firebase_project that carries the guest previews."
+  default     = "guest-previews"
+}
+
+variable "guest_hosting_channel" {
+  type        = string
+  description = "Hosting channel the broker releases. Keep live: a preview URL the visitor is handed must be the channel a browser fetches by default."
+  default     = "live"
+}
+
+variable "guest_preview_base_url" {
+  type        = string
+  description = "Public origin a preview is served from. Empty derives https://<site>.web.app, which is a DIFFERENT origin from the app — required, because generated guest HTML must never run on the app origin. Set only when a custom cookieless domain is attached to the guest site."
+  default     = ""
+
+  validation {
+    condition     = trimspace(var.guest_preview_base_url) == "" || can(regex("^https://[^/?#@[:space:]]+$", trimspace(var.guest_preview_base_url)))
+    error_message = "guest_preview_base_url must be empty or an HTTPS origin without path, query, or fragment."
+  }
+}
+
+variable "guest_preview_ttl_ms" {
+  type        = number
+  description = "How long a guest preview stays in the released union. Must equal the gateway's GUEST_PREVIEW_TTL_MS: the session record and the hosting release are the same promise, and two values would mean the transcript outlives the site it links to."
+  default     = 86400000
+
+  validation {
+    condition     = var.guest_preview_ttl_ms > 0 && floor(var.guest_preview_ttl_ms) == var.guest_preview_ttl_ms
+    error_message = "guest_preview_ttl_ms must be a positive whole number of milliseconds."
+  }
+}
+
+variable "guest_worker_pool" {
+  type        = string
+  description = "WorkerPool name written into the simulated guest CR set. Must equal the config.js GUEST_DEMO.workerPool fallback and the name deploy/gcp/guest-worker-pool.sh creates — deploy/gcp/guest-worker-pool.test.js holds the three together. Guest capacity is a separate pool so a demo cannot contend with planner-pool."
+  default     = "guest-demo-pool"
+}
+
+variable "guest_session_ttl_ms" {
+  type        = number
+  description = "How long a guest transcript is kept by the gateway. Must equal guest_preview_ttl_ms and config.js GUEST_DEMO.sessionTtlMs; the visitor is told one number about both."
+  default     = 86400000
+
+  validation {
+    condition     = var.guest_session_ttl_ms > 0 && floor(var.guest_session_ttl_ms) == var.guest_session_ttl_ms
+    error_message = "guest_session_ttl_ms must be a positive whole number of milliseconds."
+  }
+}
+
+variable "guest_snapshot_location" {
+  type        = string
+  description = "Snapshot prefix written into the simulated guest CR set. Guest actors are never created, so this is documentation the visitor can read in the YAML — but it must still be a real-looking prefix, because the same renderer produces the planner pool's value."
+  default     = "s3://ate-snapshots/guest/"
+}
+
+variable "guest_max_messages" {
+  type        = number
+  description = "Transcript cap per guest session. The flow stops advancing at the cap and emits a sign-in step, so this is the demo's length limit as much as its memory limit."
+  default     = 40
+
+  validation {
+    condition     = var.guest_max_messages > 0 && floor(var.guest_max_messages) == var.guest_max_messages
+    error_message = "guest_max_messages must be a positive whole number."
+  }
+}
+
+variable "guest_max_sessions" {
+  type        = number
+  description = "Global cap on retained guest sessions, evicted oldest-expiry-first. This — not a per-visitor limit, which an address behind CGNAT cannot provide — is the durable bound on the collection."
+  default     = 5000
+
+  validation {
+    condition     = var.guest_max_sessions > 0 && floor(var.guest_max_sessions) == var.guest_max_sessions
+    error_message = "guest_max_sessions must be a positive whole number."
+  }
+}
+
+variable "rate_limit_guest_window_ms" {
+  type        = number
+  description = "Fixed window for the per-IP limit on the unauthenticated guest routes. Advisory: a corporate NAT puts many visitors behind one address, so the caps in config.js GUEST_DEMO are the durable bound."
+  default     = 60000
+}
+
+variable "rate_limit_guest_max" {
+  type        = number
+  description = "Requests per IP per window across the guest demo routes."
+  default     = 30
+}
+
+variable "rate_limit_knowledge_window_ms" {
+  type        = number
+  description = "Fixed window for the per-IP limit retro-fitted on the existing public knowledge-search endpoint."
+  default     = 60000
+}
+
+variable "rate_limit_knowledge_max" {
+  type        = number
+  description = "Requests per IP per window on POST /api/agent/knowledge-search. Tighter than the guest routes: it reaches the planner."
+  default     = 20
+}
+
 variable "omlx_proxy_upstream" {
   type        = string
   description = "Trusted operator-configured oMLX origin used only by egress proxy containers (for example http://omlx.internal:8000). Browser/request settings can never select this target. Empty disables oMLX in proxied cloud runtimes."

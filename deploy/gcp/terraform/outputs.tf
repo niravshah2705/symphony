@@ -22,6 +22,16 @@ output "stream_token_legacy_gateway_secret_access_enabled" {
   value       = var.stream_token_legacy_gateway_secret_access
 }
 
+output "guest_deployer_uri" {
+  description = "Private guest preview broker URL, or an empty string when guest_deployer_enabled is false. Only gateway-sa may invoke its deploy/release RPCs, and only the broker's own service account can write the guest hosting site."
+  value       = local.guest_deployer_enabled ? google_cloud_run_v2_service.guest_deployer[0].uri : ""
+}
+
+output "guest_preview_origin" {
+  description = "Origin guest demo sites are served from — a dedicated Firebase Hosting site on guest_firebase_project. Intentionally a different origin from the app: generated guest HTML is never served where the app's cookies live."
+  value       = local.guest_preview_origin
+}
+
 output "pipeline_orchestrator_uri" {
   description = "IAM-gated orchestrator URL — the browser agent surface, legacy planner queue, durable pipeline control plane, and substrate control plane all live on this one service."
   value       = google_cloud_run_v2_service.orchestrator.uri

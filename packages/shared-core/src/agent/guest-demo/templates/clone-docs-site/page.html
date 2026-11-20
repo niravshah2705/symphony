@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <p class="badge">{{ACCENT_NAME}} theme</p>
+  <h1>{{TITLE}}</h1>
+  <p class="lede">{{SUBTITLE}}</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Contents</h2>
+      <nav class="nav" style="flex-direction: column; align-items: flex-start;">
+{{SIDEBAR_LINKS}}
+      </nav>
+    </div>
+    <div class="card">
+      <h2>{{ARTICLE_HEADING}}</h2>
+      <p>{{ARTICLE_BODY}}</p>
+      <pre><code>{{CODE_SAMPLE}}</code></pre>
+      <p>{{PAGE_LINK}} {{ABOUT_LINK}}</p>
+    </div>
+  </div>
+  {{FOOTER}}
+</main>
+</body>
+</html>

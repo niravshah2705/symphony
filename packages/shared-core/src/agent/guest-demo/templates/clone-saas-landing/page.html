@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <p class="badge">{{ACCENT_NAME}} theme</p>
+  <h1>{{HEADLINE}}</h1>
+  <p class="lede">{{SUBTITLE}}</p>
+
+  <div class="toolbar">
+    <button type="button">Start a trial</button>
+    <button type="button" class="ghost">Book a demo</button>
+  </div>
+
+  <div class="grid">
+{{FEATURE_CARDS}}
+  </div>
+
+  <div class="card">
+    <h2>Pricing</h2>
+    <table>
+      <thead><tr><th>Plan</th><th>Price</th><th>Included</th></tr></thead>
+      <tbody>{{PRICING_ROWS}}</tbody>
+    </table>
+    <p>{{PAGE_LINK}} {{ABOUT_LINK}}</p>
+  </div>
+  {{FOOTER}}
+</main>
+</body>
+</html>

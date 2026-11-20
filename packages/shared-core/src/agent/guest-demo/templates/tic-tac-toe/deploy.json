@@ -1,0 +1,17 @@
+{
+  "label": "Tic-tac-toe",
+  "variant": "variant.json",
+  "tokens": {
+    "TITLE": "Tic-tac-toe",
+    "SUBTITLE": "A full nine-cell game with win detection, a draw state, and a reset — with or without an opponent.",
+    "OPPONENT_LABEL": "Two players",
+    "ABOUT_BODY": "Nine cells, eight winning lines, and a greedy opponent that wins or blocks when it can.",
+    "ABOUT_HOW": "Assembled from two clicks in the guest demo: the theme, then the mode. The board logic is first-party, not generated at runtime."
+  },
+  "files": [
+    { "path": "index.html", "src": "index.html" },
+    { "path": "app.js", "src": "app.js" },
+    { "path": "styles.css", "src": "../_shared/styles.css" },
+    { "path": "about.html", "src": "../_shared/about.html", "when": { "extra": ["page"] } }
+  ]
+}
