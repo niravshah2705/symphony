@@ -234,9 +234,9 @@ test('the ecc record agrees with the harness-rootfs sources.json', () => {
   assert.match(eccSourceAgreement(versionDrift, ECC_SOURCE).join('\n'), /versionRange/);
 });
 
-test('the catalog covers all seven packs the milestone tracks', () => {
+test('the catalog covers all eight packs the milestone tracks', () => {
   assert.deepEqual(CATALOG.plugins.map((p) => p.id).sort(), [
-    'agent-skills', 'code-review-graph', 'ecc', 'graphify', 'hallmark', 'spec-kit', 'superpowers',
+    'agent-skills', 'code-review-graph', 'ecc', 'egm', 'graphify', 'hallmark', 'spec-kit', 'superpowers',
   ]);
 });
 

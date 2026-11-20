@@ -35,6 +35,7 @@ typed.
 | plugin | [graphify](https://github.com/Graphify-Labs/graphify) | 0.9.112 | 0.9.112 | 0.9.112 | | |
 | plugin | [code-review-graph](https://github.com/tirth8205/code-review-graph) | 2.4.0 | 2.4.0 | 2.4.0 | | |
 | plugin | [hallmark](https://github.com/Nutlope/hallmark) | | 2.0.0 | 2.0.0 | | |
+| plugin | [egm](https://github.com/google/elephant-goldfish-model) | | 0.1.1 | 0.1.1 | | |
 | skill | [security-audit](https://github.com/cloudflare/security-audit-skill) | c1c8a8c14710 | c1c8a8c14710 | c1c8a8c14710 | | |
 
 (Columns `deepagent`, `antigravity`, `qodercli`, `pi`, `omp` are in the CSV and
@@ -51,7 +52,10 @@ Legend, from `STATUSES` in
 | `unsupported` | no cell value, and `blockedOn` names what would have to exist first |
 
 `ecc` is `bundled` on codex because PR #307/#308 built and mounted it; everything
-else in the matrix is `declared`.
+else in the matrix is `declared`. `egm` is `declared` *and* carries a
+`limitations` entry in each filled cell — its skills mount and read correctly,
+but the isolated reviewer session the workflow dispatches is not a capability
+either native engine has yet ([why that is a limit, not a gap](#a-packs-skills-are-not-always-the-whole-pack)).
 
 ## Three limits that decide the shape of the table
 
@@ -102,6 +106,39 @@ limitation cannot be encoded accidentally.
 `c1c8a8c14710`, the first twelve characters of the pin, because an unversioned
 upstream has nothing else to say and the artifact label *is* the pin.
 
+## A pack's skills are not always the whole pack
+
+The bundle a `FROM scratch` image carries is `plugin.json` + `skills/` (+
+`mcp.json`), which assumes each `SKILL.md` is self-contained. Review-and-design
+packs break that assumption: all seven of `egm`'s skills cite files outside
+`skills/` from the plugin root — four dispatch a reviewer prompt in `agents/`,
+three score against standards in `resources/document_standards/`, and every one
+points at an adaptation guide in `docs/*.md`. Mount `skills/` alone and the skill
+fails at the step that reads the missing file, which is a long way from the
+pack's `bundle.env`.
+
+`PLUGIN_EXTRA_PATHS` is how a pack declares those companions: space-separated,
+**upstream-relative** dirs or files, copied to the bundle root beside `skills/`.
+Four rules make the input safe enough to reach a published image:
+
+- an entry may not name `skills`, `plugin.json` or `mcp.json` — the composer
+  authors those at the root, and an upstream root `plugin.json` would silently
+  replace the manifest kagent reads;
+- absolute, `..`, leading `.`/`-` and anything outside `[a-zA-Z0-9._/-]` are
+  refused **before** the pin is fetched, so a bad spec leaves no partial tree;
+- depth is preserved (`docs/codex.md` lands at `bundle/docs/codex.md`, not at
+  the root) and extras are counted against kagent's entry and byte caps;
+- a symlink or a secret-shaped basename inside a declared path fails the compose
+  — the plain copy applies no deny list otherwise.
+
+Then the gate that proves the feature: "copied" is not "reachable", so every
+`SKILL.md` reference under a declared root must resolve inside the bundle. A
+reference the pack did *not* declare is logged rather than failed, because the
+same string can mean the user's own workspace — EGM's `docs/designs/<feature>.md`
+is its project output directory, and the 296 KB of the upstream's own design
+notes under that path are deliberately not shipped. The pack composes to 7
+skills, 88 entries and 400 KB.
+
 ## One version number, checked in four places
 
 The same string must appear as the upstream release at the pinned commit, the
@@ -140,7 +177,7 @@ a reviewed file.
 | `deploy/kagent/plugin-support.csv` | the generated matrix |
 | `deploy/kagent/select-published-rows.py` | decides which rows a merge republishes, for both tracks |
 | `deploy/kagent/pack-inputs.sh`, `skill-inputs.sh` | resolve one CSV row + `bundle.env` into composer inputs; local builds and CI both source them |
-| `deploy/kagent/ecc-plugin/compose-bundle.sh` | fetch the pin, apply the skills allowlist + overlay, author root `plugin.json`/`mcp.json` |
+| `deploy/kagent/ecc-plugin/compose-bundle.sh` | fetch the pin, apply the skills allowlist + overlay + the pack's declared root files, author root `plugin.json`/`mcp.json`, then check the bundle against kagent's caps |
 | `deploy/kagent/compose-skill-bundle.sh` | the skill-track equivalent: no `plugin.json`, no allowlist, entry-file and name checks |
 | `deploy/kagent/build-plugin-image.sh`, `build-skill-image.sh`, `ecc-plugin/build-ecc-plugin-image.sh` | kind builders: compose → `docker build --platform <node arch>` → push → read back the digest → in-cluster pull probe → stamp `build/*.local.yaml` |
 | `deploy/kagent/test-pack.sh` | the four mount layers for any (pack × CLI) from the catalogs; `--quick` skips the live turn, exit `0`/`1`/`2` |
@@ -154,21 +191,34 @@ a reviewed file.
 
 1. Clone upstream at a candidate commit; confirm the layout (`skills/*/SKILL.md`,
    a single `skill.md`, `templates/commands/*.md`), where its version is stated,
-   and whether it ships an `.mcp.json`.
+   whether it ships an `.mcp.json`, **and which files outside `skills/` its
+   `SKILL.md` files read** — `grep -rnoE '(\.\./\.\./|^[a-z_]+/)[A-Za-z0-9._/-]+'
+   skills/*/SKILL.md` at the clone. A pack that cites siblings is not
+   self-contained and needs `PLUGIN_EXTRA_PATHS` (step 3).
 2. Add the row to `plugins.csv` (or `skills.csv`) with the **full 40-hex** pin and
    `version_source`; keep `current: true` on exactly one row per pack.
 3. Create `deploy/kagent/<pack>/` with `bundle.env` (upstream skill path,
-   allowlist file, overlay dir, `mcp.json`, version source) and `skills.txt`, plus
-   `Dockerfile.<pack>-plugin` (`FROM scratch` + OCI labels).
+   allowlist file, overlay dir, `mcp.json`, version source, and the
+   upstream-relative `PLUGIN_EXTRA_PATHS` for any root-level companions) and
+   `skills.txt`, plus `Dockerfile.<pack>-plugin` (`FROM scratch` + OCI labels).
 4. Add the catalog record: versions list, icon, skills with `enabled` flags,
    `requirements` (`appliedTo` a harness runtime image), `promptAppend`, and the
-   `harnesses` cells with `status`/`engine`/`blockedOn`.
+   `harnesses` cells with `status`/`engine`/`blockedOn`. `status` describes what
+   the mounted bundle *does* on that CLI, so a pack whose workflow needs a
+   capability the engine lacks (isolated child agent sessions, hooks, commands)
+   stays `declared` with the gap in that cell's `limitations[]` — the skills
+   really mount, and `unsupported` would blank a cell that works and demand a
+   `blockedOn` that is not a missing artifact. Keep `promptAppend` free of any
+   promise the limitations contradict.
 5. Commit `public/icons/plugins/<pack>.svg` — an original geometric mark, never
    fetched from the vendor's site.
 6. `npm run plugins:seed && npm run plugins:manifests && npm run plugins:check &&
    npm run plugins:manifests:check`, then `bash deploy/kagent/test-pack.sh <pack>
    --quick`.
-7. Open the PR: the plan job validates every row (no publish), the merge to main
+7. Open the PR: the plan job validates every row and **dry-composes** each
+   selected bundle into the runner temp (no build, no push), so a bad allowlist
+   name or a `PLUGIN_EXTRA_PATHS` entry absent upstream fails as a red PR
+   instead of a failed merge build with an unstamped digest. The merge to main
    publishes the rows whose bytes moved, stamps the digest into the catalog, and
    regenerates the manifests. See [Publishing](#publishing-only-the-rows-whose-bytes-moved).
 
@@ -232,11 +282,26 @@ python3 deploy/kagent/select-published-rows.py --track plugin --mode changed \
 
 ## Not in this track yet
 
-- **`byo` runtime images.** `go/harness/<cli>/Dockerfile` and
-  `go/harness/runtime-images.csv` are the destination the catalog's
-  `requirements.appliedTo` strings point at; that directory does not exist in
-  this repository, so no `byo` cell is fillable and the requirement lines are
-  reviewed text, not built. Tracked as the runtime-image issue.
+- **`byo` runtime images.** The destination those strings point at is now part
+  real: `go/harness/` holds ten per-CLI Dockerfiles,
+  [`go/harness/runtime-images.csv`](../go/harness/runtime-images.csv) pins their
+  versions and `build-runtime-images.yml` publishes them. What is still missing
+  is the pack-track half — the paths the records actually name
+  (`go/harness/codex-sdk/`, `go/harness/dsh/`) are not among those ten, no
+  matrix cell renders a `byo` engine today, and no build consumes
+  `requirements.dockerfile[]`, so the requirement lines stay reviewed text.
+  Tracked as the runtime-image issue.
+- **Isolated child agent sessions.** A pack whose workflow dispatches a fresh
+  reviewer into a session of its own — EGM's `agents/*.md` prompts — mounts the
+  prompts but cannot run them that way. The root manifest we author carries a
+  `skills` key and nothing else, no engine reads an `agents/` directory, and
+  both native engines record Subagents as `◑` (shared local only / shared
+  agents, no child-approval) in
+  [`HARNESS_CAPABILITY_MATRIX.md`](./HARNESS_CAPABILITY_MATRIX.md). EGM is the
+  first pack where that cell is a functional limit rather than a
+  nice-to-have, so it ships `declared` with the gap in each cell's
+  `limitations[]`, and its `promptAppend` tells the agent to run the review
+  in-context and label it as such rather than imply fresh eyes.
 - **Live activation.** Nothing outside the generators and the store mirror reads
   these catalogs yet: a bundle reaches an agent because an operator applies the
   pack's four-CR set, not because a loader resolved it at run time. Wiring the

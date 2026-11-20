@@ -14,8 +14,9 @@
 #   PLUGIN=<row> . deploy/kagent/pack-inputs.sh      # REPO_ROOT must be set
 # Sets/exports: PLUGIN_REPO, PLUGIN_COMMIT, PLUGIN_VERSION, PLUGIN_NAME,
 #   PLUGIN_VERSION_SOURCE, PLUGIN_SKILLS_SRC, PLUGIN_SKILLS_LIST,
-#   PLUGIN_OVERLAY_DIR, PLUGIN_MCP_FILE, PLUGIN_EXCLUDES, PLUGIN_DESCRIPTION,
-#   and the row fields CSV_* (commit, version, image, dockerfile, current).
+#   PLUGIN_OVERLAY_DIR, PLUGIN_MCP_FILE, PLUGIN_EXCLUDES, PLUGIN_EXTRA_PATHS,
+#   PLUGIN_DESCRIPTION, and the row fields CSV_* (commit, version, image,
+#   dockerfile, current).
 set -euo pipefail
 
 [ "${BASH_SOURCE[0]}" != "$0" ] || { echo "pack-inputs.sh is sourced, not executed" >&2; exit 2; }
@@ -65,6 +66,12 @@ export PLUGIN_VERSION_SOURCE="${PLUGIN_VERSION_SOURCE:-${CSV_VERSION_SOURCE:-VER
 export PLUGIN_SKILLS_SRC="${PLUGIN_SKILLS_SRC:-skills}"
 export PLUGIN_DESCRIPTION
 export PLUGIN_EXCLUDES="${PLUGIN_EXCLUDES:-}"
+# Passed through raw, unlike the three below: those point at files in THIS
+# repository (an allowlist, an overlay tree, an mcp.json), while companion
+# paths are read out of the upstream checkout, so prefixing REPO_ROOT here
+# would ask the composer for <checkout>/Users/... and fail on a path that
+# looks self-evidently correct in bundle.env.
+export PLUGIN_EXTRA_PATHS="${PLUGIN_EXTRA_PATHS:-}"
 export PLUGIN_SKILLS_LIST="$(resolve "${PLUGIN_SKILLS_LIST-}")"
 export PLUGIN_OVERLAY_DIR="$(resolve "${PLUGIN_OVERLAY_DIR-}")"
 export PLUGIN_MCP_FILE="$(resolve "${PLUGIN_MCP_FILE-}")"

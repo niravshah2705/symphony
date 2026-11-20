@@ -570,6 +570,102 @@
           ]
         }
       }
+    },
+    {
+      "id": "egm",
+      "label": "Elephant-Goldfish Model",
+      "upstream": {
+        "repository": "google/elephant-goldfish-model",
+        "url": "https://github.com/google/elephant-goldfish-model.git",
+        "release": "0.1.1",
+        "releasedAt": "2026-11-06",
+        "commit": "dea7761de06ce5b51c177ebb9bba0469f24af5a4",
+        "license": "Apache-2.0",
+        "versionSource": "plugin.json"
+      },
+      "bundle": {
+        "version": "0.1.1",
+        "image": "ghcr.io/niravshah2705/symphony/egm-plugin",
+        "dockerfile": "deploy/kagent/egm/Dockerfile.egm-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/egm/egm-codex.yaml",
+          "claude": "deploy/kagent/egm/egm-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": null
+      },
+      "versions": [
+        { "version": "0.1.1", "releasedAt": "2026-11-06", "commit": "dea7761de06ce5b51c177ebb9bba0469f24af5a4" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/egm.svg",
+        "href": "/icons/plugins/egm.svg"
+      },
+      "skills": [
+        { "name": "egm-bootstrap", "enabled": true },
+        { "name": "egm-brainstorm", "enabled": true },
+        { "name": "egm-draft", "enabled": true },
+        { "name": "egm-drift-report", "enabled": true },
+        { "name": "egm-resolve", "enabled": true },
+        { "name": "egm-review", "enabled": true },
+        { "name": "egm-review-loop", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["git"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": [],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Route design work by stage: egm-brainstorm for a concepts brief, egm-draft to turn it into a specification, egm-review or egm-review-loop on a document that already exists, egm-drift-report to check documents against the code. The pack's reviewer prompts and scoring standards mount beside skills/ at agents/ and resources/document_standards/ — read the named reviewer's prompt and the standard it applies before dispatching it. When the session cannot start an isolated child agent, run the review in this context, say so in the findings, and label it single-context rather than fresh eyes.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "0.1.1",
+          "cliKey": "codex",
+          "mcp": false,
+          "limitations": [
+            "EGM's method is a reviewer that never saw the draft. The bundle ships those prompts as data under agents/, but the root manifest we author carries a skills entry only and codex advertises shared agents with no child approval and no dedicated agents, so a review runs in the parent context until an isolated child session exists.",
+            "docs/claude.md, docs/codex.md and docs/harnesses.md are the pack's own CLI adaptation guides: they describe upstream CLI features, not this sandbox, and mount as reference text."
+          ]
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "0.1.1",
+          "cliKey": "claude",
+          "mcp": false,
+          "limitations": [
+            "EGM's method is a reviewer that never saw the draft. The bundle ships those prompts as data under agents/, but the root manifest we author carries a skills entry only, and claude runs shared local subagents with dedicated and nested subagents still listed as not yet supported, so a review runs in the parent context.",
+            "docs/claude.md, docs/codex.md and docs/harnesses.md are the pack's own CLI adaptation guides: they describe upstream CLI features, not this sandbox, and mount as reference text."
+          ]
+        },
+        "opencode": {
+          "status": "unsupported",
+          "engine": "byo",
+          "cliKey": "opencode",
+          "mcp": false,
+          "blockedOn": "go/harness/opencode/Dockerfile",
+          "limitations": [
+            "EGM ships an opencode adapter upstream, but the kagent engine enum has no opencode, so the cell needs a byo runtime image that also runs in-cluster."
+          ]
+        },
+        "antigravity": {
+          "status": "unsupported",
+          "engine": "byo",
+          "cliKey": "antigravity",
+          "mcp": false,
+          "blockedOn": "go/harness/antigravity/Dockerfile",
+          "limitations": [
+            "Antigravity is EGM's first-party target (`agy plugin install`), but the kagent engine enum has no antigravity, so it needs a byo runtime image before it can hold a cell."
+          ]
+        }
+      }
     }
   ]
 }
