@@ -1,0 +1,1318 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/flexprice/flexprice/internal/clock"
+
+	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
+
+	"github.com/flexprice/flexprice/internal/activity"
+	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/invoice"
+	"github.com/flexprice/flexprice/internal/domain/payment"
+	"github.com/flexprice/flexprice/internal/domain/wallet"
+	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/integration/nomod"
+	"github.com/flexprice/flexprice/internal/integration/payments"
+	"github.com/flexprice/flexprice/internal/integration/razorpay"
+	"github.com/flexprice/flexprice/internal/integration/stripe"
+	"github.com/flexprice/flexprice/internal/interfaces"
+	temporalmodels "github.com/flexprice/flexprice/internal/temporal/models"
+	temporalservice "github.com/flexprice/flexprice/internal/temporal/service"
+	"github.com/flexprice/flexprice/internal/types"
+)
+
+type PaymentProcessorService interface {
+	ProcessPayment(ctx context.Context, id string) (*payment.Payment, error)
+	// DispatchMarkPaid notifies the provider integrations holding a copy of the invoice
+	// (Zoho Books, Whop) that it has been paid in FlexPrice.
+	DispatchMarkPaid(ctx context.Context, invoiceID string)
+}
+
+type paymentProcessor struct {
+	*paymentService
+}
+
+func NewPaymentProcessorService(params ServiceParams) PaymentProcessorService {
+	return &paymentProcessor{
+		paymentService: NewPaymentService(params).(*paymentService),
+	}
+}
+
+func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*payment.Payment, error) {
+	paymentObj, err := p.PaymentRepo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = NewBillingEntityService(p.ServiceParams).ScopeToPayment(ctx, paymentObj)
+	if err != nil {
+		return paymentObj, err
+	}
+
+	// For payment links, accept both INITIATED and PENDING statuses
+	// For other payment methods, only accept PENDING status
+	if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+		if paymentObj.PaymentStatus != types.PaymentStatusInitiated && paymentObj.PaymentStatus != types.PaymentStatusPending {
+			return paymentObj, ierr.NewError("payment is not in initiated or pending state").
+				WithHint("Invalid payment status for processing payment link").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+					"status":     paymentObj.PaymentStatus,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
+	} else if paymentObj.SettlesByWebhook() {
+		// PENDING means the gateway already has the charge; processing it again would charge twice.
+		if paymentObj.PaymentStatus != types.PaymentStatusInitiated {
+			return paymentObj, ierr.NewError("payment is not in initiated state").
+				WithHint("This charge has already been submitted to the gateway").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+					"status":     paymentObj.PaymentStatus,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
+	} else {
+		// If payment is not in pending state, return error
+		if paymentObj.PaymentStatus != types.PaymentStatusPending {
+			return paymentObj, ierr.NewError("payment is not in pending state").
+				WithHint("Invalid payment status for processing payment").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+					"status":     paymentObj.PaymentStatus,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
+	}
+
+	// A payment link already PENDING is out with the customer; any other payment moves to processing here.
+	// TODO: take a lock on the payment object here to avoid race conditions
+	statusBefore := paymentObj.PaymentStatus
+	starting := paymentObj.PaymentMethodType != types.PaymentMethodTypePaymentLink ||
+		paymentObj.PaymentStatus == types.PaymentStatusInitiated
+	// The invoice lock makes a billing-terms edit either change the draft before this freshness check or see this
+	// payment and wait.
+	err = p.DB.WithTx(ctx, func(txCtx context.Context) error {
+		if paymentObj.DestinationType == types.PaymentDestinationTypeInvoice {
+			invoices := NewInvoiceService(p.ServiceParams).(*invoiceService)
+			if err := invoices.lockInvoice(txCtx, paymentObj.DestinationID); err != nil {
+				return err
+			}
+
+			inv, err := p.InvoiceRepo.Get(txCtx, paymentObj.DestinationID)
+			if err != nil {
+				return err
+			}
+
+			if inv.InvoiceStatus == types.InvoiceStatusVoided {
+				return errInvoiceVoided(inv.ID)
+			}
+
+			if err := invoices.requireFreshDraft(txCtx, inv); err != nil {
+				return err
+			}
+		}
+
+		if !starting {
+			return nil
+		}
+
+		paymentObj.PaymentStatus = types.PaymentStatusProcessing
+		paymentObj.UpdatedAt = clock.Now()
+		return p.PaymentRepo.Update(txCtx, paymentObj)
+	})
+	if err != nil {
+		return paymentObj, err
+	}
+	if starting {
+		p.recordPaymentTransition(ctx, paymentObj, statusBefore)
+		p.publishSystemEvent(ctx, types.WebhookEventPaymentPending, paymentObj.ID)
+	}
+
+	// Process payment based on payment method type
+	var processErr error
+	settledByWebhook := false
+	switch paymentObj.PaymentMethodType {
+	case types.PaymentMethodTypeOffline:
+		// For offline payments, we just mark them as succeeded immediately
+		processErr = nil
+	case types.PaymentMethodTypeCredits:
+		processErr = p.handleCreditsPayment(ctx, paymentObj)
+	case types.PaymentMethodTypePaymentLink:
+		// For payment links, create the actual payment link
+		// If status is already PENDING, skip creation
+		if paymentObj.PaymentStatus == types.PaymentStatusPending {
+			processErr = nil // Already processed
+		} else {
+			processErr = p.handlePaymentLinkCreation(ctx, paymentObj)
+		}
+	case types.PaymentMethodTypeCard, types.PaymentMethodTypeUPI, types.PaymentMethodTypeENACH:
+		if paymentObj.DestinationType == types.PaymentDestinationTypeInvoice {
+			lock, lockErr := payments.LockInvoiceCharge(ctx, p.Locker, p.PaymentRepo, paymentObj.EnvironmentID, paymentObj.DestinationID, paymentObj.ID)
+			if lockErr != nil {
+				processErr = lockErr
+				break
+			}
+			defer func() {
+				if releaseErr := lock.Release(ctx); releaseErr != nil {
+					p.Logger.Error(ctx, "failed to release invoice charge lock", "invoice_id", paymentObj.DestinationID, "error", releaseErr)
+				}
+			}()
+		}
+		gateway := types.PaymentGatewayType(lo.FromPtr(paymentObj.PaymentGateway))
+		switch {
+		case !lo.Contains(dto.AllowedMethodsPerGateway(gateway), paymentObj.PaymentMethodType):
+			processErr = ierr.NewErrorf("%s payments are not supported on this payment gateway", paymentObj.PaymentMethodType).
+				WithHint("CARD supports stripe (default) and razorpay. UPI and ENACH support razorpay only").
+				Mark(ierr.ErrValidation)
+		case gateway == types.PaymentGatewayTypeRazorpay:
+			processErr = p.handleRazorpayTokenCharge(ctx, paymentObj)
+			settledByWebhook = true
+		default:
+			processErr = p.handleCardPayment(ctx, paymentObj)
+		}
+	case types.PaymentMethodTypeACH:
+		// TODO: Implement ACH payment processing
+		processErr = ierr.NewError("ACH payment processing not implemented").
+			WithHint("ACH payment processing is not supported yet").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	default:
+		processErr = ierr.NewError(fmt.Sprintf("unsupported payment method type: %s", paymentObj.PaymentMethodType)).
+			WithHint("Unsupported payment method type").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	statusBeforeOutcome := paymentObj.PaymentStatus
+	// Update payment status based on processing result
+	if processErr != nil {
+		// For payment links, if the error occurred during payment link creation,
+		// keep the status as INITIATED instead of marking as FAILED
+		if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+			// Keep status as INITIATED when Stripe SDK fails for payment links
+			p.Logger.Info(ctx, "keeping payment link as initiated due to Stripe SDK failure",
+				"payment_id", paymentObj.ID,
+				"status", paymentObj.PaymentStatus,
+				"error", processErr.Error())
+			// Reset status back to INITIATED if it was changed to PROCESSING
+			if paymentObj.PaymentStatus == types.PaymentStatusProcessing {
+				paymentObj.PaymentStatus = types.PaymentStatusInitiated
+			}
+			// Don't set failed_at or error_message for payment links
+		} else {
+			// For other cases, mark as failed
+			paymentObj.PaymentStatus = types.PaymentStatusFailed
+			errMsg := processErr.Error()
+			paymentObj.ErrorMessage = lo.ToPtr(errMsg)
+			failedAt := clock.Now()
+			paymentObj.FailedAt = &failedAt
+		}
+	} else if settledByWebhook {
+		paymentObj.PaymentStatus = types.PaymentStatusPending
+		paymentObj.SucceededAt = nil
+	} else {
+		// For payment links, keep as pending until external payment completion
+		if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+			paymentObj.PaymentStatus = types.PaymentStatusPending
+			paymentObj.SucceededAt = nil // Keep succeeded_at as nil
+			p.Logger.Info(ctx, "keeping payment link as pending", "payment_id", paymentObj.ID, "status", paymentObj.PaymentStatus)
+			p.publishSystemEvent(ctx, types.WebhookEventPaymentPending, paymentObj.ID)
+		} else {
+			paymentObj.PaymentStatus = types.PaymentStatusSucceeded
+			succeededAt := clock.Now()
+			paymentObj.SucceededAt = &succeededAt
+			p.Logger.Info(ctx, "marking payment as succeeded", "payment_id", paymentObj.ID, "status", paymentObj.PaymentStatus)
+		}
+	}
+
+	paymentObj.UpdatedAt = clock.Now()
+	ctx = withPaymentStatusAction(ctx, paymentObj.ID, statusBeforeOutcome, paymentObj.PaymentStatus)
+	if settledByWebhook && processErr == nil {
+		// A fast webhook may already have settled the charge; keep its result.
+		if err := p.PaymentRepo.UpdateWithExpectedStatus(ctx, paymentObj, types.PaymentStatusProcessing); err != nil {
+			if ierr.IsVersionConflict(err) {
+				return p.PaymentRepo.Get(ctx, paymentObj.ID)
+			}
+			return paymentObj, err
+		}
+		p.recordPaymentTransition(ctx, paymentObj, statusBeforeOutcome)
+		return paymentObj, nil
+	}
+	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+		return paymentObj, err
+	}
+	p.recordPaymentTransition(ctx, paymentObj, statusBeforeOutcome)
+
+	// If payment succeeded, handle post-processing
+	if paymentObj.PaymentStatus == types.PaymentStatusSucceeded {
+		postPaymentJournal(ctx, p.ServiceParams, paymentObj.ID)
+		if err := p.handlePostProcessing(ctx, paymentObj); err != nil {
+			p.Logger.Error(ctx, "failed to handle post-processing", "error", err, "payment_id", paymentObj.ID)
+			// Note: We don't return this error as the payment itself was successful
+		}
+	}
+
+	// Checked even when saving the link failed: the link exists at the gateway either way.
+	if paymentObj.PaymentMethodType == types.PaymentMethodTypePaymentLink &&
+		paymentObj.DestinationType == types.PaymentDestinationTypeInvoice &&
+		lo.FromPtr(paymentObj.GatewayTrackingID) != "" {
+		if closed, err := p.closeLinkIfInvoiceVoided(ctx, paymentObj); err != nil {
+			return closed, err
+		}
+	}
+
+	if processErr != nil {
+		return paymentObj, processErr
+	}
+
+	return paymentObj, nil
+}
+
+// closeLinkIfInvoiceVoided closes a link whose invoice was voided while the link was being created.
+func (p *paymentProcessor) closeLinkIfInvoiceVoided(ctx context.Context, paymentObj *payment.Payment) (*payment.Payment, error) {
+	inv, err := p.InvoiceRepo.Get(ctx, paymentObj.DestinationID)
+	if err != nil {
+		p.Logger.Error(ctx, "failed to recheck invoice after creating payment link",
+			"error", err, "payment_id", paymentObj.ID, "invoice_id", paymentObj.DestinationID)
+		return paymentObj, nil
+	}
+	if inv.InvoiceStatus != types.InvoiceStatusVoided {
+		return paymentObj, nil
+	}
+	if err := NewPaymentService(p.ServiceParams).(*paymentService).voidOpenPaymentLinks(ctx, inv.ID); err != nil {
+		p.Logger.Error(ctx, "failed to close payment link created on a voided invoice",
+			"error", err, "payment_id", paymentObj.ID, "invoice_id", inv.ID)
+	}
+	if refreshed, err := p.PaymentRepo.Get(ctx, paymentObj.ID); err == nil {
+		paymentObj = refreshed
+	}
+	return paymentObj, errInvoiceVoided(inv.ID)
+}
+
+func (p *paymentProcessor) handlePaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment) error {
+	// Get the invoice to get customer information
+	invoice, err := p.InvoiceRepo.Get(ctx, paymentObj.DestinationID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get invoice for payment link creation").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+				"invoice_id": paymentObj.DestinationID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Determine which gateway to use based on payment_gateway field
+	gatewayType := types.PaymentGatewayTypeStripe // Default to Stripe for backward compatibility
+	if paymentObj.PaymentGateway != nil && *paymentObj.PaymentGateway != "" {
+		gatewayType = types.PaymentGatewayType(*paymentObj.PaymentGateway)
+	}
+
+	p.Logger.Info(ctx, "creating payment link",
+		"payment_id", paymentObj.ID,
+		"gateway_type", gatewayType)
+
+	// Route to appropriate gateway
+	switch gatewayType {
+	case types.PaymentGatewayTypeStripe:
+		return p.handleStripePaymentLinkCreation(ctx, paymentObj, invoice)
+	case types.PaymentGatewayTypeRazorpay:
+		return p.handleRazorpayPaymentLinkCreation(ctx, paymentObj, invoice)
+	case types.PaymentGatewayTypeNomod:
+		return p.handleNomodPaymentLinkCreation(ctx, paymentObj, invoice)
+	case types.PaymentGatewayTypeChargebee:
+		return p.handleChargebeePaymentLinkCreation(ctx, paymentObj, invoice)
+	default:
+		return ierr.NewError("unsupported payment gateway").
+			WithHint("Payment gateway not supported for payment links").
+			WithReportableDetails(map[string]interface{}{
+				"payment_gateway": gatewayType,
+				"payment_id":      paymentObj.ID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+}
+
+func (p *paymentProcessor) handleStripePaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment, invoice *invoice.Invoice) error {
+	// Extract success URL and cancel URL from gateway metadata
+	successURL := ""
+	cancelURL := ""
+	if paymentObj.GatewayMetadata != nil {
+		if url, exists := paymentObj.GatewayMetadata["success_url"]; exists {
+			successURL = url
+		}
+		if url, exists := paymentObj.GatewayMetadata["cancel_url"]; exists {
+			cancelURL = url
+		}
+	}
+
+	// Prepare metadata for payment link request
+	linkMetadata := types.Metadata{}
+	if paymentObj.Metadata != nil {
+		// Copy metadata but exclude connection-related fields (internal use only)
+		for k, v := range paymentObj.Metadata {
+			if k != "connection_id" && k != "connection_name" {
+				linkMetadata[k] = v
+			}
+		}
+	}
+
+	// Add FlexPrice payment ID to metadata for new payment_intent.succeeded webhook
+	linkMetadata["flexprice_payment_id"] = paymentObj.ID
+
+	// Convert to Stripe payment link request
+	paymentLinkReq := &stripe.CreateStripePaymentLinkRequest{
+		InvoiceID:  paymentObj.DestinationID,
+		CustomerID: invoice.CustomerID,
+		Amount:     paymentObj.Amount,
+		Currency:   paymentObj.Currency,
+		SuccessURL: successURL,
+		CancelURL:  cancelURL,
+		SaveCardAndMakeDefault: func() bool {
+			if paymentObj.GatewayMetadata != nil {
+				if saveCardStr, exists := paymentObj.GatewayMetadata["save_card_and_make_default"]; exists {
+					return saveCardStr == "true"
+				}
+			}
+			return false
+		}(),
+		Metadata:               linkMetadata,
+		PaymentID:              paymentObj.ID,
+		TaxIDCollectionEnabled: paymentObj.GatewayMetadata["tax_id_collection_enabled"] == "true",
+	}
+
+	// Get Stripe integration for creating payment link
+	stripeIntegration, err := p.IntegrationFactory.GetStripeIntegration(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get Stripe integration").
+			Mark(ierr.ErrSystem)
+	}
+
+	customerService := NewCustomerService(p.ServiceParams)
+	invoiceService := NewInvoiceService(p.ServiceParams)
+
+	paymentLinkResp, err := stripeIntegration.PaymentSvc.CreatePaymentLink(ctx, paymentLinkReq, customerService, invoiceService)
+	if err != nil {
+		// If Stripe SDK fails, keep payment status as INITIATED and return error
+		p.Logger.Error(ctx, "failed to create payment link via Stripe SDK",
+			"error", err,
+			"payment_id", paymentObj.ID,
+			"invoice_id", paymentObj.DestinationID)
+		return err
+	}
+
+	// If Stripe SDK succeeds, update payment status to PENDING
+	statusBefore := paymentObj.PaymentStatus
+	paymentObj.PaymentStatus = types.PaymentStatusPending
+
+	// Update payment with gateway information
+	paymentObj.GatewayTrackingID = &paymentLinkResp.ID // Store session_id in gateway_tracking_id
+	paymentObj.GatewayPaymentID = &paymentLinkResp.PaymentIntentID
+	if paymentObj.GatewayMetadata == nil {
+		paymentObj.GatewayMetadata = types.Metadata{}
+	}
+	// Merge with existing gateway metadata (preserving save_card_and_make_default if set)
+	paymentObj.GatewayMetadata["payment_url"] = paymentLinkResp.PaymentURL
+	paymentObj.GatewayMetadata["gateway"] = string(types.PaymentGatewayTypeStripe)
+	paymentObj.GatewayMetadata["session_id"] = paymentLinkResp.ID
+
+	// Update the payment record
+	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update payment with payment link information").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	p.recordPaymentTransition(ctx, paymentObj, statusBefore)
+
+	p.Logger.Info(ctx, "successfully created stripe payment link and updated status to pending",
+		"payment_id", paymentObj.ID,
+		"session_id", paymentLinkResp.ID,
+		"payment_url", paymentLinkResp.PaymentURL)
+
+	return nil
+}
+
+// handleRazorpayTokenCharge charges the customer's saved Razorpay token for the
+// payment's method. The payment stays PROCESSING until the webhook settles it.
+func (p *paymentProcessor) handleRazorpayTokenCharge(ctx context.Context, paymentObj *payment.Payment) error {
+	inv, err := p.InvoiceRepo.Get(ctx, paymentObj.DestinationID)
+	if err != nil {
+		return err
+	}
+	if paymentObj.Amount.GreaterThan(inv.AmountRemaining) {
+		return ierr.NewError("payment amount exceeds invoice remaining balance").
+			WithHint("Payment amount cannot exceed the invoice's remaining balance").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id":        paymentObj.ID,
+				"payment_amount":    paymentObj.Amount.String(),
+				"invoice_remaining": inv.AmountRemaining.String(),
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	razorpayIntegration, err := p.IntegrationFactory.GetRazorpayIntegration(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Razorpay is not connected for this environment").
+			Mark(ierr.ErrValidation)
+	}
+
+	cust, err := p.CustomerRepo.Get(ctx, inv.CustomerID)
+	if err != nil {
+		return err
+	}
+
+	result, charged, err := razorpayIntegration.PaymentSvc.ChargeSavedToken(ctx, razorpay.ChargeSavedTokenRequest{
+		Customer:           cust,
+		InvoiceID:          paymentObj.DestinationID,
+		Amount:             paymentObj.Amount,
+		Currency:           paymentObj.Currency,
+		FlexPricePaymentID: paymentObj.ID,
+		PreferredMethod:    paymentObj.PaymentMethodType,
+		TokenID:            paymentObj.PaymentMethodID,
+	})
+	if err != nil {
+		return err
+	}
+	if !charged || result == nil {
+		return razorpay.NoUsableTokenError(paymentObj, inv.CustomerID)
+	}
+	if result.AlreadySubmitted {
+		return ierr.NewError("razorpay charge already submitted for this invoice").
+			WithHint("A charge for this invoice is already in progress at Razorpay").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id": paymentObj.DestinationID,
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrAlreadyExists)
+	}
+
+	if result.RazorpayPaymentID != "" {
+		paymentObj.GatewayPaymentID = &result.RazorpayPaymentID
+	}
+
+	p.Logger.Info(ctx, "submitted razorpay token charge",
+		"payment_id", paymentObj.ID,
+		"invoice_id", inv.ID,
+		"payment_method_type", paymentObj.PaymentMethodType,
+		"razorpay_payment_id", result.RazorpayPaymentID)
+	return nil
+}
+
+func (p *paymentProcessor) handleRazorpayPaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment, invoice *invoice.Invoice) error {
+	// Convert to Razorpay payment link request
+	paymentLinkReq := &razorpay.CreatePaymentLinkRequest{
+		InvoiceID:      paymentObj.DestinationID,
+		CustomerID:     invoice.CustomerID,
+		Amount:         paymentObj.Amount,
+		Currency:       paymentObj.Currency,
+		SuccessURL:     gatewayURL(paymentObj, "success_url"),
+		CancelURL:      gatewayURL(paymentObj, "cancel_url"),
+		PaymentID:      paymentObj.ID,
+		NotifyCustomer: paymentObj.GatewayMetadata["notify_customer"] == "true",
+	}
+
+	// Get Razorpay integration for creating payment link
+	razorpayIntegration, err := p.IntegrationFactory.GetRazorpayIntegration(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get Razorpay integration").
+			Mark(ierr.ErrSystem)
+	}
+
+	customerService := NewCustomerService(p.ServiceParams)
+	invoiceService := NewInvoiceService(p.ServiceParams)
+
+	paymentLinkResp, err := razorpayIntegration.PaymentSvc.CreatePaymentLink(ctx, paymentLinkReq, customerService, invoiceService)
+	if err != nil {
+		// If Razorpay SDK fails, keep payment status as INITIATED and return error
+		p.Logger.Error(ctx, "failed to create payment link via Razorpay SDK",
+			"error", err,
+			"payment_id", paymentObj.ID,
+			"invoice_id", paymentObj.DestinationID)
+		return err
+	}
+
+	// If Razorpay SDK succeeds, update payment status to PENDING
+	statusBefore := paymentObj.PaymentStatus
+	paymentObj.PaymentStatus = types.PaymentStatusPending
+
+	// Update payment with gateway information
+	paymentObj.GatewayTrackingID = &paymentLinkResp.ID // Store payment_link_id in gateway_tracking_id
+	if paymentObj.GatewayMetadata == nil {
+		paymentObj.GatewayMetadata = types.Metadata{}
+	}
+	// Merge with existing gateway metadata
+	paymentObj.GatewayMetadata["payment_url"] = paymentLinkResp.PaymentURL
+	paymentObj.GatewayMetadata["gateway"] = string(types.PaymentGatewayTypeRazorpay)
+	paymentObj.GatewayMetadata["payment_link_id"] = paymentLinkResp.ID
+
+	// Update the payment record
+	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update payment with payment link information").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	p.recordPaymentTransition(ctx, paymentObj, statusBefore)
+
+	p.Logger.Info(ctx, "successfully created razorpay payment link and updated status to pending",
+		"payment_id", paymentObj.ID,
+		"payment_link_id", paymentLinkResp.ID,
+		"payment_url", paymentLinkResp.PaymentURL)
+
+	return nil
+}
+
+// handleChargebeePaymentLinkCreation routes through the CheckoutProvider seam rather
+// than a bespoke client: CreatePaymentLink there is session-independent and already
+// mirrors the invoice and stamps the payment id Chargebee's webhook reconciles on.
+func (p *paymentProcessor) handleChargebeePaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment, inv *invoice.Invoice) error {
+	provider, err := p.IntegrationFactory.GetCheckoutProvider(
+		ctx,
+		types.CheckoutPaymentProviderChargebee,
+		NewCustomerService(p.ServiceParams),
+		NewInvoiceService(p.ServiceParams),
+	)
+	if err != nil {
+		return err
+	}
+
+	resp, err := provider.CreatePaymentLink(ctx, interfaces.CheckoutProviderRequest{
+		InvoiceID:  paymentObj.DestinationID,
+		CustomerID: inv.CustomerID,
+		Amount:     paymentObj.Amount,
+		Currency:   paymentObj.Currency,
+		PaymentID:  paymentObj.ID,
+		SuccessURL: gatewayURL(paymentObj, "success_url"),
+		FailureURL: gatewayURL(paymentObj, "failure_url"),
+		CancelURL:  gatewayURL(paymentObj, "cancel_url"),
+		Metadata:   linkMetadataFor(paymentObj),
+		LineItems:  checkoutLineItemsFor(inv),
+	})
+	if err != nil {
+		p.Logger.Error(ctx, "failed to create chargebee payment link",
+			"error", err,
+			"payment_id", paymentObj.ID,
+			"invoice_id", paymentObj.DestinationID)
+		return err
+	}
+
+	statusBefore := paymentObj.PaymentStatus
+	paymentObj.PaymentStatus = types.PaymentStatusPending
+	if resp.ProviderSessionID != "" {
+		paymentObj.GatewayTrackingID = &resp.ProviderSessionID
+	}
+	if paymentObj.GatewayMetadata == nil {
+		paymentObj.GatewayMetadata = types.Metadata{}
+	}
+	paymentObj.GatewayMetadata["payment_url"] = resp.NextAction.URL
+	paymentObj.GatewayMetadata["gateway"] = string(types.PaymentGatewayTypeChargebee)
+
+	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update payment with payment link information").
+			WithReportableDetails(map[string]interface{}{"payment_id": paymentObj.ID}).
+			Mark(ierr.ErrDatabase)
+	}
+	p.recordPaymentTransition(ctx, paymentObj, statusBefore)
+
+	p.Logger.Info(ctx, "created chargebee payment link",
+		"payment_id", paymentObj.ID,
+		"invoice_id", paymentObj.DestinationID)
+	return nil
+}
+
+func gatewayURL(paymentObj *payment.Payment, key string) string {
+	if url, ok := paymentObj.GatewayMetadata[key]; ok && url != "" {
+		return url
+	}
+
+	return paymentObj.Metadata[key]
+}
+
+// checkoutLineItemsFor itemises an invoice for providers that can carry line items.
+// Zero-amount lines are dropped — some gateways reject a zero charge outright.
+func checkoutLineItemsFor(inv *invoice.Invoice) []interfaces.CheckoutLineItem {
+	if inv == nil {
+		return nil
+	}
+
+	items := make([]interfaces.CheckoutLineItem, 0, len(inv.LineItems))
+	for _, li := range inv.LineItems {
+		if li == nil || li.Amount.IsZero() {
+			continue
+		}
+		items = append(items, interfaces.CheckoutLineItem{
+			Description: li.GetDescription(),
+			Amount:      li.Amount,
+			Quantity:    li.Quantity,
+			PeriodStart: li.PeriodStart,
+			PeriodEnd:   li.PeriodEnd,
+		})
+	}
+	return items
+}
+
+// linkMetadataFor drops the connection fields, which are internal, and stamps the
+// FlexPrice payment id the gateway webhooks key off.
+func linkMetadataFor(paymentObj *payment.Payment) map[string]string {
+	out := make(map[string]string, len(paymentObj.Metadata)+1)
+	for k, v := range paymentObj.Metadata {
+		if k == "connection_id" || k == "connection_name" {
+			continue
+		}
+		out[k] = v
+	}
+
+	out["flexprice_payment_id"] = paymentObj.ID
+	return out
+}
+
+func (p *paymentProcessor) handleNomodPaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment, invoice *invoice.Invoice) error {
+	// Extract success URL and cancel URL from metadata
+	successURL := ""
+	cancelURL := ""
+
+	if paymentObj.Metadata != nil {
+		if url, exists := paymentObj.Metadata["success_url"]; exists {
+			successURL = url
+		}
+		if url, exists := paymentObj.Metadata["cancel_url"]; exists {
+			cancelURL = url
+		}
+	}
+
+	// Prepare metadata for payment link request
+	linkMetadata := make(map[string]string)
+	if paymentObj.Metadata != nil {
+		// Copy metadata but exclude connection-related fields (internal use only)
+		for k, v := range paymentObj.Metadata {
+			if k != "connection_id" && k != "connection_name" {
+				linkMetadata[k] = v
+			}
+		}
+	}
+
+	// Add FlexPrice payment ID to metadata
+	linkMetadata["flexprice_payment_id"] = paymentObj.ID
+
+	// Convert to Nomod payment link request
+	paymentLinkReq := nomod.CreatePaymentLinkReq{
+		InvoiceID:  paymentObj.DestinationID,
+		CustomerID: invoice.CustomerID,
+		Amount:     paymentObj.Amount,
+		Currency:   paymentObj.Currency,
+		SuccessURL: successURL,
+		FailureURL: cancelURL,
+		Metadata:   linkMetadata,
+		PaymentID:  paymentObj.ID,
+	}
+
+	// Get Nomod integration for creating payment link
+	nomodIntegration, err := p.IntegrationFactory.GetNomodIntegration(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get Nomod integration").
+			Mark(ierr.ErrSystem)
+	}
+
+	customerService := NewCustomerService(p.ServiceParams)
+	invoiceService := NewInvoiceService(p.ServiceParams)
+
+	paymentLinkResp, err := nomodIntegration.PaymentSvc.CreatePaymentLink(ctx, paymentLinkReq, customerService, invoiceService)
+	if err != nil {
+		// If Nomod API fails, keep payment status as INITIATED and return error
+		p.Logger.Error(ctx, "failed to create payment link via Nomod",
+			"error", err,
+			"payment_id", paymentObj.ID,
+			"invoice_id", paymentObj.DestinationID)
+		return err
+	}
+
+	// If Nomod API succeeds, update payment status to PENDING
+	statusBefore := paymentObj.PaymentStatus
+	paymentObj.PaymentStatus = types.PaymentStatusPending
+
+	// Update payment with gateway information
+	paymentObj.GatewayTrackingID = &paymentLinkResp.ID // Store invoice_id in gateway_tracking_id
+	if paymentObj.GatewayMetadata == nil {
+		paymentObj.GatewayMetadata = types.Metadata{}
+	}
+	// Merge with existing gateway metadata
+	paymentObj.GatewayMetadata["payment_url"] = paymentLinkResp.PaymentURL
+	paymentObj.GatewayMetadata["gateway"] = string(types.PaymentGatewayTypeNomod)
+	paymentObj.GatewayMetadata["nomod_invoice_id"] = paymentLinkResp.ID
+	paymentObj.GatewayMetadata["nomod_reference_id"] = paymentLinkResp.ReferenceID
+
+	// Update the payment record
+	if err := p.PaymentRepo.Update(ctx, paymentObj); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update payment with payment link information").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentObj.ID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	p.recordPaymentTransition(ctx, paymentObj, statusBefore)
+
+	p.Logger.Info(ctx, "successfully created nomod payment link and updated status to pending",
+		"payment_id", paymentObj.ID,
+		"nomod_invoice_id", paymentLinkResp.ID,
+		"payment_url", paymentLinkResp.PaymentURL)
+
+	return nil
+}
+
+func (p *paymentProcessor) handleCreditsPayment(ctx context.Context, paymentObj *payment.Payment) error {
+	// In case of credits, we need to find the wallet by the set payment method id
+	selectedWallet, err := p.WalletRepo.GetWalletByID(ctx, paymentObj.PaymentMethodID)
+	if err != nil {
+		return err
+	}
+
+	// Validate wallet status
+	if selectedWallet.WalletStatus != types.WalletStatusActive {
+		return ierr.NewError("wallet is not active").
+			WithHint("Wallet is not active").
+			WithReportableDetails(map[string]interface{}{
+				"wallet_id": selectedWallet.ID,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	// Validate currency match
+	if !types.IsMatchingCurrency(selectedWallet.Currency, paymentObj.Currency) {
+		return ierr.NewError("wallet currency does not match payment currency").
+			WithHint("Wallet currency does not match payment currency").
+			WithReportableDetails(map[string]interface{}{
+				"wallet_id": selectedWallet.ID,
+				"currency":  paymentObj.Currency,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	// Validate sufficient balance
+	if selectedWallet.Balance.LessThan(paymentObj.Amount) {
+		return ierr.NewError("wallet balance is less than payment amount").
+			WithHint("Wallet balance is less than payment amount").
+			WithReportableDetails(map[string]interface{}{
+				"wallet_id": selectedWallet.ID,
+				"amount":    paymentObj.Amount,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	// Create wallet operation
+	operation := &wallet.WalletOperation{
+		WalletID:          selectedWallet.ID,
+		Type:              types.TransactionTypeDebit,
+		Amount:            paymentObj.Amount,
+		ReferenceType:     types.WalletTxReferenceTypePayment,
+		ReferenceID:       paymentObj.ID,
+		Description:       fmt.Sprintf("Payment for invoice %s", paymentObj.DestinationID),
+		TransactionReason: types.TransactionReasonInvoicePayment,
+		Metadata: types.Metadata{
+			"payment_id":     paymentObj.ID,
+			"invoice_id":     paymentObj.DestinationID,
+			"payment_method": string(paymentObj.PaymentMethodType),
+			"wallet_type":    string(selectedWallet.WalletType),
+		},
+	}
+
+	if paymentObj.DestinationType == types.PaymentDestinationTypeInvoice {
+		operation.InvoiceID = &paymentObj.DestinationID
+	}
+
+	// Create wallet service
+	walletService := NewWalletService(p.ServiceParams)
+
+	// Transactional workflow begins here
+	err = p.DB.WithTx(ctx, func(ctx context.Context) error {
+		// Debit wallet
+		if err := walletService.DebitWallet(ctx, operation); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *paymentProcessor) handlePostProcessing(ctx context.Context, paymentObj *payment.Payment) error {
+	switch paymentObj.DestinationType {
+	case types.PaymentDestinationTypeInvoice:
+		return p.handleInvoicePostProcessing(ctx, paymentObj)
+	default:
+		return ierr.NewError("unsupported payment destination type").
+			WithHint("Unsupported payment destination type").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id":       paymentObj.ID,
+				"destination_type": paymentObj.DestinationType,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+}
+
+// deletionGatedInvoice reports whether an event deletion covers this invoice's
+// period, in which case a paid draft stays draft rather than sealing usage that
+// is about to be removed. The finalization cron takes it over once the deletion
+// closes. A subscription_create invoice is the exception: IsFinalizationDue
+// refuses those, so one parked here has to be finalized by hand.
+func (p *paymentProcessor) deletionGatedInvoice(ctx context.Context, inv *invoice.Invoice) bool {
+	invoiceService := NewInvoiceService(p.ServiceParams).(*invoiceService)
+	gatedDeletion, err := invoiceService.isInvoiceGatedOnEventDeletion(ctx, inv)
+	if err != nil {
+		p.Logger.Error(ctx, "failed to read the event deletion gate, leaving the paid invoice in draft",
+			"error", err,
+			"invoice_id", inv.ID,
+		)
+		return true
+	}
+	if gatedDeletion == nil {
+		return false
+	}
+
+	p.Logger.Info(ctx, "not finalizing a paid draft while an event deletion is in progress",
+		"invoice_id", inv.ID,
+		"request_id", gatedDeletion.RequestID,
+	)
+	return true
+}
+
+func (p *paymentProcessor) handleInvoicePostProcessing(ctx context.Context, paymentObj *payment.Payment) error {
+	// Get the invoice
+	invoice, err := p.InvoiceRepo.Get(ctx, paymentObj.DestinationID)
+	if err != nil {
+		return err
+	}
+
+	// Get all successful payments for this invoice
+	filter := &types.PaymentFilter{
+		DestinationType: lo.ToPtr(string(types.PaymentDestinationTypeInvoice)),
+		DestinationID:   lo.ToPtr(invoice.ID),
+		PaymentStatus:   lo.ToPtr(string(types.PaymentStatusSucceeded)),
+	}
+	payments, err := p.PaymentRepo.List(ctx, filter)
+	if err != nil {
+		return err
+	}
+
+	// Calculate total paid amount
+	totalPaid := decimal.Zero
+	for _, p := range payments {
+		if p.Currency != invoice.Currency {
+			return ierr.NewError("payment currency does not match invoice currency").
+				WithHint("Payment currency does not match invoice currency").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id":       paymentObj.ID,
+					"invoice_id":       invoice.ID,
+					"payment_currency": p.Currency,
+					"invoice_currency": invoice.Currency,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
+		totalPaid = totalPaid.Add(p.Amount)
+	}
+
+	// Update invoice payment status and amounts
+	invoice.AmountPaid = totalPaid
+	invoice.AmountRemaining = invoice.AmountDue.Sub(totalPaid)
+	if invoice.AmountRemaining.IsZero() {
+		paidAt := clock.Now()
+		invoice.PaidAt = &paidAt
+	}
+
+	// Ensure amount remaining is not less than zero even in case of excess payments.
+	// TODO: think of a better way to handle Partial payments
+	if invoice.AmountRemaining.LessThan(decimal.Zero) {
+		invoice.AmountRemaining = decimal.Zero
+	}
+
+	finalizedNow := false
+	if invoice.AmountRemaining.IsZero() {
+		invoice.PaymentStatus = types.PaymentStatusSucceeded
+		// Finalize invoice if it's still in draft state
+		if invoice.InvoiceStatus == types.InvoiceStatusDraft && !p.deletionGatedInvoice(ctx, invoice) {
+			invoice.InvoiceStatus = types.InvoiceStatusFinalized
+			finalizedAt := clock.Now()
+			invoice.FinalizedAt = &finalizedAt
+			finalizedNow = true
+			// Best effort: a failed lookup must not leave a paid invoice unfinalized, so it keeps its draft dates.
+			if err := issueSubscriptionInvoice(ctx, p.ServiceParams, invoice, finalizedAt); err != nil {
+				p.Logger.Error(ctx, "failed to date invoice at finalization, keeping its draft dates",
+					"error", err,
+					"invoice_id", invoice.ID)
+			}
+			// Best effort like the dates: a paid invoice must still finalize; without a snapshot it renders the tenant.
+			if err := NewInvoiceService(p.ServiceParams).(*invoiceService).freezeBillingEntity(ctx, invoice); err != nil {
+				p.Logger.Error(ctx, "failed to freeze invoice billing entity at finalization",
+					"error", err,
+					"invoice_id", invoice.ID)
+			}
+		}
+	} else if invoice.AmountRemaining.LessThan(invoice.AmountDue) {
+		invoice.PaymentStatus = types.PaymentStatusPending // Partial payment still keeps it pending
+	}
+
+	// Update the invoice
+	ctx = withInvoicePaid(ctx, invoice.ID, invoice.PaymentStatus)
+	if finalizedNow {
+		ctx = activity.WithAction(ctx, invoice.ID, activity.InvoiceFinalized)
+	}
+	// Unlike the finalize action, a stale instalment never fails here: a received payment must not be dropped.
+	var unclaimed []string
+	err = p.DB.WithTx(ctx, func(txCtx context.Context) error {
+		if finalizedNow {
+			stale, err := NewInvoiceService(p.ServiceParams).(*invoiceService).claimInstalments(txCtx, invoice)
+			if err != nil {
+				return err
+			}
+			unclaimed = stale
+		}
+		return p.InvoiceRepo.Update(txCtx, invoice)
+	})
+	if err != nil {
+		return err
+	}
+	if len(unclaimed) > 0 {
+		p.Logger.Error(ctx, "finalized a paid invoice carrying instalments that are no longer scheduled",
+			"error", "instalments changed since the invoice was computed",
+			"invoice_id", invoice.ID,
+			"instalment_ids", unclaimed)
+	}
+	if finalizedNow {
+		if err := NewHostedInvoiceTokenService(p.ServiceParams).Issue(ctx, invoice); err != nil {
+			p.Logger.Error(ctx, "failed to issue hosted invoice token at finalization",
+				"error", err,
+				"invoice_id", invoice.ID)
+		}
+		recordInvoiceTransition(ctx, invoice)
+	}
+
+	// This path finalizes without performFinalizeInvoiceActions, so it emits
+	// the finalized webhook + facts flip itself.
+	if finalizedNow {
+		notifyInvoiceFinalized(ctx, p.ServiceParams, invoice.ID)
+	}
+
+	// Check if this invoice is for a purchased credit (has wallet_transaction_id in metadata)
+	// If so, complete the wallet transaction to credit the wallet
+	if invoice.Metadata != nil {
+		if walletTransactionID, ok := invoice.Metadata["wallet_transaction_id"]; ok && walletTransactionID != "" {
+			// Only complete the transaction if payment is fully succeeded
+			if invoice.PaymentStatus == types.PaymentStatusSucceeded {
+				walletService := NewWalletService(p.ServiceParams)
+				if err := walletService.CompletePurchasedCreditTransactionWithRetry(ctx, walletTransactionID, invoice.ID); err != nil {
+					p.Logger.Error(ctx, "failed to complete purchased credit transaction",
+						"error", err,
+						"invoice_id", invoice.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+					// Don't fail the payment, but log the error
+					// The transaction can be manually completed later
+				} else {
+					p.Logger.Info(ctx, "successfully completed purchased credit transaction",
+						"invoice_id", invoice.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+				}
+			}
+		}
+	}
+
+	// Check if this is the first invoice payment for an incomplete subscription
+	if err := p.handleIncompleteSubscriptionPayment(ctx, invoice); err != nil {
+		p.Logger.Error(ctx, "failed to handle incomplete subscription payment",
+			"invoice_id", invoice.ID,
+			"error", err)
+	}
+
+	// Invoice is fully paid — dispatch mark-paid to whichever providers are connected.
+	if invoice.PaymentStatus == types.PaymentStatusSucceeded {
+		p.DispatchMarkPaid(ctx, invoice.ID)
+	}
+
+	return nil
+}
+
+func (p *paymentProcessor) dispatchWhopMarkPaid(ctx context.Context, invoiceID string) {
+	temporalSvc := temporalservice.GetGlobalTemporalService()
+	if temporalSvc == nil {
+		p.Logger.Info(ctx, "temporal service unavailable, skipping Whop mark-paid", "invoice_id", invoiceID)
+		return
+	}
+
+	input := temporalmodels.WhopInvoiceMarkPaidWorkflowInput{
+		InvoiceID:     invoiceID,
+		TenantID:      types.GetTenantID(ctx),
+		EnvironmentID: types.GetEnvironmentID(ctx),
+	}
+	if _, err := temporalSvc.ExecuteWorkflow(ctx, types.TemporalWhopInvoiceMarkPaidWorkflow, input); err != nil {
+		p.Logger.Error(ctx, "failed to start Whop mark-paid workflow", "error", err, "invoice_id", invoiceID)
+	}
+}
+
+func (p *paymentProcessor) dispatchZohoMarkPaid(ctx context.Context, invoiceID string) {
+	temporalSvc := temporalservice.GetGlobalTemporalService()
+	if temporalSvc == nil {
+		p.Logger.Info(ctx, "temporal service unavailable, skipping Zoho mark-paid", "invoice_id", invoiceID)
+		return
+	}
+
+	input := temporalmodels.NewZohoBooksInvoiceMarkPaidWorkflowInput(invoiceID, types.GetTenantID(ctx), types.GetEnvironmentID(ctx))
+	if _, err := temporalSvc.ExecuteWorkflow(ctx, types.TemporalZohoBooksInvoiceMarkPaidWorkflow, input); err != nil {
+		p.Logger.Error(ctx, "failed to start Zoho mark-paid workflow", "error", err, "invoice_id", invoiceID)
+	}
+}
+
+// DispatchMarkPaid lists the tenant's published connections once and only dispatches to providers
+// that are actually connected, instead of starting a workflow per provider blind and letting it
+// fail downstream with "connection not configured" for the ones that aren't.
+func (p *paymentProcessor) DispatchMarkPaid(ctx context.Context, invoiceID string) {
+	if p.ConnectionRepo == nil {
+		return
+	}
+	ctx, err := NewBillingEntityService(p.ServiceParams).ScopeToInvoice(ctx, invoiceID)
+	if err != nil {
+		p.Logger.Error(ctx, "failed to resolve billing entity for mark-paid", "error", err, "invoice_id", invoiceID)
+		return
+	}
+
+	connections, err := p.ConnectionRepo.ListPublishedInScope(ctx)
+	if err != nil {
+		p.Logger.Error(ctx, "failed to list published connections, skipping mark-paid dispatch",
+			"error", err, "invoice_id", invoiceID)
+		return
+	}
+
+	connected := make(map[types.SecretProvider]bool, len(connections))
+	for _, c := range connections {
+		connected[c.ProviderType] = true
+	}
+
+	if connected[types.SecretProviderZohoBooks] {
+		p.dispatchZohoMarkPaid(ctx, invoiceID)
+	}
+	if connected[types.SecretProviderWhop] {
+		p.dispatchWhopMarkPaid(ctx, invoiceID)
+	}
+}
+
+// handleCardPayment processes card payments using saved payment methods
+func (p *paymentProcessor) handleCardPayment(ctx context.Context, paymentObj *payment.Payment) error {
+	p.Logger.Info(ctx, "processing card payment",
+		"payment_id", paymentObj.ID,
+		"customer_id", paymentObj.Metadata["customer_id"],
+		"payment_method_id", paymentObj.PaymentMethodID,
+		"amount", paymentObj.Amount.String(),
+	)
+
+	// Get customer ID from metadata or destination
+	customerID, exists := paymentObj.Metadata["customer_id"]
+	if !exists || customerID == "" {
+		// Try to get customer from invoice if destination is invoice
+		if paymentObj.DestinationType == types.PaymentDestinationTypeInvoice {
+			invoiceService := NewInvoiceService(p.ServiceParams)
+			invoiceResp, err := invoiceService.GetInvoice(ctx, paymentObj.DestinationID)
+			if err != nil {
+				return ierr.WithError(err).
+					WithHint("Failed to get invoice for card payment").
+					WithReportableDetails(map[string]interface{}{
+						"payment_id": paymentObj.ID,
+						"invoice_id": paymentObj.DestinationID,
+					}).
+					Mark(ierr.ErrValidation)
+			}
+			customerID = invoiceResp.CustomerID
+		} else {
+			return ierr.NewError("customer_id not found").
+				WithHint("Customer ID is required for card payments").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	p.Logger.Info(ctx, "processing card payment for customer",
+		"customer_id", customerID,
+		"payment_id", paymentObj.ID,
+	)
+
+	// Get Stripe integration
+	stripeIntegration, err := p.IntegrationFactory.GetStripeIntegration(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get Stripe integration").
+			Mark(ierr.ErrSystem)
+	}
+
+	// so we don't charge the same invoice twice
+	if paymentObj.DestinationType == types.PaymentDestinationTypeInvoice {
+		settled, err := stripeIntegration.InvoiceSyncSvc.IsStripeInvoiceSettled(ctx, paymentObj.DestinationID)
+		if err != nil {
+			return err
+		}
+		if settled {
+			return ierr.NewError("invoice is already settled in Stripe").
+				WithHint("This invoice is already paid or voided in Stripe; it will be reconciled from Stripe instead of charging again.").
+				WithReportableDetails(map[string]interface{}{
+					"payment_id": paymentObj.ID,
+					"invoice_id": paymentObj.DestinationID,
+				}).
+				Mark(ierr.ErrInvalidOperation)
+		}
+	}
+
+	// If no specific payment method ID is provided, we need to get one
+	if paymentObj.PaymentMethodID == "" {
+		// Get the default payment method - this is required for card payments
+		customerService := NewCustomerService(p.ServiceParams)
+		defaultPaymentMethod, err := stripeIntegration.CustomerSvc.GetDefaultPaymentMethod(ctx, customerID, customerService)
+		if err != nil || defaultPaymentMethod == nil {
+			p.Logger.Info(ctx, "customer has no default payment method for card payment",
+				"customer_id", customerID,
+				"payment_id", paymentObj.ID,
+				"error", err,
+			)
+			return ierr.NewError("no default payment method").
+				WithHint("Customer must have a default payment method to make card payments. Please make a payment using payment link with save_card_and_make_default=true first.").
+				WithReportableDetails(map[string]interface{}{
+					"customer_id": customerID,
+					"payment_id":  paymentObj.ID,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+
+		// Use the default payment method
+		paymentObj.PaymentMethodID = defaultPaymentMethod.ID
+		p.Logger.Info(ctx, "using default payment method for card payment",
+			"customer_id", customerID,
+			"payment_id", paymentObj.ID,
+			"payment_method_id", paymentObj.PaymentMethodID,
+			"card_last4", func() string {
+				if defaultPaymentMethod.Card != nil {
+					return defaultPaymentMethod.Card.Last4
+				}
+				return ""
+			}(),
+		)
+	}
+
+	// Charge the saved payment method
+	chargeReq := &stripe.ChargeSavedPaymentMethodRequest{
+		CustomerID:      customerID,
+		PaymentMethodID: paymentObj.PaymentMethodID,
+		Amount:          paymentObj.Amount,
+		Currency:        paymentObj.Currency,
+		InvoiceID:       paymentObj.DestinationID,
+		PaymentID:       paymentObj.ID,
+	}
+
+	// Create service instances for charging
+	custSvc := NewCustomerService(p.ServiceParams)
+	invSvc := NewInvoiceService(p.ServiceParams)
+
+	paymentIntentResp, err := stripeIntegration.PaymentSvc.ChargeSavedPaymentMethod(ctx, chargeReq, custSvc, invSvc)
+	if err != nil {
+		// Update payment status to failed
+		updateReq := &dto.UpdatePaymentRequest{
+			PaymentStatus: lo.ToPtr(string(types.PaymentStatusFailed)),
+			ErrorMessage:  lo.ToPtr(err.Error()),
+			FailedAt:      lo.ToPtr(clock.Now()),
+		}
+
+		paymentService := NewPaymentService(p.ServiceParams)
+		if _, updateErr := paymentService.UpdatePayment(ctx, paymentObj.ID, *updateReq); updateErr != nil {
+			p.Logger.Error(ctx, "failed to update payment status to failed",
+				"error", updateErr,
+				"payment_id", paymentObj.ID,
+			)
+		}
+
+		return err
+	}
+
+	// Update payment with Stripe details
+	updateReq := &dto.UpdatePaymentRequest{
+		PaymentStatus:    lo.ToPtr(string(types.PaymentStatusSucceeded)),
+		GatewayPaymentID: lo.ToPtr(paymentIntentResp.ID),
+		PaymentGateway:   lo.ToPtr(string(types.PaymentGatewayTypeStripe)),
+		PaymentMethodID:  lo.ToPtr(paymentObj.PaymentMethodID),
+		SucceededAt:      lo.ToPtr(clock.Now()),
+	}
+
+	paymentService := NewPaymentService(p.ServiceParams)
+	updated, err := paymentService.UpdatePayment(ctx, paymentObj.ID, *updateReq)
+	if err != nil {
+		p.Logger.Error(ctx, "failed to update payment status to succeeded",
+			"error", err,
+			"payment_id", paymentObj.ID,
+		)
+		return err
+	}
+	// The caller saves paymentObj again; keep the status, gateway and connection the charge recorded.
+	paymentObj.PaymentStatus = updated.PaymentStatus
+	paymentObj.PaymentGateway = updated.PaymentGateway
+	paymentObj.ConnectionID = updated.ConnectionID
+
+	p.Logger.Info(ctx, "successfully processed card payment",
+		"payment_id", paymentObj.ID,
+		"customer_id", customerID,
+		"payment_method_id", paymentObj.PaymentMethodID,
+		"payment_intent_id", paymentIntentResp.ID,
+		"amount", paymentObj.Amount.String(),
+	)
+
+	return nil
+}
+
+// handleIncompleteSubscriptionPayment runs the paid handler once a subscription invoice is fully paid.
+func (p *paymentProcessor) handleIncompleteSubscriptionPayment(ctx context.Context, invoice *invoice.Invoice) error {
+	// Only process subscription invoices that are fully paid
+	if invoice.SubscriptionID == nil || !invoice.AmountRemaining.IsZero() {
+		return nil
+	}
+
+	p.Logger.Info(ctx, "processing subscription activation after invoice payment",
+		"invoice_id", invoice.ID,
+		"subscription_id", *invoice.SubscriptionID,
+		"billing_reason", invoice.BillingReason)
+
+	subscriptionService := NewSubscriptionService(p.ServiceParams)
+	if err := subscriptionService.HandleSubscriptionActivatingInvoicePaid(ctx, invoice); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to complete subscription activation after invoice payment").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": *invoice.SubscriptionID,
+				"invoice_id":      invoice.ID,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	p.Logger.Info(ctx, "successfully processed subscription activation after invoice payment",
+		"invoice_id", invoice.ID,
+		"subscription_id", *invoice.SubscriptionID)
+
+	return nil
+}

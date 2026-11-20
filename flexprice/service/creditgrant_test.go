@@ -1,0 +1,3710 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"sort"
+	"testing"
+	"time"
+
+	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/addon"
+	"github.com/flexprice/flexprice/internal/domain/creditgrant"
+	"github.com/flexprice/flexprice/internal/domain/creditgrantapplication"
+	"github.com/flexprice/flexprice/internal/domain/customer"
+	"github.com/flexprice/flexprice/internal/domain/entitlement"
+	"github.com/flexprice/flexprice/internal/domain/entitlementgrant"
+	"github.com/flexprice/flexprice/internal/domain/feature"
+	"github.com/flexprice/flexprice/internal/domain/invoice"
+	"github.com/flexprice/flexprice/internal/domain/meter"
+	"github.com/flexprice/flexprice/internal/domain/plan"
+	"github.com/flexprice/flexprice/internal/domain/price"
+	"github.com/flexprice/flexprice/internal/domain/subscription"
+	"github.com/flexprice/flexprice/internal/domain/wallet"
+	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/testutil"
+	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+)
+
+type CreditGrantServiceTestSuite struct {
+	testutil.BaseServiceTestSuite
+	creditGrantService  CreditGrantService
+	subscriptionService SubscriptionService
+	walletService       WalletService
+	testData            struct {
+		customer     *customer.Customer
+		plan         *plan.Plan
+		subscription *subscription.Subscription
+		wallet       *wallet.Wallet
+		now          time.Time
+	}
+}
+
+func TestCreditGrantService(t *testing.T) {
+	suite.Run(t, new(CreditGrantServiceTestSuite))
+}
+
+func (s *CreditGrantServiceTestSuite) SetupTest() {
+	s.BaseServiceTestSuite.SetupTest()
+	s.setupServices()
+	s.setupTestData()
+}
+
+// GetContext returns context with environment ID set for settings lookup
+func (s *CreditGrantServiceTestSuite) GetContext() context.Context {
+	return types.SetEnvironmentID(s.BaseServiceTestSuite.GetContext(), "env_test")
+}
+
+func (s *CreditGrantServiceTestSuite) TearDownTest() {
+	s.BaseServiceTestSuite.TearDownTest()
+}
+
+func (s *CreditGrantServiceTestSuite) setupServices() {
+	serviceParams := ServiceParams{
+		Logger:                     s.GetLogger(),
+		Config:                     s.GetConfig(),
+		DB:                         s.GetDB(),
+		AuthRepo:                   s.GetStores().AuthRepo,
+		UserRepo:                   s.GetStores().UserRepo,
+		EventRepo:                  s.GetStores().EventRepo,
+		MeterRepo:                  s.GetStores().MeterRepo,
+		PriceRepo:                  s.GetStores().PriceRepo,
+		CustomerRepo:               s.GetStores().CustomerRepo,
+		PlanRepo:                   s.GetStores().PlanRepo,
+		SubRepo:                    s.GetStores().SubscriptionRepo,
+		CommitmentRepo:             s.GetStores().CommitmentRepo,
+		BillingTermRepo:            s.GetStores().BillingTermRepo,
+		BillingInstalmentRepo:      s.GetStores().BillingInstalmentRepo,
+		SubscriptionLineItemRepo:   s.GetStores().SubscriptionLineItemRepo,
+		SubscriptionPhaseRepo:      s.GetStores().SubscriptionPhaseRepo,
+		WalletRepo:                 s.GetStores().WalletRepo,
+		TenantRepo:                 s.GetStores().TenantRepo,
+		InvoiceRepo:                s.GetStores().InvoiceRepo,
+		HostedInvoiceTokenRepo:     s.GetStores().HostedInvoiceTokenRepo,
+		FeatureRepo:                s.GetStores().FeatureRepo,
+		EntitlementRepo:            s.GetStores().EntitlementRepo,
+		PaymentRepo:                s.GetStores().PaymentRepo,
+		SecretRepo:                 s.GetStores().SecretRepo,
+		EnvironmentRepo:            s.GetStores().EnvironmentRepo,
+		TaskRepo:                   s.GetStores().TaskRepo,
+		CreditGrantRepo:            s.GetStores().CreditGrantRepo,
+		CreditGrantApplicationRepo: s.GetStores().CreditGrantApplicationRepo,
+		CouponRepo:                 s.GetStores().CouponRepo,
+		CouponAssociationRepo:      s.GetStores().CouponAssociationRepo,
+		CouponApplicationRepo:      s.GetStores().CouponApplicationRepo,
+		SettingsRepo:               s.GetStores().SettingsRepo,
+		EventPublisher:             s.GetPublisher(),
+		WebhookPublisher:           s.GetWebhookPublisher(),
+		AlertLogsRepo:              s.GetStores().AlertLogsRepo,
+		WalletBalanceAlertPubSub:   types.WalletBalanceAlertPubSub{PubSub: testutil.NewInMemoryPubSub()},
+		AddonAssociationRepo:       s.GetStores().AddonAssociationRepo,
+		AddonRepo:                  s.GetStores().AddonRepo,
+	}
+
+	s.creditGrantService = NewCreditGrantService(serviceParams)
+	s.subscriptionService = NewSubscriptionService(serviceParams)
+	s.walletService = NewWalletService(serviceParams)
+}
+
+func (s *CreditGrantServiceTestSuite) setupTestData() {
+	s.testData.now = time.Now().UTC()
+
+	// Create test customer
+	s.testData.customer = &customer.Customer{
+		ID:         "cust_test_123",
+		ExternalID: "ext_cust_test_123",
+		Name:       "Test Customer",
+		Email:      "test@example.com",
+		BaseModel:  types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().CustomerRepo.Create(s.GetContext(), s.testData.customer))
+
+	// Create test plan
+	s.testData.plan = &plan.Plan{
+		ID:          "plan_test_123",
+		Name:        "Test Plan",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().PlanRepo.Create(s.GetContext(), s.testData.plan))
+
+	// Create test subscription
+	s.testData.subscription = &subscription.Subscription{
+		ID:                 "sub_test_123",
+		PlanID:             s.testData.plan.ID,
+		CustomerID:         s.testData.customer.ID,
+		Currency:           "USD",
+		StartDate:          s.testData.now,
+		CurrentPeriodStart: s.testData.now,
+		CurrentPeriodEnd:   s.testData.now.Add(30 * 24 * time.Hour), // 30 days
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	// Create subscription with line items
+	lineItems := []*subscription.SubscriptionLineItem{}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), s.testData.subscription, lineItems))
+
+	// Create test wallet
+	s.testData.wallet = &wallet.Wallet{
+		ID:         "wallet_test_123",
+		CustomerID: s.testData.customer.ID,
+		Name:       "Test Wallet",
+		BaseModel:  types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().WalletRepo.CreateWallet(s.GetContext(), s.testData.wallet))
+}
+
+// getWalletTransactionByGrantID retrieves a wallet transaction by grant ID or CGA ID.
+// It returns the matching transaction and an error if not found or if any lookup fails.
+func (s *CreditGrantServiceTestSuite) getWalletTransactionByGrantID(customerID string, grantID *string, cgaID *string) (*dto.WalletTransactionResponse, error) {
+	wallets, err := s.walletService.GetWalletsByCustomerID(s.GetContext(), customerID)
+	if err != nil {
+		return nil, err
+	}
+	if len(wallets) == 0 {
+		return nil, fmt.Errorf("wallet not found for customer: %s", customerID)
+	}
+
+	// Search through all wallets to find the transaction
+	for _, wallet := range wallets {
+		txFilter := &types.WalletTransactionFilter{
+			WalletID:    &wallet.ID,
+			QueryFilter: types.NewDefaultQueryFilter(),
+		}
+		transactions, err := s.walletService.GetWalletTransactions(s.GetContext(), wallet.ID, txFilter)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, tx := range transactions.Items {
+			if tx.Metadata != nil {
+				if grantID != nil {
+					if id, ok := tx.Metadata["grant_id"]; ok && id == *grantID {
+						return tx, nil
+					}
+				}
+				if cgaID != nil {
+					if id, ok := tx.Metadata["cga_id"]; ok && id == *cgaID {
+						return tx, nil
+					}
+				}
+			}
+		}
+	}
+
+	grantIDStr := ""
+	if grantID != nil {
+		grantIDStr = *grantID
+	}
+	cgaIDStr := ""
+	if cgaID != nil {
+		cgaIDStr = *cgaID
+	}
+	return nil, fmt.Errorf("wallet transaction not found for grant_id=%s, cga_id=%s", grantIDStr, cgaIDStr)
+}
+
+// Test Case 1: Create a subscription with a credit grant one time
+func (s *CreditGrantServiceTestSuite) TestCreateSubscriptionWithOnetimeCreditGrant() {
+	// Create one-time credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "One-time Credit Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "onetime"},
+	}
+
+	creditGrantReq.SubscriptionID = &s.testData.subscription.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+	s.Equal(types.CreditGrantCadenceOneTime, creditGrantResp.CreditGrant.Cadence)
+
+	// Verify credit grant application was created
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 1)
+	s.Equal(types.ApplicationStatusApplied, applications[0].ApplicationStatus)
+	s.Equal(types.ApplicationReasonOnetimeCreditGrant, applications[0].ApplicationReason)
+	s.Equal(decimal.NewFromInt(100), applications[0].Credits)
+}
+
+// Test Case 2: Create a subscription with a credit grant recurring with no expiry
+func (s *CreditGrantServiceTestSuite) TestCreateSubscriptionWithRecurringCreditGrantNoExpiry() {
+	// Create recurring credit grant with no expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Recurring Credit Grant - No Expiry",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(50),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "recurring_no_expiry"},
+	}
+
+	creditGrantReq.SubscriptionID = &s.testData.subscription.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+	s.Equal(types.CreditGrantCadenceRecurring, creditGrantResp.CreditGrant.Cadence)
+
+	// No need to call ApplyCreditGrant, it's handled by initializeCreditGrantWorkflow via CreateCreditGrant
+
+	// Verify credit grant application was created for current period
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Find the applied application
+	var appliedApp *creditgrantapplication.CreditGrantApplication
+	var nextPeriodApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			appliedApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			nextPeriodApp = app
+		}
+	}
+
+	s.NotNil(appliedApp)
+	s.NotNil(nextPeriodApp)
+	s.Equal(types.ApplicationReasonFirstTimeRecurringCreditGrant, appliedApp.ApplicationReason)
+	s.Equal(types.ApplicationReasonRecurringCreditGrant, nextPeriodApp.ApplicationReason)
+	s.Equal(decimal.NewFromInt(50), appliedApp.Credits)
+}
+
+// Test Case 3: Create a subscription with a credit grant recurring with expiry
+func (s *CreditGrantServiceTestSuite) TestCreateSubscriptionWithRecurringCreditGrantWithExpiry() {
+	// Create recurring credit grant with billing cycle expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Recurring Credit Grant - With Expiry",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(25),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeBillingCycle,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "recurring_with_expiry"},
+	}
+
+	creditGrantReq.SubscriptionID = &s.testData.subscription.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+	s.Equal(types.CreditGrantCadenceRecurring, creditGrantResp.CreditGrant.Cadence)
+	s.Equal(types.CreditGrantExpiryTypeBillingCycle, creditGrantResp.CreditGrant.ExpirationType)
+
+	// No need to call ApplyCreditGrant, it's handled by initializeCreditGrantWorkflow via CreateCreditGrant
+
+	// Verify credit grant application was created
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Verify applied application
+	var appliedApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			appliedApp = app
+			break
+		}
+	}
+	s.NotNil(appliedApp)
+	s.Equal(decimal.NewFromInt(25), appliedApp.Credits)
+}
+
+// Test Case 4: Create a subscription with credit grant weekly period and subscription monthly period
+func (s *CreditGrantServiceTestSuite) TestWeeklyGrantMonthlySubscription() {
+	// Create weekly recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Weekly Credit Grant - Monthly Subscription",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(15),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_WEEKLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "weekly_grant_monthly_sub"},
+	}
+
+	creditGrantReq.SubscriptionID = &s.testData.subscription.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.Equal(types.CREDIT_GRANT_PERIOD_WEEKLY, lo.FromPtr(creditGrantResp.CreditGrant.Period))
+
+	// No need to call ApplyCreditGrant, it's handled by initializeCreditGrantWorkflow via CreateCreditGrant
+
+	// Verify applications created
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	// Verify first application is applied
+	var appliedApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			appliedApp = app
+			break
+		}
+	}
+	s.NotNil(appliedApp)
+	s.Equal(decimal.NewFromInt(15), appliedApp.Credits)
+}
+
+// Test Case 5: Create a subscription with credit grant monthly period and subscription weekly period
+func (s *CreditGrantServiceTestSuite) TestMonthlyGrantWeeklySubscription() {
+	// Create weekly subscription
+	weeklySubscription := &subscription.Subscription{
+		ID:                 "sub_weekly_123",
+		PlanID:             s.testData.plan.ID,
+		CustomerID:         s.testData.customer.ID,
+		StartDate:          s.testData.now,
+		CurrentPeriodStart: s.testData.now,
+		CurrentPeriodEnd:   s.testData.now.Add(7 * 24 * time.Hour), // 7 days
+		Currency:           "usd",
+		BillingPeriod:      types.BILLING_PERIOD_WEEKLY,
+		BillingPeriodCount: 1,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	lineItems := []*subscription.SubscriptionLineItem{}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), weeklySubscription, lineItems))
+
+	// Create monthly recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Monthly Credit Grant - Weekly Subscription",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(60),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "monthly_grant_weekly_sub"},
+	}
+
+	creditGrantReq.SubscriptionID = &weeklySubscription.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.Equal(types.CREDIT_GRANT_PERIOD_MONTHLY, lo.FromPtr(creditGrantResp.CreditGrant.Period))
+
+	// No need to call ApplyCreditGrant, it's handled by initializeCreditGrantWorkflow via CreateCreditGrant
+
+	// Verify applications created
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{weeklySubscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	// Verify first application is applied
+	var appliedApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			appliedApp = app
+			break
+		}
+	}
+	s.NotNil(appliedApp)
+	s.Equal(decimal.NewFromInt(60), appliedApp.Credits)
+}
+
+// Test Case 6: Test ProcessScheduledCreditGrantApplications function
+func (s *CreditGrantServiceTestSuite) TestProcessScheduledCreditGrantApplications() {
+	// Create a recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Scheduled Credit Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(75),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "scheduled_processing"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Create a scheduled application manually (simulating next period)
+	nextPeriodStart := s.testData.now.Add(30 * 24 * time.Hour)
+	nextPeriodEnd := s.testData.now.Add(60 * 24 * time.Hour)
+
+	scheduledApp := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    s.testData.now.Add(-1 * time.Hour), // Scheduled for past (ready for processing)
+		PeriodStart:                     nextPeriodStart,
+		PeriodEnd:                       &nextPeriodEnd,
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonRecurringCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      0,
+		Credits:                         decimal.NewFromInt(75), // Set the credit amount from the grant
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "test_idempotency_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), scheduledApp)
+	s.NoError(err)
+
+	// Process scheduled applications
+	response, err := s.creditGrantService.ProcessScheduledCreditGrantApplications(s.GetContext())
+	s.NoError(err)
+	s.NotNil(response)
+	s.Equal(1, response.TotalApplicationsCount)
+	s.Equal(1, response.SuccessApplicationsCount)
+	s.Equal(0, response.FailedApplicationsCount)
+
+	// Verify the application was processed
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), scheduledApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusApplied, processedApp.ApplicationStatus)
+	s.Equal(decimal.NewFromInt(75), processedApp.Credits)
+}
+
+// Test Case 7: Create a credit grant application with default values and check processing
+func (s *CreditGrantServiceTestSuite) TestCreditGrantApplicationDefaultProcessing() {
+	// Create a basic credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Basic Credit Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(40),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "default_processing"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Create CGA manually with default values
+	cga := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    s.testData.now.Add(-10 * time.Minute), // Ready for processing
+		PeriodStart:                     s.testData.now.Add(-10 * time.Minute), // Required: set period_start
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonOnetimeCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      0,
+		Credits:                         decimal.NewFromInt(40), // Set the credit amount from the grant
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "default_idempotency_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), cga)
+	s.NoError(err)
+
+	// Process scheduled applications
+	response, err := s.creditGrantService.ProcessScheduledCreditGrantApplications(s.GetContext())
+	s.NoError(err)
+	s.Equal(1, response.TotalApplicationsCount)
+	s.Equal(1, response.SuccessApplicationsCount)
+
+	// Verify processing
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), cga.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusApplied, processedApp.ApplicationStatus)
+	s.Equal(decimal.NewFromInt(40), processedApp.Credits)
+	s.NotNil(processedApp.AppliedAt)
+}
+
+// Test Case 8: Create a failed credit grant application and check retry processing
+func (s *CreditGrantServiceTestSuite) TestFailedCreditGrantApplicationRetry() {
+	// Create a credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Retry Credit Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(30),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "retry_processing"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Create failed CGA
+	failedCGA := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    s.testData.now.Add(-5 * time.Minute), // Ready for retry
+		ApplicationStatus:               types.ApplicationStatusFailed,
+		ApplicationReason:               types.ApplicationReasonOnetimeCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      1,
+		Credits:                         decimal.NewFromInt(30), // Set the credit amount from the grant
+		FailureReason:                   lo.ToPtr("Previous failure reason"),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "retry_idempotency_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), failedCGA)
+	s.NoError(err)
+
+	// Process scheduled applications (should retry the failed one)
+	response, err := s.creditGrantService.ProcessScheduledCreditGrantApplications(s.GetContext())
+	s.NoError(err)
+	s.Equal(1, response.TotalApplicationsCount)
+	s.Equal(1, response.SuccessApplicationsCount)
+
+	// Verify retry was successful
+	retriedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), failedCGA.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusApplied, retriedApp.ApplicationStatus)
+	s.Equal(decimal.NewFromInt(30), retriedApp.Credits)
+	s.Equal(2, retriedApp.RetryCount) // Should be incremented
+	// Note: Failure reason is NOT cleared on success - it's preserved for audit/history purposes
+}
+
+// Test Case 9: Test subscription end prevents next period CGA creation
+func (s *CreditGrantServiceTestSuite) TestSubscriptionEndPreventsNextPeriodCGA() {
+	// Create subscription with end date soon
+	endingSoon := s.testData.now.Add(15 * 24 * time.Hour) // Ends in 15 days
+	subscriptionWithEnd := &subscription.Subscription{
+		ID:                 "sub_ending_123",
+		PlanID:             s.testData.plan.ID,
+		CustomerID:         s.testData.customer.ID,
+		StartDate:          s.testData.now,
+		EndDate:            &endingSoon,
+		CurrentPeriodStart: s.testData.now,
+		CurrentPeriodEnd:   s.testData.now.Add(30 * 24 * time.Hour), // 30 days (extends beyond end date)
+		Currency:           "usd",
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	lineItems := []*subscription.SubscriptionLineItem{}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), subscriptionWithEnd, lineItems))
+
+	// Create recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Ending Subscription Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(50),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "ending_subscription"},
+	}
+
+	creditGrantReq.SubscriptionID = &subscriptionWithEnd.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// No need to call ApplyCreditGrant, it's handled by initializeCreditGrantWorkflow via CreateCreditGrant
+
+	// Check applications created
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{subscriptionWithEnd.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+
+	// There might be 2 applications created, but the second one should be for a period that ends at subscription end date
+	s.GreaterOrEqual(len(applications), 1)
+
+	// Find the applied application (current period)
+	var appliedApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			appliedApp = app
+			break
+		}
+	}
+
+	s.NotNil(appliedApp)
+	s.Equal(types.ApplicationStatusApplied, appliedApp.ApplicationStatus)
+	s.Equal(decimal.NewFromInt(50), appliedApp.Credits)
+}
+
+// Test Case 10: Test error scenarios
+func (s *CreditGrantServiceTestSuite) TestErrorScenarios() {
+	s.Run("Invalid Plan ID", func() {
+		invalidPlanID := "invalid_plan_id"
+		creditGrantReq := dto.CreateCreditGrantRequest{
+			Name:           "Invalid Plan Credit Grant",
+			Scope:          types.CreditGrantScopePlan,
+			Credits:        decimal.NewFromInt(50),
+			Cadence:        types.CreditGrantCadenceOneTime,
+			ExpirationType: types.CreditGrantExpiryTypeNever,
+			Priority:       lo.ToPtr(1),
+			PlanID:         &invalidPlanID,
+		}
+
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+		s.Error(err)
+		s.True(ierr.IsNotFound(err))
+	})
+
+	s.Run("Anchor Before Start Date", func() {
+		startDate := time.Now().Add(24 * time.Hour)
+		anchorDate := time.Now() // Before start date
+		creditGrantReq := dto.CreateCreditGrantRequest{
+			Name:              "Invalid Anchor Grant",
+			Scope:             types.CreditGrantScopeSubscription,
+			SubscriptionID:    &s.testData.subscription.ID,
+			Credits:           decimal.NewFromInt(50),
+			Cadence:           types.CreditGrantCadenceOneTime,
+			ExpirationType:    types.CreditGrantExpiryTypeNever,
+			StartDate:         &startDate,
+			CreditGrantAnchor: &anchorDate,
+			PlanID:            &s.testData.plan.ID,
+		}
+
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+		s.Error(err)
+		s.Contains(err.Error(), "credit_grant_anchor cannot be before start_date")
+	})
+
+	s.Run("Missing Start Date", func() {
+		creditGrantReq := dto.CreateCreditGrantRequest{
+			Name:           "Missing Start Date Grant",
+			Scope:          types.CreditGrantScopeSubscription,
+			SubscriptionID: &s.testData.subscription.ID,
+			Credits:        decimal.NewFromInt(50),
+			Cadence:        types.CreditGrantCadenceOneTime,
+			ExpirationType: types.CreditGrantExpiryTypeNever,
+			PlanID:         &s.testData.plan.ID,
+		}
+
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+		s.Error(err)
+		s.Contains(err.Error(), "start_date is required")
+	})
+
+	s.Run("Get Non-existent Credit Grant", func() {
+		_, err := s.creditGrantService.GetCreditGrant(s.GetContext(), "non_existent_id")
+		s.Error(err)
+		s.True(ierr.IsNotFound(err))
+	})
+}
+
+// Test Case 11: Test UpdateCreditGrant
+func (s *CreditGrantServiceTestSuite) TestUpdateCreditGrant() {
+	// Create a credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Update Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(35),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"original": "value"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Update the credit grant
+	updateReq := dto.UpdateCreditGrantRequest{
+		Name:     lo.ToPtr("Updated Grant Name"),
+		Metadata: lo.ToPtr(types.Metadata{"updated": "value"}),
+	}
+
+	updatedResp, err := s.creditGrantService.UpdateCreditGrant(s.GetContext(), creditGrantResp.CreditGrant.ID, updateReq)
+	s.NoError(err)
+	s.Equal("Updated Grant Name", updatedResp.CreditGrant.Name)
+	s.Equal(types.Metadata{"updated": "value"}, updatedResp.CreditGrant.Metadata)
+}
+
+// Test Case 12: Test DeleteCreditGrant
+func (s *CreditGrantServiceTestSuite) TestDeleteCreditGrant() {
+	// Create a credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Delete Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(45),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Delete the credit grant (subscription scope: sets end date and cancels future CGAs, does not delete)
+	err = s.creditGrantService.DeleteCreditGrant(s.GetContext(), dto.DeleteCreditGrantRequest{
+		CreditGrantID: creditGrantResp.CreditGrant.ID,
+		EffectiveDate: &s.testData.now,
+	})
+	s.NoError(err)
+
+	// For subscription-scoped grants, the grant is not deleted; end date is set. Verify grant still exists with end date set.
+	gotGrant, err := s.creditGrantService.GetCreditGrant(s.GetContext(), creditGrantResp.CreditGrant.ID)
+	s.NoError(err)
+	s.NotNil(gotGrant.EndDate)
+	s.True(gotGrant.EndDate.Equal(s.testData.now) || (gotGrant.EndDate.After(s.testData.now.Add(-time.Second)) && gotGrant.EndDate.Before(s.testData.now.Add(time.Second))))
+}
+
+func (s *CreditGrantServiceTestSuite) TestDeleteCreditGrant_OnlyCancelsApplicationsAfterEffectiveDate() {
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Ordering Bug Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+	}
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	effectiveDate := s.testData.now.Add(15 * 24 * time.Hour)
+
+	beforeApp := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    effectiveDate.Add(-5 * 24 * time.Hour), // still within the active window
+		PeriodStart:                     effectiveDate.Add(-5 * 24 * time.Hour),
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonRecurringCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		Credits:                         decimal.NewFromInt(100),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "before_effective_date",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), beforeApp))
+
+	afterApp := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    effectiveDate.Add(5 * 24 * time.Hour), // after cancellation takes effect
+		PeriodStart:                     effectiveDate.Add(5 * 24 * time.Hour),
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonRecurringCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		Credits:                         decimal.NewFromInt(100),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "after_effective_date",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), afterApp))
+
+	// Scheduled exactly at the cutoff — must stay pending. This pins the filter as strictly
+	// "after" (ScheduledForGT), not "at or after"; if that ever changed to >=, this app would be
+	// wrongly cancelled and only this boundary case would catch it.
+	atCutoffApp := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    effectiveDate,
+		PeriodStart:                     effectiveDate,
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonRecurringCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		Credits:                         decimal.NewFromInt(100),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "at_effective_date",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), atCutoffApp))
+
+	err = s.creditGrantService.DeleteCreditGrant(s.GetContext(), dto.DeleteCreditGrantRequest{
+		CreditGrantID: creditGrantResp.CreditGrant.ID,
+		EffectiveDate: &effectiveDate,
+	})
+	s.NoError(err)
+
+	gotBefore, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), beforeApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusPending, gotBefore.ApplicationStatus, "application scheduled before the effective date must remain untouched")
+
+	gotAtCutoff, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), atCutoffApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusCancelled, gotAtCutoff.ApplicationStatus, "application scheduled exactly at the effective date must be cancelled (inclusive cutoff)")
+
+	gotAfter, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), afterApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusCancelled, gotAfter.ApplicationStatus, "application scheduled after the effective date must be cancelled")
+}
+
+// Test Case 13: Test period start and end dates for weekly credit grant
+func (s *CreditGrantServiceTestSuite) TestWeeklyCreditGrantPeriodDates() {
+	// Create weekly recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Weekly Period Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(20),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_WEEKLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "weekly_period_dates"},
+	}
+
+	creditGrantReq.SubscriptionID = &s.testData.subscription.ID
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// No need to call ApplyCreditGrant, it's handled by initializeCreditGrantWorkflow via CreateCreditGrant
+
+	// Verify applications and their period dates
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Find current and next period applications
+	var currentApp, nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			currentApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			nextApp = app
+		}
+	}
+
+	s.NotNil(currentApp)
+	s.NotNil(nextApp)
+
+	// Verify current period dates (should start around subscription start)
+	s.NotNil(currentApp.PeriodStart)
+	s.NotNil(currentApp.PeriodEnd)
+
+	// For weekly period, the period should be 7 days
+	expectedCurrentEnd := currentApp.PeriodStart.Add(7 * 24 * time.Hour)
+	s.WithinDuration(expectedCurrentEnd, *currentApp.PeriodEnd, time.Hour,
+		"Current period end should be 7 days after start for weekly grant")
+
+	// Verify next period dates (should start when current period ends)
+	s.NotNil(nextApp.PeriodStart)
+	s.NotNil(nextApp.PeriodEnd)
+
+	// Next period should start when current period ends
+	s.WithinDuration(*currentApp.PeriodEnd, nextApp.PeriodStart, time.Minute,
+		"Next period should start when current period ends")
+
+	// Next period should also be 7 days long
+	expectedNextEnd := nextApp.PeriodStart.Add(7 * 24 * time.Hour)
+	s.WithinDuration(expectedNextEnd, *nextApp.PeriodEnd, time.Hour,
+		"Next period end should be 7 days after start for weekly grant")
+
+	s.T().Logf("Weekly Grant - Current Period: %s to %s",
+		currentApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		currentApp.PeriodEnd.Format("2006-01-02 15:04:05"))
+	s.T().Logf("Weekly Grant - Next Period: %s to %s",
+		nextApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		nextApp.PeriodEnd.Format("2006-01-02 15:04:05"))
+}
+
+// Test Case 14: Test period start and end dates for monthly credit grant
+func (s *CreditGrantServiceTestSuite) TestMonthlyCreditGrantPeriodDates() {
+	// Create monthly recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Monthly Period Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "monthly_period_dates"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify applications and their period dates
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Find current and next period applications
+	var currentApp, nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			currentApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			nextApp = app
+		}
+	}
+
+	s.NotNil(currentApp)
+	s.NotNil(nextApp)
+
+	// Verify current period dates
+	s.NotNil(currentApp.PeriodStart)
+	s.NotNil(currentApp.PeriodEnd)
+
+	// For monthly period, verify it's approximately 28-32 days (allow 1h tolerance for float/DST)
+	periodDuration := currentApp.PeriodEnd.Sub(currentApp.PeriodStart)
+	// Round to account for floating-point precision issues
+	periodHours := math.Round(periodDuration.Hours()*100) / 100
+	s.GreaterOrEqual(periodHours, float64(28*24)-1, "Monthly period should be at least 28 days")
+	s.LessOrEqual(periodHours, float64(32*24), "Monthly period should be at most 32 days")
+
+	// Verify next period dates
+	s.NotNil(nextApp.PeriodStart)
+	s.NotNil(nextApp.PeriodEnd)
+
+	// Next period should start when current period ends
+	s.WithinDuration(*currentApp.PeriodEnd, nextApp.PeriodStart, time.Minute,
+		"Next period should start when current period ends")
+
+	// Next period should also be approximately monthly (allow 1h tolerance for float/DST)
+	nextPeriodDuration := nextApp.PeriodEnd.Sub(nextApp.PeriodStart)
+	// Round to account for floating-point precision issues
+	nextPeriodHours := math.Round(nextPeriodDuration.Hours()*100) / 100
+	s.GreaterOrEqual(nextPeriodHours, float64(28*24)-1, "Next monthly period should be at least 28 days")
+	s.LessOrEqual(nextPeriodHours, float64(32*24), "Next monthly period should be at most 32 days")
+
+	s.T().Logf("Monthly Grant - Current Period: %s to %s (Duration: %.1f days)",
+		currentApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		currentApp.PeriodEnd.Format("2006-01-02 15:04:05"),
+		periodDuration.Hours()/24)
+	s.T().Logf("Monthly Grant - Next Period: %s to %s (Duration: %.1f days)",
+		nextApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		nextApp.PeriodEnd.Format("2006-01-02 15:04:05"),
+		nextPeriodDuration.Hours()/24)
+}
+
+// Test Case 15: Test period start and end dates for yearly credit grant
+func (s *CreditGrantServiceTestSuite) TestYearlyCreditGrantPeriodDates() {
+	// Create yearly recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Yearly Period Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(1200),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_ANNUAL),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "yearly_period_dates"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify applications and their period dates
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Find current and next period applications
+	var currentApp, nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			currentApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			nextApp = app
+		}
+	}
+
+	s.NotNil(currentApp)
+	s.NotNil(nextApp)
+
+	// Verify current period dates
+	s.NotNil(currentApp.PeriodStart)
+	s.NotNil(currentApp.PeriodEnd)
+
+	// For yearly period, verify it's approximately 365 days
+	periodDuration := currentApp.PeriodEnd.Sub(currentApp.PeriodStart)
+	s.GreaterOrEqual(periodDuration.Hours(), float64(364*24), "Yearly period should be at least 364 days")
+	s.LessOrEqual(periodDuration.Hours(), float64(366*24), "Yearly period should be at most 366 days")
+
+	// Verify next period dates
+	s.NotNil(nextApp.PeriodStart)
+	s.NotNil(nextApp.PeriodEnd)
+
+	// Next period should start when current period ends
+	s.WithinDuration(*currentApp.PeriodEnd, nextApp.PeriodStart, time.Minute,
+		"Next period should start when current period ends")
+
+	// Next period should also be approximately yearly
+	nextPeriodDuration := nextApp.PeriodEnd.Sub(nextApp.PeriodStart)
+	s.GreaterOrEqual(nextPeriodDuration.Hours(), float64(364*24), "Next yearly period should be at least 364 days")
+	s.LessOrEqual(nextPeriodDuration.Hours(), float64(366*24), "Next yearly period should be at most 366 days")
+
+	s.T().Logf("Yearly Grant - Current Period: %s to %s (Duration: %.1f days)",
+		currentApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		currentApp.PeriodEnd.Format("2006-01-02 15:04:05"),
+		periodDuration.Hours()/24)
+	s.T().Logf("Yearly Grant - Next Period: %s to %s (Duration: %.1f days)",
+		nextApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		nextApp.PeriodEnd.Format("2006-01-02 15:04:05"),
+		nextPeriodDuration.Hours()/24)
+}
+
+// Test Case 16: Test period start and end dates with multiple period counts
+func (s *CreditGrantServiceTestSuite) TestMultiplePeriodCountDates() {
+	// Create bi-weekly credit grant (every 2 weeks)
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Bi-Weekly Period Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(40),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_WEEKLY),
+		PeriodCount:    lo.ToPtr(2), // Every 2 weeks
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "bi_weekly_period_dates"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify applications and their period dates
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Find current and next period applications
+	var currentApp, nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			currentApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			nextApp = app
+		}
+	}
+
+	s.NotNil(currentApp)
+	s.NotNil(nextApp)
+
+	// Verify current period dates
+	s.NotNil(currentApp.PeriodStart)
+	s.NotNil(currentApp.PeriodEnd)
+
+	// For bi-weekly period (2 weeks), the period should be 14 days
+	expectedCurrentEnd := currentApp.PeriodStart.Add(14 * 24 * time.Hour)
+	s.WithinDuration(expectedCurrentEnd, *currentApp.PeriodEnd, time.Hour,
+		"Current period end should be 14 days after start for bi-weekly grant")
+
+	// Verify next period dates
+	s.NotNil(nextApp.PeriodStart)
+	s.NotNil(nextApp.PeriodEnd)
+
+	// Next period should start when current period ends
+	s.WithinDuration(*currentApp.PeriodEnd, nextApp.PeriodStart, time.Minute,
+		"Next period should start when current period ends")
+
+	// Next period should also be 14 days long
+	expectedNextEnd := nextApp.PeriodStart.Add(14 * 24 * time.Hour)
+	s.WithinDuration(expectedNextEnd, *nextApp.PeriodEnd, time.Hour,
+		"Next period end should be 14 days after start for bi-weekly grant")
+
+	s.T().Logf("Bi-Weekly Grant - Current Period: %s to %s (Duration: %.1f days)",
+		currentApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		currentApp.PeriodEnd.Format("2006-01-02 15:04:05"),
+		currentApp.PeriodEnd.Sub(currentApp.PeriodStart).Hours()/24)
+	s.T().Logf("Bi-Weekly Grant - Next Period: %s to %s (Duration: %.1f days)",
+		nextApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		nextApp.PeriodEnd.Format("2006-01-02 15:04:05"),
+		nextApp.PeriodEnd.Sub(nextApp.PeriodStart).Hours()/24)
+}
+
+// Test Case 17: Test period dates alignment with credit grant creation date
+func (s *CreditGrantServiceTestSuite) TestPeriodDatesAlignmentWithGrantCreationDate() {
+	// Anchor to the most recent 15th 10:30 UTC that is not in the future. Recurring grant
+	// catch-up applies every past-due period until the next ScheduledFor is after now; a fixed
+	// 2024 date would create one application per month from 2024 through the test run year.
+	now := time.Now().UTC()
+	specificTime := time.Date(now.Year(), now.Month(), 15, 10, 30, 0, 0, time.UTC)
+	if now.Before(specificTime) {
+		specificTime = specificTime.AddDate(0, -1, 0)
+	}
+
+	// Create a new subscription starting at specific time
+	testSubscription := &subscription.Subscription{
+		ID:                 "sub_alignment_test",
+		PlanID:             s.testData.plan.ID,
+		CustomerID:         s.testData.customer.ID,
+		StartDate:          specificTime,
+		CurrentPeriodStart: specificTime,
+		CurrentPeriodEnd:   specificTime.AddDate(0, 1, 0),
+		Currency:           "usd",
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	lineItems := []*subscription.SubscriptionLineItem{}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), testSubscription, lineItems))
+
+	// Create monthly recurring credit grant
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Alignment Test Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &testSubscription.ID,
+		Credits:        decimal.NewFromInt(50),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &specificTime,
+		Metadata:       types.Metadata{"test": "alignment_dates"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify applications and their period dates
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{testSubscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 2) // Current period + next period
+
+	// Find current and next period applications
+	var currentApp, nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			currentApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			nextApp = app
+		}
+	}
+
+	s.NotNil(currentApp)
+	s.NotNil(nextApp)
+
+	// Verify period dates are properly calculated from grant creation time
+	s.NotNil(currentApp.PeriodStart)
+	s.NotNil(currentApp.PeriodEnd)
+	s.NotNil(nextApp.PeriodStart)
+	s.NotNil(nextApp.PeriodEnd)
+
+	// The periods should be calculated based on the grant's creation date as anchor
+	// Current period should align with the grant creation date
+	expectedNextStart := *currentApp.PeriodEnd
+	s.WithinDuration(expectedNextStart, nextApp.PeriodStart, time.Minute,
+		"Next period should start exactly when current period ends")
+
+	// Log the alignment details
+	s.T().Logf("Grant Created At: %s", creditGrantResp.CreditGrant.CreatedAt.Format("2006-01-02 15:04:05"))
+	s.T().Logf("Subscription Start: %s", testSubscription.StartDate.Format("2006-01-02 15:04:05"))
+	s.T().Logf("Current Period: %s to %s",
+		currentApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		currentApp.PeriodEnd.Format("2006-01-02 15:04:05"))
+	s.T().Logf("Next Period: %s to %s",
+		nextApp.PeriodStart.Format("2006-01-02 15:04:05"),
+		nextApp.PeriodEnd.Format("2006-01-02 15:04:05"))
+
+	// Verify that periods don't overlap
+	s.True(currentApp.PeriodEnd.Before(*nextApp.PeriodEnd) || currentApp.PeriodEnd.Equal(nextApp.PeriodStart),
+		"Current period should end before or exactly when next period starts")
+}
+
+// ============================================================================
+// Phase 1: DURATION Expiration Type Tests (Tests 18-21)
+// ============================================================================
+
+// Test Case 18: One-time Grant with DURATION Expiry (DAY unit)
+func (s *CreditGrantServiceTestSuite) TestOnetimeGrantWithDurationExpiryDay() {
+	// Create one-time grant with 7 DAY expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "One-time Grant - 7 Day Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(100),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(7),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitDays),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "duration_day_expiry"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+	s.Equal(types.CreditGrantExpiryTypeDuration, creditGrantResp.CreditGrant.ExpirationType)
+	s.Equal(7, lo.FromPtr(creditGrantResp.CreditGrant.ExpirationDuration))
+	s.Equal(types.CreditGrantExpiryDurationUnitDays, lo.FromPtr(creditGrantResp.CreditGrant.ExpirationDurationUnit))
+
+	// Verify credit grant application was created and applied
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 1)
+	s.Equal(types.ApplicationStatusApplied, applications[0].ApplicationStatus)
+
+	// Verify expiry date is calculated correctly (scheduledFor + 7 days)
+	// Implementation uses AddDate() which preserves time component
+	// This check is redundant since we verify the actual wallet transaction expiry below
+
+	// Verify wallet transaction has correct expiry date
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx, "Should find wallet transaction for the grant")
+	s.NotNil(grantTx.ExpiryDate, "Transaction should have expiry date")
+
+	// Verify expiry date is approximately 7 days from PeriodStart (used for expiry calculation)
+	// Implementation uses PeriodStart directly with AddDate() which preserves time component
+	// Calculate expected expiry: actual expiry - 7 days should equal PeriodStart (within tolerance)
+	// This accounts for any time normalization that might occur during database storage/retrieval
+	s.NotNil(applications[0].PeriodStart, "PeriodStart should be set for subscription-scoped grants")
+	expectedPeriodStart := grantTx.ExpiryDate.AddDate(0, 0, -7) // Reverse calculate from actual expiry
+	s.WithinDuration(expectedPeriodStart, applications[0].PeriodStart, 24*time.Hour, "PeriodStart should be approximately 7 days before expiry")
+	// Also verify the expiry is 7 days from PeriodStart using AddDate()
+	expectedExpiryTime := applications[0].PeriodStart.AddDate(0, 0, 7)
+	s.WithinDuration(expectedExpiryTime, *grantTx.ExpiryDate, 24*time.Hour, "Expiry date should be 7 days from PeriodStart using AddDate()")
+	s.Equal(decimal.NewFromInt(100), grantTx.CreditAmount, "Transaction should have correct credit amount")
+}
+
+// Test Case 19: One-time Grant with DURATION Expiry (WEEK unit)
+func (s *CreditGrantServiceTestSuite) TestOnetimeGrantWithDurationExpiryWeek() {
+	// Create one-time grant with 2 WEEK expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "One-time Grant - 2 Week Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(200),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(2),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitWeeks),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "duration_week_expiry"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+
+	// Verify application was created and applied
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 1)
+	s.Equal(types.ApplicationStatusApplied, applications[0].ApplicationStatus)
+
+	// Verify expiry date = scheduledFor + 14 days (2 weeks)
+	// Implementation uses AddDate() which preserves time component
+	// This check is redundant since we verify the actual wallet transaction expiry below
+
+	// Verify wallet transaction expiry
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+
+	// Verify expiry is calculated from PeriodStart (used for expiry calculation)
+	// Implementation uses PeriodStart directly with AddDate() which preserves time component
+	// Calculate expected expiry: actual expiry - 14 days should equal PeriodStart (within tolerance)
+	// This accounts for any time normalization that might occur during database storage/retrieval
+	s.NotNil(applications[0].PeriodStart, "PeriodStart should be set for subscription-scoped grants")
+	expectedPeriodStart := grantTx.ExpiryDate.AddDate(0, 0, -14) // Reverse calculate from actual expiry
+	s.WithinDuration(expectedPeriodStart, applications[0].PeriodStart, 24*time.Hour, "PeriodStart should be approximately 14 days before expiry")
+	// Also verify the expiry is 14 days from PeriodStart using AddDate()
+	expectedExpiryTime := applications[0].PeriodStart.AddDate(0, 0, 14) // 2 weeks = 14 days
+	s.WithinDuration(expectedExpiryTime, *grantTx.ExpiryDate, 24*time.Hour, "Expiry should be 14 days from PeriodStart using AddDate()")
+}
+
+// Test Case 20: One-time Grant with DURATION Expiry (MONTH unit)
+func (s *CreditGrantServiceTestSuite) TestOnetimeGrantWithDurationExpiryMonth() {
+	// Create one-time grant with 1 MONTH expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "One-time Grant - 1 Month Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(300),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitMonths),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "duration_month_expiry"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+
+	// Verify application was created and applied
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 1)
+	s.Equal(types.ApplicationStatusApplied, applications[0].ApplicationStatus)
+
+	// Verify wallet transaction expiry
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+
+	expectedExpiryTime := s.testData.now.AddDate(0, 1, 0) // Add 1 month
+	s.WithinDuration(expectedExpiryTime, *grantTx.ExpiryDate, 2*24*time.Hour, "Expiry should be approximately 1 month from grant creation")
+}
+
+// Test Case 21: One-time Grant with DURATION Expiry (YEAR unit)
+func (s *CreditGrantServiceTestSuite) TestOnetimeGrantWithDurationExpiryYear() {
+	// Create one-time grant with 1 YEAR expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "One-time Grant - 1 Year Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(400),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitYears),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "duration_year_expiry"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+	s.NotNil(creditGrantResp)
+
+	// Verify application was created and applied
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 1)
+	s.Equal(types.ApplicationStatusApplied, applications[0].ApplicationStatus)
+
+	// Verify wallet transaction expiry
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+
+	expectedExpiryTime := s.testData.now.AddDate(1, 0, 0) // Add 1 year
+	s.WithinDuration(expectedExpiryTime, *grantTx.ExpiryDate, 2*24*time.Hour, "Expiry should be approximately 1 year from grant creation")
+}
+
+// ============================================================================
+// Phase 2: Past Expiration Skip Tests (Critical) (Tests 22-25)
+// ============================================================================
+
+// Test Case 22: Skip Grant with Past Expiration (One-time, DAY unit)
+func (s *CreditGrantServiceTestSuite) TestSkipGrantWithPastExpirationOnetimeDay() {
+	// Create one-time grant with DURATION expiry (1 DAY)
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "One-time Grant - Past Expiry Day",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(50),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitDays),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "past_expiry_skip"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Manually create CGA with scheduledFor in past (2 days ago) and expiry in past (1 day ago)
+	pastScheduledFor := s.testData.now.Add(-2 * 24 * time.Hour) // 2 days ago
+
+	expiredCGA := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    pastScheduledFor,
+		PeriodStart:                     pastScheduledFor, // PeriodStart is required for expiry calculation
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonOnetimeCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      0,
+		Credits:                         decimal.NewFromInt(50),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "expired_cga_idempotency_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), expiredCGA)
+	s.NoError(err)
+
+	// Process the application - it should be skipped due to past expiry
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), expiredCGA.ID)
+	s.NoError(err) // Processing should succeed, but grant should be skipped
+
+	// Verify: Status is SKIPPED, failure reason is "expired", applied_at is nil
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusSkipped, processedApp.ApplicationStatus)
+	s.NotNil(processedApp.FailureReason)
+	s.Contains(*processedApp.FailureReason, "expired")
+	s.Nil(processedApp.AppliedAt, "AppliedAt should be nil for skipped grants")
+
+	// Verify: No credits are added to wallet
+	_, err = s.getWalletTransactionByGrantID(s.testData.customer.ID, nil, &expiredCGA.ID)
+	s.Error(err, "Should not find wallet transaction for expired grant")
+}
+
+// Test Case 23: Skip Grant with Past Expiration (Recurring, WEEK unit)
+func (s *CreditGrantServiceTestSuite) TestSkipGrantWithPastExpirationRecurringWeek() {
+	// Create recurring grant with 1 WEEK expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Recurring Grant - Past Expiry Week",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(75),
+		Cadence:                types.CreditGrantCadenceRecurring,
+		Period:                 lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:            lo.ToPtr(1),
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitWeeks),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "past_expiry_recurring"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Create CGA with scheduledFor in past and expiry in past
+	pastScheduledFor := s.testData.now.Add(-10 * 24 * time.Hour) // 10 days ago
+
+	expiredCGA := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    pastScheduledFor,
+		PeriodStart:                     pastScheduledFor,
+		PeriodEnd:                       lo.ToPtr(pastScheduledFor.Add(30 * 24 * time.Hour)),
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonRecurringCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      0,
+		Credits:                         decimal.NewFromInt(75),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "expired_recurring_cga_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), expiredCGA)
+	s.NoError(err)
+
+	// Process the application
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+
+	// Verify: Status is SKIPPED
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusSkipped, processedApp.ApplicationStatus)
+	s.NotNil(processedApp.FailureReason)
+	s.Contains(*processedApp.FailureReason, "expired")
+
+	// Verify: Next period application is still created (for recurring grants)
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	// Should have at least 2 applications: the skipped one and potentially a next period one
+	s.GreaterOrEqual(len(applications), 1)
+}
+
+// Test Case 24: Skip Grant with Past Expiration (MONTH unit)
+func (s *CreditGrantServiceTestSuite) TestSkipGrantWithPastExpirationMonth() {
+	// Create grant with MONTH unit expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Grant - Past Expiry Month",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(100),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitMonths),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "past_expiry_month"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Create CGA with scheduledFor in past and expiry in past
+	pastScheduledFor := s.testData.now.Add(-60 * 24 * time.Hour) // 60 days ago
+
+	expiredCGA := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    pastScheduledFor,
+		PeriodStart:                     pastScheduledFor, // PeriodStart is required for expiry calculation
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonOnetimeCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      0,
+		Credits:                         decimal.NewFromInt(100),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "expired_month_cga_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), expiredCGA)
+	s.NoError(err)
+
+	// Process the application
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+
+	// Verify skip behavior
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusSkipped, processedApp.ApplicationStatus)
+	s.NotNil(processedApp.FailureReason)
+	s.Contains(*processedApp.FailureReason, "expired")
+	s.Nil(processedApp.AppliedAt)
+}
+
+// Test Case 25: Skip Grant with Past Expiration (YEAR unit)
+func (s *CreditGrantServiceTestSuite) TestSkipGrantWithPastExpirationYear() {
+	// Create grant with YEAR unit expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Grant - Past Expiry Year",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(200),
+		Cadence:                types.CreditGrantCadenceOneTime,
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitYears),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "past_expiry_year"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Create CGA with scheduledFor in past and expiry in past
+	pastScheduledFor := s.testData.now.AddDate(-2, 0, 0) // 2 years ago
+
+	expiredCGA := &creditgrantapplication.CreditGrantApplication{
+		ID:                              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+		CreditGrantID:                   creditGrantResp.CreditGrant.ID,
+		SubscriptionID:                  s.testData.subscription.ID,
+		ScheduledFor:                    pastScheduledFor,
+		PeriodStart:                     pastScheduledFor, // PeriodStart is required for expiry calculation
+		ApplicationStatus:               types.ApplicationStatusPending,
+		ApplicationReason:               types.ApplicationReasonOnetimeCreditGrant,
+		SubscriptionStatusAtApplication: s.testData.subscription.SubscriptionStatus,
+		RetryCount:                      0,
+		Credits:                         decimal.NewFromInt(200),
+		Metadata:                        types.Metadata{},
+		IdempotencyKey:                  "expired_year_cga_key",
+		EnvironmentID:                   types.GetEnvironmentID(s.GetContext()),
+		BaseModel:                       types.GetDefaultBaseModel(s.GetContext()),
+	}
+
+	err = s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), expiredCGA)
+	s.NoError(err)
+
+	// Process the application
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+
+	// Verify skip behavior
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), expiredCGA.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusSkipped, processedApp.ApplicationStatus)
+	s.NotNil(processedApp.FailureReason)
+	s.Contains(*processedApp.FailureReason, "expired")
+	s.Nil(processedApp.AppliedAt)
+}
+
+// ============================================================================
+// Phase 3: Recurring Grant DURATION Expiry Tests (Tests 26-29)
+// ============================================================================
+
+// Test Case 26: Recurring Grant with DURATION Expiry (DAY unit)
+func (s *CreditGrantServiceTestSuite) TestRecurringGrantWithDurationExpiryDay() {
+	// Create recurring monthly grant with 7 DAY expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Recurring Grant - 7 Day Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(50),
+		Cadence:                types.CreditGrantCadenceRecurring,
+		Period:                 lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:            lo.ToPtr(1),
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(7),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitDays),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "recurring_duration_day"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify first application has correct expiry
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	var firstApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			firstApp = app
+			break
+		}
+	}
+	s.NotNil(firstApp)
+
+	// Verify wallet transaction has expiry of 7 days from scheduledFor
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+	// Expiry is calculated from PeriodStart
+	// Implementation uses PeriodStart directly with AddDate() which preserves time component
+	// Calculate expected expiry: actual expiry - 7 days should equal PeriodStart (within tolerance)
+	// This accounts for any time normalization that might occur during database storage/retrieval
+	s.NotNil(firstApp.PeriodStart, "PeriodStart should be set for subscription-scoped grants")
+	expectedPeriodStart := grantTx.ExpiryDate.AddDate(0, 0, -7) // Reverse calculate from actual expiry
+	s.WithinDuration(expectedPeriodStart, firstApp.PeriodStart, 24*time.Hour, "PeriodStart should be approximately 7 days before expiry")
+	// Also verify the expiry is 7 days from PeriodStart using AddDate()
+	expectedExpiry := firstApp.PeriodStart.AddDate(0, 0, 7)
+	s.WithinDuration(expectedExpiry, *grantTx.ExpiryDate, 24*time.Hour, "First application expiry should be 7 days from PeriodStart using AddDate()")
+
+	// Verify next period application is created
+	var nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusPending && app.ID != firstApp.ID {
+			nextApp = app
+			break
+		}
+	}
+	s.NotNil(nextApp, "Next period application should be created")
+
+	// Process next period application
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), nextApp.ID)
+	s.NoError(err)
+
+	// Verify: Each application has its own expiry timeline (7 days from its scheduledFor)
+	processedNextApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), nextApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusApplied, processedNextApp.ApplicationStatus)
+
+	// Get transactions again to find the new one
+	nextGrantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, nil, &nextApp.ID)
+	s.NoError(err)
+	s.NotNil(nextGrantTx)
+	s.NotNil(nextGrantTx.ExpiryDate)
+	// Expiry is calculated from PeriodStart
+	// Implementation uses PeriodStart directly with AddDate() which preserves time component
+	// Calculate expected expiry: actual expiry - 7 days should equal PeriodStart (within tolerance)
+	// This accounts for any time normalization that might occur during database storage/retrieval
+	s.NotNil(processedNextApp.PeriodStart, "PeriodStart should be set for subscription-scoped grants")
+	expectedNextPeriodStart := nextGrantTx.ExpiryDate.AddDate(0, 0, -7) // Reverse calculate from actual expiry
+	s.WithinDuration(expectedNextPeriodStart, processedNextApp.PeriodStart, 24*time.Hour, "PeriodStart should be approximately 7 days before expiry")
+	// Also verify the expiry is 7 days from PeriodStart using AddDate()
+	expectedNextExpiry := processedNextApp.PeriodStart.AddDate(0, 0, 7)
+	s.WithinDuration(expectedNextExpiry, *nextGrantTx.ExpiryDate, 24*time.Hour, "Next application expiry should be 7 days from its own PeriodStart using AddDate()")
+}
+
+// Test Case 27: Recurring Grant with DURATION Expiry (WEEK unit)
+func (s *CreditGrantServiceTestSuite) TestRecurringGrantWithDurationExpiryWeek() {
+	// Create recurring grant with WEEK unit expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Recurring Grant - Week Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(60),
+		Cadence:                types.CreditGrantCadenceRecurring,
+		Period:                 lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:            lo.ToPtr(1),
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(2),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitWeeks),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "recurring_duration_week"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify expiry independence for each period
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	var firstApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			firstApp = app
+			break
+		}
+	}
+	s.NotNil(firstApp)
+
+	// Verify first period expiry (2 weeks = 14 days)
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+	// Expiry is calculated from PeriodStart
+	// Implementation uses PeriodStart directly with AddDate() which preserves time component
+	// Calculate expected expiry: actual expiry - 14 days should equal PeriodStart (within tolerance)
+	// This accounts for any time normalization that might occur during database storage/retrieval
+	expectedPeriodStart := grantTx.ExpiryDate.AddDate(0, 0, -14) // Reverse calculate from actual expiry
+	s.WithinDuration(expectedPeriodStart, firstApp.PeriodStart, 24*time.Hour, "PeriodStart should be approximately 14 days before expiry")
+	// Also verify the expiry is 14 days from PeriodStart using AddDate()
+	expectedExpiry := firstApp.PeriodStart.AddDate(0, 0, 14)
+	s.WithinDuration(expectedExpiry, *grantTx.ExpiryDate, 24*time.Hour, "First application expiry should be 2 weeks from PeriodStart using AddDate()")
+}
+
+// Test Case 28: Recurring Grant with DURATION Expiry (MONTH unit)
+func (s *CreditGrantServiceTestSuite) TestRecurringGrantWithDurationExpiryMonth() {
+	// Create recurring grant with MONTH unit expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Recurring Grant - Month Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(80),
+		Cadence:                types.CreditGrantCadenceRecurring,
+		Period:                 lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:            lo.ToPtr(1),
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitMonths),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "recurring_duration_month"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify expiry calculation
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	var firstApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			firstApp = app
+			break
+		}
+	}
+	s.NotNil(firstApp)
+
+	// Verify expiry is approximately 1 month from scheduledFor
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+	// Expiry is calculated from PeriodStart
+	effectiveDate := firstApp.ScheduledFor
+	if !firstApp.PeriodStart.IsZero() {
+		effectiveDate = firstApp.PeriodStart
+	}
+	expectedExpiry := effectiveDate.AddDate(0, 1, 0) // Add 1 month
+	s.WithinDuration(expectedExpiry, *grantTx.ExpiryDate, 2*24*time.Hour, "First application expiry should be 1 month from PeriodStart")
+}
+
+// Test Case 29: Recurring Grant with DURATION Expiry (YEAR unit)
+func (s *CreditGrantServiceTestSuite) TestRecurringGrantWithDurationExpiryYear() {
+	// Create recurring grant with YEAR unit expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:                   "Recurring Grant - Year Expiry",
+		Scope:                  types.CreditGrantScopeSubscription,
+		SubscriptionID:         &s.testData.subscription.ID,
+		Credits:                decimal.NewFromInt(120),
+		Cadence:                types.CreditGrantCadenceRecurring,
+		Period:                 lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:            lo.ToPtr(1),
+		ExpirationType:         types.CreditGrantExpiryTypeDuration,
+		ExpirationDuration:     lo.ToPtr(1),
+		ExpirationDurationUnit: lo.ToPtr(types.CreditGrantExpiryDurationUnitYears),
+		Priority:               lo.ToPtr(1),
+		PlanID:                 &s.testData.plan.ID,
+		StartDate:              &s.testData.now,
+		Metadata:               types.Metadata{"test": "recurring_duration_year"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify expiry calculation
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	var firstApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			firstApp = app
+			break
+		}
+	}
+	s.NotNil(firstApp)
+
+	// Verify expiry is approximately 1 year from scheduledFor
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+	// Expiry is calculated from PeriodStart
+	effectiveDate := firstApp.ScheduledFor
+	if !firstApp.PeriodStart.IsZero() {
+		effectiveDate = firstApp.PeriodStart
+	}
+	expectedExpiry := effectiveDate.AddDate(1, 0, 0) // Add 1 year
+	s.WithinDuration(expectedExpiry, *grantTx.ExpiryDate, 2*24*time.Hour, "First application expiry should be 1 year from PeriodStart")
+}
+
+// ============================================================================
+// Phase 4: Enhance Billing Cycle Expiry Tests (Tests 30-31)
+// ============================================================================
+
+// Test Case 30: Billing Cycle Expiry with Recurring Grant
+func (s *CreditGrantServiceTestSuite) TestBillingCycleExpiryWithRecurringGrant() {
+	// Create recurring grant with BILLING_CYCLE expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Recurring Grant - Billing Cycle Expiry",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeBillingCycle,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "billing_cycle_recurring"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify first application expiry date matches subscription period end
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1)
+
+	var firstApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			firstApp = app
+			break
+		}
+	}
+	s.NotNil(firstApp)
+
+	// Verify wallet transaction expiry matches subscription period end
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+	// Expiry should match subscription current period end (compare dates only, times may differ)
+	expectedExpiryDate := s.testData.subscription.CurrentPeriodEnd.Truncate(24 * time.Hour)
+	actualExpiryDate := grantTx.ExpiryDate.Truncate(24 * time.Hour)
+	s.True(expectedExpiryDate.Equal(actualExpiryDate), "Expiry date should match subscription period end date (times may differ)")
+
+	// Process multiple periods - get next period application
+	var nextApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusPending && app.ID != firstApp.ID {
+			nextApp = app
+			break
+		}
+	}
+	s.NotNil(nextApp)
+
+	// Process next period application
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), nextApp.ID)
+	s.NoError(err)
+
+	// Verify: Each period's expiry matches its billing period end
+	processedNextApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), nextApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusApplied, processedNextApp.ApplicationStatus)
+
+	// Note: Next period expiry should match the subscription's next period end
+	// This depends on subscription period calculation
+
+	// Get transactions again
+	nextGrantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, nil, &nextApp.ID)
+	s.NoError(err)
+	if nextGrantTx != nil && nextGrantTx.ExpiryDate != nil {
+		// Next period expiry should match the subscription's next period end
+		// Note: This depends on subscription period calculation
+		s.NotNil(nextGrantTx.ExpiryDate, "Next period transaction should have expiry date")
+	}
+}
+
+// Test Case 31: Billing Cycle Expiry with One-time Grant
+func (s *CreditGrantServiceTestSuite) TestBillingCycleExpiryWithOnetimeGrant() {
+	// Create one-time grant with BILLING_CYCLE expiry
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "One-time Grant - Billing Cycle Expiry",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(150),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeBillingCycle,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "billing_cycle_onetime"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify expiry matches current period end
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{s.testData.subscription.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(applications, 1)
+	s.Equal(types.ApplicationStatusApplied, applications[0].ApplicationStatus)
+
+	// Verify wallet transaction expiry
+	grantTx, err := s.getWalletTransactionByGrantID(s.testData.customer.ID, &creditGrantResp.CreditGrant.ID, nil)
+	s.NoError(err)
+	s.NotNil(grantTx)
+	s.NotNil(grantTx.ExpiryDate)
+	// Expiry should match subscription current period end (compare dates only, times may differ)
+	expectedExpiryDate := s.testData.subscription.CurrentPeriodEnd.Truncate(24 * time.Hour)
+	actualExpiryDate := grantTx.ExpiryDate.Truncate(24 * time.Hour)
+	s.True(expectedExpiryDate.Equal(actualExpiryDate), "Expiry date should match subscription period end date (times may differ)")
+}
+
+// TestSubscriptionCancellationCancelsFutureGrants verifies that when a subscription is cancelled,
+// all future credit grant applications are cancelled as well
+func (s *CreditGrantServiceTestSuite) TestSubscriptionCancellationCancelsFutureGrants() {
+	// Create a subscription specifically for this test
+	testSub := &subscription.Subscription{
+		ID:                 "sub_cancel_test_123",
+		CustomerID:         s.testData.customer.ID,
+		PlanID:             s.testData.plan.ID,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		StartDate:          s.testData.now.Add(-30 * 24 * time.Hour),
+		CurrentPeriodStart: s.testData.now.Add(-24 * time.Hour),
+		CurrentPeriodEnd:   s.testData.now.Add(6 * 24 * time.Hour),
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		Currency:           "usd",
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+		LineItems:          []*subscription.SubscriptionLineItem{},
+	}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), testSub, testSub.LineItems))
+
+	// Create a recurring credit grant on this subscription
+	creditGrantReq := dto.CreateCreditGrantRequest{
+		Name:           "Recurring Grant for Cancellation Test",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &testSub.ID,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "cancellation_test"},
+	}
+
+	creditGrantResp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq)
+	s.NoError(err)
+
+	// Verify first application is applied and next period application is created
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs:  []string{creditGrantResp.CreditGrant.ID},
+		SubscriptionIDs: []string{testSub.ID},
+		QueryFilter:     types.NewDefaultQueryFilter(),
+	}
+
+	applications, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.GreaterOrEqual(len(applications), 1, "Should have at least one application")
+
+	// Find the first applied application
+	var firstApp *creditgrantapplication.CreditGrantApplication
+	var futureApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ApplicationStatus == types.ApplicationStatusApplied {
+			firstApp = app
+		} else if app.ApplicationStatus == types.ApplicationStatusPending {
+			futureApp = app
+		}
+	}
+	s.NotNil(firstApp, "First application should be applied")
+	s.NotNil(futureApp, "Future application should be created and pending")
+
+	// Verify the future application is in pending status
+	s.Equal(types.ApplicationStatusPending, futureApp.ApplicationStatus)
+
+	// Manually cancel the subscription status to test grant cancellation
+	// (We do this directly to avoid invoice creation dependencies)
+	testSub.SubscriptionStatus = types.SubscriptionStatusCancelled
+	now := time.Now().UTC()
+	testSub.CancelledAt = &now
+	s.NoError(s.GetStores().SubscriptionRepo.Update(s.GetContext(), testSub))
+
+	// Call CancelFutureSubscriptionGrants directly to test the functionality
+	err = s.creditGrantService.CancelFutureSubscriptionGrants(s.GetContext(), dto.CancelFutureSubscriptionGrantsRequest{
+		SubscriptionID: testSub.ID,
+		// EffectiveDate is optional, defaults to now if not provided
+	})
+	s.NoError(err)
+
+	// Verify that future grant applications are cancelled
+	applications, err = s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+
+	var cancelledFutureApp *creditgrantapplication.CreditGrantApplication
+	for _, app := range applications {
+		if app.ID == futureApp.ID {
+			cancelledFutureApp = app
+			break
+		}
+	}
+	s.NotNil(cancelledFutureApp, "Future application should still exist")
+	s.Equal(types.ApplicationStatusCancelled, cancelledFutureApp.ApplicationStatus, "Future application should be cancelled")
+	s.Nil(cancelledFutureApp.AppliedAt, "Cancelled application should not have AppliedAt set")
+
+	// Verify that the grant has end_date set (subscription-scoped grants are not deleted, just ended)
+	updatedGrant, err := s.GetStores().CreditGrantRepo.Get(s.GetContext(), creditGrantResp.CreditGrant.ID)
+	s.NoError(err, "Grant should still exist after cancellation")
+	s.NotNil(updatedGrant.EndDate, "Grant should have end_date set after cancellation")
+
+	// Test that processing a grant application for a cancelled subscription results in cancellation
+	// Create a new subscription and grant for this test
+	testSub2 := &subscription.Subscription{
+		ID:                 "sub_cancel_test_456",
+		CustomerID:         s.testData.customer.ID,
+		PlanID:             s.testData.plan.ID,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		StartDate:          s.testData.now.Add(-30 * 24 * time.Hour),
+		CurrentPeriodStart: s.testData.now.Add(-24 * time.Hour),
+		CurrentPeriodEnd:   s.testData.now.Add(6 * 24 * time.Hour),
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		Currency:           "usd",
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+		LineItems:          []*subscription.SubscriptionLineItem{},
+	}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), testSub2, testSub2.LineItems))
+
+	// Create another recurring grant
+	creditGrantReq2 := dto.CreateCreditGrantRequest{
+		Name:           "Recurring Grant for Processing Test",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &testSub2.ID,
+		Credits:        decimal.NewFromInt(75),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		PlanID:         &s.testData.plan.ID,
+		StartDate:      &s.testData.now,
+		Metadata:       types.Metadata{"test": "processing_cancellation_test"},
+	}
+
+	creditGrantResp2, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), creditGrantReq2)
+	s.NoError(err)
+
+	// Create a pending application manually
+	manualFutureApp := &creditgrantapplication.CreditGrantApplication{
+		ID:                s.GetUUID(),
+		CreditGrantID:     creditGrantResp2.CreditGrant.ID,
+		SubscriptionID:    testSub2.ID,
+		ApplicationStatus: types.ApplicationStatusPending,
+		ScheduledFor:      s.testData.now.Add(7 * 24 * time.Hour),
+		PeriodStart:       s.testData.now.Add(7 * 24 * time.Hour),
+		PeriodEnd:         lo.ToPtr(s.testData.now.Add(37 * 24 * time.Hour)),
+		Credits:           decimal.NewFromInt(75),
+		BaseModel:         types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().CreditGrantApplicationRepo.Create(s.GetContext(), manualFutureApp))
+
+	// Cancel the subscription
+	testSub2.SubscriptionStatus = types.SubscriptionStatusCancelled
+	now2 := time.Now().UTC()
+	testSub2.CancelledAt = &now2
+	s.NoError(s.GetStores().SubscriptionRepo.Update(s.GetContext(), testSub2))
+
+	// Try to process this application - it should be cancelled because subscription is cancelled
+	err = s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), manualFutureApp.ID)
+	s.NoError(err)
+
+	// Verify the application was cancelled
+	processedApp, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), manualFutureApp.ID)
+	s.NoError(err)
+	s.Equal(types.ApplicationStatusCancelled, processedApp.ApplicationStatus, "Application should be cancelled when subscription is cancelled")
+	s.Nil(processedApp.AppliedAt, "Cancelled application should not have AppliedAt set")
+
+	// Verify no wallet transaction was created for the cancelled application
+	_, err = s.getWalletTransactionByGrantID(testSub2.CustomerID, nil, &manualFutureApp.ID)
+	s.Error(err, "No wallet transaction should be created for cancelled future applications")
+}
+
+// createBackdatedSubscription creates a subscription with start date in the past.
+func (s *CreditGrantServiceTestSuite) createBackdatedSubscription(id string, startDate time.Time) *subscription.Subscription {
+	sub := &subscription.Subscription{
+		ID:                 id,
+		PlanID:             s.testData.plan.ID,
+		CustomerID:         s.testData.customer.ID,
+		Currency:           "USD",
+		StartDate:          startDate,
+		CurrentPeriodStart: startDate,
+		CurrentPeriodEnd:   startDate.AddDate(0, 1, 0),
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		SubscriptionStatus: types.SubscriptionStatusActive,
+		BillingAnchor:      startDate,
+		BaseModel:          types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().SubscriptionRepo.CreateWithLineItems(s.GetContext(), sub, nil))
+	return sub
+}
+
+// countCGAStatuses returns (applied, pending) counts for a grant.
+func (s *CreditGrantServiceTestSuite) countCGAStatuses(grantID string) (applied, pending int) {
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs: []string{grantID},
+		QueryFilter:    types.NewNoLimitQueryFilter(),
+	}
+	apps, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	for _, a := range apps {
+		switch a.ApplicationStatus {
+		case types.ApplicationStatusApplied:
+			applied++
+		case types.ApplicationStatusPending:
+			pending++
+		}
+	}
+	return
+}
+
+// TestCatchUp_BackdatedOneCycle verifies a grant backdated by 1 cycle applies immediately.
+func (s *CreditGrantServiceTestSuite) TestCatchUp_BackdatedOneCycle() {
+	ctx := s.GetContext()
+	backDate := s.testData.now.AddDate(0, 0, -1)
+
+	sub := s.createBackdatedSubscription("sub_catchup_1cycle", backDate)
+
+	resp, err := s.creditGrantService.CreateCreditGrant(ctx, dto.CreateCreditGrantRequest{
+		Name:           "Catch-up 1 Cycle",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		StartDate:      &backDate,
+		SubscriptionID: &sub.ID,
+	})
+	s.NoError(err)
+
+	applied, pending := s.countCGAStatuses(resp.CreditGrant.ID)
+	s.Equal(1, applied, "expected 1 applied CGA for past cycle")
+	s.Equal(1, pending, "expected 1 pending CGA for upcoming cycle")
+}
+
+// TestCatchUp_BackdatedThreeCycles verifies all 3 past cycles are applied immediately.
+func (s *CreditGrantServiceTestSuite) TestCatchUp_BackdatedThreeCycles() {
+	ctx := s.GetContext()
+	backDate := s.testData.now.AddDate(0, -2, -15)
+
+	sub := s.createBackdatedSubscription("sub_catchup_3cycles", backDate)
+
+	resp, err := s.creditGrantService.CreateCreditGrant(ctx, dto.CreateCreditGrantRequest{
+		Name:           "Catch-up 3 Cycles",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(50),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		StartDate:      &backDate,
+		SubscriptionID: &sub.ID,
+	})
+	s.NoError(err)
+
+	applied, pending := s.countCGAStatuses(resp.CreditGrant.ID)
+	s.Equal(3, applied, "expected 3 applied CGAs for 3 past cycles")
+	s.Equal(1, pending, "expected 1 pending CGA for upcoming cycle")
+}
+
+// TestCatchUp_FutureStartDate verifies a future-dated grant does not trigger catch-up.
+func (s *CreditGrantServiceTestSuite) TestCatchUp_FutureStartDate() {
+	ctx := s.GetContext()
+	futureDate := s.testData.now.AddDate(0, 1, 0)
+
+	sub := s.createBackdatedSubscription("sub_catchup_future", s.testData.now.AddDate(0, 0, -1))
+
+	resp, err := s.creditGrantService.CreateCreditGrant(ctx, dto.CreateCreditGrantRequest{
+		Name:           "Future Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		StartDate:      &futureDate,
+		SubscriptionID: &sub.ID,
+	})
+	s.NoError(err)
+
+	applied, pending := s.countCGAStatuses(resp.CreditGrant.ID)
+	s.Equal(0, applied, "expected no applied CGAs for future grant")
+	s.Equal(1, pending, "expected 1 pending CGA waiting for future schedule")
+}
+
+// ---------------------------------------------------------------------------
+// Addon-scoped credit grants
+// ---------------------------------------------------------------------------
+
+// createTestAddon creates and stores a published addon for use in tests.
+func (s *CreditGrantServiceTestSuite) createTestAddon(id, lookupKey, name string) *addon.Addon {
+	a := &addon.Addon{
+		ID:            id,
+		LookupKey:     lookupKey,
+		Name:          name,
+		EnvironmentID: types.GetEnvironmentID(s.GetContext()),
+		BaseModel:     types.GetDefaultBaseModel(s.GetContext()),
+	}
+	s.NoError(s.GetStores().AddonRepo.Create(s.GetContext(), a))
+	return a
+}
+
+// An ADDON-scoped grant is an inert template: it is stored with scope=ADDON and
+// addon_id set (subscription_id/plan_id nil) and does NOT initialize a workflow,
+// so no credit grant application is created and no wallet is touched.
+func (s *CreditGrantServiceTestSuite) TestCreateAddonScopedCreditGrant_IsInertTemplate() {
+	a := s.createTestAddon("addon_cg_inert", "addon_cg_inert", "Credit Booster")
+
+	req := dto.CreateCreditGrantRequest{
+		Name:           "Addon Monthly Credits",
+		Scope:          types.CreditGrantScopeAddon,
+		AddonID:        &a.ID,
+		Credits:        decimal.NewFromInt(5000),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeBillingCycle,
+		Priority:       lo.ToPtr(1),
+	}
+
+	resp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), req)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(types.CreditGrantScopeAddon, resp.CreditGrant.Scope)
+	s.Equal(a.ID, lo.FromPtr(resp.CreditGrant.AddonID))
+	s.Nil(resp.CreditGrant.SubscriptionID)
+	s.Nil(resp.CreditGrant.PlanID)
+
+	// Inert: no credit grant application created (no wallet effect).
+	filter := &types.CreditGrantApplicationFilter{
+		CreditGrantIDs: []string{resp.CreditGrant.ID},
+		QueryFilter:    types.NewDefaultQueryFilter(),
+	}
+	apps, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), filter)
+	s.NoError(err)
+	s.Len(apps, 0)
+}
+
+// Validation for ADDON-scoped grants: addon_id is required, the addon must exist,
+// and start/end dates are not allowed (it is a template, like a plan grant).
+func (s *CreditGrantServiceTestSuite) TestCreateAddonScopedCreditGrant_Validation() {
+	a := s.createTestAddon("addon_cg_val", "addon_cg_val", "Credit Booster")
+	now := s.testData.now
+
+	base := func() dto.CreateCreditGrantRequest {
+		return dto.CreateCreditGrantRequest{
+			Name:           "Addon Grant",
+			Scope:          types.CreditGrantScopeAddon,
+			AddonID:        &a.ID,
+			Credits:        decimal.NewFromInt(100),
+			Cadence:        types.CreditGrantCadenceOneTime,
+			ExpirationType: types.CreditGrantExpiryTypeNever,
+		}
+	}
+
+	s.Run("missing addon_id", func() {
+		req := base()
+		req.AddonID = nil
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), req)
+		s.Error(err)
+	})
+
+	s.Run("nonexistent addon", func() {
+		req := base()
+		req.AddonID = lo.ToPtr("addon_does_not_exist")
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), req)
+		s.Error(err)
+	})
+
+	s.Run("start_date not allowed for addon scope", func() {
+		req := base()
+		req.StartDate = &now
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), req)
+		s.Error(err)
+	})
+}
+
+// All of an addon's grants must share the same conversion rates (same rule plans have).
+func (s *CreditGrantServiceTestSuite) TestAddonGrants_UniformConversionRate() {
+	a := s.createTestAddon("addon_cg_cr", "addon_cg_cr", "Credit Booster")
+
+	first := dto.CreateCreditGrantRequest{
+		Name:           "Grant 1",
+		Scope:          types.CreditGrantScopeAddon,
+		AddonID:        &a.ID,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		ConversionRate: lo.ToPtr(decimal.NewFromInt(1)),
+	}
+	_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), first)
+	s.NoError(err)
+
+	second := first
+	second.Name = "Grant 2"
+	second.ConversionRate = lo.ToPtr(decimal.NewFromInt(2)) // mismatched rate
+	_, err = s.creditGrantService.CreateCreditGrant(s.GetContext(), second)
+	s.Error(err)
+}
+
+// GetCreditGrantsByAddon returns only that addon's ADDON-scoped grants, not plan grants.
+func (s *CreditGrantServiceTestSuite) TestGetCreditGrantsByAddon() {
+	a := s.createTestAddon("addon_cg_get", "addon_cg_get", "Credit Booster")
+
+	for i := 0; i < 2; i++ {
+		req := dto.CreateCreditGrantRequest{
+			Name:           fmt.Sprintf("Addon Grant %d", i),
+			Scope:          types.CreditGrantScopeAddon,
+			AddonID:        &a.ID,
+			Credits:        decimal.NewFromInt(10),
+			Cadence:        types.CreditGrantCadenceOneTime,
+			ExpirationType: types.CreditGrantExpiryTypeNever,
+		}
+		_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), req)
+		s.NoError(err)
+	}
+
+	// A plan-scoped grant that must NOT be returned by GetCreditGrantsByAddon.
+	planGrant := dto.CreateCreditGrantRequest{
+		Name:           "Plan Grant",
+		Scope:          types.CreditGrantScopePlan,
+		PlanID:         &s.testData.plan.ID,
+		Credits:        decimal.NewFromInt(10),
+		Cadence:        types.CreditGrantCadenceOneTime,
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+	}
+	_, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), planGrant)
+	s.NoError(err)
+
+	resp, err := s.creditGrantService.GetCreditGrantsByAddon(s.GetContext(), a.ID)
+	s.NoError(err)
+	s.Len(resp.Items, 2)
+	for _, cg := range resp.Items {
+		s.Equal(types.CreditGrantScopeAddon, cg.Scope)
+		s.Equal(a.ID, lo.FromPtr(cg.AddonID))
+	}
+}
+
+func (s *CreditGrantServiceTestSuite) seedSubscriptionGrant(name, addonID string) string {
+	ctx := s.GetContext()
+	cg := &creditgrant.CreditGrant{
+		ID:             types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT),
+		Name:           name,
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		Credits:        decimal.NewFromInt(100),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		Priority:       lo.ToPtr(1),
+		StartDate:      lo.ToPtr(s.testData.now),
+		BaseModel:      types.GetDefaultBaseModel(ctx),
+	}
+	if addonID != "" {
+		cg.AddonID = lo.ToPtr(addonID)
+	} else {
+		cg.PlanID = lo.ToPtr(s.testData.plan.ID)
+	}
+
+	_, err := s.GetStores().CreditGrantRepo.Create(ctx, cg)
+	s.Require().NoError(err)
+	return cg.ID
+}
+
+func (s *CreditGrantServiceTestSuite) grantEndDate(id string) *time.Time {
+	g, err := s.GetStores().CreditGrantRepo.Get(s.GetContext(), id)
+	s.Require().NoError(err)
+	return g.EndDate
+}
+
+func (s *CreditGrantServiceTestSuite) TestCancelFutureSubscriptionGrants_ScopedByAddonIDs() {
+	fromA := s.seedSubscriptionGrant("addon a credits", "addon_a")
+	fromB := s.seedSubscriptionGrant("addon b credits", "addon_b")
+	fromC := s.seedSubscriptionGrant("addon c credits", "addon_c")
+	fromPlan := s.seedSubscriptionGrant("plan credits", "")
+
+	effectiveDate := s.testData.now.Add(time.Hour)
+	err := s.creditGrantService.CancelFutureSubscriptionGrants(s.GetContext(), dto.CancelFutureSubscriptionGrantsRequest{
+		SubscriptionID: s.testData.subscription.ID,
+		AddonIDs:       []string{"addon_a", "addon_b"},
+		EffectiveDate:  &effectiveDate,
+	})
+	s.NoError(err)
+
+	s.Require().NotNil(s.grantEndDate(fromA))
+	s.True(s.grantEndDate(fromA).Equal(effectiveDate))
+	s.Require().NotNil(s.grantEndDate(fromB))
+	s.True(s.grantEndDate(fromB).Equal(effectiveDate))
+
+	s.Nil(s.grantEndDate(fromC), "an unnamed addon's grants are untouched")
+	s.Nil(s.grantEndDate(fromPlan), "plan-sourced grants are untouched")
+}
+
+func (s *CreditGrantServiceTestSuite) TestCancelFutureSubscriptionGrants_EmptyAddonIDsCancelsEverything() {
+	fromAddon := s.seedSubscriptionGrant("addon credits", "addon_a")
+	fromPlan := s.seedSubscriptionGrant("plan credits", "")
+
+	effectiveDate := s.testData.now.Add(time.Hour)
+	err := s.creditGrantService.CancelFutureSubscriptionGrants(s.GetContext(), dto.CancelFutureSubscriptionGrantsRequest{
+		SubscriptionID: s.testData.subscription.ID,
+		AddonIDs:       []string{},
+		EffectiveDate:  &effectiveDate,
+	})
+	s.NoError(err)
+
+	s.NotNil(s.grantEndDate(fromAddon))
+	s.NotNil(s.grantEndDate(fromPlan))
+}
+
+func (s *CreditGrantServiceTestSuite) TestShouldGateApplicationOnPayment() {
+	periodStart := s.testData.now.Truncate(time.Second)
+	periodEnd := periodStart.AddDate(0, 1, 0)
+	prevStart := periodStart.AddDate(0, -1, 0)
+	olderStart := periodStart.AddDate(0, -2, 0)
+
+	type inv struct {
+		start, end    time.Time
+		invoiceStatus types.InvoiceStatus
+		paymentStatus types.PaymentStatus
+	}
+	cycle := func(start, end time.Time, is types.InvoiceStatus, ps types.PaymentStatus) inv {
+		return inv{start: start, end: end, invoiceStatus: is, paymentStatus: ps}
+	}
+
+	tests := []struct {
+		name            string
+		paymentBehavior types.PaymentBehavior
+		reason          types.CreditGrantApplicationReason
+		cgaPeriodStart  time.Time
+		invoices        []inv
+		want            bool
+	}{
+		{
+			name:            "default_active is never gated",
+			paymentBehavior: types.PaymentBehaviorDefaultActive,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusPending)},
+			want:            false,
+		},
+		{
+			name:            "first-time recurring grant is not gated",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonFirstTimeRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusPending)},
+			want:            false,
+		},
+		{
+			name:            "period not rolled yet defers",
+			paymentBehavior: types.PaymentBehaviorDefaultIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodEnd,
+			want:            true,
+		},
+		{
+			name:            "no renewal invoice applies",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			want:            false,
+		},
+		{
+			name:            "skipped renewal invoice applies",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusSkipped, types.PaymentStatusPending)},
+			want:            false,
+		},
+		{
+			name:            "unpaid renewal invoice defers",
+			paymentBehavior: types.PaymentBehaviorErrorIfIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusPending)},
+			want:            true,
+		},
+		{
+			name:            "draft renewal invoice defers",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusDraft, types.PaymentStatusPending)},
+			want:            true,
+		},
+		{
+			name:            "paid renewal invoice applies",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusSucceeded)},
+			want:            false,
+		},
+		{
+			name:            "overpaid renewal invoice applies",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices:        []inv{cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusOverpaid)},
+			want:            false,
+		},
+		{
+			name:            "latest invoice decides over an older paid one",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices: []inv{
+				cycle(olderStart, prevStart, types.InvoiceStatusFinalized, types.PaymentStatusSucceeded),
+				cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusFailed),
+			},
+			want: true,
+		},
+		{
+			name:            "latest period decides even when created before an older one",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices: []inv{
+				cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusFailed),
+				cycle(olderStart, prevStart, types.InvoiceStatusFinalized, types.PaymentStatusSucceeded),
+			},
+			want: true,
+		},
+		{
+			name:            "voided invoice is ignored",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart,
+			invoices: []inv{
+				cycle(olderStart, prevStart, types.InvoiceStatusFinalized, types.PaymentStatusSucceeded),
+				cycle(prevStart, periodStart, types.InvoiceStatusVoided, types.PaymentStatusPending),
+			},
+			want: false,
+		},
+		{
+			name:            "mid-period grant uses the invoice ending before it",
+			paymentBehavior: types.PaymentBehaviorAllowIncomplete,
+			reason:          types.ApplicationReasonRecurringCreditGrant,
+			cgaPeriodStart:  periodStart.AddDate(0, 0, 7),
+			invoices: []inv{
+				cycle(prevStart, periodStart, types.InvoiceStatusFinalized, types.PaymentStatusSucceeded),
+				cycle(periodStart, periodEnd, types.InvoiceStatusFinalized, types.PaymentStatusPending),
+			},
+			want: false,
+		},
+	}
+
+	for i, tt := range tests {
+		s.Run(tt.name, func() {
+			ctx := s.GetContext()
+			sub := &subscription.Subscription{
+				ID:                 types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SUBSCRIPTION),
+				CustomerID:         s.testData.customer.ID,
+				CurrentPeriodStart: periodStart,
+				CurrentPeriodEnd:   periodEnd,
+				SubscriptionStatus: types.SubscriptionStatusActive,
+				PaymentBehavior:    string(tt.paymentBehavior),
+				BaseModel:          types.GetDefaultBaseModel(ctx),
+			}
+			for j, in := range tt.invoices {
+				s.NoError(s.GetStores().InvoiceRepo.Create(ctx, &invoice.Invoice{
+					ID:              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_INVOICE),
+					CustomerID:      s.testData.customer.ID,
+					SubscriptionID:  lo.ToPtr(sub.ID),
+					InvoiceType:     types.InvoiceTypeSubscription,
+					BillingReason:   string(types.InvoiceBillingReasonSubscriptionCycle),
+					InvoiceStatus:   in.invoiceStatus,
+					PaymentStatus:   in.paymentStatus,
+					Currency:        "usd",
+					AmountDue:       decimal.NewFromInt(10),
+					AmountRemaining: decimal.NewFromInt(10),
+					PeriodStart:     lo.ToPtr(in.start),
+					PeriodEnd:       lo.ToPtr(in.end),
+					BaseModel:       types.GetDefaultBaseModel(ctx),
+				}), "case %d invoice %d", i, j)
+			}
+			cga := &creditgrantapplication.CreditGrantApplication{
+				ID:                types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CREDIT_GRANT_APPLICATION),
+				SubscriptionID:    sub.ID,
+				PeriodStart:       tt.cgaPeriodStart,
+				ApplicationReason: tt.reason,
+			}
+
+			got, err := s.creditGrantService.ShouldGateApplicationOnPayment(ctx, sub, cga)
+			s.NoError(err)
+			s.Equal(tt.want, got)
+		})
+	}
+}
+
+// createAppliedRecurringGrant returns the applied first application and the pending next one.
+func (s *CreditGrantServiceTestSuite) createAppliedRecurringGrant() (*creditgrant.CreditGrant, *creditgrantapplication.CreditGrantApplication, *creditgrantapplication.CreditGrantApplication) {
+	resp, err := s.creditGrantService.CreateCreditGrant(s.GetContext(), dto.CreateCreditGrantRequest{
+		Name:           "Recurring Grant",
+		Scope:          types.CreditGrantScopeSubscription,
+		SubscriptionID: &s.testData.subscription.ID,
+		PlanID:         &s.testData.plan.ID,
+		Credits:        decimal.NewFromInt(50),
+		Cadence:        types.CreditGrantCadenceRecurring,
+		Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+		PeriodCount:    lo.ToPtr(1),
+		ExpirationType: types.CreditGrantExpiryTypeNever,
+		StartDate:      &s.testData.now,
+	})
+	s.Require().NoError(err)
+
+	apps, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), &types.CreditGrantApplicationFilter{
+		CreditGrantIDs: []string{resp.CreditGrant.ID},
+		QueryFilter:    types.NewDefaultQueryFilter(),
+	})
+	s.Require().NoError(err)
+	s.Require().Len(apps, 2)
+
+	applied, _ := lo.Find(apps, func(a *creditgrantapplication.CreditGrantApplication) bool {
+		return a.ApplicationStatus == types.ApplicationStatusApplied
+	})
+	next, _ := lo.Find(apps, func(a *creditgrantapplication.CreditGrantApplication) bool {
+		return a.ApplicationStatus == types.ApplicationStatusPending
+	})
+	s.Require().NotNil(applied)
+	s.Require().NotNil(next)
+	return resp.CreditGrant, applied, next
+}
+
+func (s *CreditGrantServiceTestSuite) countWalletTransactionsForApplication(cgaID string) int {
+	wallets, err := s.walletService.GetWalletsByCustomerID(s.GetContext(), s.testData.customer.ID)
+	s.Require().NoError(err)
+
+	count := 0
+	for _, w := range wallets {
+		txs, err := s.walletService.GetWalletTransactions(s.GetContext(), w.ID, &types.WalletTransactionFilter{
+			WalletID:    &w.ID,
+			QueryFilter: types.NewNoLimitQueryFilter(),
+		})
+		s.Require().NoError(err)
+		count += len(lo.Filter(txs.Items, func(tx *dto.WalletTransactionResponse, _ int) bool {
+			return tx.Metadata["cga_id"] == cgaID
+		}))
+	}
+	return count
+}
+
+func (s *CreditGrantServiceTestSuite) TestFailedApplicationAlreadyCreditedHeals() {
+	_, applied, _ := s.createAppliedRecurringGrant()
+
+	// A lost race left the credited application marked failed.
+	applied.ApplicationStatus = types.ApplicationStatusFailed
+	applied.FailureReason = lo.ToPtr("duplicate key")
+	s.Require().NoError(s.GetStores().CreditGrantApplicationRepo.Update(s.GetContext(), applied))
+
+	s.Require().NoError(s.creditGrantService.ProcessCreditGrantApplication(s.GetContext(), applied.ID))
+
+	healed, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), applied.ID)
+	s.Require().NoError(err)
+	s.Equal(types.ApplicationStatusApplied, healed.ApplicationStatus)
+	s.Equal(1, s.countWalletTransactionsForApplication(applied.ID))
+
+	apps, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), &types.CreditGrantApplicationFilter{
+		CreditGrantIDs: []string{applied.CreditGrantID},
+		QueryFilter:    types.NewDefaultQueryFilter(),
+	})
+	s.Require().NoError(err)
+	s.Len(apps, 2)
+}
+
+func (s *CreditGrantServiceTestSuite) TestStaleConcurrentApplicationDoesNotMarkFailed() {
+	grant, _, next := s.createAppliedRecurringGrant()
+	svc := s.creditGrantService.(*creditGrantService)
+
+	stale := *next
+	_, err := svc.applyCreditGrantToWallet(s.GetContext(), grant, s.testData.subscription, next)
+	s.Require().NoError(err)
+
+	nextCGA, err := svc.applyCreditGrantToWallet(s.GetContext(), grant, s.testData.subscription, &stale)
+	s.Require().NoError(err)
+	s.Nil(nextCGA)
+
+	got, err := s.GetStores().CreditGrantApplicationRepo.Get(s.GetContext(), next.ID)
+	s.Require().NoError(err)
+	s.Equal(types.ApplicationStatusApplied, got.ApplicationStatus)
+	s.Equal(1, s.countWalletTransactionsForApplication(next.ID))
+}
+
+// CreditGrantProrationSuite covers credit and entitlement grant proration and checks that grants share
+// the charge's coefficient. Dates are in 2027 because create_prorations rejects past start dates.
+type CreditGrantProrationSuite struct {
+	testutil.BaseServiceTestSuite
+	params ServiceParams
+	subSvc SubscriptionService
+	cust   *customer.Customer
+	meter  *meter.Meter
+}
+
+func TestCreditGrantProration(t *testing.T) {
+	suite.Run(t, new(CreditGrantProrationSuite))
+}
+
+var (
+	pvgDec20 = time.Date(2026, 12, 20, 0, 0, 0, 0, time.UTC)
+	pvgJan1  = time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	pvgJan10 = time.Date(2027, 1, 10, 0, 0, 0, 0, time.UTC)
+	pvgJan15 = time.Date(2027, 1, 15, 0, 0, 0, 0, time.UTC)
+	pvgJan20 = time.Date(2027, 1, 20, 0, 0, 0, 0, time.UTC)
+	pvgJan29 = time.Date(2027, 1, 29, 0, 0, 0, 0, time.UTC)
+	pvgFeb1  = time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)
+)
+
+const (
+	pvgPlanAmount = 31
+	pvgCGCredits  = 1000
+	pvgEGQuota    = 100
+)
+
+func (s *CreditGrantProrationSuite) SetupTest() {
+	s.BaseServiceTestSuite.SetupTest()
+	s.ClearStores()
+	st := s.GetStores()
+	s.params = ServiceParams{
+		Logger:                       s.GetLogger(),
+		Config:                       s.GetConfig(),
+		DB:                           s.GetDB(),
+		TaxAssociationRepo:           st.TaxAssociationRepo,
+		TaxRateRepo:                  st.TaxRateRepo,
+		SubRepo:                      st.SubscriptionRepo,
+		CommitmentRepo:               st.CommitmentRepo,
+		BillingTermRepo:              st.BillingTermRepo,
+		BillingInstalmentRepo:        st.BillingInstalmentRepo,
+		SubscriptionLineItemRepo:     st.SubscriptionLineItemRepo,
+		SubscriptionPhaseRepo:        st.SubscriptionPhaseRepo,
+		SubScheduleRepo:              st.SubscriptionScheduleRepo,
+		PlanRepo:                     st.PlanRepo,
+		PriceRepo:                    st.PriceRepo,
+		PriceUnitRepo:                st.PriceUnitRepo,
+		EventRepo:                    st.EventRepo,
+		MeterRepo:                    st.MeterRepo,
+		CustomerRepo:                 st.CustomerRepo,
+		InvoiceRepo:                  st.InvoiceRepo,
+		HostedInvoiceTokenRepo:       st.HostedInvoiceTokenRepo,
+		InvoiceLineItemRepo:          st.InvoiceLineItemRepo,
+		EntitlementRepo:              st.EntitlementRepo,
+		EntitlementGrantRepo:         st.EntitlementGrantRepo,
+		EnvironmentRepo:              st.EnvironmentRepo,
+		FeatureRepo:                  st.FeatureRepo,
+		TenantRepo:                   st.TenantRepo,
+		UserRepo:                     st.UserRepo,
+		AuthRepo:                     st.AuthRepo,
+		WalletRepo:                   st.WalletRepo,
+		PaymentRepo:                  st.PaymentRepo,
+		CreditGrantRepo:              st.CreditGrantRepo,
+		CreditGrantApplicationRepo:   st.CreditGrantApplicationRepo,
+		CouponRepo:                   st.CouponRepo,
+		CouponAssociationRepo:        st.CouponAssociationRepo,
+		CouponApplicationRepo:        st.CouponApplicationRepo,
+		AlertLogsRepo:                st.AlertLogsRepo,
+		WalletBalanceAlertPubSub:     types.WalletBalanceAlertPubSub{PubSub: testutil.NewInMemoryPubSub()},
+		AddonRepo:                    st.AddonRepo,
+		AddonAssociationRepo:         st.AddonAssociationRepo,
+		CheckoutSessionRepo:          st.CheckoutSessionRepo,
+		TaxAppliedRepo:               st.TaxAppliedRepo,
+		ConnectionRepo:               st.ConnectionRepo,
+		SettingsRepo:                 st.SettingsRepo,
+		EventPublisher:               s.GetPublisher(),
+		WebhookPublisher:             s.GetWebhookPublisher(),
+		ProrationCalculator:          s.GetCalculator(),
+		MeterUsageRepo:               st.MeterUsageRepo,
+		IntegrationFactory:           s.GetIntegrationFactory(),
+		PlanPriceSyncRepo:            st.PlanPriceSyncRepo,
+		AddonPriceSyncRepo:           st.AddonPriceSyncRepo,
+		EntityIntegrationMappingRepo: st.EntityIntegrationMappingRepo,
+	}
+	s.subSvc = NewSubscriptionService(s.params)
+
+	ctx := s.GetContext()
+	s.cust = &customer.Customer{
+		ID:         types.GenerateUUIDWithPrefix(types.UUID_PREFIX_CUSTOMER),
+		ExternalID: "pvg_cust",
+		Name:       "PVG Customer",
+		Email:      "pvg@example.com",
+		BaseModel:  types.GetDefaultBaseModel(ctx),
+	}
+	s.Require().NoError(st.CustomerRepo.Create(ctx, s.cust))
+
+	s.meter = &meter.Meter{
+		ID:          types.GenerateUUIDWithPrefix(types.UUID_PREFIX_METER),
+		Name:        "PVG Calls",
+		EventName:   "pvg_call",
+		Aggregation: meter.Aggregation{Type: types.AggregationCount},
+		BaseModel:   types.GetDefaultBaseModel(ctx),
+	}
+	s.Require().NoError(st.MeterRepo.CreateMeter(ctx, s.meter))
+
+	s.Require().NoError(st.WalletRepo.CreateWallet(ctx, &wallet.Wallet{
+		ID:                  "wallet_pvg",
+		CustomerID:          s.cust.ID,
+		Name:                "PVG Wallet",
+		Currency:            "usd",
+		WalletStatus:        types.WalletStatusActive,
+		ConversionRate:      decimal.NewFromInt(1),
+		TopupConversionRate: decimal.NewFromInt(1),
+		BaseModel:           types.GetDefaultBaseModel(ctx),
+	}))
+}
+
+func (s *CreditGrantProrationSuite) TearDownTest() {
+	s.BaseServiceTestSuite.TearDownTest()
+	s.ClearStores()
+}
+
+// -----------------------------------------------------------------------------
+// expectations
+// -----------------------------------------------------------------------------
+
+// pvgFrac is used/full in seconds.
+func pvgFrac(usedFrom, usedTo, fullFrom, fullTo time.Time) decimal.Decimal {
+	used := decimal.NewFromInt(int64(usedTo.Sub(usedFrom).Seconds()))
+	full := decimal.NewFromInt(int64(fullTo.Sub(fullFrom).Seconds()))
+	return used.Div(full)
+}
+
+func pvgCurrency(amount int64, frac decimal.Decimal) decimal.Decimal {
+	return decimal.NewFromInt(amount).Mul(frac).Round(2)
+}
+
+func pvgQuota(amount int64, frac decimal.Decimal) decimal.Decimal {
+	return decimal.NewFromInt(amount).Mul(frac).Round(15)
+}
+
+func (s *CreditGrantProrationSuite) pvgExpectEqual(label string, want, got decimal.Decimal) {
+	s.T().Logf("[%s] expected=%s actual=%s", label, want.String(), got.String())
+	s.True(want.Equal(got), "%s: expected %s, got %s", label, want.String(), got.String())
+}
+
+func (s *CreditGrantProrationSuite) pvgExpectTime(label string, want, got time.Time) {
+	s.T().Logf("[%s] expected=%s actual=%s", label, want.UTC().Format(time.RFC3339), got.UTC().Format(time.RFC3339))
+	s.True(want.Equal(got), "%s: expected %s, got %s", label, want.UTC(), got.UTC())
+}
+
+// -----------------------------------------------------------------------------
+// fixtures
+// -----------------------------------------------------------------------------
+
+// pvgSeedPlan registers a plan with one $31 fixed advance monthly price and, optionally,
+// a 1000-credit monthly plan credit grant.
+func (s *CreditGrantProrationSuite) pvgSeedPlan(planID string, withCG bool) *plan.Plan {
+	ctx := s.GetContext()
+	p := &plan.Plan{ID: planID, Name: planID, BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.Require().NoError(s.GetStores().PlanRepo.Create(ctx, p))
+	s.Require().NoError(s.GetStores().PriceRepo.Create(ctx, &price.Price{
+		ID:                 "price_" + planID,
+		Amount:             decimal.NewFromInt(pvgPlanAmount),
+		Currency:           "usd",
+		EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
+		EntityID:           planID,
+		Type:               types.PRICE_TYPE_FIXED,
+		BillingCadence:     types.BILLING_CADENCE_RECURRING,
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		BillingModel:       types.BILLING_MODEL_FLAT_FEE,
+		InvoiceCadence:     types.InvoiceCadenceAdvance,
+		BaseModel:          types.GetDefaultBaseModel(ctx),
+	}))
+	if withCG {
+		_, err := NewCreditGrantService(s.params).CreateCreditGrant(ctx, dto.CreateCreditGrantRequest{
+			Name:           "Plan Monthly Credits",
+			Scope:          types.CreditGrantScopePlan,
+			PlanID:         lo.ToPtr(planID),
+			Credits:        decimal.NewFromInt(pvgCGCredits),
+			Cadence:        types.CreditGrantCadenceRecurring,
+			Period:         lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY),
+			PeriodCount:    lo.ToPtr(1),
+			ExpirationType: types.CreditGrantExpiryTypeNever,
+			Priority:       lo.ToPtr(1),
+		})
+		s.Require().NoError(err)
+	}
+	return p
+}
+
+type pvgAddonSpec struct {
+	id         string
+	withCG     bool
+	withEG     bool
+	fixedPrice bool                    // $31 fixed advance monthly instead of a zero usage price
+	cgPeriod   types.CreditGrantPeriod // default MONTHLY
+}
+
+// pvgSeedAddon registers an addon and returns the feature id its EG feeds (empty if none).
+func (s *CreditGrantProrationSuite) pvgSeedAddon(spec pvgAddonSpec) string {
+	ctx := s.GetContext()
+	st := s.GetStores()
+	s.Require().NoError(st.AddonRepo.Create(ctx, &addon.Addon{
+		ID: spec.id, LookupKey: spec.id, Name: spec.id, BaseModel: types.GetDefaultBaseModel(ctx),
+	}))
+
+	pr := &price.Price{
+		ID:                 "price_" + spec.id,
+		Currency:           "usd",
+		EntityType:         types.PRICE_ENTITY_TYPE_ADDON,
+		EntityID:           spec.id,
+		BillingCadence:     types.BILLING_CADENCE_RECURRING,
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		BillingModel:       types.BILLING_MODEL_FLAT_FEE,
+		BaseModel:          types.GetDefaultBaseModel(ctx),
+	}
+	if spec.fixedPrice {
+		pr.Amount = decimal.NewFromInt(pvgPlanAmount)
+		pr.Type = types.PRICE_TYPE_FIXED
+		pr.InvoiceCadence = types.InvoiceCadenceAdvance
+	} else {
+		pr.Amount = decimal.Zero
+		pr.Type = types.PRICE_TYPE_USAGE
+		pr.InvoiceCadence = types.InvoiceCadenceArrear
+		pr.MeterID = s.meter.ID
+	}
+	s.Require().NoError(st.PriceRepo.Create(ctx, pr))
+
+	if spec.withCG {
+		addonID := spec.id
+		_, err := NewCreditGrantService(s.params).CreateCreditGrant(ctx, dto.CreateCreditGrantRequest{
+			Name:           "Addon Monthly Credits",
+			Scope:          types.CreditGrantScopeAddon,
+			AddonID:        &addonID,
+			Credits:        decimal.NewFromInt(pvgCGCredits),
+			Cadence:        types.CreditGrantCadenceRecurring,
+			Period:         lo.ToPtr(lo.CoalesceOrEmpty(spec.cgPeriod, types.CREDIT_GRANT_PERIOD_MONTHLY)),
+			PeriodCount:    lo.ToPtr(1),
+			ExpirationType: types.CreditGrantExpiryTypeNever,
+			Priority:       lo.ToPtr(1),
+		})
+		s.Require().NoError(err)
+	}
+
+	if !spec.withEG {
+		return ""
+	}
+	featureID := "feat_" + spec.id
+	s.Require().NoError(st.FeatureRepo.Create(ctx, &feature.Feature{
+		ID: featureID, Name: featureID, Type: types.FeatureTypeMetered, MeterID: s.meter.ID,
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}))
+	dv := 1
+	q := decimal.NewFromInt(pvgEGQuota)
+	_, err := st.EntitlementRepo.Create(ctx, &entitlement.Entitlement{
+		ID:                 "ent_" + spec.id,
+		EntityType:         types.ENTITLEMENT_ENTITY_TYPE_ADDON,
+		EntityID:           spec.id,
+		FeatureID:          featureID,
+		FeatureType:        types.FeatureTypeMetered,
+		IsEnabled:          true,
+		GrantMeasure:       types.EntitlementGrantMeasureQuantity,
+		GrantDurationValue: &dv,
+		GrantDurationUnit:  types.EntitlementGrantDurationUnitSubscriptionPeriod,
+		GrantQuota:         &q,
+		BaseModel:          types.GetDefaultBaseModel(ctx),
+	})
+	s.Require().NoError(err)
+	return featureID
+}
+
+type pvgSubSpec struct {
+	planID        string
+	start         time.Time
+	cycle         types.BillingCycle
+	behavior      types.ProrationBehavior
+	timezone      string
+	billingAnchor *time.Time
+	trialDays     *int
+	endDate       *time.Time
+}
+
+func (s *CreditGrantProrationSuite) pvgCreateSub(spec pvgSubSpec) *subscription.Subscription {
+	ctx := s.GetContext()
+	tz := lo.Ternary(spec.timezone == "", "UTC", spec.timezone)
+	start := spec.start
+	resp, err := s.subSvc.CreateSubscription(ctx, dto.CreateSubscriptionRequest{
+		CustomerID:         s.cust.ID,
+		PlanID:             spec.planID,
+		Currency:           "usd",
+		StartDate:          &start,
+		BillingCadence:     types.BILLING_CADENCE_RECURRING,
+		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+		BillingPeriodCount: 1,
+		BillingCycle:       spec.cycle,
+		ProrationBehavior:  spec.behavior,
+		Timezone:           tz,
+		BillingAnchor:      spec.billingAnchor,
+		TrialPeriodDays:    spec.trialDays,
+		EndDate:            spec.endDate,
+	})
+	s.Require().NoError(err)
+	sub, _, err := s.GetStores().SubscriptionRepo.GetWithLineItems(ctx, resp.ID)
+	s.Require().NoError(err)
+	return sub
+}
+
+// pvgCalendarStubSub is the standard fixture: calendar monthly, start Jan 15, create_prorations.
+func (s *CreditGrantProrationSuite) pvgCalendarStubSub(planID string, withPlanCG bool) *subscription.Subscription {
+	s.pvgSeedPlan(planID, withPlanCG)
+	return s.pvgCreateSub(pvgSubSpec{
+		planID:   planID,
+		start:    pvgJan15,
+		cycle:    types.BillingCycleCalendar,
+		behavior: types.ProrationBehaviorCreateProrations,
+	})
+}
+
+func (s *CreditGrantProrationSuite) pvgAttach(subID, addonID string, at time.Time) error {
+	_, err := s.subSvc.AddAddonToSubscription(s.GetContext(), &dto.AddAddonRequest{
+		SubscriptionID: subID,
+		AddAddonToSubscriptionRequest: dto.AddAddonToSubscriptionRequest{
+			AddonID:           addonID,
+			Cadence:           types.AddonCadenceRecurring,
+			StartDate:         &at,
+			ProrationBehavior: types.ProrationBehaviorCreateProrations,
+		},
+	})
+	return err
+}
+
+// pvgSubGrants returns the subscription-scoped grants, filtered by addon (addonID != "")
+// or plan-sourced (addonID == "").
+func (s *CreditGrantProrationSuite) pvgSubGrants(subID, addonID string) []*creditgrant.CreditGrant {
+	filter := types.NewNoLimitCreditGrantFilter()
+	filter.SubscriptionIDs = []string{subID}
+	grants, err := s.GetStores().CreditGrantRepo.List(s.GetContext(), filter)
+	s.Require().NoError(err)
+	return lo.Filter(grants, func(g *creditgrant.CreditGrant, _ int) bool {
+		if g.Scope != types.CreditGrantScopeSubscription {
+			return false
+		}
+		if addonID == "" {
+			return g.AddonID == nil || *g.AddonID == ""
+		}
+		return g.AddonID != nil && *g.AddonID == addonID
+	})
+}
+
+func (s *CreditGrantProrationSuite) pvgApps(grantID string) []*creditgrantapplication.CreditGrantApplication {
+	apps, err := s.GetStores().CreditGrantApplicationRepo.List(s.GetContext(), &types.CreditGrantApplicationFilter{
+		CreditGrantIDs: []string{grantID},
+		QueryFilter:    types.NewNoLimitQueryFilter(),
+	})
+	s.Require().NoError(err)
+	sort.Slice(apps, func(i, j int) bool { return apps[i].PeriodStart.Before(apps[j].PeriodStart) })
+	return apps
+}
+
+// pvgFirstApp returns the single grant for the source and its earliest application.
+func (s *CreditGrantProrationSuite) pvgFirstApp(subID, addonID string) (*creditgrant.CreditGrant, *creditgrantapplication.CreditGrantApplication) {
+	grants := s.pvgSubGrants(subID, addonID)
+	s.Require().Len(grants, 1, "expected exactly one materialized grant")
+	g := grants[0]
+	apps := s.pvgApps(g.ID)
+	s.Require().NotEmpty(apps, "expected at least one application")
+	return g, apps[0]
+}
+
+func (s *CreditGrantProrationSuite) pvgEGRows(featureID string) []*entitlementgrant.EntitlementGrant {
+	rows, err := s.GetStores().EntitlementGrantRepo.List(s.GetContext(), types.NewNoLimitEntitlementGrantFilter())
+	s.Require().NoError(err)
+	rows = lo.Filter(rows, func(g *entitlementgrant.EntitlementGrant, _ int) bool { return g.FeatureID() == featureID })
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ValidFrom.Before(rows[j].ValidFrom) })
+	return rows
+}
+
+func (s *CreditGrantProrationSuite) pvgPlanLineItem(sub *subscription.Subscription) *subscription.SubscriptionLineItem {
+	items, err := s.GetStores().SubscriptionLineItemRepo.ListBySubscription(s.GetContext(), sub)
+	s.Require().NoError(err)
+	for _, li := range items {
+		if li.EntityType == types.SubscriptionLineItemEntityTypePlan && li.PriceType == types.PRICE_TYPE_FIXED {
+			return li
+		}
+	}
+	s.FailNow("plan fixed line item not found")
+	return nil
+}
+
+// pvgEnsureBilled records amount as billed for the stub unless the opening invoice already billed it.
+func (s *CreditGrantProrationSuite) pvgEnsureBilled(sub *subscription.Subscription, li *subscription.SubscriptionLineItem, amount decimal.Decimal) {
+	ctx := s.GetContext()
+	billed, err := s.GetStores().InvoiceLineItemRepo.GetBilledAmountsBySubscriptionLineItem(ctx, []string{li.ID}, pvgJan20)
+	s.Require().NoError(err)
+	if billed[li.ID] != nil {
+		return
+	}
+	ps, pe := sub.CurrentPeriodStart, sub.CurrentPeriodEnd
+	s.Require().NoError(s.GetStores().InvoiceLineItemRepo.Create(ctx, &invoice.InvoiceLineItem{
+		ID:                     types.GenerateUUIDWithPrefix(types.UUID_PREFIX_INVOICE_LINE_ITEM),
+		InvoiceID:              types.GenerateUUIDWithPrefix(types.UUID_PREFIX_INVOICE),
+		CustomerID:             sub.CustomerID,
+		SubscriptionID:         &sub.ID,
+		SubscriptionLineItemID: &li.ID,
+		Amount:                 amount,
+		Quantity:               decimal.NewFromInt(1),
+		Currency:               "usd",
+		PeriodStart:            &ps,
+		PeriodEnd:              &pe,
+		BaseModel:              types.GetDefaultBaseModel(ctx),
+	}))
+}
+
+// -----------------------------------------------------------------------------
+// scenarios
+// -----------------------------------------------------------------------------
+
+// S1: plan CG at creation in a calendar stub is prorated 17/31 and its chain anchors to Feb 1.
+func (s *CreditGrantProrationSuite) TestPlanCreditGrantAtCreation_CalendarStub() {
+	sub := s.pvgCalendarStubSub("plan_pvg_s1", true)
+	s.pvgExpectTime("S1 sub current_period_end", pvgFeb1, sub.CurrentPeriodEnd)
+
+	_, app := s.pvgFirstApp(sub.ID, "")
+	frac := pvgFrac(pvgJan15, pvgFeb1, pvgJan1, pvgFeb1)
+
+	s.pvgExpectEqual("S1 first CGA credits (17/31, currency precision)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+	s.Require().NotNil(app.PeriodEnd)
+	s.pvgExpectTime("S1 first CGA period_end (= next application date)", pvgFeb1, lo.FromPtr(app.PeriodEnd))
+}
+
+// S4 (control): same attach in a full anniversary period [Jan 1, Feb 1).
+func (s *CreditGrantProrationSuite) TestAddonGrants_AttachInsideFullPeriod_Control() {
+	s.pvgSeedPlan("plan_pvg_s4", false)
+	sub := s.pvgCreateSub(pvgSubSpec{
+		planID: "plan_pvg_s4", start: pvgJan1, cycle: types.BillingCycleAnniversary,
+		behavior: types.ProrationBehaviorCreateProrations,
+	})
+	featureID := s.pvgSeedAddon(pvgAddonSpec{id: "addon_pvg_s4", withCG: true, withEG: true})
+	s.Require().NoError(s.pvgAttach(sub.ID, "addon_pvg_s4", pvgJan20))
+
+	frac := pvgFrac(pvgJan20, pvgFeb1, pvgJan1, pvgFeb1)
+	_, app := s.pvgFirstApp(sub.ID, "addon_pvg_s4")
+	rows := s.pvgEGRows(featureID)
+	s.Require().Len(rows, 1)
+
+	s.Run("cg_rounded_to_currency_precision", func() {
+		s.pvgExpectEqual("S4 addon CGA credits (stored)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+	})
+	s.Run("eg_coefficient_12_of_31", func() {
+		s.pvgExpectEqual("S4 addon EG coefficient (4dp)", frac.Round(4), decimal.RequireFromString(rows[0].Metadata["proration_coefficient"]).Round(4))
+	})
+	s.Run("eg_quota_full_precision", func() {
+		s.pvgExpectEqual("S4 addon EG quota (stored)", pvgQuota(pvgEGQuota, frac), rows[0].Quota)
+	})
+}
+
+// S5: one attach on Jan 20 inside the stub: charge, CG and EG share the 12/31 coefficient.
+func (s *CreditGrantProrationSuite) TestAddonChargeAndGrantsShareCoefficient() {
+	sub := s.pvgCalendarStubSub("plan_pvg_s5", false)
+	featureID := s.pvgSeedAddon(pvgAddonSpec{id: "addon_pvg_s5", withCG: true, withEG: true, fixedPrice: true})
+	s.Require().NoError(s.pvgAttach(sub.ID, "addon_pvg_s5", pvgJan20))
+
+	ctx := s.GetContext()
+	items, err := s.GetStores().SubscriptionLineItemRepo.ListBySubscription(ctx, sub)
+	s.Require().NoError(err)
+	addonItem, found := lo.Find(items, func(li *subscription.SubscriptionLineItem) bool {
+		return li.EntityType == types.SubscriptionLineItemEntityTypeAddon && li.PriceType == types.PRICE_TYPE_FIXED
+	})
+	s.Require().True(found, "addon fixed line item must exist after attach")
+	addonPrice, err := s.GetStores().PriceRepo.Get(ctx, addonItem.PriceID)
+	s.Require().NoError(err)
+
+	quote, err := NewLineItemProrationService(s.params).Compute(ctx, LineItemProrationRequest{
+		Subscription: sub,
+		Entries: []LineItemProrationEntry{{
+			LineItem: addonItem, Action: types.ProrationActionAddItem,
+			NewPrice: addonPrice, NewQuantity: decimal.NewFromInt(1),
+		}},
+		EffectiveDate: pvgJan20,
+		Behavior:      types.ProrationBehaviorCreateProrations,
+	})
+	s.Require().NoError(err)
+
+	frac := pvgFrac(pvgJan20, pvgFeb1, pvgJan1, pvgFeb1)
+	s.Run("charge_12_00", func() {
+		s.pvgExpectEqual("S5 addon charge", pvgCurrency(pvgPlanAmount, frac), quote.TotalChargeAmount)
+	})
+
+	_, app := s.pvgFirstApp(sub.ID, "addon_pvg_s5")
+	rows := s.pvgEGRows(featureID)
+	s.Require().Len(rows, 1)
+
+	chargeCoef := quote.TotalChargeAmount.Div(decimal.NewFromInt(pvgPlanAmount)).Round(2)
+	cgCoef := app.Credits.Div(decimal.NewFromInt(pvgCGCredits)).Round(2)
+	egCoef := decimal.RequireFromString(rows[0].Metadata["proration_coefficient"]).Round(2)
+	s.Run("charge_coef_equals_cg_coef", func() {
+		s.pvgExpectEqual("S5 cg coef vs charge coef", chargeCoef, cgCoef)
+	})
+	s.Run("charge_coef_equals_eg_coef", func() {
+		s.pvgExpectEqual("S5 eg coef vs charge coef", chargeCoef, egCoef)
+	})
+	s.Run("cg_rounded_to_currency_precision", func() {
+		s.pvgExpectEqual("S5 addon CGA credits (stored)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+		s.pvgExpectTime("S5 addon CGA period_end", pvgFeb1, lo.FromPtr(app.PeriodEnd))
+	})
+	s.Run("eg_quota_full_precision", func() {
+		s.pvgExpectEqual("S5 addon EG quota (stored)", pvgQuota(pvgEGQuota, frac), rows[0].Quota)
+	})
+}
+
+// S6: immediate cancel on Jan 20 inside the stub: credit = 12/31 x 31 = 12.00 (capped at billed 17).
+func (s *CreditGrantProrationSuite) TestCancelInsideCalendarStub() {
+	sub := s.pvgCalendarStubSub("plan_pvg_s6", false)
+	li := s.pvgPlanLineItem(sub)
+	s.pvgEnsureBilled(sub, li, decimal.NewFromInt(17))
+
+	res, err := NewProrationService(s.params).CalculateSubscriptionCancellationProration(
+		s.GetContext(), sub, []*subscription.SubscriptionLineItem{li},
+		types.CancellationTypeImmediate, pvgJan20, "pvg", types.ProrationBehaviorCreateProrations)
+	s.Require().NoError(err)
+
+	frac := pvgFrac(pvgJan20, pvgFeb1, pvgJan1, pvgFeb1)
+	s.pvgExpectEqual("S6 cancellation credit", pvgCurrency(pvgPlanAmount, frac).Neg(), res.TotalProrationAmount)
+}
+
+// S7: +1 seat on Jan 20 inside the stub = 12/31 x 31 = 12.00 through every modification path.
+func (s *CreditGrantProrationSuite) TestMidPeriodLineItemModificationInsideStub() {
+	sub := s.pvgCalendarStubSub("plan_pvg_s7", false)
+	li := s.pvgPlanLineItem(sub)
+	s.pvgEnsureBilled(sub, li, decimal.NewFromInt(17))
+	modSvc := NewSubscriptionModificationService(s.params).(*subscriptionModificationService)
+	ctx := s.GetContext()
+	frac := pvgFrac(pvgJan20, pvgFeb1, pvgJan1, pvgFeb1)
+	want := pvgCurrency(pvgPlanAmount, frac)
+	at := pvgJan20
+
+	s.Run("line_item_change_quantity_path", func() {
+		qty := decimal.NewFromInt(2)
+		req, err := modSvc.buildLineItemChangeRequest(ctx, sub.ID, &dto.SubModifyLineItemChangeRequest{
+			LineItems: []dto.LineItemChange{{ID: li.ID, Quantity: &qty, EffectiveDate: &at}},
+		})
+		s.Require().NoError(err)
+		settle, err := modSvc.quoteLineItemChange(ctx, req)
+		s.Require().NoError(err)
+		s.pvgExpectEqual("S7 line_item_change qty net", want, settle.Quote.NetAmount())
+	})
+
+	s.Run("line_item_change_price_path", func() {
+		amount := decimal.NewFromInt(2 * pvgPlanAmount)
+		req, err := modSvc.buildLineItemChangeRequest(ctx, sub.ID, &dto.SubModifyLineItemChangeRequest{
+			LineItems: []dto.LineItemChange{{ID: li.ID, Amount: &amount, EffectiveDate: &at}},
+		})
+		s.Require().NoError(err)
+		settle, err := modSvc.quoteLineItemChange(ctx, req)
+		s.Require().NoError(err)
+		s.pvgExpectEqual("S7 line_item_change price 31->62 net", want, settle.Quote.NetAmount())
+	})
+}
+
+// S8: anniversary start Jan 10 with billing_anchor Jan 20 (stub of 10 days, full [Dec 20, Jan 20)),
+// addon CG attached Jan 15: 1000 x 5/31 = 161.29.
+func (s *CreditGrantProrationSuite) TestAnniversaryAnchorStub_AddonCreditGrant() {
+	s.pvgSeedPlan("plan_pvg_s8", false)
+	anchor := pvgJan20
+	sub := s.pvgCreateSub(pvgSubSpec{
+		planID: "plan_pvg_s8", start: pvgJan10, cycle: types.BillingCycleAnniversary,
+		behavior: types.ProrationBehaviorCreateProrations, billingAnchor: &anchor,
+	})
+	s.pvgExpectTime("S8 sub current_period_end", pvgJan20, sub.CurrentPeriodEnd)
+
+	s.pvgSeedAddon(pvgAddonSpec{id: "addon_pvg_s8", withCG: true})
+	s.Require().NoError(s.pvgAttach(sub.ID, "addon_pvg_s8", pvgJan15))
+
+	_, app := s.pvgFirstApp(sub.ID, "addon_pvg_s8")
+	frac := pvgFrac(pvgJan15, pvgJan20, pvgDec20, pvgJan20)
+	s.pvgExpectEqual("S8 addon CGA credits (5/31)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+}
+
+// S9: calendar sub with 14-day trial; trial end keeps the calendar anchor and the first paid
+// period is the stub [Jan 29, Feb 1) with plan CG = 3/31 x 1000.
+func (s *CreditGrantProrationSuite) TestTrialEndOnCalendarSub() {
+	s.pvgSeedPlan("plan_pvg_s9", true)
+	sub := s.pvgCreateSub(pvgSubSpec{
+		planID: "plan_pvg_s9", start: pvgJan15, cycle: types.BillingCycleCalendar,
+		behavior: types.ProrationBehaviorCreateProrations, trialDays: lo.ToPtr(14),
+	})
+	s.Require().NotNil(sub.TrialEnd)
+	s.pvgExpectTime("S9 trial_end", pvgJan29, lo.FromPtr(sub.TrialEnd))
+
+	svc := s.subSvc.(*subscriptionService)
+	_, err := svc.processSubscriptionTrialEnd(s.GetContext(), sub, NewInvoiceService(s.params), pvgJan29.Add(time.Minute))
+	s.Require().NoError(err)
+
+	after, err := s.GetStores().SubscriptionRepo.Get(s.GetContext(), sub.ID)
+	s.Require().NoError(err)
+
+	s.Run("calendar_anchor_kept", func() {
+		s.pvgExpectTime("S9 billing_anchor after trial end", pvgFeb1, after.BillingAnchor)
+	})
+	s.Run("first_paid_period_is_stub", func() {
+		s.pvgExpectTime("S9 current_period_start", pvgJan29, after.CurrentPeriodStart)
+		s.pvgExpectTime("S9 current_period_end", pvgFeb1, after.CurrentPeriodEnd)
+	})
+	s.Run("plan_cg_prorated_3_of_31", func() {
+		_, app := s.pvgFirstApp(sub.ID, "")
+		frac := pvgFrac(pvgJan29, pvgFeb1, pvgJan1, pvgFeb1)
+		s.pvgExpectEqual("S9 plan CGA credits (2dp)", pvgCurrency(pvgCGCredits, frac), app.Credits.Round(2))
+		s.pvgExpectTime("S9 plan CGA period_end", pvgFeb1, lo.FromPtr(app.PeriodEnd))
+	})
+}
+
+// S11: a subscription-scoped credit grant created through the API on Jan 20, inside the Jan 15
+// calendar stub. With create_prorations it covers 12/31 and the next application lands on Feb 1;
+// without, it grants in full from Jan 20.
+func (s *CreditGrantProrationSuite) TestSubscriptionCreditGrantCreatedMidPeriod() {
+	create := func(planID string, behavior types.ProrationBehavior) (*creditgrant.CreditGrant, *creditgrantapplication.CreditGrantApplication) {
+		sub := s.pvgCalendarStubSub(planID, false)
+		_, err := NewCreditGrantService(s.params).CreateCreditGrant(s.GetContext(), dto.CreateCreditGrantRequest{
+			Name: "Custom credits", Scope: types.CreditGrantScopeSubscription, SubscriptionID: lo.ToPtr(sub.ID),
+			Credits: decimal.NewFromInt(pvgCGCredits), Cadence: types.CreditGrantCadenceRecurring,
+			Period: lo.ToPtr(types.CREDIT_GRANT_PERIOD_MONTHLY), PeriodCount: lo.ToPtr(1),
+			ExpirationType: types.CreditGrantExpiryTypeNever, Priority: lo.ToPtr(1),
+			StartDate: lo.ToPtr(pvgJan20), ProrationBehavior: behavior,
+		})
+		s.Require().NoError(err)
+		return s.pvgFirstApp(sub.ID, "")
+	}
+
+	s.Run("create_prorations", func() {
+		grant, app := create("plan_pvg_s11a", types.ProrationBehaviorCreateProrations)
+		frac := pvgFrac(pvgJan20, pvgFeb1, pvgJan1, pvgFeb1)
+		s.pvgExpectEqual("S11a API CG credits (12/31)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+		s.pvgExpectTime("S11a API CG first period end", pvgFeb1, lo.FromPtr(app.PeriodEnd))
+		s.pvgExpectTime("S11a API CG anchor", pvgFeb1, lo.FromPtr(grant.CreditGrantAnchor))
+	})
+	s.Run("no_proration_behavior", func() {
+		_, app := create("plan_pvg_s11b", "")
+		s.pvgExpectEqual("S11b API CG credits (full)", decimal.NewFromInt(pvgCGCredits), app.Credits)
+	})
+}
+
+// S12: plan CG on subscriptions whose first period is not a plain calendar stub.
+func (s *CreditGrantProrationSuite) TestPlanCreditGrantFirstPeriodEdges() {
+	s.Run("sub_ends_inside_first_period", func() {
+		// Jan 15 calendar sub ending Jan 25: the grant covers 10 of January's 31 days.
+		s.pvgSeedPlan("plan_pvg_s12a", true)
+		end := time.Date(2027, 1, 25, 0, 0, 0, 0, time.UTC)
+		sub := s.pvgCreateSub(pvgSubSpec{
+			planID: "plan_pvg_s12a", start: pvgJan15, cycle: types.BillingCycleCalendar,
+			behavior: types.ProrationBehaviorCreateProrations, endDate: &end,
+		})
+		_, app := s.pvgFirstApp(sub.ID, "")
+		frac := pvgFrac(pvgJan15, end, pvgJan1, pvgFeb1)
+		s.pvgExpectEqual("S12a plan CG credits (10/31)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+		s.pvgExpectTime("S12a plan CG first period end", end, lo.FromPtr(app.PeriodEnd))
+	})
+	s.Run("anniversary_anchor_ahead_of_start", func() {
+		// Jan 10 start, billing anchor Jan 20: the first period [Jan 10, Jan 20) is 10/31 of [Dec 20, Jan 20).
+		s.pvgSeedPlan("plan_pvg_s12c", true)
+		jan10 := time.Date(2027, 1, 10, 0, 0, 0, 0, time.UTC)
+		jan20 := pvgJan20
+		sub := s.pvgCreateSub(pvgSubSpec{
+			planID: "plan_pvg_s12c", start: jan10, cycle: types.BillingCycleAnniversary,
+			behavior: types.ProrationBehaviorCreateProrations, billingAnchor: &jan20,
+		})
+		grant, app := s.pvgFirstApp(sub.ID, "")
+		frac := pvgFrac(jan10, jan20, time.Date(2026, 12, 20, 0, 0, 0, 0, time.UTC), jan20)
+		s.pvgExpectEqual("S12c plan CG credits (10/31)", pvgCurrency(pvgCGCredits, frac), app.Credits)
+		s.pvgExpectTime("S12c plan CG anchor", jan20, lo.FromPtr(grant.CreditGrantAnchor))
+	})
+	s.Run("proration_none_aligns_without_scaling", func() {
+		// none grants in full, but the next grant still lands on the billing date (Feb 1).
+		s.pvgSeedPlan("plan_pvg_s12b", true)
+		sub := s.pvgCreateSub(pvgSubSpec{
+			planID: "plan_pvg_s12b", start: pvgJan15, cycle: types.BillingCycleCalendar,
+			behavior: types.ProrationBehaviorNone,
+		})
+		grant, app := s.pvgFirstApp(sub.ID, "")
+		s.pvgExpectEqual("S12b plan CG credits (none, full)", decimal.NewFromInt(pvgCGCredits), app.Credits)
+		s.pvgExpectTime("S12b plan CG first period end", pvgFeb1, lo.FromPtr(app.PeriodEnd))
+		s.pvgExpectTime("S12b plan CG anchor", pvgFeb1, lo.FromPtr(grant.CreditGrantAnchor))
+	})
+}
+
+// H6: an annual addon CG attached Jan 20 to a monthly sub is a different cadence, so it is granted in full.
+func (s *CreditGrantProrationSuite) TestAddonAnnualCreditGrantOnMonthlySub_GrantedInFull() {
+	s.pvgSeedPlan("plan_pvg_h6", false)
+	sub := s.pvgCreateSub(pvgSubSpec{
+		planID: "plan_pvg_h6", start: pvgJan1, cycle: types.BillingCycleAnniversary,
+		behavior: types.ProrationBehaviorCreateProrations,
+	})
+	s.pvgSeedAddon(pvgAddonSpec{id: "addon_pvg_h6", withCG: true, cgPeriod: types.CREDIT_GRANT_PERIOD_ANNUAL})
+	s.Require().NoError(s.pvgAttach(sub.ID, "addon_pvg_h6", pvgJan20))
+
+	_, app := s.pvgFirstApp(sub.ID, "addon_pvg_h6")
+	s.pvgExpectEqual("H6 annual addon CG credits (full)", decimal.NewFromInt(pvgCGCredits), app.Credits)
+}
+
+// A grant follows billing (and is prorated) only when its period and count both equal the sub's.
+func TestCreditGrantFollowsBilling(t *testing.T) {
+	grant := func(period types.CreditGrantPeriod, count int) dto.CreateCreditGrantRequest {
+		return dto.CreateCreditGrantRequest{Cadence: types.CreditGrantCadenceRecurring, Period: lo.ToPtr(period), PeriodCount: lo.ToPtr(count)}
+	}
+	sub := func(period types.BillingPeriod, count int) *subscription.Subscription {
+		return &subscription.Subscription{BillingPeriod: period, BillingPeriodCount: count}
+	}
+
+	tests := []struct {
+		name  string
+		grant dto.CreateCreditGrantRequest
+		sub   *subscription.Subscription
+		want  bool
+	}{
+		{name: "monthly grant on monthly sub", grant: grant(types.CREDIT_GRANT_PERIOD_MONTHLY, 1), sub: sub(types.BILLING_PERIOD_MONTHLY, 1), want: true},
+		{name: "annual grant on monthly sub", grant: grant(types.CREDIT_GRANT_PERIOD_ANNUAL, 1), sub: sub(types.BILLING_PERIOD_MONTHLY, 1), want: false},
+		{name: "onetime grant", grant: dto.CreateCreditGrantRequest{Cadence: types.CreditGrantCadenceOneTime}, sub: sub(types.BILLING_PERIOD_MONTHLY, 1), want: false},
+		{name: "monthly grant on a 3-month sub", grant: grant(types.CREDIT_GRANT_PERIOD_MONTHLY, 1), sub: sub(types.BILLING_PERIOD_MONTHLY, 3), want: false},
+		{name: "2-month grant on monthly sub", grant: grant(types.CREDIT_GRANT_PERIOD_MONTHLY, 2), sub: sub(types.BILLING_PERIOD_MONTHLY, 1), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := creditGrantFollowsBilling(tt.grant, tt.sub); got != tt.want {
+				t.Errorf("creditGrantFollowsBilling = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

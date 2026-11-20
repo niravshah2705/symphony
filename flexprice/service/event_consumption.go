@@ -1,0 +1,533 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/flexprice/flexprice/internal/config"
+	"github.com/flexprice/flexprice/internal/domain/events"
+	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/logger"
+	"github.com/flexprice/flexprice/internal/metrics"
+	"github.com/flexprice/flexprice/internal/pubsub"
+	"github.com/flexprice/flexprice/internal/pubsub/kafka"
+	pubsubRouter "github.com/flexprice/flexprice/internal/pubsub/router"
+	"github.com/flexprice/flexprice/internal/tracing"
+	"github.com/flexprice/flexprice/internal/types"
+)
+
+// EventConsumptionService handles consuming raw events from Kafka and inserting them into ClickHouse
+type EventConsumptionService interface {
+	// Register message handler with the router
+	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
+
+	// Register message handler with the router
+	RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration)
+
+	// Register replay handler with the router
+	RegisterHandlerReplay(router *pubsubRouter.Router, cfg *config.Configuration)
+
+	// RegisterBulkHandler registers a batch-mode consumer that reads
+	// RawEventBatch messages published by the bulk-ingest API path and
+	// bulk-inserts every event in the batch into the events table in one call.
+	RegisterBulkHandler(router *pubsubRouter.Router, cfg *config.Configuration)
+
+	// Process a raw event payload (used for AWS Lambda and direct processing)
+	ProcessRawEvent(ctx context.Context, payload []byte) error
+}
+
+type eventConsumptionService struct {
+	ServiceParams
+	pubSub         pubsub.PubSub
+	lazyPubSub     pubsub.PubSub
+	replayPubSub   pubsub.PubSub
+	bulkPubSub     pubsub.PubSub
+	eventRepo      events.Repository
+	tracingService *tracing.Service
+	deletionWindow EventDeletionWindowService
+}
+
+// NewEventConsumptionService creates a new event consumption service
+func NewEventConsumptionService(
+	params ServiceParams,
+	eventRepo events.Repository,
+	tracingService *tracing.Service,
+	deletionWindow EventDeletionWindowService,
+) EventConsumptionService {
+	ev := &eventConsumptionService{
+		ServiceParams:  params,
+		eventRepo:      eventRepo,
+		tracingService: tracingService,
+		deletionWindow: deletionWindow,
+	}
+
+	pubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.EventProcessing.ConsumerGroup,
+	)
+	if err != nil {
+		params.Logger.Fatal(context.Background(), "failed to create pubsub", "error", err)
+		return nil
+	}
+	ev.pubSub = pubSub
+
+	lazyPubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.EventProcessingLazy.ConsumerGroup,
+	)
+	if err != nil {
+		params.Logger.Fatal(context.Background(), "failed to create lazy pubsub", "error", err)
+		return nil
+	}
+	ev.lazyPubSub = lazyPubSub
+
+	replayPubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.EventProcessingReplay.ConsumerGroup,
+	)
+	if err != nil {
+		params.Logger.Fatal(context.Background(), "failed to create replay pubsub", "error", err)
+		return nil
+	}
+	ev.replayPubSub = replayPubSub
+
+	bulkPubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.BulkEventConsumption.ConsumerGroup,
+	)
+	if err != nil {
+		params.Logger.Fatal(context.Background(), "failed to create bulk pubsub", "error", err)
+		return nil
+	}
+	ev.bulkPubSub = bulkPubSub
+
+	return ev
+}
+
+// RegisterBulkHandler subscribes the bulk consumer group to the bulk-events
+// topic. One Kafka message = one RawEventBatch = one bulk-insert into the
+// events ClickHouse table.
+func (s *eventConsumptionService) RegisterBulkHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
+	if !cfg.BulkEventConsumption.Enabled {
+		s.Logger.Info(context.Background(), "bulk event consumption handler disabled by configuration")
+		return
+	}
+
+	throttle := middleware.NewThrottle(cfg.BulkEventConsumption.RateLimit, time.Second)
+
+	dlq := cfg.BulkEventConsumption.TopicDLQ
+	if dlq == "" {
+		dlq = cfg.Kafka.TopicDLQ
+	}
+
+	router.AddNoPublishHandler(
+		"bulk_event_consumption_handler",
+		cfg.BulkEventConsumption.Topic,
+		dlq,
+		s.bulkPubSub,
+		s.processBulkMessage,
+		throttle.Middleware,
+	)
+
+	s.Logger.Info(context.Background(), "registered bulk event consumption handler",
+		"topic", cfg.BulkEventConsumption.Topic,
+		"consumer_group", cfg.BulkEventConsumption.ConsumerGroup,
+		"rate_limit", cfg.BulkEventConsumption.RateLimit,
+	)
+}
+
+// scopeConflict reports two non-empty, differing scope values.
+func scopeConflict(a, b string) bool {
+	return a != "" && b != "" && a != b
+}
+
+// dropScopeMismatch logs and counts scope-mismatched events.
+func dropScopeMismatch(ctx context.Context, log *logger.Logger, consumer, msg string, count int, eventTenantID, eventEnvironmentID string, fields ...any) {
+	metrics.RecordCounter(ctx, metrics.EventsScopeDropped, int64(count), metrics.L(metrics.KeyConsumer, consumer))
+	log.Info(ctx, msg, append([]any{
+		"consumer", consumer,
+		"event_tenant_id", eventTenantID,
+		"event_environment_id", eventEnvironmentID,
+	}, fields...)...)
+}
+
+// withEventScope pins ctx to the tenant and environment the event is written under.
+func withEventScope(ctx context.Context, evt *events.Event) context.Context {
+	if evt.TenantID != "" {
+		ctx = context.WithValue(ctx, types.CtxTenantID, evt.TenantID)
+	}
+	if evt.EnvironmentID != "" {
+		ctx = context.WithValue(ctx, types.CtxEnvironmentID, evt.EnvironmentID)
+	}
+	return ctx
+}
+
+// processBulkMessage unmarshals a RawEventBatch and bulk-inserts every event
+// in the batch with a single call. Malformed rows inside the batch are
+// skipped so healthy siblings still land in ClickHouse.
+func (s *eventConsumptionService) processBulkMessage(ctx context.Context, msg *message.Message) error {
+	var batch events.EventBatch
+	if err := json.Unmarshal(msg.Payload, &batch); err != nil {
+		s.Logger.Error(ctx, "failed to unmarshal bulk event batch",
+			"error", err,
+			"message_uuid", msg.UUID,
+		)
+		s.tracingService.CaptureException(ctx, err)
+		return fmt.Errorf("non-retriable unmarshal error: %w", err)
+	}
+
+	if len(batch.Events) == 0 {
+		return nil
+	}
+
+	if scopeConflict(types.GetTenantID(ctx), batch.TenantID) ||
+		scopeConflict(types.GetEnvironmentID(ctx), batch.EnvironmentID) {
+		dropScopeMismatch(ctx, s.Logger, "events_bulk", "dropping bulk event batch: message scope mismatch",
+			len(batch.Events), batch.TenantID, batch.EnvironmentID,
+			"message_uuid", msg.UUID,
+			"batch_size", len(batch.Events),
+		)
+		return nil
+	}
+
+	tenantID := batch.TenantID
+	if tenantID == "" {
+		tenantID = types.GetTenantID(ctx)
+	}
+	environmentID := batch.EnvironmentID
+	if environmentID == "" {
+		environmentID = types.GetEnvironmentID(ctx)
+	}
+	if tenantID == "" {
+		s.Logger.Info(ctx, "dropping bulk event batch: tenant missing",
+			"message_uuid", msg.UUID,
+		)
+		return nil
+	}
+	ctx = context.WithValue(ctx, types.CtxTenantID, tenantID)
+	if environmentID != "" {
+		ctx = context.WithValue(ctx, types.CtxEnvironmentID, environmentID)
+	}
+
+	inserts := make([]*events.Event, 0, len(batch.Events))
+	for _, evt := range batch.Events {
+		if evt == nil {
+			continue
+		}
+
+		if scopeConflict(evt.TenantID, tenantID) || scopeConflict(evt.EnvironmentID, environmentID) {
+			dropScopeMismatch(ctx, s.Logger, "events_bulk", "dropping bulk event: scope mismatch",
+				1, evt.TenantID, evt.EnvironmentID,
+				"event_id", evt.ID,
+				"message_uuid", msg.UUID,
+			)
+			continue
+		}
+		if evt.TenantID == "" {
+			evt.TenantID = tenantID
+		}
+		if evt.EnvironmentID == "" {
+			evt.EnvironmentID = environmentID
+		}
+		// The whole batch is held: one Kafka message cannot be part-acknowledged,
+		// and writing the rest would duplicate them on every redelivery.
+		if s.deletionWindow != nil && s.deletionWindow.IsSuppressed(withEventScope(ctx, evt), evt.ExternalCustomerID, evt.Timestamp) {
+			s.Logger.Error(ctx, "holding bulk event batch: a deletion is in progress for this customer and period",
+				"error", types.ErrEventDeletionInProgress,
+				"event_id", evt.ID,
+				"external_customer_id", evt.ExternalCustomerID,
+				"timestamp", evt.Timestamp,
+				"message_uuid", msg.UUID,
+			)
+			return types.ErrEventDeletionInProgress
+		}
+		inserts = append(inserts, evt)
+	}
+
+	if len(inserts) == 0 {
+		s.Logger.Info(ctx, "bulk event batch produced zero valid events, skipping",
+			"batch_size", len(batch.Events),
+			"message_uuid", msg.UUID,
+		)
+		return nil
+	}
+
+	if err := s.eventRepo.BulkInsertEvents(ctx, inserts); err != nil {
+		s.Logger.Error(ctx, "bulk event batch insert failed",
+			"error", err,
+			"batch_size", len(inserts),
+			"message_uuid", msg.UUID,
+		)
+		return fmt.Errorf("bulk insert events: %w", err)
+	}
+
+	s.Logger.Debug(ctx, "bulk event batch inserted",
+		"batch_size", len(inserts),
+		"message_uuid", msg.UUID,
+	)
+	return nil
+}
+
+// RegisterHandler registers the event consumption handler with the router
+func (s *eventConsumptionService) RegisterHandler(
+	router *pubsubRouter.Router,
+	cfg *config.Configuration,
+) {
+	if !cfg.EventProcessing.Enabled {
+		s.Logger.Info(context.Background(), "event consumption handler disabled by configuration")
+		return
+	}
+
+	// Add throttle middleware to this specific handler
+	throttle := middleware.NewThrottle(cfg.EventProcessing.RateLimit, time.Second)
+
+	// Add the handler
+	router.AddNoPublishHandler(
+		"event_consumption_handler",
+		cfg.EventProcessing.Topic,
+		cfg.EventProcessing.TopicDLQ,
+		s.pubSub,
+		s.processMessage,
+		throttle.Middleware,
+	)
+
+	s.Logger.Info(context.Background(), "registered event consumption handler",
+		"topic", cfg.EventProcessing.Topic,
+		"rate_limit", cfg.EventProcessing.RateLimit,
+	)
+}
+
+// RegisterHandler registers the event consumption handler with the router
+func (s *eventConsumptionService) RegisterHandlerLazy(
+	router *pubsubRouter.Router,
+	cfg *config.Configuration,
+) {
+	if !cfg.EventProcessingLazy.Enabled {
+		s.Logger.Info(context.Background(), "event consumption lazy handler disabled by configuration")
+		return
+	}
+
+	// Add throttle middleware to this specific handler
+	throttle := middleware.NewThrottle(cfg.EventProcessingLazy.RateLimit, time.Second)
+
+	// Add the handler
+	router.AddNoPublishHandler(
+		"event_consumption_lazy_handler",
+		cfg.EventProcessingLazy.Topic,
+		cfg.EventProcessingLazy.TopicDLQ,
+		s.lazyPubSub,
+		s.processMessage,
+		throttle.Middleware,
+	)
+
+	s.Logger.Info(context.Background(), "registered event consumption lazy handler",
+		"topic", cfg.EventProcessingLazy.Topic,
+		"rate_limit", cfg.EventProcessingLazy.RateLimit,
+	)
+}
+
+// RegisterHandlerReplay registers the event consumption replay handler with the router
+func (s *eventConsumptionService) RegisterHandlerReplay(
+	router *pubsubRouter.Router,
+	cfg *config.Configuration,
+) {
+	if !cfg.EventProcessingReplay.Enabled {
+		s.Logger.Info(context.Background(), "event consumption replay handler disabled by configuration")
+		return
+	}
+
+	// Check if replay topic is configured
+	if cfg.EventProcessingReplay.Topic == "" {
+		s.Logger.Info(context.Background(), "replay topic not set, skipping replay handler")
+		return
+	}
+
+	// Add throttle middleware to this specific handler
+	replayThrottle := middleware.NewThrottle(cfg.EventProcessingReplay.RateLimit, time.Second)
+
+	// Add the handler
+	router.AddNoPublishHandler(
+		"event_consumption_replay_handler",
+		cfg.EventProcessingReplay.Topic,
+		cfg.Kafka.TopicDLQ,
+		s.replayPubSub,
+		s.processMessage,
+		replayThrottle.Middleware,
+	)
+
+	s.Logger.Info(context.Background(), "registered event consumption replay handler",
+		"topic", cfg.EventProcessingReplay.Topic,
+		"rate_limit", cfg.EventProcessingReplay.RateLimit,
+		"pubsub_type", "kafka",
+	)
+}
+
+// processMessage processes a single event message from Kafka
+func (s *eventConsumptionService) processMessage(ctx context.Context, msg *message.Message) error {
+	partitionKey := msg.Metadata.Get("partition_key")
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+
+	s.Logger.Debug(ctx, "processing event from message queue in event consumption service",
+		"message_uuid", msg.UUID,
+		"partition_key", partitionKey,
+		"tenant_id", tenantID,
+		"environment_id", environmentID,
+	)
+
+	// Unmarshal the event
+	var event events.Event
+	if err := json.Unmarshal(msg.Payload, &event); err != nil {
+		s.Logger.Error(ctx, "failed to unmarshal event",
+			"error", err,
+			"payload", string(msg.Payload),
+		)
+		s.tracingService.CaptureException(ctx, err)
+
+		// Return error for non-retriable parse errors
+		// Watermill's poison queue middleware will handle moving it to DLQ
+		if !s.shouldRetryError(err) {
+			return fmt.Errorf("non-retriable unmarshal error: %w", err)
+		}
+		return err
+	}
+
+	if scopeConflict(event.TenantID, tenantID) || scopeConflict(event.EnvironmentID, environmentID) {
+		dropScopeMismatch(ctx, s.Logger, "events", "dropping event: scope mismatch",
+			1, event.TenantID, event.EnvironmentID,
+			"event_id", event.ID,
+			"message_uuid", msg.UUID,
+		)
+		return nil
+	}
+
+	if tenantID == "" && event.TenantID != "" {
+		tenantID = event.TenantID
+		ctx = context.WithValue(ctx, types.CtxTenantID, tenantID)
+	}
+
+	if environmentID == "" && event.EnvironmentID != "" {
+		environmentID = event.EnvironmentID
+		ctx = context.WithValue(ctx, types.CtxEnvironmentID, environmentID)
+	}
+
+	s.Logger.Debug(ctx, "processing event in event consumption service",
+		"event_id", event.ID,
+		"event_name", event.EventName,
+		"tenant_id", event.TenantID,
+		"environment_id", event.EnvironmentID,
+		"external_customer_id", event.ExternalCustomerID,
+		"timestamp", event.Timestamp,
+	)
+
+	if s.deletionWindow != nil && s.deletionWindow.IsSuppressed(ctx, event.ExternalCustomerID, event.Timestamp) {
+		s.Logger.Error(ctx, "holding event: a deletion is in progress for this customer and period",
+			"error", types.ErrEventDeletionInProgress,
+			"event_id", event.ID,
+			"external_customer_id", event.ExternalCustomerID,
+			"timestamp", event.Timestamp,
+		)
+		return types.ErrEventDeletionInProgress
+	}
+
+	// Prepare events to insert
+	eventsToInsert := []*events.Event{&event}
+
+	// Insert events into ClickHouse
+	s.Logger.Debug(ctx, "inserting events into ClickHouse",
+		"event_id", event.ID,
+		"events_to_insert_count", len(eventsToInsert),
+	)
+
+	if err := s.eventRepo.BulkInsertEvents(ctx, eventsToInsert); err != nil {
+		s.Logger.Error(ctx, "failed to insert events",
+			"error", err,
+			"event_id", event.ID,
+			"event_name", event.EventName,
+		)
+
+		// Return error for retry
+		return ierr.WithError(err).
+			WithHint("Failed to insert events into ClickHouse").
+			Mark(ierr.ErrSystem)
+	}
+
+	s.Logger.Debug(ctx, "successfully processed event",
+		"event_id", event.ID,
+		"event_name", event.EventName,
+		"lag_ms", time.Since(event.Timestamp).Milliseconds(),
+	)
+
+	return nil
+}
+
+// ProcessRawEvent processes a raw event payload (used for AWS Lambda and direct processing)
+func (s *eventConsumptionService) ProcessRawEvent(ctx context.Context, payload []byte) error {
+	// Start a transaction for this event processing
+	transaction, ctx := s.tracingService.StartTransaction(ctx, "event.process")
+	if transaction != nil {
+		defer transaction.Finish()
+	}
+
+	// Unmarshal the event
+	var event events.Event
+	if err := json.Unmarshal(payload, &event); err != nil {
+		s.Logger.Error(ctx, "failed to unmarshal event",
+			"error", err,
+			"payload", string(payload),
+		)
+		s.tracingService.CaptureException(ctx, err)
+		return fmt.Errorf("failed to unmarshal event: %w", err)
+	}
+
+	s.Logger.Debug(ctx, "processing raw event",
+		"event_id", event.ID,
+		"event_name", event.EventName,
+		"tenant_id", event.TenantID,
+		"timestamp", event.Timestamp,
+	)
+
+	// Prepare events to insert
+	eventsToInsert := []*events.Event{&event}
+
+	// Insert events into ClickHouse
+	if err := s.eventRepo.BulkInsertEvents(ctx, eventsToInsert); err != nil {
+		s.Logger.Error(ctx, "failed to insert events",
+			"error", err,
+			"event_id", event.ID,
+			"event_name", event.EventName,
+		)
+		return fmt.Errorf("failed to insert events: %w", err)
+	}
+
+	s.Logger.Debug(ctx, "successfully processed raw event",
+		"event_id", event.ID,
+		"event_name", event.EventName,
+		"lag_ms", time.Since(event.Timestamp).Milliseconds(),
+	)
+
+	return nil
+}
+
+// shouldRetryError determines if an error should trigger a message retry
+func (s *eventConsumptionService) shouldRetryError(err error) bool {
+	// Don't retry parsing errors which are not likely to succeed on retry
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "unmarshal") ||
+		strings.Contains(errMsg, "parse") ||
+		strings.Contains(errMsg, "invalid") {
+		return false
+	}
+
+	// Retry all other errors (database issues, network issues, etc.)
+	return true
+}

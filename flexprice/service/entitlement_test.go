@@ -1,0 +1,1518 @@
+package service
+
+import (
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/addon"
+	"github.com/flexprice/flexprice/internal/domain/addonassociation"
+	"github.com/flexprice/flexprice/internal/domain/entitlement"
+	"github.com/flexprice/flexprice/internal/domain/feature"
+	"github.com/flexprice/flexprice/internal/domain/meter"
+	"github.com/flexprice/flexprice/internal/domain/plan"
+	"github.com/flexprice/flexprice/internal/domain/subscription"
+	"github.com/flexprice/flexprice/internal/testutil"
+	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/suite"
+)
+
+type EntitlementServiceSuite struct {
+	testutil.BaseServiceTestSuite
+	service EntitlementService
+}
+
+func TestEntitlementService(t *testing.T) {
+	suite.Run(t, new(EntitlementServiceSuite))
+}
+
+func (s *EntitlementServiceSuite) SetupTest() {
+	s.BaseServiceTestSuite.SetupTest()
+	s.setupService()
+}
+
+func (s *EntitlementServiceSuite) setupService() {
+	stores := s.GetStores()
+	s.service = NewEntitlementService(ServiceParams{
+		Logger:               s.GetLogger(),
+		Config:               s.GetConfig(),
+		DB:                   s.GetDB(),
+		EntitlementRepo:      stores.EntitlementRepo,
+		EntitlementGrantRepo: stores.EntitlementGrantRepo,
+		PlanRepo:             stores.PlanRepo,
+		SubRepo:              stores.SubscriptionRepo,
+		AddonRepo:            stores.AddonRepo,
+		AddonAssociationRepo: stores.AddonAssociationRepo,
+		PriceRepo:            stores.PriceRepo,
+		FeatureRepo:          stores.FeatureRepo,
+		MeterRepo:            testutil.NewInMemoryMeterStore(),
+		WebhookPublisher:     s.GetWebhookPublisher(),
+		RedisCache:           s.GetRedisCache(),
+	})
+}
+
+func (s *EntitlementServiceSuite) TestCreateEntitlement() {
+	// Setup test features with different types
+	boolFeature := &feature.Feature{
+		ID:          "feat-bool",
+		Name:        "Boolean Feature",
+		Description: "Test Boolean Feature",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), boolFeature)
+	s.NoError(err)
+
+	// Create a regular meter for the metered feature
+	regularMeter := &meter.Meter{
+		ID:        "meter-regular",
+		Name:      "Regular Meter",
+		EventName: "api_calls",
+		Aggregation: meter.Aggregation{
+			Type: types.AggregationSum,
+		},
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	meterStore := s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore)
+	err = meterStore.CreateMeter(s.GetContext(), regularMeter)
+	s.NoError(err)
+
+	meteredFeature := &feature.Feature{
+		ID:          "feat-metered",
+		Name:        "Metered Feature",
+		Description: "Test Metered Feature",
+		Type:        types.FeatureTypeMetered,
+		MeterID:     regularMeter.ID,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), meteredFeature)
+	s.NoError(err)
+
+	staticFeature := &feature.Feature{
+		ID:          "feat-static",
+		Name:        "Static Feature",
+		Description: "Test Static Feature",
+		Type:        types.FeatureTypeStatic,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), staticFeature)
+	s.NoError(err)
+
+	// Create a test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-1",
+		Name:        "Test Plan",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Test case: Valid boolean entitlement
+	s.Run("Valid Boolean Entitlement", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   boolFeature.ID,
+			FeatureType: types.FeatureTypeBoolean,
+			IsEnabled:   true,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(types.ENTITLEMENT_ENTITY_TYPE_PLAN, resp.Entitlement.EntityType)
+		s.Equal(testPlan.ID, resp.Entitlement.EntityID)
+		s.Equal(req.FeatureID, resp.Entitlement.FeatureID)
+		s.Equal(req.IsEnabled, resp.Entitlement.IsEnabled)
+	})
+
+	// Test case: Valid metered entitlement
+	s.Run("Valid Metered Entitlement", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:           testPlan.ID,
+			FeatureID:        meteredFeature.ID,
+			FeatureType:      types.FeatureTypeMetered,
+			UsageLimit:       lo.ToPtr(int64(1000)),
+			UsageResetPeriod: types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY,
+			IsSoftLimit:      true,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(types.ENTITLEMENT_ENTITY_TYPE_PLAN, resp.Entitlement.EntityType)
+		s.Equal(testPlan.ID, resp.Entitlement.EntityID)
+		s.Equal(req.FeatureID, resp.Entitlement.FeatureID)
+		// A metered entitlement is put on the grant model at creation: the usage_limit
+		// becomes the quota and is cleared, so the row carries one answer.
+		s.True(resp.Entitlement.HasGrantConfig())
+		s.Equal("1000", resp.Entitlement.GrantQuota.String())
+		s.Nil(resp.Entitlement.UsageLimit)
+		s.Equal(req.UsageResetPeriod, resp.Entitlement.UsageResetPeriod)
+	})
+
+	// Test case: Valid static entitlement
+	s.Run("Valid Static Entitlement", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   staticFeature.ID,
+			FeatureType: types.FeatureTypeStatic,
+			StaticValue: "premium",
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(types.ENTITLEMENT_ENTITY_TYPE_PLAN, resp.Entitlement.EntityType)
+		s.Equal(testPlan.ID, resp.Entitlement.EntityID)
+		s.Equal(req.FeatureID, resp.Entitlement.FeatureID)
+		s.Equal(req.StaticValue, resp.Entitlement.StaticValue)
+	})
+
+	// Test case: Invalid feature ID
+	s.Run("Invalid Feature ID", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   "nonexistent",
+			FeatureType: types.FeatureTypeBoolean,
+			IsEnabled:   true,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+	})
+
+	// Test case: Missing static value for static feature
+	s.Run("Missing Static Value", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   staticFeature.ID,
+			FeatureType: types.FeatureTypeStatic,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+	})
+}
+
+func (s *EntitlementServiceSuite) TestGetEntitlement() {
+	// Create test feature
+	testFeature := &feature.Feature{
+		ID:          "feat-1",
+		Name:        "Test Feature",
+		Description: "Test Feature Description",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), testFeature)
+	s.NoError(err)
+
+	// Create test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-1",
+		Name:        "Test Plan",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Create an entitlement
+	ent := &entitlement.Entitlement{
+		ID:          "ent-1",
+		EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:    testPlan.ID,
+		FeatureID:   testFeature.ID,
+		FeatureType: types.FeatureTypeBoolean,
+		IsEnabled:   true,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	_, err = s.GetStores().EntitlementRepo.Create(s.GetContext(), ent)
+	s.NoError(err)
+
+	resp, err := s.service.GetEntitlement(s.GetContext(), "ent-1")
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(ent.EntityID, resp.Entitlement.EntityID)
+
+	// Non-existent entitlement
+	resp, err = s.service.GetEntitlement(s.GetContext(), "nonexistent")
+	s.Error(err)
+	s.Nil(resp)
+}
+
+func (s *EntitlementServiceSuite) TestListEntitlements() {
+	// Create test features
+	boolFeature := &feature.Feature{
+		ID:          "feat-1",
+		Name:        "Boolean Feature",
+		Description: "Test Boolean Feature",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), boolFeature)
+	s.NoError(err)
+
+	// Create a regular meter for the metered feature
+	regularMeterList := &meter.Meter{
+		ID:        "meter-regular-list",
+		Name:      "Regular Meter List",
+		EventName: "api_calls_list",
+		Aggregation: meter.Aggregation{
+			Type: types.AggregationSum,
+		},
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	meterStore := s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore)
+	err = meterStore.CreateMeter(s.GetContext(), regularMeterList)
+	s.NoError(err)
+
+	meteredFeature := &feature.Feature{
+		ID:          "feat-2",
+		Name:        "Metered Feature",
+		Description: "Test Metered Feature",
+		Type:        types.FeatureTypeMetered,
+		MeterID:     regularMeterList.ID,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), meteredFeature)
+	s.NoError(err)
+
+	// Create test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-1",
+		Name:        "Test Plan",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Create multiple entitlements
+	ent1 := &entitlement.Entitlement{
+		ID:          "ent-1",
+		EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:    testPlan.ID,
+		FeatureID:   boolFeature.ID,
+		FeatureType: types.FeatureTypeBoolean,
+		IsEnabled:   true,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	_, err = s.GetStores().EntitlementRepo.Create(s.GetContext(), ent1)
+	s.NoError(err)
+
+	ent2 := &entitlement.Entitlement{
+		ID:          "ent-2",
+		EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:    testPlan.ID,
+		FeatureID:   meteredFeature.ID,
+		FeatureType: types.FeatureTypeMetered,
+		UsageLimit:  lo.ToPtr(int64(1000)),
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	_, err = s.GetStores().EntitlementRepo.Create(s.GetContext(), ent2)
+	s.NoError(err)
+
+	// Test listing with pagination
+	filter := types.NewDefaultEntitlementFilter()
+	filter.QueryFilter.Limit = lo.ToPtr(10)
+	resp, err := s.service.ListEntitlements(s.GetContext(), filter)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(2, resp.Pagination.Total)
+
+	// Test filtering by entity ID
+	filter.EntityIDs = []string{testPlan.ID}
+	resp, err = s.service.ListEntitlements(s.GetContext(), filter)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(2, len(resp.Items))
+
+	// Test filtering by feature type
+	filter = types.NewDefaultEntitlementFilter()
+	featureType := types.FeatureTypeBoolean
+	filter.FeatureType = &featureType
+	resp, err = s.service.ListEntitlements(s.GetContext(), filter)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(1, len(resp.Items))
+}
+
+func (s *EntitlementServiceSuite) TestUpdateEntitlement() {
+	// Create test feature
+	testFeature := &feature.Feature{
+		ID:          "feat-1",
+		Name:        "Test Feature",
+		Description: "Test Feature Description",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), testFeature)
+	s.NoError(err)
+
+	// Create test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-1",
+		Name:        "Test Plan",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Create an entitlement
+	ent := &entitlement.Entitlement{
+		ID:          "ent-1",
+		EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:    testPlan.ID,
+		FeatureID:   testFeature.ID,
+		FeatureType: types.FeatureTypeBoolean,
+		IsEnabled:   false,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	_, err = s.GetStores().EntitlementRepo.Create(s.GetContext(), ent)
+	s.NoError(err)
+
+	// Update the entitlement
+	isEnabled := true
+	req := dto.UpdateEntitlementRequest{
+		IsEnabled: &isEnabled,
+	}
+
+	resp, err := s.service.UpdateEntitlement(s.GetContext(), "ent-1", req)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.True(resp.Entitlement.IsEnabled)
+
+	// Test updating non-existent entitlement
+	resp, err = s.service.UpdateEntitlement(s.GetContext(), "nonexistent", req)
+	s.Error(err)
+	s.Nil(resp)
+}
+
+func (s *EntitlementServiceSuite) TestDeleteEntitlement() {
+	// Create test feature
+	testFeature := &feature.Feature{
+		ID:          "feat-1",
+		Name:        "Test Feature",
+		Description: "Test Feature Description",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), testFeature)
+	s.NoError(err)
+
+	// Create test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-1",
+		Name:        "Test Plan",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Create an entitlement
+	ent := &entitlement.Entitlement{
+		ID:          "ent-1",
+		EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:    testPlan.ID,
+		FeatureID:   testFeature.ID,
+		FeatureType: types.FeatureTypeBoolean,
+		IsEnabled:   true,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	_, err = s.GetStores().EntitlementRepo.Create(s.GetContext(), ent)
+	s.NoError(err)
+
+	// Delete the entitlement
+	err = s.service.DeleteEntitlement(s.GetContext(), "ent-1")
+	s.NoError(err)
+
+	// Verify the entitlement is deleted
+	_, err = s.GetStores().EntitlementRepo.Get(s.GetContext(), "ent-1")
+	s.Error(err)
+}
+
+func (s *EntitlementServiceSuite) TestCreateEntitlementWithBucketedMaxMeter() {
+	// Create a bucketed max meter
+	bucketedMaxMeter := &meter.Meter{
+		ID:        "meter-bucketed-max",
+		Name:      "Bucketed Max Meter",
+		EventName: "api_calls_bucketed",
+		Aggregation: meter.Aggregation{
+			Type:       types.AggregationMax,
+			BucketSize: "hour", // This makes it a bucketed max meter
+		},
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	meterStore := s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore)
+	err := meterStore.CreateMeter(s.GetContext(), bucketedMaxMeter)
+	s.NoError(err)
+
+	// Create a regular max meter (without bucket size)
+	regularMaxMeter := &meter.Meter{
+		ID:        "meter-regular-max",
+		Name:      "Regular Max Meter",
+		EventName: "api_calls_regular",
+		Aggregation: meter.Aggregation{
+			Type: types.AggregationMax,
+			// No BucketSize - this is a regular max meter
+		},
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = meterStore.CreateMeter(s.GetContext(), regularMaxMeter)
+	s.NoError(err)
+
+	// Create metered features
+	bucketedMaxFeature := &feature.Feature{
+		ID:          "feat-bucketed-max",
+		Name:        "Bucketed Max Feature",
+		Description: "Feature with bucketed max meter",
+		Type:        types.FeatureTypeMetered,
+		MeterID:     bucketedMaxMeter.ID,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), bucketedMaxFeature)
+	s.NoError(err)
+
+	regularMaxFeature := &feature.Feature{
+		ID:          "feat-regular-max",
+		Name:        "Regular Max Feature",
+		Description: "Feature with regular max meter",
+		Type:        types.FeatureTypeMetered,
+		MeterID:     regularMaxMeter.ID,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), regularMaxFeature)
+	s.NoError(err)
+
+	// Create test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-bucketed-test",
+		Name:        "Test Plan for Bucketed Max",
+		Description: "Test Plan Description",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Test case: Should reject entitlement for bucketed max meter
+	s.Run("Reject Entitlement for Bucketed Max Meter", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:           testPlan.ID,
+			FeatureID:        bucketedMaxFeature.ID,
+			FeatureType:      types.FeatureTypeMetered,
+			UsageLimit:       lo.ToPtr(int64(1000)),
+			UsageResetPeriod: types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY,
+			IsSoftLimit:      true,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "entitlements not supported for bucketed max meters")
+	})
+
+	// Test case: Should allow entitlement for regular max meter
+	s.Run("Allow Entitlement for Regular Max Meter", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:           testPlan.ID,
+			FeatureID:        regularMaxFeature.ID,
+			FeatureType:      types.FeatureTypeMetered,
+			UsageLimit:       lo.ToPtr(int64(1000)),
+			UsageResetPeriod: types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY,
+			IsSoftLimit:      true,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(testPlan.ID, resp.Entitlement.EntityID)
+		s.Equal(regularMaxFeature.ID, resp.Entitlement.FeatureID)
+		s.Equal(int64(1000), *resp.Entitlement.UsageLimit)
+	})
+}
+
+func (s *EntitlementServiceSuite) TestCreateBulkEntitlementWithBucketedMaxMeter() {
+	// Create a bucketed max meter
+	bucketedMaxMeter := &meter.Meter{
+		ID:        "meter-bucketed-max-bulk",
+		Name:      "Bucketed Max Meter Bulk",
+		EventName: "api_calls_bucketed_bulk",
+		Aggregation: meter.Aggregation{
+			Type:       types.AggregationMax,
+			BucketSize: "minute", // This makes it a bucketed max meter
+		},
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	meterStore := s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore)
+	err := meterStore.CreateMeter(s.GetContext(), bucketedMaxMeter)
+	s.NoError(err)
+
+	// Create metered feature with bucketed max meter
+	bucketedMaxFeature := &feature.Feature{
+		ID:          "feat-bucketed-max-bulk",
+		Name:        "Bucketed Max Feature Bulk",
+		Description: "Feature with bucketed max meter for bulk test",
+		Type:        types.FeatureTypeMetered,
+		MeterID:     bucketedMaxMeter.ID,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), bucketedMaxFeature)
+	s.NoError(err)
+
+	// Create boolean feature for comparison
+	boolFeature := &feature.Feature{
+		ID:          "feat-bool-bulk-bucketed",
+		Name:        "Boolean Feature Bulk Bucketed",
+		Description: "Test Boolean Feature for Bulk with Bucketed",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), boolFeature)
+	s.NoError(err)
+
+	// Create test plan
+	testPlan := &plan.Plan{
+		ID:          "plan-bulk-bucketed",
+		Name:        "Test Plan Bulk Bucketed",
+		Description: "Test Plan Description for Bucketed Bulk",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	// Test case: Should reject bulk entitlement when one feature has bucketed max meter
+	s.Run("Reject Bulk Entitlement with Bucketed Max Meter", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{
+				{
+					PlanID:      testPlan.ID,
+					FeatureID:   boolFeature.ID,
+					FeatureType: types.FeatureTypeBoolean,
+					IsEnabled:   true,
+				},
+				{
+					PlanID:           testPlan.ID,
+					FeatureID:        bucketedMaxFeature.ID,
+					FeatureType:      types.FeatureTypeMetered,
+					UsageLimit:       lo.ToPtr(int64(1000)),
+					UsageResetPeriod: types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY,
+					IsSoftLimit:      true,
+				},
+			},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "entitlements not supported for bucketed max meters")
+	})
+}
+
+func (s *EntitlementServiceSuite) TestCreateBulkEntitlement() {
+	// Setup test features with different types
+	boolFeature := &feature.Feature{
+		ID:          "feat-bool-bulk",
+		Name:        "Boolean Feature Bulk",
+		Description: "Test Boolean Feature for Bulk",
+		Type:        types.FeatureTypeBoolean,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), boolFeature)
+	s.NoError(err)
+
+	// Create a regular meter for the metered feature
+	regularMeterBulk := &meter.Meter{
+		ID:        "meter-regular-bulk",
+		Name:      "Regular Meter Bulk",
+		EventName: "api_calls_bulk",
+		Aggregation: meter.Aggregation{
+			Type: types.AggregationSum,
+		},
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	meterStore := s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore)
+	err = meterStore.CreateMeter(s.GetContext(), regularMeterBulk)
+	s.NoError(err)
+
+	meteredFeature := &feature.Feature{
+		ID:          "feat-metered-bulk",
+		Name:        "Metered Feature Bulk",
+		Description: "Test Metered Feature for Bulk",
+		Type:        types.FeatureTypeMetered,
+		MeterID:     regularMeterBulk.ID,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), meteredFeature)
+	s.NoError(err)
+
+	staticFeature := &feature.Feature{
+		ID:          "feat-static-bulk",
+		Name:        "Static Feature Bulk",
+		Description: "Test Static Feature for Bulk",
+		Type:        types.FeatureTypeStatic,
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().FeatureRepo.Create(s.GetContext(), staticFeature)
+	s.NoError(err)
+
+	// Create test plans
+	testPlan1 := &plan.Plan{
+		ID:          "plan-bulk-1",
+		Name:        "Test Plan Bulk 1",
+		Description: "Test Plan Description Bulk 1",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan1)
+	s.NoError(err)
+
+	testPlan2 := &plan.Plan{
+		ID:          "plan-bulk-2",
+		Name:        "Test Plan Bulk 2",
+		Description: "Test Plan Description Bulk 2",
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan2)
+	s.NoError(err)
+
+	s.Run("Valid Bulk Entitlement Creation", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{
+				{
+					PlanID:      testPlan1.ID,
+					FeatureID:   boolFeature.ID,
+					FeatureType: types.FeatureTypeBoolean,
+					IsEnabled:   true,
+				},
+				{
+					PlanID:           testPlan1.ID,
+					FeatureID:        meteredFeature.ID,
+					FeatureType:      types.FeatureTypeMetered,
+					UsageLimit:       lo.ToPtr(int64(1000)),
+					UsageResetPeriod: types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY,
+					IsSoftLimit:      true,
+				},
+				{
+					PlanID:      testPlan2.ID,
+					FeatureID:   staticFeature.ID,
+					FeatureType: types.FeatureTypeStatic,
+					StaticValue: "premium",
+				},
+			},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Len(resp.Items, 3)
+
+		// Verify first entitlement (boolean)
+		ent1 := resp.Items[0]
+		s.Equal(types.ENTITLEMENT_ENTITY_TYPE_PLAN, ent1.Entitlement.EntityType)
+		s.Equal(testPlan1.ID, ent1.Entitlement.EntityID)
+		s.Equal(boolFeature.ID, ent1.Entitlement.FeatureID)
+		s.Equal(types.FeatureTypeBoolean, ent1.Entitlement.FeatureType)
+		s.True(ent1.Entitlement.IsEnabled)
+		s.NotNil(ent1.Feature)
+		s.Equal(boolFeature.ID, ent1.Feature.Feature.ID)
+		s.NotNil(ent1.Plan)
+		s.Equal(testPlan1.ID, ent1.Plan.Plan.ID)
+
+		// Verify second entitlement (metered)
+		ent2 := resp.Items[1]
+		s.Equal(types.ENTITLEMENT_ENTITY_TYPE_PLAN, ent2.Entitlement.EntityType)
+		s.Equal(testPlan1.ID, ent2.Entitlement.EntityID)
+		s.Equal(meteredFeature.ID, ent2.Entitlement.FeatureID)
+		s.Equal(types.FeatureTypeMetered, ent2.Entitlement.FeatureType)
+		s.Equal(int64(1000), *ent2.Entitlement.UsageLimit)
+		s.Equal(types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY, ent2.Entitlement.UsageResetPeriod)
+		s.True(ent2.Entitlement.IsSoftLimit)
+		s.NotNil(ent2.Feature)
+		s.Equal(meteredFeature.ID, ent2.Feature.Feature.ID)
+		s.NotNil(ent2.Plan)
+		s.Equal(testPlan1.ID, ent2.Plan.Plan.ID)
+
+		// Verify third entitlement (static)
+		ent3 := resp.Items[2]
+		s.Equal(types.ENTITLEMENT_ENTITY_TYPE_PLAN, ent3.Entitlement.EntityType)
+		s.Equal(testPlan2.ID, ent3.Entitlement.EntityID)
+		s.Equal(staticFeature.ID, ent3.Entitlement.FeatureID)
+		s.Equal(types.FeatureTypeStatic, ent3.Entitlement.FeatureType)
+		s.Equal("premium", ent3.Entitlement.StaticValue)
+		s.NotNil(ent3.Feature)
+		s.Equal(staticFeature.ID, ent3.Feature.Feature.ID)
+		s.NotNil(ent3.Plan)
+		s.Equal(testPlan2.ID, ent3.Plan.Plan.ID)
+	})
+
+	s.Run("Invalid Bulk Entitlement - Feature Type Mismatch", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{
+				{
+					PlanID:      testPlan1.ID,
+					FeatureID:   boolFeature.ID,
+					FeatureType: types.FeatureTypeMetered, // Wrong type
+					IsEnabled:   true,
+				},
+			},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "feature type mismatch")
+	})
+
+	s.Run("Invalid Bulk Entitlement - Non-existent Plan", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{
+				{
+					PlanID:      "non-existent-plan",
+					FeatureID:   boolFeature.ID,
+					FeatureType: types.FeatureTypeBoolean,
+					IsEnabled:   true,
+				},
+			},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "not found")
+	})
+
+	s.Run("Invalid Bulk Entitlement - Non-existent Feature", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{
+				{
+					PlanID:      testPlan1.ID,
+					FeatureID:   "non-existent-feature",
+					FeatureType: types.FeatureTypeBoolean,
+					IsEnabled:   true,
+				},
+			},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "not found")
+	})
+
+	s.Run("Invalid Bulk Entitlement - Empty Request", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "at least one entitlement is required")
+	})
+
+	s.Run("Invalid Bulk Entitlement - Too Many Entitlements", func() {
+		entitlements := make([]dto.CreateEntitlementRequest, 101)
+		for i := 0; i < 101; i++ {
+			entitlements[i] = dto.CreateEntitlementRequest{
+				PlanID:      testPlan1.ID,
+				FeatureID:   boolFeature.ID,
+				FeatureType: types.FeatureTypeBoolean,
+				IsEnabled:   true,
+			}
+		}
+
+		req := dto.CreateBulkEntitlementRequest{
+			Items: entitlements,
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+		s.Contains(err.Error(), "too many entitlements in bulk request")
+	})
+}
+
+func (s *EntitlementServiceSuite) TestConfigEntitlement() {
+	configFeature := &feature.Feature{
+		ID:        "feat-config",
+		Name:      "Config Feature",
+		Type:      types.FeatureTypeConfig,
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), configFeature)
+	s.NoError(err)
+
+	testPlan := &plan.Plan{
+		ID:        "plan-config",
+		Name:      "Config Plan",
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	s.Run("Create config entitlement with config_value", func() {
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   configFeature.ID,
+			FeatureType: types.FeatureTypeConfig,
+			IsEnabled:   true,
+			ConfigValue: map[string]interface{}{
+				"webhook_url": "https://example.com/hook",
+				"retry_count": "3",
+			},
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(types.FeatureTypeConfig, resp.Entitlement.FeatureType)
+		s.True(resp.Entitlement.IsEnabled)
+		s.Equal("https://example.com/hook", resp.Entitlement.ConfigValue["webhook_url"])
+		s.Equal("3", resp.Entitlement.ConfigValue["retry_count"])
+	})
+
+	s.Run("Create config entitlement without config_value is allowed", func() {
+		// Own feature: only one published entitlement per (plan, feature).
+		configFeature2 := &feature.Feature{
+			ID:        "feat-config-2",
+			Name:      "Config Feature 2",
+			Type:      types.FeatureTypeConfig,
+			BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+		}
+		s.NoError(s.GetStores().FeatureRepo.Create(s.GetContext(), configFeature2))
+
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   configFeature2.ID,
+			FeatureType: types.FeatureTypeConfig,
+			IsEnabled:   true,
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Empty(resp.Entitlement.ConfigValue)
+	})
+
+	s.Run("config_value rejected for non-config feature type", func() {
+		boolFeature := &feature.Feature{
+			ID:        "feat-bool-cv",
+			Name:      "Bool Feature",
+			Type:      types.FeatureTypeBoolean,
+			BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+		}
+		err := s.GetStores().FeatureRepo.Create(s.GetContext(), boolFeature)
+		s.NoError(err)
+
+		req := dto.CreateEntitlementRequest{
+			PlanID:      testPlan.ID,
+			FeatureID:   boolFeature.ID,
+			FeatureType: types.FeatureTypeBoolean,
+			IsEnabled:   true,
+			ConfigValue: map[string]interface{}{"key": "val"},
+		}
+
+		resp, err := s.service.CreateEntitlement(s.GetContext(), req)
+		s.Error(err)
+		s.Nil(resp)
+	})
+}
+
+func (s *EntitlementServiceSuite) TestUpdateEntitlementConfigValue() {
+	configFeature := &feature.Feature{
+		ID:        "feat-config-upd",
+		Name:      "Config Feature Update",
+		Type:      types.FeatureTypeConfig,
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), configFeature)
+	s.NoError(err)
+
+	testPlan := &plan.Plan{
+		ID:        "plan-config-upd",
+		Name:      "Config Plan Update",
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	ent := &entitlement.Entitlement{
+		ID:          "ent-config-1",
+		EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:    testPlan.ID,
+		FeatureID:   configFeature.ID,
+		FeatureType: types.FeatureTypeConfig,
+		IsEnabled:   true,
+		ConfigValue: map[string]interface{}{"env": "staging"},
+		BaseModel:   types.GetDefaultBaseModel(s.GetContext()),
+	}
+	_, err = s.GetStores().EntitlementRepo.Create(s.GetContext(), ent)
+	s.NoError(err)
+
+	s.Run("Update config_value replaces existing value", func() {
+		req := dto.UpdateEntitlementRequest{
+			ConfigValue: map[string]interface{}{
+				"env":         "production",
+				"webhook_url": "https://prod.example.com/hook",
+			},
+		}
+
+		resp, err := s.service.UpdateEntitlement(s.GetContext(), "ent-config-1", req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal("production", resp.Entitlement.ConfigValue["env"])
+		s.Equal("https://prod.example.com/hook", resp.Entitlement.ConfigValue["webhook_url"])
+	})
+
+	s.Run("Update without config_value leaves existing config_value intact", func() {
+		// Empty update — no fields set; config_value must remain from the previous subtest
+		req := dto.UpdateEntitlementRequest{}
+
+		resp, err := s.service.UpdateEntitlement(s.GetContext(), "ent-config-1", req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal("production", resp.Entitlement.ConfigValue["env"])
+		s.Equal("https://prod.example.com/hook", resp.Entitlement.ConfigValue["webhook_url"])
+	})
+
+	s.Run("Update config_value does not disturb existing is_enabled", func() {
+		req := dto.UpdateEntitlementRequest{
+			ConfigValue: map[string]interface{}{"env": "production"},
+		}
+
+		resp, err := s.service.UpdateEntitlement(s.GetContext(), "ent-config-1", req)
+		s.NoError(err)
+		s.NotNil(resp)
+		// is_enabled is untouched — remains what it was created with (true)
+		s.True(resp.Entitlement.IsEnabled)
+	})
+}
+
+func (s *EntitlementServiceSuite) TestCreateBulkEntitlementWithConfig() {
+	configFeature := &feature.Feature{
+		ID:        "feat-config-bulk",
+		Name:      "Config Feature Bulk",
+		Type:      types.FeatureTypeConfig,
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err := s.GetStores().FeatureRepo.Create(s.GetContext(), configFeature)
+	s.NoError(err)
+
+	testPlan := &plan.Plan{
+		ID:        "plan-config-bulk",
+		Name:      "Config Plan Bulk",
+		BaseModel: types.GetDefaultBaseModel(s.GetContext()),
+	}
+	err = s.GetStores().PlanRepo.Create(s.GetContext(), testPlan)
+	s.NoError(err)
+
+	s.Run("Bulk create includes config entitlement with config_value", func() {
+		req := dto.CreateBulkEntitlementRequest{
+			Items: []dto.CreateEntitlementRequest{
+				{
+					PlanID:      testPlan.ID,
+					FeatureID:   configFeature.ID,
+					FeatureType: types.FeatureTypeConfig,
+					IsEnabled:   true,
+					ConfigValue: map[string]interface{}{
+						"rate_limit": "100",
+						"region":     "us-east-1",
+					},
+				},
+			},
+		}
+
+		resp, err := s.service.CreateBulkEntitlement(s.GetContext(), req)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Len(resp.Items, 1)
+
+		ent := resp.Items[0]
+		s.Equal(types.FeatureTypeConfig, ent.Entitlement.FeatureType)
+		s.True(ent.Entitlement.IsEnabled)
+		s.Equal("100", ent.Entitlement.ConfigValue["rate_limit"])
+		s.Equal("us-east-1", ent.Entitlement.ConfigValue["region"])
+	})
+}
+
+func (s *EntitlementServiceSuite) TestAggregateConfigEntitlementsForBilling() {
+	ents := []*entitlement.Entitlement{
+		{
+			IsEnabled:   true,
+			ConfigValue: map[string]interface{}{"webhook_url": "https://plan.example.com", "timeout": "30"},
+		},
+		{
+			IsEnabled:   true,
+			ConfigValue: map[string]interface{}{"webhook_url": "https://addon.example.com", "rate_limit": "100"},
+		},
+		{
+			IsEnabled:   false,
+			ConfigValue: map[string]interface{}{"webhook_url": "https://disabled.example.com"},
+		},
+	}
+
+	result := aggregateConfigEntitlementsForBilling(ents)
+	s.True(result.IsEnabled)
+	// both enabled entitlements returned as separate entries — no key collision
+	s.Len(result.ConfigValues, 2)
+	s.Equal(map[string]interface{}{"webhook_url": "https://plan.example.com", "timeout": "30"}, result.ConfigValues[0])
+	s.Equal(map[string]interface{}{"webhook_url": "https://addon.example.com", "rate_limit": "100"}, result.ConfigValues[1])
+
+	// all disabled → isEnabled false, configValues nil
+	disabled := []*entitlement.Entitlement{
+		{IsEnabled: false, ConfigValue: map[string]interface{}{"key": "val"}},
+	}
+	r2 := aggregateConfigEntitlementsForBilling(disabled)
+	s.False(r2.IsEnabled)
+	s.Len(r2.ConfigValues, 0)
+
+	// empty slice
+	r3 := aggregateConfigEntitlementsForBilling(nil)
+	s.False(r3.IsEnabled)
+	s.Len(r3.ConfigValues, 0)
+}
+
+// GetPlanEntitlements must never cache the composed response: the payload embeds
+// features, meters and plans, none of which are invalidated by entitlement writes.
+// Each of those is cached by its owning repository instead, so an edit to any of them
+// has to show up on the next call.
+func (s *EntitlementServiceSuite) TestGetPlanEntitlements_ReflectsRelatedEntityUpdates() {
+	ctx := s.GetContext()
+
+	testPlan := &plan.Plan{
+		ID:        "plan-cache-1",
+		Name:      "Cache Plan",
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.GetStores().PlanRepo.Create(ctx, testPlan))
+
+	boolFeature := &feature.Feature{
+		ID:        "feat-cache-bool",
+		Name:      "Bool",
+		Type:      types.FeatureTypeBoolean,
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, boolFeature))
+
+	_, err := s.service.CreateEntitlement(ctx, dto.CreateEntitlementRequest{
+		PlanID:      testPlan.ID,
+		FeatureID:   boolFeature.ID,
+		FeatureType: types.FeatureTypeBoolean,
+		IsEnabled:   true,
+	})
+	s.NoError(err)
+
+	first, err := s.service.GetPlanEntitlements(ctx, testPlan.ID)
+	s.NoError(err)
+	s.Len(first.Items, 1)
+	s.Require().NotNil(first.Items[0].Feature)
+	s.Equal("Bool", first.Items[0].Feature.Name)
+
+	// Rename the feature without touching any entitlement.
+	boolFeature.Name = "Bool Renamed"
+	s.NoError(s.GetStores().FeatureRepo.Update(ctx, boolFeature))
+
+	testPlan.Name = "Cache Plan Renamed"
+	s.NoError(s.GetStores().PlanRepo.Update(ctx, testPlan))
+
+	afterFeatureUpdate, err := s.service.GetPlanEntitlements(ctx, testPlan.ID)
+	s.NoError(err)
+	s.Require().Len(afterFeatureUpdate.Items, 1)
+	s.Require().NotNil(afterFeatureUpdate.Items[0].Feature)
+	s.Equal("Bool Renamed", afterFeatureUpdate.Items[0].Feature.Name,
+		"a feature rename must not be masked by a cached entitlements response")
+	s.Require().NotNil(afterFeatureUpdate.Items[0].Plan)
+	s.Equal("Cache Plan Renamed", afterFeatureUpdate.Items[0].Plan.Name,
+		"a plan rename must not be masked by a cached entitlements response")
+
+	// A new entitlement on the same plan must show up too.
+	secondFeature := &feature.Feature{
+		ID:        "feat-cache-bool-2",
+		Name:      "Bool 2",
+		Type:      types.FeatureTypeBoolean,
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, secondFeature))
+	_, err = s.service.CreateEntitlement(ctx, dto.CreateEntitlementRequest{
+		PlanID:      testPlan.ID,
+		FeatureID:   secondFeature.ID,
+		FeatureType: types.FeatureTypeBoolean,
+		IsEnabled:   true,
+	})
+	s.NoError(err)
+
+	afterCreate, err := s.service.GetPlanEntitlements(ctx, testPlan.ID)
+	s.NoError(err)
+	s.Len(afterCreate.Items, 2, "a newly created entitlement must be visible immediately")
+}
+
+// A no-limit filter must survive ListEntitlements' limit normalization. GetLimit()
+// returns 0 for unlimited filters, so a naive `GetLimit() == 0` check would clobber the
+// filter with the default page size and silently truncate the result set.
+func (s *EntitlementServiceSuite) TestListEntitlements_NoLimitFilterIsNotTruncated() {
+	ctx := s.GetContext()
+
+	const total = 75 // deliberately above types.GetDefaultFilter().Limit (50)
+
+	testPlan := &plan.Plan{
+		ID:        "plan-no-limit",
+		Name:      "No Limit Plan",
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.GetStores().PlanRepo.Create(ctx, testPlan))
+
+	for i := 0; i < total; i++ {
+		f := &feature.Feature{
+			ID:        fmt.Sprintf("feat-no-limit-%d", i),
+			Name:      fmt.Sprintf("Feature %d", i),
+			Type:      types.FeatureTypeBoolean,
+			BaseModel: types.GetDefaultBaseModel(ctx),
+		}
+		s.NoError(s.GetStores().FeatureRepo.Create(ctx, f))
+
+		_, err := s.GetStores().EntitlementRepo.Create(ctx, &entitlement.Entitlement{
+			ID:          fmt.Sprintf("ent-no-limit-%d", i),
+			EntityType:  types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+			EntityID:    testPlan.ID,
+			FeatureID:   f.ID,
+			FeatureType: types.FeatureTypeBoolean,
+			IsEnabled:   true,
+			BaseModel:   types.GetDefaultBaseModel(ctx),
+		})
+		s.NoError(err)
+	}
+
+	filter := types.NewNoLimitEntitlementFilter()
+	filter.WithEntityIDs([]string{testPlan.ID})
+	filter.WithEntityType(types.ENTITLEMENT_ENTITY_TYPE_PLAN)
+	filter.WithStatus(types.StatusPublished)
+
+	resp, err := s.service.ListEntitlements(ctx, filter)
+	s.NoError(err)
+	s.Len(resp.Items, total, "no-limit filter must return every entitlement, not just the default page")
+
+	// Total comes from len(items) rather than a COUNT query when the filter is unlimited.
+	s.Equal(total, resp.Pagination.Total)
+
+	// The caller's filter must not be mutated into a limited one.
+	s.True(filter.IsUnlimited(), "ListEntitlements must not clobber a no-limit filter")
+}
+
+// Grant coherence is about ECs that land in the same resolved set. An override
+// replaces its parent rather than sitting beside it, and two customers' overrides
+// never meet — so neither may block a customer from going unlimited.
+func (s *EntitlementServiceSuite) TestGrantSiblingCoherenceIgnoresUnrelatedScopes() {
+	ctx := s.GetContext()
+
+	m := &meter.Meter{
+		ID:          "meter-coherence",
+		Name:        "Coherence Meter",
+		EventName:   "api_calls",
+		Aggregation: meter.Aggregation{Type: types.AggregationSum},
+		BaseModel:   types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore).CreateMeter(ctx, m))
+
+	f := &feature.Feature{
+		ID:        "feat-coherence",
+		Name:      "Coherence Feature",
+		Type:      types.FeatureTypeMetered,
+		MeterID:   m.ID,
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, f))
+
+	p := &plan.Plan{ID: "plan-coherence", Name: "Coherence Plan", BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().PlanRepo.Create(ctx, p))
+
+	newSub := func(id string) string {
+		s.NoError(s.GetStores().SubscriptionRepo.Create(ctx, &subscription.Subscription{
+			ID:                 id,
+			PlanID:             p.ID,
+			CustomerID:         "cust-coherence",
+			SubscriptionStatus: types.SubscriptionStatusActive,
+			Currency:           "usd",
+			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
+			BillingPeriodCount: 1,
+			StartDate:          time.Now().UTC(),
+			BaseModel:          types.GetDefaultBaseModel(ctx),
+		}))
+		return id
+	}
+
+	// The plan hands everyone a bounded hourly allowance.
+	parent, err := s.service.CreateEntitlement(ctx, dto.CreateEntitlementRequest{
+		EntityType:              types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		EntityID:                p.ID,
+		FeatureID:               f.ID,
+		FeatureType:             types.FeatureTypeMetered,
+		IsEnabled:               true,
+		GrantMeasure:            types.EntitlementGrantMeasureQuantity,
+		GrantQuota:              lo.ToPtr(decimal.NewFromInt(5000)),
+		GrantDurationValue:      lo.ToPtr(1),
+		GrantDurationUnit:       types.EntitlementGrantDurationUnitHour,
+		GrantAllocationBehavior: types.EntitlementGrantAllocationBehaviorFirstUsage,
+		AggregationMode:         types.EntitlementAggregationModeAdditive,
+	})
+	s.NoError(err)
+
+	override := func(subID string, req dto.CreateEntitlementRequest) dto.CreateEntitlementRequest {
+		req.EntityType = types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION
+		req.EntityID = subID
+		req.FeatureID = f.ID
+		req.FeatureType = types.FeatureTypeMetered
+		req.IsEnabled = true
+		req.ParentEntitlementID = lo.ToPtr(parent.ID)
+		req.GrantMeasure = types.EntitlementGrantMeasureQuantity
+		req.AggregationMode = types.EntitlementAggregationModeAdditive
+		return req
+	}
+
+	s.Run("one customer may go unlimited while the plan stays bounded", func() {
+		got, err := s.service.CreateEntitlement(ctx, override(newSub("sub-coherence-1"), dto.CreateEntitlementRequest{
+			GrantUnlimited:    true,
+			GrantDurationUnit: types.EntitlementGrantDurationUnitSubscriptionPeriod,
+		}))
+		s.NoError(err)
+		s.True(got.IsUnlimitedGrant())
+	})
+
+	s.Run("another customer may keep a bounded allowance alongside it", func() {
+		got, err := s.service.CreateEntitlement(ctx, override(newSub("sub-coherence-2"), dto.CreateEntitlementRequest{
+			GrantQuota:              lo.ToPtr(decimal.NewFromInt(250)),
+			GrantDurationValue:      lo.ToPtr(1),
+			GrantDurationUnit:       types.EntitlementGrantDurationUnitHour,
+			GrantAllocationBehavior: types.EntitlementGrantAllocationBehaviorFirstUsage,
+		}))
+		s.NoError(err)
+		s.Equal("250", got.GrantQuota.String())
+	})
+}
+
+// A subscription EC with no parent does not replace the plan's — both apply to that
+// subscription and pool into one window — so the two must stay coherent. Skipping
+// every subscription-scoped row let a plan edit contradict one of them.
+func (s *EntitlementServiceSuite) TestGrantCoherenceComparesNetNewSubscriptionECs() {
+	ctx := s.GetContext()
+
+	m := &meter.Meter{
+		ID:          "meter-netnew",
+		Name:        "Net-new Meter",
+		EventName:   "api_calls",
+		Aggregation: meter.Aggregation{Type: types.AggregationSum},
+		BaseModel:   types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore).CreateMeter(ctx, m))
+
+	f := &feature.Feature{ID: "feat-netnew", Name: "Net-new", Type: types.FeatureTypeMetered, MeterID: m.ID, BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, f))
+
+	p := &plan.Plan{ID: "plan-netnew", Name: "Net-new Plan", BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().PlanRepo.Create(ctx, p))
+
+	s.NoError(s.GetStores().SubscriptionRepo.Create(ctx, &subscription.Subscription{
+		ID: "sub-netnew", PlanID: p.ID, CustomerID: "cust-netnew",
+		SubscriptionStatus: types.SubscriptionStatusActive, Currency: "usd",
+		BillingPeriod: types.BILLING_PERIOD_MONTHLY, BillingPeriodCount: 1,
+		StartDate: time.Now().UTC(), BaseModel: types.GetDefaultBaseModel(ctx),
+	}))
+
+	grant := func(mode types.EntitlementAggregationMode) dto.CreateEntitlementRequest {
+		return dto.CreateEntitlementRequest{
+			FeatureID: f.ID, FeatureType: types.FeatureTypeMetered, IsEnabled: true,
+			GrantMeasure:            types.EntitlementGrantMeasureQuantity,
+			GrantQuota:              lo.ToPtr(decimal.NewFromInt(1000)),
+			GrantDurationValue:      lo.ToPtr(1),
+			GrantDurationUnit:       types.EntitlementGrantDurationUnitHour,
+			GrantAllocationBehavior: types.EntitlementGrantAllocationBehaviorFirstUsage,
+			AggregationMode:         mode,
+		}
+	}
+
+	planReq := grant(types.EntitlementAggregationModeAdditive)
+	planReq.EntityType, planReq.EntityID = types.ENTITLEMENT_ENTITY_TYPE_PLAN, p.ID
+	planEC, err := s.service.CreateEntitlement(ctx, planReq)
+	s.Require().NoError(err)
+
+	// Net-new: no parent, so it pools with the plan's rather than replacing it.
+	netNew := grant(types.EntitlementAggregationModeAdditive)
+	netNew.EntityType, netNew.EntityID = types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION, "sub-netnew"
+	_, err = s.service.CreateEntitlement(ctx, netNew)
+	s.Require().NoError(err)
+
+	// Editing the plan into a conflicting mode is now caught.
+	_, err = s.service.UpdateEntitlement(ctx, planEC.ID, dto.UpdateEntitlementRequest{
+		AggregationMode: lo.ToPtr(types.EntitlementAggregationModeParallel),
+	})
+	s.Error(err, "a plan edit must not contradict an entitlement it pools with")
+}
+
+// An override of one EC still pools with a different EC on the same feature: it
+// replaces only its own parent. Skipping every row that had a parent hid that.
+func (s *EntitlementServiceSuite) TestGrantCoherenceComparesOverrideOfAnotherEC() {
+	ctx := s.GetContext()
+
+	m := &meter.Meter{
+		ID: "meter-otherec", Name: "Other EC", EventName: "api_calls",
+		Aggregation: meter.Aggregation{Type: types.AggregationSum},
+		BaseModel:   types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore).CreateMeter(ctx, m))
+	f := &feature.Feature{ID: "feat-otherec", Name: "Other EC", Type: types.FeatureTypeMetered, MeterID: m.ID, BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, f))
+	p := &plan.Plan{ID: "plan-otherec", Name: "Other EC Plan", BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().PlanRepo.Create(ctx, p))
+	a := &addon.Addon{ID: "addon-otherec", Name: "Other EC Addon", BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().AddonRepo.Create(ctx, a))
+	s.NoError(s.GetStores().SubscriptionRepo.Create(ctx, &subscription.Subscription{
+		ID: "sub-otherec", PlanID: p.ID, CustomerID: "cust-otherec",
+		SubscriptionStatus: types.SubscriptionStatusActive, Currency: "usd",
+		BillingPeriod: types.BILLING_PERIOD_MONTHLY, BillingPeriodCount: 1,
+		StartDate: time.Now().UTC(), BaseModel: types.GetDefaultBaseModel(ctx),
+	}))
+
+	grant := func(mode types.EntitlementAggregationMode) dto.CreateEntitlementRequest {
+		return dto.CreateEntitlementRequest{
+			FeatureID: f.ID, FeatureType: types.FeatureTypeMetered, IsEnabled: true,
+			GrantMeasure:            types.EntitlementGrantMeasureQuantity,
+			GrantQuota:              lo.ToPtr(decimal.NewFromInt(500)),
+			GrantDurationValue:      lo.ToPtr(1),
+			GrantDurationUnit:       types.EntitlementGrantDurationUnitHour,
+			GrantAllocationBehavior: types.EntitlementGrantAllocationBehaviorFirstUsage,
+			AggregationMode:         mode,
+		}
+	}
+
+	addonReq := grant(types.EntitlementAggregationModeAdditive)
+	addonReq.EntityType, addonReq.EntityID = types.ENTITLEMENT_ENTITY_TYPE_ADDON, a.ID
+	addonEC, err := s.service.CreateEntitlement(ctx, addonReq)
+	s.Require().NoError(err)
+
+	// The addon's EC is overridden for this subscription. It replaces the ADDON's row,
+	// not the plan's.
+	overrideReq := grant(types.EntitlementAggregationModeAdditive)
+	overrideReq.EntityType, overrideReq.EntityID = types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION, "sub-otherec"
+	overrideReq.ParentEntitlementID = lo.ToPtr(addonEC.ID)
+	_, err = s.service.CreateEntitlement(ctx, overrideReq)
+	s.Require().NoError(err)
+
+	// A plan EC on the same feature pools with that override, so a conflicting mode
+	// has to be rejected.
+	planReq := grant(types.EntitlementAggregationModeParallel)
+	planReq.EntityType, planReq.EntityID = types.ENTITLEMENT_ENTITY_TYPE_PLAN, p.ID
+	_, err = s.service.CreateEntitlement(ctx, planReq)
+	s.Error(err, "an override of the addon's EC still pools with the plan's")
+}
+
+// A pricing ladder: bounded on one plan, unlimited on another, same feature. Two plans
+// never apply to the same subscription, so their allowances have nothing to agree on.
+func (s *EntitlementServiceSuite) TestGrantCoherenceAllowsDifferentPlansToDiffer() {
+	ctx := s.GetContext()
+	m := &meter.Meter{
+		ID: "meter-ladder", Name: "Ladder", EventName: "api_calls",
+		Aggregation: meter.Aggregation{Type: types.AggregationSum},
+		BaseModel:   types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore).CreateMeter(ctx, m))
+	f := &feature.Feature{ID: "feat-ladder", Name: "Ladder", Type: types.FeatureTypeMetered, MeterID: m.ID, BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, f))
+	for _, id := range []string{"plan-pro", "plan-ent"} {
+		s.NoError(s.GetStores().PlanRepo.Create(ctx, &plan.Plan{ID: id, Name: id, BaseModel: types.GetDefaultBaseModel(ctx)}))
+	}
+
+	base := dto.CreateEntitlementRequest{
+		FeatureID: f.ID, FeatureType: types.FeatureTypeMetered, IsEnabled: true,
+		EntityType:        types.ENTITLEMENT_ENTITY_TYPE_PLAN,
+		GrantMeasure:      types.EntitlementGrantMeasureQuantity,
+		GrantDurationUnit: types.EntitlementGrantDurationUnitSubscriptionPeriod,
+		AggregationMode:   types.EntitlementAggregationModeAdditive,
+	}
+
+	pro := base
+	pro.EntityID, pro.GrantQuota = "plan-pro", lo.ToPtr(decimal.NewFromInt(10000))
+	_, err := s.service.CreateEntitlement(ctx, pro)
+	s.NoError(err)
+
+	ent := base
+	ent.EntityID, ent.GrantUnlimited = "plan-ent", true
+	_, err = s.service.CreateEntitlement(ctx, ent)
+	s.NoError(err, "a different plan may grant unlimited where this one is bounded")
+}
+
+// An override sets one number for one feature, so it is refused when several
+// entitlements already feed that feature: additive would pool them and land above
+// the number, parallel would leave the field addressing an arbitrary one of them.
+func (s *EntitlementServiceSuite) TestOverrideRefusedWhenSeveralEntitlementsFeedTheFeature() {
+	ctx := s.GetContext()
+	now := time.Now().UTC()
+
+	m := &meter.Meter{
+		ID: "meter-multi", Name: "Multi", EventName: "api_calls",
+		Aggregation: meter.Aggregation{Type: types.AggregationSum},
+		BaseModel:   types.GetDefaultBaseModel(ctx),
+	}
+	s.NoError(s.service.(*entitlementService).MeterRepo.(*testutil.InMemoryMeterStore).CreateMeter(ctx, m))
+	f := &feature.Feature{ID: "feat-multi", Name: "Multi", Type: types.FeatureTypeMetered, MeterID: m.ID, BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().FeatureRepo.Create(ctx, f))
+	p := &plan.Plan{ID: "plan-multi", Name: "Multi Plan", BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().PlanRepo.Create(ctx, p))
+	a := &addon.Addon{ID: "addon-multi", Name: "Multi Addon", BaseModel: types.GetDefaultBaseModel(ctx)}
+	s.NoError(s.GetStores().AddonRepo.Create(ctx, a))
+	s.NoError(s.GetStores().SubscriptionRepo.Create(ctx, &subscription.Subscription{
+		ID: "sub-multi", PlanID: p.ID, CustomerID: "cust-multi",
+		SubscriptionStatus: types.SubscriptionStatusActive, Currency: "usd",
+		BillingPeriod: types.BILLING_PERIOD_MONTHLY, BillingPeriodCount: 1,
+		StartDate: now, CurrentPeriodStart: now, CurrentPeriodEnd: now.AddDate(0, 1, 0),
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}))
+
+	grant := func(quota int64) dto.CreateEntitlementRequest {
+		return dto.CreateEntitlementRequest{
+			FeatureID: f.ID, FeatureType: types.FeatureTypeMetered, IsEnabled: true,
+			GrantMeasure:            types.EntitlementGrantMeasureQuantity,
+			GrantQuota:              lo.ToPtr(decimal.NewFromInt(quota)),
+			GrantDurationValue:      lo.ToPtr(1),
+			GrantDurationUnit:       types.EntitlementGrantDurationUnitHour,
+			GrantAllocationBehavior: types.EntitlementGrantAllocationBehaviorFirstUsage,
+			AggregationMode:         types.EntitlementAggregationModeAdditive,
+		}
+	}
+
+	planReq := grant(1000)
+	planReq.EntityType, planReq.EntityID = types.ENTITLEMENT_ENTITY_TYPE_PLAN, p.ID
+	planEC, err := s.service.CreateEntitlement(ctx, planReq)
+	s.Require().NoError(err)
+
+	// The plan alone feeds the feature, so the override has one thing to replace.
+	override := grant(500)
+	override.EntityType, override.EntityID = types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION, "sub-multi"
+	override.ParentEntitlementID = lo.ToPtr(planEC.ID)
+	_, err = s.service.CreateEntitlement(ctx, override)
+	s.Require().NoError(err, "a single contributor leaves no ambiguity")
+
+	// Attaching an addon that feeds the same feature adds a second contributor.
+	addonReq := grant(100)
+	addonReq.EntityType, addonReq.EntityID = types.ENTITLEMENT_ENTITY_TYPE_ADDON, a.ID
+	_, err = s.service.CreateEntitlement(ctx, addonReq)
+	s.Require().NoError(err)
+	s.NoError(s.GetStores().AddonAssociationRepo.Create(ctx, &addonassociation.AddonAssociation{
+		ID: "assoc-multi", EntityID: "sub-multi", EntityType: types.AddonAssociationEntityTypeSubscription,
+		AddonID: a.ID, StartDate: &now, AddonStatus: types.AddonStatusActive,
+		BaseModel: types.GetDefaultBaseModel(ctx),
+	}))
+
+	// A second override on the same feature now has no single allowance to set.
+	second := grant(800)
+	second.EntityType, second.EntityID = types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION, "sub-multi"
+	second.ParentEntitlementID = lo.ToPtr(planEC.ID)
+	_, err = s.service.CreateEntitlement(ctx, second)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "more than one entitlement")
+}
