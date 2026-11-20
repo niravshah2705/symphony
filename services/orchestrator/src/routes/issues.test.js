@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const linear = require('@ai-fleet/shared/linear');
+const linear = require('@software-factory/shared/linear');
 
 const { normalizeProjectTask } = require('./issues');
 

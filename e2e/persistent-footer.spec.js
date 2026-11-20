@@ -18,6 +18,8 @@ const APP_ROUTES = Object.freeze([
   'invite',
   'privacy',
   'terms',
+  'refund',
+  'shipping',
 ]);
 
 const FIREBASE_APP_STUB = 'export function initializeApp() { return {}; }';
@@ -171,7 +173,9 @@ async function expectSingleVisibleFooter(page) {
   await expect(page.locator('footer')).toHaveCount(1);
   await expect(footer).toBeVisible();
   await expect(page.locator('#view footer#app-footer')).toHaveCount(0);
-  await expect(footer.getByText('© 2026 Nirav Shah. All rights reserved.', { exact: true })).toBeVisible();
+  await expect(footer.getByText('© 2026 Archagentix Private Limited. All rights reserved.', { exact: true })).toBeVisible();
+  await expect(footer.getByText('Hinjewadi IT Park, Pune 411057, Maharashtra, India', { exact: false })).toBeVisible();
+  await expect(footer.getByRole('link', { name: '+91 93705 80836' })).toBeVisible();
   return footer;
 }
 
@@ -237,12 +241,12 @@ test('one stable footer survives view replacement across every application and l
       if (routeName === 'privacy') {
         await expect(page.locator('.legal-document')).toHaveAttribute('lang', 'en');
         await expect(page.getByRole('heading', { level: 1, name: 'Privacy Notice' })).toBeVisible();
-        await expect(page.locator('.legal-document')).toContainText('Draft for qualified legal review');
+        await expect(page.locator('.legal-document')).toContainText('Grievance Officer, Archagentix Private Limited');
       }
       if (routeName === 'terms') {
         await expect(page.locator('.legal-document')).toHaveAttribute('lang', 'en');
         await expect(page.getByRole('heading', { level: 1, name: 'End User License Agreement (EULA)' })).toBeVisible();
-        await expect(page.locator('.legal-document')).toContainText('Template notice — not legal advice.');
+        await expect(page.locator('.legal-document')).toContainText('Software Factory');
       }
     });
   }

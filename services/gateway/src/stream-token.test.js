@@ -15,7 +15,7 @@ const {
   configuredServiceUrl,
   validMintResponse,
 } = require('./stream-token');
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
+const { WORKSPACE_CHANNEL } = require('@software-factory/shared-core/messaging/events');
 
 function jsonResponse(status, body) {
   return new Response(JSON.stringify(body), {

@@ -1,6 +1,6 @@
 # GCP deployment (no-cost design)
 
-AI Fleet runs the same code in two profiles, selected entirely by environment
+Software Factory runs the same code in two profiles, selected entirely by environment
 variables. Nothing GCP-specific is required for local development.
 
 ## Architecture

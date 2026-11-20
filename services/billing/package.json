@@ -1,5 +1,5 @@
 {
-  "name": "@ai-fleet/billing",
+  "name": "@software-factory/billing",
   "version": "1.0.0",
   "description": "Dedicated billing, cost-metering, auto-renew, and Cashfree payments microservice.",
   "private": true,
@@ -17,7 +17,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared-core": "*",
+    "@software-factory/shared-core": "*",
     "express": "^5.2.1"
   }
 }

@@ -1,8 +1,8 @@
 'use strict';
 
-const events = require('@ai-fleet/shared-core/messaging/events');
+const events = require('@software-factory/shared-core/messaging/events');
 const streamTokens = require('./stream-token');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 const { cleanContextId } = require('./request-context');
 
 /**

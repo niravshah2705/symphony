@@ -1,6 +1,6 @@
 'use strict';
 
-// Browser contract coverage for native AI Fleet organization/project context
+// Browser contract coverage for native Software Factory organization/project context
 // and email invitations. The stateful routes model /api/org without requiring
 // the Python service, while still asserting the exact browser request shapes.
 

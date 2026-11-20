@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1
 # Durable pipeline control plane.
 #
-# It carries @ai-fleet/shared as well as @ai-fleet/shared-core + LangGraph:
+# It carries @software-factory/shared as well as @software-factory/shared-core + LangGraph:
 # #283 retired the Cloud Run planner and absorbed its HTTP surface into
 # services/orchestrator/src/agent-surface.js, which is mounted from app.js and
 # requires the shared library at boot. The image was left packaging only
 # shared-core, so the revision died at `Cannot find module
-# '@ai-fleet/shared/agent/pipeline-stage-service'` — a build-time- invisible
+# '@software-factory/shared/agent/pipeline-stage-service'` — a build-time- invisible
 # MODULE_NOT_FOUND, because npm ci never resolves local requires.
 #
 # The credential half of the earlier "never acquire the agent SDK tree or
@@ -26,20 +26,20 @@ COPY packages/shared-core/ ./packages/shared-core/
 COPY packages/shared/ ./packages/shared/
 COPY services/orchestrator/ ./services/orchestrator/
 
-# @ai-fleet/shared is selected explicitly: npm only installs the deps of the
+# @software-factory/shared is selected explicitly: npm only installs the deps of the
 # workspaces named here, so leaving it out would resolve the symlink but ship
 # the agent library with its own dependency tree missing.
 RUN npm ci --omit=dev \
-      --workspace=@ai-fleet/shared-core \
-      --workspace=@ai-fleet/shared \
-      --workspace=@ai-fleet/orchestrator \
+      --workspace=@software-factory/shared-core \
+      --workspace=@software-factory/shared \
+      --workspace=@software-factory/orchestrator \
       --include-workspace-root=false \
     && npm cache clean --force
 
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
-    AI_FLEET_DATA_DIR=/tmp
+    SOFTWARE_FACTORY_DATA_DIR=/tmp
 COPY --from=builder --chown=node:node /app /app
 USER node
 EXPOSE 8080

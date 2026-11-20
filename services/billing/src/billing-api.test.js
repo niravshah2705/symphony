@@ -8,10 +8,10 @@ const assert = require('node:assert/strict');
 
 // Isolate the store before anything loads config.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-api-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
-const store = require('@ai-fleet/shared-core/store');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
+const store = require('@software-factory/shared-core/store');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
 const billingApi = require('./billing-api');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });

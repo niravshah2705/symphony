@@ -1,23 +1,22 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared/config');
+const { CONFIG } = require('@software-factory/shared/config');
 const {
   getSettings,
   patchSettings,
-} = require('@ai-fleet/shared/store');
-const { asyncHandler, maskKey } = require('@ai-fleet/shared/util');
-const { ensureFreshCodexTokens } = require('@ai-fleet/shared/agent/llm');
-const { presetForModel } = require('@ai-fleet/shared/agent/model-presets');
-const { discoverModels } = require('@ai-fleet/shared/agent/model-discovery');
+} = require('@software-factory/shared/store');
+const { asyncHandler, maskKey } = require('@software-factory/shared/util');
+const { ensureFreshCodexTokens } = require('@software-factory/shared/agent/llm');
+const { presetForModel } = require('@software-factory/shared/agent/model-presets');
+const { discoverModels } = require('@software-factory/shared/agent/model-discovery');
 
 /**
  * Planner-owned Codex (OpenAI) provider settings endpoints: masked status, model catalog,
  * model/params config, sign-out, and a live token test.
  *
  * The browser OAuth redirect/login flow (authorize URL + /auth/callback token
- * exchange) was REMOVED from the gateway — see
- * archive/gateway-agent-endpoints/codex-oauth-redirect.js. Codex tokens are
+ * exchange) was REMOVED from the gateway. Codex tokens are
  * provided out-of-band; these routes only read/validate them.
  */
 
@@ -139,7 +138,7 @@ router.post(
     // Exercise the real generation path so auth, model selection, and Responses
     // request compatibility are validated together.
     if (CONFIG.OAUTH.backend === 'chatgpt') {
-      const { resolveLlm, createChatModel } = require('@ai-fleet/shared/agent/llm');
+      const { resolveLlm, createChatModel } = require('@software-factory/shared/agent/llm');
       const llm = await resolveLlm({ ...getSettings(), llmProvider: 'codex' });
       const msg = await createChatModel(llm).invoke('Reply with the single word: ok');
       const text = typeof msg.content === 'string' ? msg.content : Array.isArray(msg.content) ? msg.content.map((c) => c.text || '').join('') : '';

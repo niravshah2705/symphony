@@ -69,7 +69,7 @@ spec:
     command you echo, or a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/spec-kit-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/spec-kit-plugin@sha256:b715b3d6af87a5b0b99a45fd1c55d625e86cf96c80764961ba27a91452b6176b'
     skills:
     - 'spec-kit'
 ---

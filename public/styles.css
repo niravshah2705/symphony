@@ -422,6 +422,11 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 .legal-document a { color: var(--accent-2); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
 .legal-document code { padding: 1px 4px; border-radius: 4px; background: var(--panel-2); font: .9em/1.5 var(--font-mono); }
 .legal-document strong { color: var(--text); }
+/* Data/purpose table in the privacy notice: fixed layout + wrapping so the purpose
+   column stays visible instead of scrolling out of a 320px viewport. */
+.legal-document table { width: 100%; margin: 0 0 18px; border-collapse: collapse; table-layout: fixed; font-size: 13px; line-height: 1.7; }
+.legal-document :is(th, td) { padding: 8px 10px; border: 1px solid var(--border-strong); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.legal-document th { background: var(--panel-2); font-weight: 620; }
 
 /* Shared view primitives. These appear across route bundles and shell chrome. */
 .badge {

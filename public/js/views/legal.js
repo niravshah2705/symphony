@@ -10,6 +10,14 @@ const LEGAL_DOCUMENTS = Object.freeze({
     label: 'Terms of Use',
     url: '/legal/terms.md',
   }),
+  refund: Object.freeze({
+    label: 'Refund and Cancellation Policy',
+    url: '/legal/refund.md',
+  }),
+  shipping: Object.freeze({
+    label: 'Delivery Policy',
+    url: '/legal/shipping.md',
+  }),
 });
 
 async function renderLegalDocument(view, descriptor) {
@@ -58,4 +66,12 @@ export function renderPrivacy(view) {
 
 export function renderTerms(view) {
   return renderLegalDocument(view, LEGAL_DOCUMENTS.terms);
+}
+
+export function renderRefund(view) {
+  return renderLegalDocument(view, LEGAL_DOCUMENTS.refund);
+}
+
+export function renderShipping(view) {
+  return renderLegalDocument(view, LEGAL_DOCUMENTS.shipping);
 }

@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 // catalogs, so the behaviour worth pinning is that a re-seed is a no-op: boot
 // seeds it on every start.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'store-plugins-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
 const store = require('./store');
 

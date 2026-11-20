@@ -516,3 +516,36 @@ pre {
     font-size: 32px;
   }
 }
+
+/* The privacy notice states its data/purpose mapping as a table, because Rule 3
+   of the DPDP Rules asks for an itemised description rather than prose. Fixed
+   layout plus word wrapping keeps the purpose column visible at 320px, where a
+   horizontal scroll region would hide it from a reader — and from an underwriter
+   screenshotting the page. */
+.policy-prose table {
+  width: 100%;
+  margin: 0 0 22px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.policy-prose th,
+.policy-prose td {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.policy-prose th {
+  background: var(--paper);
+  font-weight: 620;
+}
+
+.policy-prose td code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

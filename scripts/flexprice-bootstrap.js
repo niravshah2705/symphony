@@ -154,7 +154,7 @@ function ensureEnv(checkout) {
     [keyHash]: {
       tenant_id: TENANT_ID,
       user_id: TENANT_ID,
-      name: 'AI Fleet Phase 0 local',
+      name: 'Software Factory Phase 0 local',
       is_active: true,
     },
   });

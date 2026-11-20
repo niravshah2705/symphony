@@ -1,13 +1,13 @@
 'use strict';
 
 const express = require('express');
-const { getApiKey } = require('@ai-fleet/shared/store');
+const { getApiKey } = require('@software-factory/shared/store');
 const {
   getProjects,
   getProjectMilestones,
   getTeams,
-} = require('@ai-fleet/shared/linear');
-const { asyncHandler } = require('@ai-fleet/shared/util');
+} = require('@software-factory/shared/linear');
+const { asyncHandler } = require('@software-factory/shared/util');
 
 const router = express.Router();
 

@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-gate-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 // The unconfigured local profile, which is what this file is for: no FlexPrice,
 // no named policy. The rule itself is tested where it lives —
 // packages/shared-core/src/billing/gate.test.js.
@@ -16,7 +16,7 @@ delete process.env.BILLING_GATE_POLICY;
 delete process.env.FLEXPRICE_ENABLED;
 process.env.FLEET_ORG_ID = 'org-gate';
 
-const coreGate = require('@ai-fleet/shared-core/billing/gate');
+const coreGate = require('@software-factory/shared-core/billing/gate');
 const { billingStatus, isBillingBlocked, getOrgFundStatus } = require('./gate');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });

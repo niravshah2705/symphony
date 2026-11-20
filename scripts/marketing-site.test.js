@@ -11,7 +11,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const generator = require('./build-marketing-site.js');
-const { buildMarketingSite, sitemapLocs, run, CANONICAL_ORIGIN, PLATFORM_ORIGIN } = generator;
+const { buildMarketingSite, sitemapLocs, run, CANONICAL_ORIGIN, PLATFORM_ORIGIN, LEGAL_PAGE_SLUGS } = generator;
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'marketing-test-'));
@@ -101,12 +101,26 @@ test('the generated sitemap lists promoted urls backed by files', () => {
   assert.equal(locs.length, sourceLocs.length, 'promotion must not drop sitemap urls');
 });
 
-test('legal hash routes point at the SPA on the platform origin', () => {
+test('legal documents are static pages on www, never hash routes', () => {
   for (const rel of built.files.filter((name) => name.endsWith('.html'))) {
     const html = read(rel);
     assert.ok(!html.includes(`${CANONICAL_ORIGIN}/#/`), `marketing/${rel} links a dead www hash route`);
   }
-  assert.ok(read('index.html').includes(`${PLATFORM_ORIGIN}/#/privacy`), 'Privacy must resolve to the SPA');
+  // The policy text an acquirer reads must exist without executing JavaScript.
+  for (const slug of LEGAL_PAGE_SLUGS) {
+    const html = read(`${slug}/index.html`);
+    assert.match(html, /<h2 id="/, `${slug} must carry the document body as headings`);
+    assert.ok(html.length > 4000, `${slug} looks like a stub, not the full policy`);
+  }
+});
+
+test('no published page names an individual or a free-mailbox contact', () => {
+  for (const rel of built.files) {
+    if (!/\.(html|txt|xml)$/.test(rel)) continue;
+    const text = read(rel);
+    assert.doesNotMatch(text, /Nirav Shah/, `marketing/${rel} names an individual`);
+    assert.doesNotMatch(text, /@[a-z0-9.-]*gmail\.com/i, `marketing/${rel} publishes a gmail address`);
+  }
 });
 test('firebase publishes the generated tree as the www root and rewrites every legacy /adlc/ url onto it', () => {
   const firebase = JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));

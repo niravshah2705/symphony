@@ -6,7 +6,7 @@ const { EventEmitter } = require('node:events');
 
 process.env.STREAM_TOKEN_PROXY_URL ||= 'http://127.0.0.1:4030';
 
-const events = require('@ai-fleet/shared-core/messaging/events');
+const events = require('@software-factory/shared-core/messaging/events');
 const sse = require('./sse');
 
 function makeReqRes(query) {

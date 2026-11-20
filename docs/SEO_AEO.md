@@ -290,9 +290,9 @@ engines describe one entity rather than three.
 
 1. **The brand was in none of the strings that matter.** The www root title was
    `ADLC - Agentic Development Life Cycle` and the platform root
-   `ADLC — Agentic Development Life Cycle | AI Fleet`. Neither contains
+   `ADLC — Agentic Development Life Cycle | Software Factory`. Neither contains
    "Archagentix"; `og:site_name` was `ADLC`. A brand query has nothing to match.
-   Three names competed for one entity (Archagentix / ADLC / AI Fleet), and the
+   Three names competed for one entity (Archagentix / ADLC / Software Factory), and the
    benchmarks page spelled it a fourth way (`ArchAgentix`).
 2. **The app host opted out of the index.** `platform.archagentix.com/` shipped
    `rel="canonical" href="https://www.archagentix.com/"` — that tag instructs
@@ -311,13 +311,13 @@ engines describe one entity rather than three.
 |---|---|
 | Brand-first metadata | Every one of the 16 pages under `public/` now includes "Archagentix" in `<title>` (asserted site-wide, and the two surfaces a brand search must win — `public/index.html` and `public/adlc/index.html` — lead with it). Landing `og:site_name` → `Archagentix`; visible header wordmark `ADLC` → `Archagentix`; `aria-label` matched. |
 | Platform root | `public/index.html` self-canonicalises to `https://platform.archagentix.com/`, `og:url` with it, `application-name` `Archagentix`. Its `@graph` `WebSite`/`SoftwareApplication`/`DefinedTerm` now carry platform `@id`s, and reference — never redeclare — the Organization. |
-| Rendered title | `public/js/app.js` `ADLC_BRAND_TITLE` → `Archagentix — ADLC (Agentic Development Life Cycle)`. The static head alone would have been worthless: `app.js:202` overwrites `document.title` on render and Googlebot renders JS. The agent (root) view now renders exactly the static `<title>` instead of appending `| AI Fleet`. `e2e/agent-jobs.spec.js` updated in the same commit. |
+| Rendered title | `public/js/app.js` `ADLC_BRAND_TITLE` → `Archagentix — ADLC (Agentic Development Life Cycle)`. The static head alone would have been worthless: `app.js:202` overwrites `document.title` on render and Googlebot renders JS. The agent (root) view now renders exactly the static `<title>` instead of appending `| Software Factory`. `e2e/agent-jobs.spec.js` updated in the same commit. |
 | Second sitemap | New `public/sitemap-platform.xml` (app root + `/archagentix/`). A sitemap may only list URLs on the host that serves it, so the www sitemap stayed www-only. `public/robots.txt` now advertises both. The platform sitemap is deliberately **not** in `DISCOVERY_FILES` — `validateTree` only inspects `outDir/sitemap.xml`, so a leak would publish platform URLs on www silently; `scripts/seo-archagentix.test.js` pins both the absence and the disjointness. |
 | Benchmarks page | Full head on `public/archagentix/index.html`: brand spelling fixed, self-canonical, 155-char description, `robots` index/follow, `og:*`, `WebPage` + `ItemList` graph that references the www Organization by `@id`. |
 | Entity graph | One Organization node, `@id https://www.archagentix.com/#organization`, present on all 7 marketing surfaces and referenced from platform. www root gained a `WebSite` node (`www#website`) so `SoftwareApplication.isPartOf` resolves instead of declaring an anonymous duplicate. `sameAs` (GitHub) + `alternateName` added. |
 | Topical keywords | `agentic development`, `software factory`, `Human AI Development`, `Centaur Developer`, `AGI` on `SoftwareApplication.keywords` (schema.org), plus 1–2 natural occurrences in visible copy on the landing lede, `/adlc/brief/` canonical definition, and `/adlc/blog/getting-started/`. **Not** a `<meta name="keywords">` tag — asserted absent, since it is a spam signal. |
 | Sitelink anchors | Footer Explore link relabelled `Try now` → `Archagentix Platform` on all 14 marketing pages. Header/body CTAs keep "Try now" (conversion copy); brand anchor text is what Google uses for brand sitelinks. |
-| AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / AI Fleet as three products. |
+| AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / Software Factory as three products. |
 
 ## Known issue, deliberately out of scope: the apex domain
 

@@ -118,7 +118,7 @@ function buildPlan(slug, cfg) {
     AUTH_MODE: 'firebase',
     FIREBASE_PROJECT_ID: cfg.firebaseProjectId || cfg.projectId,
     FIREBASE_API_KEY: cfg.firebaseApiKey || '',
-    AI_FLEET_DATA_DIR: '/tmp',
+    SOFTWARE_FACTORY_DATA_DIR: '/tmp',
     // The isolation switch — this tenant's own Firestore store + SSE namespace.
     STORE_NAMESPACE: slug,
     PUBSUB_PLANNER_TOPIC: n.plannerTopic,

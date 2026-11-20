@@ -54,7 +54,7 @@ resource "google_service_account" "litellm" {
   count        = var.litellm_enabled ? 1 : 0
   project      = var.project_id
   account_id   = "ai-fleet-litellm-sa"
-  display_name = "AI Fleet LiteLLM Gateway"
+  display_name = "Software Factory LiteLLM Gateway"
 }
 
 # Master key guards the Admin UI and every privileged /key/* RPC; the salt key

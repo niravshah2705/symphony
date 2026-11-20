@@ -1,13 +1,13 @@
 'use strict';
 
 const http = require('http');
-const log = require('@ai-fleet/shared-core/logger');
+const log = require('@software-factory/shared-core/logger');
 const { createProxyHandler } = require('./proxy');
 const { createStreamTokenService } = require('./stream-token');
 const { createStreamTokenRpcHandler } = require('./stream-token-rpc');
 
 /**
- * AI Fleet egress proxy sidecar. Provider egress remains the default behavior;
+ * Software Factory egress proxy sidecar. Provider egress remains the default behavior;
  * narrowly-scoped internal capabilities are opt-in through PROXY_CAPABILITIES.
  */
 
@@ -98,7 +98,7 @@ if (require.main === module) {
   // wildcard bind required by its sidecar startup probe; the application still
   // reaches this container only through the instance's shared loopback.
   server.listen(PORT, PROXY_BIND_HOST, () => {
-    log.info(`AI Fleet egress proxy sidecar listening on http://${PROXY_BIND_HOST}:${PORT}`);
+    log.info(`Software Factory egress proxy sidecar listening on http://${PROXY_BIND_HOST}:${PORT}`);
   });
 }
 

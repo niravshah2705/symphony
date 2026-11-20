@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const scheduler = require('@ai-fleet/shared/agent/scheduler');
-const events = require('@ai-fleet/shared/messaging/events');
-const { toPushEnvelope } = require('@ai-fleet/shared/messaging/publisher');
-const { currentWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
+const scheduler = require('@software-factory/shared/agent/scheduler');
+const events = require('@software-factory/shared/messaging/events');
+const { toPushEnvelope } = require('@software-factory/shared/messaging/publisher');
+const { currentWorkspaceContext } = require('@software-factory/shared/store/workspace-context');
 
 function plannerHandler(router) {
   const layer = router.stack.find((candidate) => candidate.route && candidate.route.path === '/planner');

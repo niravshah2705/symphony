@@ -1,8 +1,8 @@
 'use strict';
 
-const { TRACEPARENT_HEADER, cleanTraceparent } = require('@ai-fleet/shared-core/traceparent');
+const { TRACEPARENT_HEADER, cleanTraceparent } = require('@software-factory/shared-core/traceparent');
 
-/** Browser-selected native AI Fleet scope. These names are part of the public API. */
+/** Browser-selected native Software Factory scope. These names are part of the public API. */
 const ORGANIZATION_HEADER = 'x-ai-fleet-organization-id';
 const PROJECT_HEADER = 'x-ai-fleet-project-id';
 // Per-request LLM gateway feature flag (browser opt-in). Unlike the tenant ids
@@ -42,7 +42,7 @@ function header(req, name) {
 
 /** Normalize the llm-gateway selector; anything off the allowlist is dropped. */
 function cleanLlmGateway(value) {
-  return require('@ai-fleet/shared-core/config').normalizeLlmGatewayMode(value);
+  return require('@software-factory/shared-core/config').normalizeLlmGatewayMode(value);
 }
 
 /** True when the request opted into the notifications stream via any non-blank header value. */
@@ -65,7 +65,7 @@ function deprecatedUiRequested(req) {
  * Lazy require keeps this module import-light for tests.
  */
 function llmGatewayAvailable() {
-  const modes = Object.values(require('@ai-fleet/shared-core/config').CONFIG.LLM_GATEWAY_MODES);
+  const modes = Object.values(require('@software-factory/shared-core/config').CONFIG.LLM_GATEWAY_MODES);
   return modes.some((entry) => entry.block.enabled);
 }
 

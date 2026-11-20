@@ -1,0 +1,2004 @@
+# Default values for flexprice
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  # Default OSS image — published multi-arch (linux/amd64, linux/arm64) from CI on tag.
+  # Override `repository`/`tag` to pin to a private mirror or a specific build.
+  repository: ghcr.io/flexprice/flexprice
+  pullPolicy: IfNotPresent
+  # tag: defaults to .Chart.AppVersion when empty — keep that contract so chart upgrades
+  # automatically pull a matching image. Set explicitly to override.
+  tag: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ServiceAccount for the pods
+# On AWS EKS, annotate with the IAM role ARN for IRSA (IAM Roles for Service Accounts).
+# The role's trust policy must allow the OIDC provider to assume it for this service account.
+# All pods (api, consumer, worker) share this service account — scope the IAM role accordingly.
+# Example:
+#   serviceAccount:
+#     annotations:
+#       eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/flexprice-role
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  # perComponent=true creates a separate ServiceAccount for api, consumer, and
+  # worker. Use this when you need IRSA / Workload Identity scoped per workload
+  # (e.g., consumer needs Kafka MSK IAM, worker needs Temporal Cloud, api needs
+  # SES). Per-component annotations override the top-level annotations above.
+  perComponent: false
+  components:
+    api:
+      name: ""           # default: "<fullname>-api"
+      annotations: {}
+    consumer:
+      name: ""           # default: "<fullname>-consumer"
+      annotations: {}
+    worker:
+      name: ""           # default: "<fullname>-worker"
+      annotations: {}
+
+# NetworkPolicy — off by default. When enabled, renders an ingress-only allow
+# policy on the api pod (TCP/8080 from networkPolicy.ingress.fromIngressController).
+# Egress is intentionally unrestricted for now — managed services (Stripe,
+# Resend, Temporal Cloud, ClickHouse Cloud, ...) rotate IPs, making a
+# CIDR allow-list operationally brittle. Revisit once egress topology stabilises.
+networkPolicy:
+  enabled: false
+  ingress:
+    # Selector for the ingress controller that should reach the api pod.
+    # Default targets ingress-nginx in the namespace `ingress-nginx`.
+    fromIngressController:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: ingress-nginx
+
+# Data protection — keep PVs around when StatefulSets/PVCs are deleted.
+#
+# When enabled (default), the chart renders a cluster-scoped StorageClass
+# named `<release>-retain` with `reclaimPolicy: Retain`, and every in-cluster
+# database (postgres, clickhouse, redis, kafka, temporal stores) is wired to
+# use it. Chart-rendered PVCs/StatefulSets also get `helm.sh/resource-policy: keep`
+# so `helm uninstall` will not delete them.
+#
+# Trade-off: this is safer for production data, but `helm uninstall` will
+# leave behind orphan PVs/disks that must be cleaned up manually (see the
+# "Data protection" section of the chart README for the cleanup procedure).
+#
+# To opt out (back to cluster-default StorageClass + Delete reclaim policy):
+#   dataProtection.retainStorage: false
+#
+# To use a StorageClass you already manage (and skip the chart-rendered one),
+# set retainStorage: false and point each component's persistence.storageClass
+# at your own class.
+dataProtection:
+  # Toggle the whole feature. true = create the chart's Retain StorageClass
+  # AND default every in-cluster DB persistence.storageClass to it, AND add
+  # helm.sh/resource-policy: keep to chart-rendered stateful resources.
+  retainStorage: true
+  storageClass:
+    # If empty, the chart computes the name as "<release>-retain". Override
+    # if you need to share one across releases or match an external naming
+    # convention.
+    name: ""
+    # Provisioner the StorageClass should use. Empty = cluster default
+    # provisioner (the in-tree one). Common values:
+    #   AWS EBS CSI:    ebs.csi.aws.com
+    #   GCE PD CSI:     pd.csi.storage.gke.io
+    #   Azure Disk CSI: disk.csi.azure.com
+    #   kind / dev:     rancher.io/local-path
+    # Leave empty for clusters that already have a CSI driver wired to the
+    # default StorageClass — kubectl get sc to inspect.
+    provisioner: ""
+    # Optional CSI parameters (pass-through to the StorageClass spec).
+    # Example for EBS gp3:
+    #   parameters:
+    #     type: gp3
+    #     fsType: ext4
+    parameters: {}
+    # WaitForFirstConsumer is safer (binds PV in the same AZ as the pod);
+    # Immediate is faster but can pin storage to the wrong AZ. Keep
+    # WaitForFirstConsumer unless you know you need otherwise.
+    volumeBindingMode: WaitForFirstConsumer
+    # allowVolumeExpansion lets you grow PVCs in place via kubectl edit.
+    # Almost always desirable.
+    allowVolumeExpansion: true
+
+# Pod-level security context. Compatible with the Kubernetes PodSecurityStandard
+# "restricted" profile (fsGroup non-zero, runAsNonRoot, seccomp RuntimeDefault).
+podSecurityContext:
+  fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 3000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context. readOnlyRootFilesystem is true because the
+# app writes only to /tmp (mounted as emptyDir in each Deployment template).
+# If you need to write elsewhere, add another emptyDir + volumeMount rather
+# than relaxing this default.
+securityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# API deployment configuration
+api:
+  enabled: true
+  replicaCount: 1
+  # API-only env, rendered after the shared env. Accepts valueFrom entries.
+  extraEnv: []
+  # Extra labels for this component's Kubernetes objects (Deployment, Service,
+  # HPA, PDB, Ingress, ServiceAccount). Merged on top of the global `labels`.
+  # Not applied to spec.selector.matchLabels — selectors are immutable.
+  labels: {}
+  # Extra labels for this component's pods only. Merged on top of the global
+  # `podLabels`. This is what log shippers (Filebeat/ELK, Fluent Bit) read.
+  podLabels: {}
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "768Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1536Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  # KEDA ScaledObject combining ALB request-rate (aws-cloudwatch) with cpu/mem
+  # triggers for the api Deployment. Enable EITHER api.autoscaling (HPA) OR
+  # api.keda — never both (render fails). Off by default.
+  keda:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    pollingInterval: 30
+    cooldownPeriod: 300
+    cpuValue: ""     # target CPU utilization % for the cpu trigger; empty = trigger omitted
+    memValue: ""     # target memory utilization % for the memory trigger; empty = trigger omitted
+    request:
+      enabled: false
+      targetGroup: ""    # ALB target group name/ARN suffix (CloudWatch TargetGroup dimension)
+      targetValue: 1000  # target RequestCountPerTarget
+      awsRegion: ""
+      authenticationRef: {}   # TriggerAuthentication for IRSA (podIdentity: aws) built in infra
+  podDisruptionBudget:
+    enabled: true
+    # maxUnavailable so a single-replica api still permits one eviction.
+    minAvailable: ""
+    maxUnavailable: 1
+  # RollingUpdate strategy: maxSurge controls how many extra pods can spin up
+  # over `replicaCount`; maxUnavailable how many existing pods can go down.
+  # Defaults are HA-safe (one extra up, zero unavailable) so api rollouts
+  # never reduce capacity below the configured replica count.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  # Total budget for pod termination. The preStop sleep runs inside this window,
+  # not in addition to it, so the budget must cover preStop + the server's
+  # server.shutdown_timeout drain + dependency cleanup, or kubelet SIGKILLs
+  # mid-shutdown. 45 = 5 preStop + 25 drain + 15 slack.
+  # preStop gives the endpoints controller time to pull this pod from the
+  # load-balancer pool before the process stops accepting.
+  terminationGracePeriodSeconds: 45
+  preStop:
+    enabled: true
+    sleepSeconds: 5
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Internal admin portal (deployment.mode=admin).
+admin:
+  enabled: false
+  replicaCount: 1
+  labels: {}
+  podLabels: {}
+  # Source of FLEXPRICE_ADMIN_SECRET; empty name = app secret.
+  secretRef:
+    name: ""
+    key: admin-secret
+  # Dev-only; used with chart-managed secret.
+  secret: ""
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  # Tailnet-only exposure.
+  tailscale:
+    enabled: false
+    hostname: ""
+    tags: ""
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Consumer deployment configuration
+consumer:
+  enabled: true
+  replicaCount: 1
+  # Extra labels for this component's Kubernetes objects (Deployment, Service,
+  # HPA, PDB, Ingress, ServiceAccount). Merged on top of the global `labels`.
+  # Not applied to spec.selector.matchLabels — selectors are immutable.
+  labels: {}
+  # Extra labels for this component's pods only. Merged on top of the global
+  # `podLabels`. This is what log shippers (Filebeat/ELK, Fluent Bit) read.
+  podLabels: {}
+  # Consumer-only env overrides (rendered after the shared flexprice.env, so these
+  # win for duplicate keys). For settings that differ on the consumer vs api/worker —
+  # e.g. FLEXPRICE_CACHE_ENABLED (cache enabled on the consumer only).
+  extraEnv: []
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1024Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2048Mi"
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  # KEDA ScaledObject for Kafka consumer-lag-based autoscaling.
+  # When enabled, set `consumer.autoscaling.enabled: false` so the chart's
+  # HPA and KEDA don't fight over the same Deployment.
+  # Requires KEDA (https://keda.sh) installed cluster-wide.
+  keda:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    lagThreshold: 1000          # default messages of consumer-group lag per replica (used as fallback for topics without their own lagThreshold)
+    pollingInterval: 15         # seconds between KEDA polls
+    cooldownPeriod: 300         # seconds before scaling down to minReplicas
+    offsetResetPolicy: "earliest"
+    topics: []                  # list of {topic, lagThreshold} objects, one kafka trigger each; empty = single trigger on kafkaConfig.topic using lagThreshold above (back-compat)
+    cpuValue: ""                # target CPU utilization % for the cpu trigger; empty = trigger omitted
+    memValue: ""                # target memory utilization % for the memory trigger; empty = trigger omitted
+    fallback: {}                # KEDA fallback (e.g. failureThreshold + replicas)
+    # Reference to a KEDA TriggerAuthentication when Kafka needs SASL/IAM.
+    # Example:
+    #   authenticationRef:
+    #     name: kafka-msk-auth
+    #
+    # KEDA's operator connects to Kafka itself, separately from the consumer
+    # pod, so it does NOT see kafkaConfig.tlsCASecret — that Secret is only
+    # mounted into the workloads. A private/self-signed broker CA therefore has
+    # to be repeated here, in the same TriggerAuthentication that carries the
+    # SASL credentials (KEDA accepts one authenticationRef per trigger, so the
+    # CA and the credentials cannot be split across two resources):
+    #
+    #   apiVersion: keda.sh/v1alpha1
+    #   kind: TriggerAuthentication
+    #   metadata:
+    #     name: kafka-scram-auth
+    #   spec:
+    #     secretTargetRef:
+    #       - {parameter: sasl,     name: keda-kafka-secrets, key: sasl}
+    #       - {parameter: username, name: keda-kafka-secrets, key: username}
+    #       - {parameter: password, name: keda-kafka-secrets, key: password}
+    #       - {parameter: tls,      name: keda-kafka-secrets, key: tls}
+    #       - {parameter: ca,       name: keda-kafka-secrets, key: ca}
+    #
+    # The `ca` key holds the same PEM bundle as kafkaConfig.tlsCASecret. Without
+    # it the scaler fails its TLS handshake against a private CA and the
+    # consumer silently stops autoscaling.
+    authenticationRef: {}
+  podDisruptionBudget:
+    enabled: true
+    # maxUnavailable (not minAvailable) so a single-replica consumer still
+    # permits one eviction — minAvailable:1 on 1 replica blocks GKE node drains.
+    minAvailable: ""
+    maxUnavailable: 1
+  # Kafka consumer prefers one-at-a-time rollout to minimise consumer-group
+  # rebalance churn. maxSurge=0 keeps the partition assignment stable.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  # Graceful shutdown: Kafka consumer needs time to finish processing in-flight
+  # messages and commit offsets before exit. Must be longer than the longest
+  # expected message processing time. The preStop hook sleeps so the pod stays
+  # in Terminating long enough for the readiness gate to drop it from the
+  # consumer-group rebalance, avoiding duplicate processing on the new pod.
+  terminationGracePeriodSeconds: 60
+  preStop:
+    enabled: true
+    sleepSeconds: 15
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Extra consumer Deployments (plural MAP) — OPTIONAL, additive.
+# Each key becomes its own Deployment "<fullname>-<key>" running the SAME image
+# in deployment.mode=consumer, isolated purely by its own extraEnv. Mirrors prod,
+# where flexprice-prod-consumer and flexprice-prod-consumer-bulk are two task defs
+# off one image differing only in FLEXPRICE_*_ENABLED / _TOPIC / _CONSUMER_GROUP.
+#
+# The singular `consumer:` above is unaffected — leave `consumers` empty and
+# nothing extra renders. Per-entry keys: enabled (default true), replicaCount,
+# resources, strategy, nodeSelector, tolerations, affinity, extraEnv (list of
+# {name,value}), preStop {enabled,sleepSeconds}, and keda
+# {enabled,minReplicas,maxReplicas,lagThreshold,topics,authenticationRef,
+#  cpuValue,memValue,...} — same shape as consumer.keda above. resources,
+# strategy and terminationGracePeriodSeconds fall back to the singular consumer's
+# when omitted.
+#
+# Example:
+#   consumers:
+#     consumer-billing:
+#       replicaCount: 2
+#       extraEnv:
+#         - {name: FLEXPRICE_BULK_EVENT_CONSUMPTION_ENABLED, value: "true"}
+#         - {name: FLEXPRICE_BULK_EVENT_CONSUMPTION_TOPIC,   value: "events_billing"}
+#         - {name: FLEXPRICE_BULK_EVENT_CONSUMPTION_CONSUMER_GROUP, value: "billing_consumer"}
+#       keda:
+#         enabled: true
+#         topics:
+#           - {topic: events_billing, lagThreshold: 500}
+#     consumer-events:
+#       extraEnv:
+#         - {name: FLEXPRICE_KAFKA_TOPIC, value: "events"}
+consumers: {}
+
+# Bento collector — OPTIONAL stream collector (Kafka/MSK -> in-cluster Flexprice
+# API). Off by default. Not a Flexprice binary: it runs its own image and its
+# own config, so it does NOT share the app's flexprice.env / configmap. It is
+# config-agnostic — you supply the image, the baked config path, and the source
+# connection details via `env`. The container POSTs to the in-cluster api
+# Service (<release>-api on :80, http) so ingest never leaves the cluster.
+#
+# MSK SCRAM creds are reused from the same Secret the app uses
+# (secrets.existingSecret / <release>-secrets), keys `kafka-sasl-username` and
+# `kafka-sasl-password` — BYOC bootstraps those from AWS Secrets Manager. Point
+# bento at a different Secret with `envSecretName` (mounted via envFrom) if your
+# source creds live elsewhere.
+#
+# IRSA (MSK IAM auth instead of SCRAM): set serviceAccount.perComponent=true and
+# put the role ARN under serviceAccount.components.bento.annotations. SCRAM (the
+# default) needs no IAM role.
+bento:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: ghcr.io/flexprice/bento-collector
+    tag: "v1.2.5"      # empty falls back to the chart appVersion
+    digest: ""         # pin by digest (wins over tag) where the registry allows
+    pullPolicy: IfNotPresent
+  # Config baked into the image, selected with `-c`. Pick the pipeline for your
+  # source, e.g. /app/internal/aws-kafka-to-flexprice.yaml (MSK -> Flexprice).
+  configPath: /app/internal/aws-kafka-to-flexprice.yaml
+  # In-cluster Flexprice API target. Defaults point at the api Service; override
+  # only to send events somewhere else.
+  apiHost: ""          # empty = <release>-api (in-cluster Service)
+  apiScheme: http      # http for the in-cluster Service (no TLS hop)
+  # Extra Secret mounted wholesale via envFrom (source creds that are NOT the
+  # reused kafka-sasl-* keys). Empty = not mounted.
+  envSecretName: ""
+  # Free-form plain env for the collector (brokers, topic, consumer group, TLS,
+  # mechanism, batching knobs). Non-secret values only — secrets belong in a
+  # Secret referenced above. See docs/BENTO-DEPLOY-SARVAM.md for the var names.
+  env: {}
+  labels: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1024Mi"
+  # Bento's HTTP server (health + metrics). 4195 is the bento default.
+  httpPort: 4195
+  terminationGracePeriodSeconds: 60
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Per-component ServiceAccount overrides. The `bento` entry is only consumed
+# when serviceAccount.perComponent=true (MSK IAM / IRSA path); with the default
+# SCRAM auth bento uses the shared ServiceAccount and this is ignored.
+# serviceAccount:
+#   perComponent: true
+#   components:
+#     bento:
+#       annotations:
+#         eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/flexprice-bento
+
+# Temporal Worker deployment configuration
+worker:
+  # Opt-in: derive Go's soft memory budget from this worker's hard memory limit.
+  # Supported limit units: bytes, Ki/Mi/Gi/Ti/Pi/Ei, or k/M/G/T/P/E.
+  gc:
+    enabled: false
+    memoryLimitRatio: 0.8
+    gogc: 100
+  enabled: true
+  replicaCount: 1
+  # Extra labels for this component's Kubernetes objects (Deployment, Service,
+  # HPA, PDB, Ingress, ServiceAccount). Merged on top of the global `labels`.
+  # Not applied to spec.selector.matchLabels — selectors are immutable.
+  labels: {}
+  # Extra labels for this component's pods only. Merged on top of the global
+  # `podLabels`. This is what log shippers (Filebeat/ELK, Fluent Bit) read.
+  podLabels: {}
+  resources:
+    requests:
+      cpu: "375m"
+      memory: "512Mi"
+    limits:
+      cpu: "750m"
+      memory: "1024Mi"
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  keda:
+    # Temporal task-queue-depth autoscaling for the worker Deployment.
+    # Requires KEDA >= v2.17 (native temporal scaler) installed cluster-wide.
+    # Enable EITHER worker.autoscaling (HPA) OR worker.keda — never both (render fails). Off by default.
+    enabled: false
+    endpoint: "temporal-frontend.temporal.svc:7233"   # in-cluster Temporal frontend gRPC (host:port); override for Temporal Cloud
+    pollingInterval: 15
+    cooldownPeriod: 300
+    minReplicas: 1
+    maxReplicas: 3
+    targetQueueSize: 100    # pending tasks per replica (1->N scaling ratio)
+    queues: []               # task queues to watch, one temporal trigger each; empty = single trigger on temporalConfig.taskQueue (back-compat)
+    cpuValue: ""             # target CPU utilization % for the cpu trigger; empty = trigger omitted
+    memValue: ""             # target memory utilization % for the memory trigger; empty = trigger omitted
+    fallback: {}
+    authenticationRef: {}   # in-cluster plaintext temporal needs none; set for Temporal Cloud
+  podDisruptionBudget:
+    enabled: true
+    # maxUnavailable so a single-replica worker still permits one eviction.
+    minAvailable: ""
+    maxUnavailable: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  # Worker drains by letting Temporal SDK finish in-progress activities on SIGTERM.
+  # Bump if your longest workflow activity exceeds 30s.
+  terminationGracePeriodSeconds: 60
+  preStop:
+    enabled: false
+    sleepSeconds: 0
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: flexprice.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # Selects the ingress flavor.
+  type: ""          # nginx | gce
+  # GCE options, read when type is gce.
+  gce:
+    enabled: false
+    # Object name is <fullname>-api-<nameSuffix>.
+    nameSuffix: gce
+    # Pins the object name exactly. Must match an
+    # adopted object, which also needs Helm ownership
+    # metadata or the upgrade fails. A mismatch creates
+    # a second load balancer.
+    nameOverride: ""
+    # Defaults to ingress.hosts.
+    hosts: []
+    # Empty takes an ephemeral IP; recreation changes it.
+    globalStaticIpName: ""
+    # With tls.mode managed this must start true.
+    allowHttp: false
+    annotations: {}
+    # false annotates the shared api Service instead.
+    ownService: true
+    service:
+      annotations: {}
+    tls:
+      # certManager issues before the LB serves.
+      # managed validates over HTTP after DNS moves.
+      mode: certManager
+      # Set to render the Certificate.
+      clusterIssuer: ""
+      issuerKind: ClusterIssuer
+      # Defaults to <objectName>-tls.
+      secretName: ""
+      # Defaults to the shared object name.
+      certificateName: ""
+    backendConfig:
+      healthCheck:
+        path: /health
+        port: 8080
+        checkIntervalSec: 15
+        timeoutSec: 5
+        healthyThreshold: 2
+        unhealthyThreshold: 3
+      timeoutSec: 60
+      cloudArmor:
+        securityPolicyName: ""
+      # null keeps the LB default; false asserts off.
+      logging:
+        enable: null
+        sampleRate: 0.1
+    frontendConfig:
+      redirectToHttps:
+        enabled: false
+        responseCodeName: MOVED_PERMANENTLY_DEFAULT
+      sslPolicy: ""
+
+# Frontend deployment configuration
+frontend:
+  enabled: false
+  # How the UI is served.
+  #   image    — a self-contained frontend image listening on service.port.
+  #              Default; existing regions render exactly as before.
+  #   gcsproxy — static SPA assets published to a GCS bucket and served by a
+  #              gcsproxy sidecar behind nginx. This is what the GCP production
+  #              regions actually run (previously as raw manifests in each
+  #              region's ui/ directory). Requires frontend.gcs.bucket and a
+  #              ServiceAccount bound to a GSA with objectViewer on it.
+  mode: image
+  replicaCount: 1
+  # Extra labels for this component's Kubernetes objects (Deployment, Service,
+  # HPA, PDB, Ingress, ServiceAccount). Merged on top of the global `labels`.
+  # Not applied to spec.selector.matchLabels — selectors are immutable.
+  labels: {}
+  # Extra labels for this component's pods only. Merged on top of the global
+  # `podLabels`. This is what log shippers (Filebeat/ELK, Fluent Bit) read.
+  podLabels: {}
+  image:
+    repository: flexprice-frontend
+    tag: "local"
+    pullPolicy: IfNotPresent
+  # ── mode: gcsproxy ───────────────────────────────────────────────────────────
+  # Only read when mode is "gcsproxy".
+  s3:
+    # S3 bucket holding the built SPA, for build.cloud=aws.
+    #
+    # Only the build Job reads this. The chart has no S3 serving mode — on EKS
+    # the UI is served by nginx proxying the bucket through an S3 gateway VPC
+    # endpoint, deployed from the infrastructure repo rather than from here.
+    # This is the bucket that nginx reads.
+    bucket: ""
+  gcs:
+    # GCS bucket holding the built SPA. Required in this mode.
+    bucket: ""
+    # Object served for / and for SPA deep links.
+    indexObject: index.html
+    # Public upstream image, pinned by digest. Deliberately not mirrored into
+    # Artifact Registry: it is tiny, pulled once per pod start, and a per-region
+    # AR copy would need cross-region reader grants on the node SA.
+    image: ghcr.io/daichirata/gcsproxy@sha256:462591f5990b0c1578a848095fc0fd40e01a0ec08321e00f5b85bd4a9492cf5c
+    # Loopback port the sidecar listens on; nginx proxies to it. Never exposed.
+    port: 8080
+    resources:
+      requests: {cpu: "50m", memory: "64Mi"}
+      limits: {cpu: "250m", memory: "128Mi"}
+  # Build the SPA in-cluster and sync it into gcs.bucket.
+  #
+  # gcsproxy serves whatever is in that bucket; nothing else in this chart puts
+  # anything THERE. Without this, publishing a build means an operator cloning
+  # the frontend, building it locally with the right VITE_* values, and syncing
+  # with their own credentials.
+  #
+  # Runs as a post-install/post-upgrade hook, NOT pre- like the migration: an
+  # unmigrated database is dangerous and must block the release, a stale UI is
+  # not. A failed build here leaves the previous bundle serving and the backend
+  # deployed, rather than rolling back a release that was fine.
+  build:
+    enabled: false
+    # Which object store the bundle is synced to: "gcp" or "aws".
+    #
+    # The build half — clone, npm ci, vite build — is identical either way.
+    # This picks the sync half, the image that runs it, and how the pod proves
+    # its identity:
+    #   gcp  gcloud storage rsync into frontend.gcs.bucket, authenticating with
+    #        a projected token (see tokenAudience).
+    #   aws  aws s3 sync into frontend.s3.bucket, authenticating with IRSA.
+    cloud: gcp
+    # Required when cloud is aws — the CLI cannot resolve a bucket without it.
+    awsRegion: ""
+    # false renders an ordinary Job that persists after it finishes, which is
+    # what the terragrunt path applies. true adds the Helm hook annotations for
+    # ArgoCD-driven environments — at the cost of the Job, and its logs, being
+    # deleted when it ends.
+    asHook: true
+    repoUrl: https://github.com/flexprice/flexprice-front.git
+    # MUST be an immutable tag or commit sha, never a branch.
+    #
+    # The Job's name embeds a checksum of this and buildEnv. A moving ref makes
+    # that checksum constant, so ArgoCD records the hook completed for that name
+    # and never recreates it: the build silently never runs again while
+    # everything else rolls out normally, and the bucket keeps serving the old
+    # bundle with nothing to surface it. The template refuses "main" outright.
+    ref: ""
+    # VITE_* values baked into the bundle at build time. These are
+    # per-environment — VITE_API_URL differs per region — which is why the
+    # bundle cannot be shared across environments.
+    buildEnv: {}
+    #   VITE_APP_ENV: self-hosted
+    #   VITE_API_URL: https://billing.example.com/v1
+    #   VITE_AUTH_ENABLED: "true"
+    #   VITE_AUTH_PROVIDER: flexprice
+    #   VITE_SVIX_URL: https://billing.example.com
+    # Must satisfy flexprice-front's engines.node (>=22.22.0). Digest-pinned:
+    # this container executes the whole public npm dependency tree, so the base
+    # image is the one part that should not move underneath a deploy.
+    image: node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a
+    # Cloud CLI only — no build tooling. This container holds the credential,
+    # so its contents are the blast radius. Empty picks the default for
+    # `cloud`: google/cloud-sdk:alpine or amazon/aws-cli:latest.
+    syncImage: ""
+    imagePullPolicy: IfNotPresent
+    # Identity binding for the Job's OWN ServiceAccount, which needs WRITE
+    # access to the bucket. Distinct from frontend.serviceAccount, which
+    # gcsproxy reads as: binding write access to that one would let the
+    # internet-facing serving pod overwrite the bundle it serves.
+    #
+    #   gcp  iam.gke.io/gcp-service-account: ui-build@<project>.iam.gserviceaccount.com
+    #   aws  eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<role>
+    #
+    # On AWS, scope that role to the UI bucket alone. IRSA injects its token
+    # into every container in the pod, so the build container — which runs the
+    # whole public npm dependency tree — can assume it too; a tight role is
+    # what bounds that to a corrupted bundle rather than anything worse.
+    serviceAccountAnnotations: {}
+    # GCP ONLY: <project>.svc.id.goog. Set alongside the annotation above — it
+    # is the audience the metadata server expects when exchanging the projected
+    # token for a GCP access token, and the sync cannot authenticate without
+    # it. Leave empty on AWS, where IRSA's webhook handles this.
+    tokenAudience: ""
+    nodeSelector: {}
+    # tsc -b && vite build needs more than node's default heap. Keep
+    # resources.limits.memory ABOVE this, so node fails with a readable JS heap
+    # error rather than being OOM-killed with a bare exit 137.
+    maxOldSpaceMb: 6144
+    resources:
+      requests: {cpu: "1", memory: "4Gi"}
+      limits: {cpu: "2", memory: "8Gi"}
+    syncResources:
+      requests: {cpu: "100m", memory: "256Mi"}
+      limits: {cpu: "500m", memory: "512Mi"}
+    # Kills a wedged npm install rather than leaving it holding a node.
+    activeDeadlineSeconds: 2400
+    ttlSecondsAfterFinished: 3600
+  # nginx sidecar that fronts gcsproxy and terminates the Service port.
+  nginx:
+    image: nginx:1.27-alpine
+    resources:
+      requests: {cpu: "50m", memory: "64Mi"}
+      limits: {cpu: "250m", memory: "128Mi"}
+  # ServiceAccount for the UI pod. In gcsproxy mode this must be annotated for
+  # Workload Identity so gcsproxy can read the bucket.
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  env:
+    apiUrl: "http://api.flexprice.example.com/v1"
+    environment: "self-hosted"
+    supabaseUrl: ""
+    supabaseAnonKey: ""
+  extraEnv: []
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "768Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1536Mi"
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+  # Inherits global topologySpreadConstraints unless overridden here.
+  topologySpreadConstraints: []
+
+# e2eprobe — synthetic end-to-end probe that runs continuously against a
+# live environment, driving real billing flows under a dedicated probe
+# tenant and alerting to Slack on assertion failure. Off by default so
+# existing regions are unaffected; opt in per-region.
+e2eprobe:
+  enabled: false          # opt-in; existing regions unaffected
+  # SEPARATE GHCR repo from the app image — the probe ships its own artifact.
+  image:
+    repository: ghcr.io/flexprice/e2eprobe
+    # Pin an explicit tag or digest per region. Left empty on purpose: the
+    # template falls back to the chart appVersion rather than a mutable
+    # floating tag, so enabling the probe cannot silently pull whatever was
+    # last pushed to `develop` into a production cluster.
+    tag: ""
+    pullPolicy: IfNotPresent
+  # NOTE: replica count is NOT configurable. The Deployment hardcodes 1 because
+  # concurrent probes race on shared seeded fixtures and produce false
+  # failures. See templates/probe/deployment.yaml.
+  existingSecret: e2eprobe-secrets
+  secretKeys:
+    apiKey: api-key
+    slackWebhookUrl: slack-webhook-url
+  # Signup bootstrap, for airgapped deployments with no way to pre-provision an
+  # API key. The probe signs up, mints a key, and patches it into secretName.
+  #
+  # Requires the flexprice-native auth provider (auth.provider: "flexprice",
+  # the chart default). Supabase-backed deployments reject signup outright, and
+  # a tenant enforcing SSO refuses password login.
+  #
+  # Off by default: with this false the probe renders exactly as before, and
+  # its ServiceAccount token stays unmounted.
+  bootstrap:
+    enabled: false
+    # Dedicated Secret holding ONLY the bootstrap output. Keep it separate from
+    # existingSecret above: the probe is granted write access to this object,
+    # so it must never also carry the Slack webhook.
+    secretName: e2eprobe-bootstrap
+    secretKey: api-key
+    # Secret supplying the signup credentials. Never put a password in
+    # e2eprobe.env — the chart rejects that.
+    existingCredentialsSecret: e2eprobe-bootstrap-credentials
+    emailKey: email
+    passwordKey: password
+  env: {}                 # E2EPROBE_* non-secret vars, set per region
+  service: {port: 8765}
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+
+# Frontend ingress — serves the UI at its own hostname
+frontendIngress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  host: "flexprice.example.com"
+  tls: []
+
+# Temporal UI ingress — exposes temporal-web on its own hostname
+temporalIngress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  host: "temporal.example.com"
+  tls: []
+auth:
+  provider: "flexprice" # "flexprice" or "supabase"
+  secret: "" # Required — set via secret (existingSecret or auth.secret)
+  supabase:
+    baseUrl: ""
+    serviceKey: "" # Set via secret
+  apiKey:
+    header: "x-api-key"
+    keys: {} # Map of hashed API keys to details
+
+# PostgreSQL Configuration
+# Deployment options (pick one):
+#   1. Bitnami subchart (default)  — postgresql.enabled=true, postgres.external.enabled=false
+#   2. External managed service    — postgresql.enabled=false, postgres.external.enabled=true
+#   3. Hand-rolled internal        — postgresql.enabled=false, postgres.external.enabled=false (legacy, not recommended)
+postgres:
+  external:
+    enabled: false  # Set true when pointing to an external/managed PostgreSQL
+  # External PostgreSQL configuration (when external.enabled=true)
+  host: "postgres-service"  # Override when using external PostgreSQL
+  port: 5432
+  user: "flexprice"
+  password: "" # Required — set via secret (existingSecret or postgres.password)
+  dbname: "flexprice"
+  sslmode: "require"
+  maxOpenConns: 10
+  maxIdleConns: 5
+  connMaxLifetimeMinutes: 60
+  readerHost: "" # Optional: for read replicas
+  readerPort: 5432
+  # Internal PostgreSQL configuration (when external.enabled=false)
+  internal:
+    image:
+      repository: postgres
+      tag: "15.3"
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""  # Use default storage class if empty
+    resources: {}
+    service:
+      type: ClusterIP
+      port: 5432
+    initScripts:
+      enabled: true
+      # Scripts will be mounted from migrations/postgres directory if available
+
+# ClickHouse Configuration
+# Deployment options — set clickhouse.mode to one of:
+#   standalone  (default) — single-replica StatefulSet, no operator required. Good for dev and
+#                           single-node production. Works on any cluster out of the box.
+#   altinity              — ClickHouseInstallation CRD managed by the Altinity operator.
+#                           Requires operator installed cluster-wide before helm install.
+#                           Install: kubectl apply -f shared/clickhouse/operator/install-bundle.yaml
+#   external              — point to ClickHouse Cloud or any self-managed endpoint.
+clickhouse:
+  # HTTP port used ONLY by the migration Job's verify step, which queries over
+  # HTTP rather than the native protocol. `address` below is the NATIVE endpoint
+  # (9000) the application uses; the two are not interchangeable, and deriving
+  # one from the other is what made verify report healthy tables as MISSING.
+  httpPort: 8123
+  mode: standalone   # standalone | altinity | external
+
+  # Namespace for the in-cluster ClickHouse (standalone/altinity modes). Empty =
+  # release namespace (backward compatible). Set to isolate ClickHouse in its own
+  # namespace; the chart then auto-creates it (resource-policy: keep) and the app +
+  # migration job resolve ClickHouse via its cross-namespace FQDN.
+  namespace: ""
+
+  # Shared connection settings (used by all modes)
+  tls: false
+  # Skip server certificate/hostname verification on the TLS connection. Only has
+  # an effect when tls is true. This is the "SSL on, SSL_MODE none" combination —
+  # use it for dev ClickHouse serving a self-signed cert with no CA to distribute.
+  # It removes MITM protection, so keep it false in staging/production and trust
+  # the issuing CA instead (mount the bundle and point SSL_CERT_FILE at it).
+  tlsSkipVerify: false
+  username: "default"
+  password: "" # Set via secret or secrets.existingSecret key: clickhouse-password
+  database: "flexprice"
+  # Per-query memory limit applied via clickhouse-go client Settings.
+  # Bound by the underlying server's max_memory_usage. Default 90 GB matches
+  # the legacy hardcoded value documented in CLAUDE.md. Lower for shared
+  # clusters or tighter resource isolation.
+  maxMemoryUsageGB: 90
+
+  # ── external mode ────────────────────────────────────────────────────────────
+  # address: "my-clickhouse.example.com:9000"
+
+  # ── standalone mode ──────────────────────────────────────────────────────────
+  # Single-replica StatefulSet + ClusterIP Service. No operator needed.
+  # Service name: <fullname>-clickhouse  →  address: <fullname>-clickhouse:9000
+  standalone:
+    image:
+      repository: clickhouse/clickhouse-server
+      tag: "24.8-alpine"
+      pullPolicy: IfNotPresent
+    persistence:
+      size: 10Gi
+      storageClass: ""  # "" = cluster default (kind: "standard", EKS: set to "gp3", GKE: "pd-balanced")
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "2"
+    service:
+      httpPort: 8123
+      nativePort: 9000
+    nodeSelector: {}
+    tolerations: []
+    # The clickhouse-server process already runs as uid 101 (data dir is 101-owned);
+    # runAsUser: 101 matches existing ownership so no fsGroup chown is triggered on
+    # the data PVC. Clears the GKE RUN_AS_NONROOT + PRIVILEGE_ESCALATION findings.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 101
+      runAsGroup: 101
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+
+  # ── altinity mode ─────────────────────────────────────────────────────────────
+  # ClickHouseInstallation CRD. Operator creates service: chi-<fullname>-flexprice-0-0
+  altinity:
+    # >1 requires keeper.hosts (enforced: rendering fails without it) and
+    # Replicated*MergeTree tables.
+    replicasCount: 1
+    # Explicit layout overrides replicasCount; supply placement/security in its pod templates.
+    replicas: []
+    # Additional operator pod templates referenced by replicas[].templates.podTemplate.
+    additionalPodTemplates: []
+    schemaPolicy: {}
+    bootstrapServiceTemplates: []
+    bootstrapServiceTemplateName: ""
+    # Empty renders no zookeeper block. Keeper is not deployed by this chart:
+    # it needs its own storage class (N2 pools take PD, C4 pools take Hyperdisk)
+    # and must be running before the CHI references it.
+    keeper:
+      hosts: []
+      port: 2181
+    # Empty = chart adds a required hostname anti-affinity when replicas > 1.
+    affinity: {}
+    # Empty = chart supplies {fsGroup: 101, fsGroupChangePolicy: OnRootMismatch}
+    # when replicas > 1, without which a new replica cannot write its fresh PVC.
+    podSecurityContext: {}
+    image:
+      repository: altinity/clickhouse-server
+      tag: "24.8.14.10459.altinitystable"
+      pullPolicy: IfNotPresent
+    persistence:
+      size: 50Gi
+      storageClass: "gp3"
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1"
+      limits:
+        memory: "4Gi"
+        cpu: "2"
+    backgroundPoolSize: 8
+    asyncInsert:
+      enabled: true
+      busyTimeoutMs: 50
+      maxDataSize: 10485760   # 10 MiB
+      staleTimeoutMs: 1000
+    nodeSelector: {}
+    tolerations: []
+    # Same rationale as standalone: clickhouse-server already runs as uid 101 and
+    # the data dir is 101-owned, so runAsUser: 101 triggers no fsGroup chown on the
+    # PVC. Clears the GKE RUN_AS_NONROOT + PRIVILEGE_ESCALATION findings.
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 101
+      runAsGroup: 101
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+
+# Kafka Configuration
+# Deployment options (pick one):
+#   1. Bitnami subchart (default)  — kafka.enabled=true (top-level), kafka.external.enabled=false
+#   2. External managed service    — kafka.enabled=false (top-level), kafka.external.enabled=true
+#   3. Hand-rolled internal        — kafka.enabled=false (top-level), kafka.external.enabled=false (legacy)
+kafkaConfig:
+  external:
+    enabled: false  # Set true when pointing to an external/managed Kafka
+  # External Kafka configuration (when external.enabled=true)
+  brokers:
+    - "kafka-service:9092"  # Override when using external Kafka
+  consumerGroup: "flexprice-consumer"
+  topic: "events"
+  topicLazy: "events_lazy"
+  # Batched-ingest topic, read by the app as FLEXPRICE_KAFKA_TOPIC_BULK.
+  #
+  # Unlike topic/topicLazy this has no default in the Go config and is not
+  # `validate:"required"`, so leaving it unset passes startup validation and
+  # only fails later, when a batched publish targets the empty topic name.
+  #
+  # It is also created by the migration Job's topic step. Brokers with
+  # auto-creation disabled (the MSK default) will not create it on first
+  # publish, so an unset value there is a runtime failure rather than a
+  # first-use delay.
+  topicBulk: "events_bulk"
+  tls: false
+  # Broker CA for private/self-signed Kafka certificates. Leave name empty for
+  # brokers with publicly-trusted certs (MSK, Confluent Cloud) — the pods then
+  # verify against the OS trust store and no volume is mounted.
+  #
+  # The Secret must already exist; create it with an ExternalSecret (or sealed
+  # secret) so certificate material never lands in a values file. Its key must
+  # hold a PEM bundle. A JKS truststore must be converted first:
+  #   keytool -exportcert -alias <alias> -keystore truststore.jks -rfc -file ca.pem
+  #
+  # Setting `name` always mounts the Secret. On the legacy structured-env shape
+  # the chart also emits FLEXPRICE_KAFKA_TLS_CA_CERT_FILE pointing at the
+  # mounted path. On the MIGRATED generic-env shape (`.Values.env` set) the
+  # chart emits no kafkaConfig-derived env vars at all, so set it yourself:
+  #   env:
+  #     FLEXPRICE_KAFKA_TLS_CA_CERT_FILE: "/etc/flexprice/kafka-tls/ca.crt"
+  tlsCASecret:
+    name: ""                              # e.g. "flexprice-kafka-ca" (synced by ExternalSecret)
+    key: "ca.crt"                         # key inside the Secret holding the PEM bundle
+    mountPath: "/etc/flexprice/kafka-tls" # dir the key is mounted into
+  useSASL: false
+  saslMechanism: ""
+  saslUser: ""
+  saslPassword: "" # Required only when kafkaConfig.useSASL=true — set via secret
+  clientId: "flexprice-client"
+  routeTenantsOnLazyMode: []
+  # Internal Kafka configuration (when external.enabled=false)
+  internal:
+    replicas: 1
+    image:
+      repository: confluentinc/cp-kafka
+      tag: "7.7.1"
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""  # Use default storage class if empty
+    resources: {}
+    service:
+      type: ClusterIP
+      internalPort: 9092
+      externalPort: 29092
+    # Kafka KRaft mode configuration
+    clusterId: "ca497efe-9f82-4b84-890b-d9969a9a2e1c"
+    brokerId: 0
+
+    # Add these lines 👇
+    configOverrides:
+      # make this node both controller + broker and use localhost for the controller RPC
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "0"
+      KAFKA_LISTENERS: "INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://flexprice-kafka:9092,EXTERNAL://flexprice-kafka:29092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "0@flexprice-kafka:9093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_MIN_INSYNC_REPLICAS: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+
+
+# Migration Job Configuration
+# Set enabled=true to run database migrations as a Kubernetes Job
+migration:
+  enabled: true  # Set to true to enable migration job
+  seedKafkaACLs: false  # seed allow-all MSK ACLs (SCRAM/MSK only); opt-in, off by default
+
+  # Install the migration Job as a Helm pre-install/pre-upgrade HOOK (default),
+  # or as an ordinary chart resource.
+  #
+  # true  — ArgoCD and plain `helm install`. The Job runs before the app rolls
+  #         out and Helm owns its lifecycle.
+  #
+  # false — for delivery models where the Job is applied by something else, as
+  #         its own terraform unit ordered before the release. The hook's
+  #         delete-policy (hook-succeeded,hook-failed) removes the Job and its
+  #         logs the moment it fails, which is correct when a controller can
+  #         retry immediately and wrong when a human needs to read why it broke.
+  #         Set false ONLY when something else applies the Job; leaving both this
+  #         false and no external applier means migrations never run.
+  asHook: true
+  timeout: 300  # Timeout in seconds for migration
+
+  # 0 = do not retry a failed migration Job.
+  #
+  # A retry is only useful when the failure was transient. A migration that was
+  # KILLED part-way is the opposite: if it died during CREATE INDEX CONCURRENTLY
+  # the index is left INVALID, and `CREATE INDEX CONCURRENTLY IF NOT EXISTS`
+  # skips an invalid index -- so the retry would report success, record the
+  # migration as applied, and leave the index permanently broken.
+  #
+  # `migrate postgres up` now refuses to start while any invalid index exists, so
+  # a retry fails loudly rather than silently. 0 keeps it from burning the
+  # deadline on an attempt that cannot succeed.
+  backoffLimit: 0
+
+  # Hard kill for the whole Job. Kubernetes SIGKILLs the pod at this deadline;
+  # for a running CREATE INDEX CONCURRENTLY that means an aborted build and an
+  # INVALID index, because the migration and the thing watching it are the same
+  # process here (unlike the ECS path, where the workflow only watches a task
+  # that keeps running).
+  #
+  # 900s is sized for the current migrations, which are small. Before deploying a
+  # migration that builds an index on a large table, set this to null: the field
+  # is then omitted, nothing kills the Job, and Helm or ArgoCD giving up waiting
+  # no longer stops the index from finishing.
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 3600  # Time to keep completed job (1 hour)
+
+  # When the migration Job (and its pod, and therefore its LOGS) is deleted.
+  #
+  # before-hook-creation  the previous Job is removed just before the next one
+  #                       is created. A finished Job survives until
+  #                       ttlSecondsAfterFinished above, so the logs of a failed
+  #                       migration are still there when someone goes looking.
+  #                       This is the default and what you want on call.
+  #
+  # hook-succeeded,hook-failed
+  #                       the previous behaviour: delete the moment the Job ends,
+  #                       either way. Retries never collide with a stale Job, but
+  #                       a failed migration erases the only record of why.
+  #
+  # Either value prevents the stale-Job collision that stalled the
+  # northamerica-northeast2 bring-up; they differ only in when the deletion
+  # happens, and therefore in whether the logs outlive the failure.
+  hookDeletePolicy: before-hook-creation
+  command: ""  # Custom command to run (if empty, uses default migration steps)
+  # Apply a SINGLE ClickHouse baseline .sql via `migrate clickhouse --file`
+  # instead of scanning migrations/clickhouse/. Empty = scan the directory (the
+  # incremental, non-Replicated set). Set to a baseline path for a replicated
+  # cluster, e.g. migrations/baseline/clickhouse_baseline_replicated_20260819.sql
+  # — its tables use Replicated* engines + ON CLUSTER, which the directory set
+  # does not. Requires a migrate binary that supports --file (flexprice #2617).
+  clickhouseFile: ""
+
+  # Migration steps to run
+  #
+  # `dbmate` and `ent` are two implementations of the SAME step and are mutually
+  # exclusive — enabling both renders an error rather than running the schema
+  # through two mechanisms in one Job.
+  steps:
+    postgresSetup: true  # Create schema and extensions in PostgreSQL
+    clickhouse: true     # Run ClickHouse migrations
+    kafka: true          # Create Kafka topics (idempotent, safe to re-run)
+    # Apply the reviewed .sql files in migrations/versioned/postgres and record
+    # them in schema_migrations. This is the supported path: what ran is a fact
+    # in a table, the same files run on every region and every client, and a
+    # change is reviewed as SQL before it reaches a database.
+    dbmate: true
+    # Ent auto-migration — the previous mechanism. It diffs the live schema
+    # against the Go models at deploy time and applies whatever it infers, so
+    # what runs is never reviewed and never recorded. Kept in the image so
+    # rolling back is flipping these two flags, not rebuilding.
+    #
+    # An EXISTING database must be adopted once before dbmate runs against it
+    # (`make migrate-adopt`); the Job fails with instructions if it was not.
+    ent: false
+    seed: false          # Run seed data (optional, set to true to enable)
+    verify: true         # Fatally assert CH tables + kafka topics exist post-migration
+
+  # Pinned helper images used by the migration Job init containers. Override
+  # `registry` per image if your cluster only allows pulls from a private
+  # mirror (common in regulated AWS accounts). All three images are multi-arch.
+  images:
+    postgres:
+      registry: docker.io
+      repository: postgres
+      tag: "15.3-alpine"
+      pullPolicy: IfNotPresent
+    busybox:
+      registry: docker.io
+      repository: busybox
+      tag: "1.36"
+      pullPolicy: IfNotPresent
+    clickhouse:
+      registry: docker.io
+      repository: clickhouse/clickhouse-server
+      tag: "24.8-alpine"
+      pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+
+# Temporal Configuration
+# Deployment options (pick one):
+#   1. Official temporalio subchart (default) — temporal.enabled=true (top-level), temporal.external.enabled=false
+#   2. External managed / Temporal Cloud       — temporal.enabled=false (top-level), temporal.external.enabled=true
+#   3. Hand-rolled internal                   — temporal.enabled=false (top-level), temporal.external.enabled=false (legacy)
+temporalConfig:
+  enabled: true   # Set false to disable Temporal entirely (no worker, no workflows)
+  # Namespaces created on install/upgrade via a post-install Helm hook Job.
+  # Empty list disables the bootstrap job entirely (use this for Temporal Cloud
+  # where namespaces are provisioned out-of-band).
+  bootstrapNamespaces:
+    - name: default
+      retention: 72h
+      description: "Default Temporal namespace bootstrapped by FlexPrice Helm chart"
+  # Override the admin-tools image used by the bootstrap job. Pinned by default
+  # to keep installs reproducible; bump alongside the temporal subchart version.
+  bootstrapImage:
+    repository: temporalio/admin-tools
+    tag: "1.24.2-tctl-1.18.1-cli-0.13.2"
+    pullPolicy: IfNotPresent
+  bootstrapResources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  external:
+    enabled: false  # Set true when pointing to an external Temporal or Temporal Cloud
+  # External Temporal configuration (when external.enabled=true)
+  address: "temporal-service:7233"  # Override when using external Temporal
+  taskQueue: "billing-task-queue"
+  namespace: "default"
+  apiKey: "" # Required only when using Temporal Cloud — set via secret
+  apiKeyName: ""  # Optional: name of the API key for reference
+  tls: false  # Set to true if using TLS with external Temporal
+  # Internal Temporal configuration (when external.enabled=false)
+  internal:
+    server:
+      image:
+        repository: temporalio/auto-setup
+        tag: "1.26.2"
+        pullPolicy: IfNotPresent
+      resources:
+        limits:
+          cpu: "1000m"
+          memory: "1Gi"
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+      service:
+        type: ClusterIP
+        port: 7233
+      # Temporal uses the same PostgreSQL instance by default
+      # Set temporal.internal.postgres.useExternalPostgres=true to use separate PostgreSQL
+      postgres:
+        useExternalPostgres: false  # Set to true to use separate PostgreSQL instance
+        host: ""  # If empty and useExternalPostgres=false, uses the main postgres.internal service
+        port: 5432
+        user: "flexprice"  # If empty and useExternalPostgres=false, uses the main postgres user
+        password: ""  # If empty, uses the main postgres password from secrets
+        dbname: "temporal"
+    ui:
+      enabled: true  # Set to false to disable Temporal UI
+      image:
+        repository: temporalio/ui
+        tag: "2.31.2"
+        pullPolicy: IfNotPresent
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+      service:
+        type: ClusterIP
+        port: 8088
+
+# Logging configuration
+logging:
+  level: "info"    # "debug", "info", "warn", "error"
+  format: "json"   # "json" or "text"
+  environment: ""  # OTel resource deployment.environment (e.g. "staging-gcp", "production"); empty → unset
+  otel:            # OTLP LOG export
+    enabled: false
+    endpoint: ""           # e.g. "ingest.in2.signoz.cloud:443"
+    insecure: false        # set true for non-TLS endpoints
+    authHeader: ""         # e.g. "signoz-ingestion-key"
+    authValue: ""          # Set via secret in production
+
+# OpenTelemetry TRACES export (distinct from logging.otel, which is logs).
+# Traces drive the APM/RED metrics (request rate, error rate, latency) in SigNoz.
+# The traces auth value is read from the existingSecret key `logging-otel-auth-value`
+# (the shared SigNoz ingestion key — same one logging.otel uses above).
+otel:
+  enabled: false
+  serviceName: ""     # empty → app falls back to FLEXPRICE_DEPLOYMENT_MODE per component (api/consumer/temporal_worker)
+  traces:
+    enabled: false
+    endpoint: ""        # e.g. "ingest.in2.signoz.cloud:443"
+    authHeader: ""      # e.g. "signoz-ingestion-key"
+    sampleRate: ""      # empty → app default (1.0 = 100%); e.g. "0.2" to sample 20%
+
+# S3 configuration
+s3:
+  enabled: false
+  region: "ap-south-1"
+  invoice:
+    bucket: "flexprice-invoices"
+    presignExpiryDuration: "1h"
+    keyPrefix: ""
+
+# Redis Configuration
+# Deployment options (pick one):
+#   1. Bitnami subchart (default)  — redis.enabled=true (top-level), redis.external.enabled=false
+#   2. External managed service    — redis.enabled=false (top-level), redis.external.enabled=true
+#   3. Hand-rolled internal        — redis.enabled=false (top-level), redis.external.enabled=false (legacy)
+redisConfig:
+  external:
+    enabled: false  # Set true when pointing to an external/managed Redis
+  # External Redis configuration (when external.enabled=true)
+  host: "redis-service"
+  port: 6379
+  password: ""       # Set via secret if auth is enabled
+  db: 0
+  useTLS: false
+  timeout: "5s"
+  # Internal Redis configuration (when external.enabled=false and bitnami subchart disabled)
+  internal:
+    image:
+      repository: redis
+      tag: "7.2-alpine"
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+    resources: {}
+
+# Cache configuration
+cache:
+  enabled: false
+
+# Redis extended configuration (beyond host/port/db set above)
+redisExtended:
+  keyPrefix: ""         # e.g. "flexprice:prod" — namespaces all keys
+  # clusterMode preserves the pre-1.1 hardcoded client behaviour (always
+  # *redis.ClusterClient). Keep true for Redis Cluster / AWS ElastiCache
+  # cluster-mode-enabled. Flip to false for single-node Redis (bundled
+  # bitnami/redis chart, single-node ElastiCache, in-cluster redis).
+  clusterMode: true
+  poolSize: 10          # connection pool size
+
+# Event processing configuration
+# `enabled` gates whether the consumer subscribes to each topic. The Go struct
+# defaults are true, but viper ignores Go `default` tags on Unmarshal, so they
+# must be set here or the events→ClickHouse consumers never start.
+eventProcessing:
+  enabled: true
+  topic: "events"
+  rateLimit: 12
+  consumerGroup: "flexprice-consumer"
+  topicDLQ: "event_processing_dlq"
+
+eventProcessingLazy:
+  enabled: true
+  topic: "events_lazy"
+  rateLimit: 12
+  consumerGroup: "v1_event_processing_lazy"
+  topicDLQ: "event_processing_lazy_dlq"
+
+eventPostProcessing:
+  enabled: true
+  topic: "events_post_processing"
+  rateLimit: 12
+  consumerGroup: "v1_events_post_processing"
+  topicBackfill: "events_post_processing_backfill"
+  rateLimitBackfill: 1
+  consumerGroupBackfill: "v1_events_post_processing_backfill"
+
+featureUsageTracking:
+  enabled: true
+  topic: "events"
+  rateLimit: 1
+  consumerGroup: "v1_feature_tracking_service"
+  topicBackfill: "events_post_processing_backfill"
+  rateLimitBackfill: 1
+  consumerGroupBackfill: "v1_feature_tracking_service_backfill"
+  topicDLQ: "feature_tracking_service_dlq"
+
+featureUsageTrackingLazy:
+  enabled: true
+  topic: "events_lazy"
+  rateLimit: 1
+  consumerGroup: "v1_feature_tracking_service_lazy"
+  topicDLQ: "feature_tracking_service_lazy_dlq"
+
+# Onboarding event-generator (POST /v1/portal/onboarding/events).
+# The app's OnboardingEvents.Topic resolves to empty if this is not rendered
+# into the mounted config.yaml: viper ignores the Go `default` struct tag and
+# AutomaticEnv won't bind the nested onboarding_events.topic key. An empty
+# topic makes the publish fail with a broker "invalid topic" error (a 400).
+onboardingEvents:
+  enabled: true
+  topic: "onboarding_events"
+  rateLimit: 10
+  consumerGroup: "onboarding_events_consumer"
+  maxRetries: 3
+
+# Raw event consumption configuration
+rawEventConsumption:
+  enabled: false
+  topic: "raw_events"
+  outputTopic: "events"
+  consumerGroup: "raw_events_consumer"
+  rateLimit: 100
+
+# Consumer blocks below are off by default (a deployment opts in per-env). They are rendered
+# into the ConfigMap so they can actually be configured on GKE; defaults mirror config.yaml.
+eventProcessingReplay:
+  enabled: false
+  topic: "events_backfill"
+  rateLimit: 1
+  consumerGroup: "v1_event_processing_replay"
+
+featureUsageTrackingReplay:
+  enabled: false
+  topic: "events_backfill"
+  rateLimit: 1
+  consumerGroup: "v1_feature_tracking_service_replay"
+
+meterUsageTracking:
+  enabled: false
+  topic: "events"
+  rateLimit: 1
+  consumerGroup: "v1_meter_usage_tracking_service"
+  topicDLQ: "meter_usage_tracking_service_dlq"
+  redisDeduplicationEnabled: true
+  walletAlertPushEnabled: false
+
+meterUsageTrackingLazy:
+  enabled: false
+  topic: "events_lazy"
+  rateLimit: 1
+  consumerGroup: "v1_meter_usage_tracking_service_lazy"
+  topicDLQ: "meter_usage_tracking_service_lazy_dlq"
+
+costsheetUsageTracking:
+  enabled: false
+  topic: "events"
+  rateLimit: 1
+  consumerGroup: "v1_costsheet_usage_tracking_service"
+  topicDLQ: "costsheet_usage_tracking_service_dlq"
+
+costsheetUsageTrackingLazy:
+  enabled: false
+  topic: "events_lazy"
+  rateLimit: 1
+  consumerGroup: "v1_costsheet_usage_tracking_service_lazy"
+  topicDLQ: "costsheet_usage_tracking_service_lazy_dlq"
+
+usageBenchmark:
+  enabled: false
+  topic: "benchmarking"
+  rateLimit: 10
+  consumerGroup: "v1_usage_benchmark_service"
+
+# DynamoDB configuration
+dynamodb:
+  inUse: false
+  region: "us-east-1"
+  eventTableName: "events"
+
+# Event configuration
+event:
+  publishDestination: "kafka"
+
+# Webhook configuration
+webhook:
+  enabled: true
+  topic: "system_events"
+  pubsub: "memory"
+  consumerGroup: "system-events-consumer"
+  rateLimit: 5
+  maxRetries: 3
+  initialInterval: "1s"
+  maxInterval: "10s"
+  multiplier: 2.0
+  maxElapsedTime: "2m"
+  tenants: {}
+  svixConfig:
+    enabled: false
+    authToken: "" # Set via secret
+    baseUrl: "https://api.us.svix.com"
+
+# Integration events consumer — same system_events topic, independent consumer group.
+integrationEvents:
+  enabled: true
+  consumerGroup: "integration-events-consumer"
+  rateLimit: 10
+
+# ---------------------------------------------------------------------------
+# Secrets management
+# ---------------------------------------------------------------------------
+#
+# PRODUCTION — use one of these approaches (never commit real values here):
+#
+# ── Option A: AWS Secrets Manager + External Secrets Operator ────────────────
+# 1. Create a secret in AWS Secrets Manager with all keys as a JSON object:
+#
+#   aws secretsmanager create-secret \
+#     --name flexprice/prod \
+#     --region ap-south-1 \
+#     --secret-string '{
+#       "encryption-key":                "<openssl rand -hex 32>",
+#       "auth-secret":                   "<openssl rand -hex 32>",
+#       "postgres-password":             "<pg-password>",
+#       "clickhouse-password":           "<ch-password>",
+#       "kafka-sasl-password":           "<kafka-sasl-password>",
+#       "temporal-api-key":              "<temporal-cloud-api-key>",
+#       "supabase-service-key":          "<supabase-service-role-key>",
+#       "sentry-dsn":                    "<https://...@sentry.io/...>",
+#       "pyroscope-basic-auth-password": "<grafana-cloud-api-key>",
+#       "email-resend-api-key":          "<re_...>",
+#       "svix-auth-token":               "<sk_...>",
+#       "logging-otel-auth-value":       "<signoz-ingestion-key>"
+#     }'
+#
+# 2. Install External Secrets Operator (ESO) in the cluster:
+#   helm repo add external-secrets https://charts.external-secrets.io
+#   helm install external-secrets external-secrets/external-secrets -n external-secrets --create-namespace
+#
+# 3. Create an ExternalSecret that syncs to a Kubernetes Secret named "flexprice-secrets":
+#   apiVersion: external-secrets.io/v1beta1
+#   kind: ExternalSecret
+#   metadata:
+#     name: flexprice-secrets
+#   spec:
+#     refreshInterval: 1h
+#     secretStoreRef:
+#       name: aws-secretsmanager
+#       kind: ClusterSecretStore
+#     target:
+#       name: flexprice-secrets   # ← this name goes into secrets.existingSecret below
+#     dataFrom:
+#       - extract:
+#           key: flexprice/prod
+#
+# 4. Set in values.yaml (or values-prod.yaml):
+#   secrets:
+#     existingSecret: "flexprice-secrets"
+#
+# ── Option B: kubectl (simpler, no ESO required) ─────────────────────────────
+#   kubectl create secret generic flexprice-secrets \
+#     --from-literal=encryption-key=$(openssl rand -hex 32) \
+#     --from-literal=auth-secret=$(openssl rand -hex 32) \
+#     --from-literal=postgres-password=$PG_PASSWORD \
+#     --from-literal=clickhouse-password=$CH_PASSWORD \
+#     --from-literal=kafka-sasl-password=$KAFKA_PASSWORD \
+#     --from-literal=temporal-api-key=$TEMPORAL_API_KEY \
+#     --from-literal=supabase-service-key=$SUPABASE_KEY \
+#     --from-literal=sentry-dsn=$SENTRY_DSN \
+#     --from-literal=pyroscope-basic-auth-password=$PYROSCOPE_PASSWORD \
+#     --from-literal=email-resend-api-key=$RESEND_KEY \
+#     --from-literal=svix-auth-token=$SVIX_TOKEN \
+#     --from-literal=logging-otel-auth-value=$SIGNOZ_KEY
+#   helm install flexprice ./flexprice --set secrets.existingSecret=flexprice-secrets
+#
+# ── Required keys (chart will error if missing when the feature is enabled) ──
+#   encryption-key                 always required
+#   auth-secret                    always required
+#   postgres-password              always required
+#   clickhouse-password            always required
+#   kafka-sasl-password            required if kafkaConfig.useSASL=true
+#   temporal-api-key               required if using Temporal Cloud
+#   supabase-service-key           required if auth.provider=supabase
+#   sentry-dsn                     required if sentry.enabled=true
+#   pyroscope-basic-auth-password  required if pyroscope.basicAuthUser is set
+#   email-resend-api-key           required if email.enabled=true
+#   svix-auth-token                required if webhook.svixConfig.enabled=true
+#   logging-otel-auth-value        required if logging.otel.enabled=true OR otel.traces.enabled=true
+#   redis-password                 required if redisConfig.password is set
+#
+# ── Dev fallback ──────────────────────────────────────────────────────────────
+# Leave existingSecret empty — chart renders its own Secret from plaintext
+# values scattered in this file. NEVER use this in production.
+# ---------------------------------------------------------------------------
+secrets:
+  existingSecret: ""   # name of a pre-created Secret (production). Takes precedence over fields below.
+  encryptionKey: ""    # dev-only fallback. Generate with: openssl rand -hex 32
+
+# Billing configuration
+billing:
+  tenantId: ""
+  environmentId: ""
+
+# App URL configuration
+app:
+  customerPortalUrl: ""   # e.g. "https://admin.flexprice.io/customer-portal"
+  oauthRedirectUri: ""    # e.g. "https://admin.flexprice.io/tools/integrations/oauth/callback"
+
+  # Email configuration
+  email:
+    enabled: false
+    resendApiKey: "" # secret — bound via FLEXPRICE_EMAIL_RESEND_API_KEY (config.go BindEnv); not rendered in configmap
+    fromAddress: ""
+    replyTo: ""
+    calendarUrl: ""
+    zapierWebhookUrl: "" # plain value (user-signup automation) — rendered into config.yaml
+
+# Checkout flow base URL → rendered into config.yaml as checkout.base_url
+checkout:
+  baseUrl: ""   # e.g. "https://admin.flexprice.io"
+
+# Feature flag configuration
+featureFlag:
+  enableFeatureUsageForAnalytics: true
+  forceV1ForTenant: ""
+
+# Environment access configuration
+envAccess:
+  userEnvMapping: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels applied to every flexprice pod (api, consumer, worker, frontend).
+# Per-component additions go under `<component>.podLabels`.
+# Example — tag pods for an ELK ingest pipeline:
+#   podLabels:
+#     logging.company.io/index: flexprice
+podLabels: {}
+
+# ---------------------------------------------------------------------------
+# Node placement — nodeSelector, tolerations, affinity
+# ---------------------------------------------------------------------------
+# These apply globally to all pods (api, consumer, worker, migration).
+# On EKS, node groups expose labels you can use to pin workloads:
+#
+#   nodeSelector:
+#     eks.amazonaws.com/nodegroup: flexprice-app   # target a specific managed node group
+#     node.kubernetes.io/instance-type: t3.medium  # target an instance type
+#     kubernetes.io/arch: amd64
+#
+# If the node group has a taint (e.g. dedicated=flexprice:NoSchedule), add a matching toleration:
+#   tolerations:
+#     - key: dedicated
+#       operator: Equal
+#       value: flexprice
+#       effect: NoSchedule
+#
+# For HA: spread pods across AZs using topology spread constraints via affinity:
+#   affinity:
+#     podAntiAffinity:
+#       preferredDuringSchedulingIgnoredDuringExecution:
+#         - weight: 100
+#           podAffinityTerm:
+#             labelSelector:
+#               matchLabels:
+#                 app.kubernetes.io/name: flexprice
+#             topologyKey: topology.kubernetes.io/zone
+#
+# Per-component overrides (api/consumer/worker each accept the same three keys):
+#   api:
+#     nodeSelector:
+#       eks.amazonaws.com/nodegroup: flexprice-api
+#   consumer:
+#     nodeSelector:
+#       eks.amazonaws.com/nodegroup: flexprice-consumer
+#   worker:
+#     nodeSelector:
+#       eks.amazonaws.com/nodegroup: flexprice-worker
+# ---------------------------------------------------------------------------
+
+# Global defaults — used when per-component overrides are not set
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Topology spread constraints — ON by default with ScheduleAnyway so they
+# are a no-op on single-AZ clusters (kind, single-node) and free multi-AZ
+# HA on real EKS/GKE/AKS deployments. Override per-component via
+# `<component>.topologySpreadConstraints`. Use `whenUnsatisfiable: DoNotSchedule`
+# for strict HA where you'd rather pods stay Pending than land in one AZ.
+#
+# labelSelector is left EMPTY on purpose: the deployment templates inject
+# `app.kubernetes.io/name` (honouring nameOverride) plus the per-component key
+# when a constraint carries no selector of its own. Hardcoding
+# `app.kubernetes.io/name: flexprice` here matched nothing as soon as an
+# operator set nameOverride, and because whenUnsatisfiable is ScheduleAnyway
+# that failed SILENTLY — every replica could land in one AZ with no signal.
+# Set labelSelector explicitly only if you want to spread against a different
+# set of pods than the component being rendered.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+
+# Liveness probe
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Startup probe
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+# Additional environment variables injected into all pods (api, consumer, worker).
+# Supports plain values and valueFrom (secretKeyRef, configMapKeyRef, fieldRef).
+# Example:
+#   extraEnv:
+#     - name: CUSTOM_VAR
+#       value: "custom-value"
+#     - name: SECRET_VAR
+#       valueFrom:
+#         secretKeyRef:
+#           name: my-secret
+#           key: my-key
+#     - name: CONFIGMAP_VAR
+#       valueFrom:
+#         configMapKeyRef:
+#           name: my-configmap
+#           key: my-key
+extraEnv: []
+
+# Additional volumes
+extraVolumes: []
+# - name: extra-volume
+#   configMap:
+#     name: extra-config
+
+# Additional volume mounts
+extraVolumeMounts: []
+# - name: extra-volume
+#   mountPath: /extra
+
+# Labels applied to every Kubernetes object the chart renders.
+# Per-component additions go under `<component>.labels`.
+# Never lands on spec.selector.matchLabels — those are immutable on
+# Deployments, so changing this value stays upgrade-safe.
+labels: {}
+
+# ---------------------------------------------------------------------------
+# Subchart conditions
+# These top-level keys enable/disable Bitnami and official subcharts.
+# They correspond to the `condition:` fields in Chart.yaml dependencies.
+#
+# DEFAULTS: ALL stateful subcharts (postgresql, kafka, redis, temporal) are OFF.
+# Production deployments must point to externally managed services via the
+# `postgres.external`, `kafkaConfig.external`, `redisConfig.external`, and
+# `temporalConfig.external` blocks above — or via Temporal Cloud.
+#
+# For local dev / demos, layer values-local.yaml on top:
+#   helm install flexprice ./flexprice -f ../values-local.yaml
+# It flips these flags to true with dev-safe credentials and small persistence.
+#
+# Running these stateful workloads in-cluster is acceptable for kicking the
+# tires, NOT for production — no backups, no HA, no upgrade story.
+# ---------------------------------------------------------------------------
+
+# bitnami/postgresql subchart
+# When enabled, the hand-rolled infra/postgres.yaml is NOT rendered.
+# Configure postgres credentials above under the `postgres:` key.
+#
+# Data protection wiring: when dataProtection.retainStorage=true (default),
+# set `primary.persistence.storageClass` to the chart's Retain class (default
+# name: "<release>-retain") and keep the PVC retention policy below set to
+# Retain. The chart README "Data protection" section walks through this.
+postgresql:
+  enabled: false
+  auth:
+    username: flexprice
+    password: ""  # Required only when postgresql.enabled=true — override via -f
+    database: flexprice
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      # Set this to "<release>-retain" (or whatever dataProtection.storageClass.name
+      # resolves to) to inherit the chart's Retain reclaim policy. Leave empty
+      # to use the cluster default StorageClass (data may be deleted on PV release).
+      storageClass: ""
+      # Add helm.sh/resource-policy: keep so `helm uninstall` does not delete the
+      # PVC. Removed only via explicit `kubectl delete pvc`. Disable by setting
+      # dataProtection.retainStorage=false at the top level AND clearing this.
+      annotations:
+        helm.sh/resource-policy: keep
+    # Keep the PVC alive across StatefulSet scale-down and StatefulSet deletion.
+    # Combined with the StorageClass `reclaimPolicy: Retain` above, this means
+    # data survives both `kubectl delete statefulset` and `helm uninstall`.
+    persistentVolumeClaimRetentionPolicy:
+      enabled: true
+      whenScaled: Retain
+      whenDeleted: Retain
+
+# bitnami/kafka subchart (KRaft mode, no Zookeeper)
+# When enabled, the hand-rolled infra/kafka.yaml is NOT rendered.
+#
+# Data protection wiring: Kafka KRaft has two stateful pools — `controller`
+# and `broker`. Both PVCs must point at the Retain StorageClass (default name:
+# "<release>-retain") and carry the keep annotation. See chart README
+# "Data protection" section.
+kafka:
+  enabled: false
+  kraft:
+    enabled: true
+  replicaCount: 1
+  # Auto-create topics disabled — migration job handles topic creation
+  autoCreateTopicsEnable: false
+  controller:
+    persistence:
+      enabled: true
+      size: 20Gi
+      # Set to "<release>-retain" (or dataProtection.storageClass.name) to
+      # inherit Retain reclaim policy. Empty = cluster default.
+      storageClass: ""
+      annotations:
+        helm.sh/resource-policy: keep
+    persistentVolumeClaimRetentionPolicy:
+      enabled: true
+      whenScaled: Retain
+      whenDeleted: Retain
+  broker:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+      annotations:
+        helm.sh/resource-policy: keep
+    persistentVolumeClaimRetentionPolicy:
+      enabled: true
+      whenScaled: Retain
+      whenDeleted: Retain
+
+# bitnami/redis subchart
+# When enabled, the hand-rolled infra/redis.yaml is NOT rendered.
+# sentinel.enabled=false → standalone mode (no HA); set to true for HA sentinel setup.
+#
+# Data protection wiring: set master.persistence.storageClass to the chart's
+# Retain class (default "<release>-retain") and keep the retention policy below.
+# When architecture=replication, mirror the same settings under `replica`.
+redis:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: false  # Set to true and provide password if auth is required
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+      # Set to "<release>-retain" (or dataProtection.storageClass.name) to
+      # inherit Retain reclaim policy. Empty = cluster default.
+      storageClass: ""
+      annotations:
+        helm.sh/resource-policy: keep
+    persistentVolumeClaimRetentionPolicy:
+      enabled: true
+      whenScaled: Retain
+      whenDeleted: Retain
+
+# temporalio/temporal subchart
+# When enabled, the hand-rolled infra/temporal.yaml is NOT rendered.
+# Temporal shares the same Postgres instance as FlexPrice (different DB: "temporal").
+# The connection is passed via server.config.persistence below.
+temporal:
+  enabled: false
+  server:
+    replicaCount: 1
+    config:
+      persistence:
+        default:
+          driver: sql
+          sql:
+            driver: postgres12
+            # IMPORTANT: This must be the Kubernetes service name for PostgreSQL.
+            # When using the bitnami/postgresql subchart with release name "flexprice",
+            # this is "flexprice-postgresql". Update if your release name differs or
+            # if using external postgres (set to postgres.host value).
+            host: "flexprice-postgresql"
+            port: 5432
+            database: temporal
+            user: "flexprice"
+            password: ""  # Required only when temporal.enabled=true — override via -f
+            maxConns: 20
+            maxConnLifetime: "1h"
+        visibility:
+          driver: sql
+          sql:
+            driver: postgres12
+            host: "flexprice-postgresql"
+            port: 5432
+            database: temporal_visibility
+            user: "flexprice"
+            password: ""  # Required only when temporal.enabled=true — override via -f
+            maxConns: 20
+            maxConnLifetime: "1h"
+  cassandra:
+    enabled: false
+  mysql:
+    enabled: false
+  postgresql:
+    enabled: false   # Temporal chart's own postgres — disabled, we share the bitnami subchart
+  schema:
+    setup:
+      enabled: true
+    update:
+      enabled: true
+  admintools:
+    enabled: true  # needed for schema setup jobs
+
+
+# ---------------------------------------------------------------------------
+# High Availability (HA) overrides
+# ---------------------------------------------------------------------------
+# HA is OFF by default. To enable HA for production, copy these overrides
+# into your own values-prod.yaml and apply with:
+#   helm upgrade flexprice . -f values.yaml -f values-prod.yaml
+#
+# What each setting does:
+#   api.replicaCount / consumer.replicaCount / worker.replicaCount
+#     → run multiple pods; api PDB ensures at least 1 is always available
+#
+#   postgresql.primary.replicaCount + readReplicas.replicaCount
+#     → bitnami postgres primary + read replica(s)
+#
+#   kafka.replicaCount + controller.replicaCount
+#     → multi-broker KRaft Kafka; requires replication factors to be bumped too
+#
+#   redis.architecture: replication  (vs standalone)
+#     → Redis primary + replica; use sentinel for automatic failover
+#
+#   temporal.server.replicaCount
+#     → multiple Temporal frontend/history/matching/worker pods
+#
+# Example HA values (paste into values-prod.yaml):
+#
+# api:
+#   replicaCount: 3
+#   autoscaling:
+#     enabled: true
+#     minReplicas: 3
+#     maxReplicas: 10
+#
+# consumer:
+#   replicaCount: 3
+#
+# worker:
+#   replicaCount: 2
+#
+# postgresql:
+#   primary:
+#     replicaCount: 1
+#   readReplicas:
+#     replicaCount: 1
+#
+# kafka:
+#   replicaCount: 3
+#   controller:
+#     replicaCount: 3
+#
+# redis:
+#   architecture: replication
+#   sentinel:
+#     enabled: true
+#
+# temporal:
+#   server:
+#     replicaCount: 2

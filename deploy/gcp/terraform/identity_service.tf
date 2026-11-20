@@ -5,7 +5,7 @@
 resource "google_service_account" "identity" {
   project      = var.project_id
   account_id   = "identity-verification-sa"
-  display_name = "AI Fleet identity verification"
+  display_name = "Software Factory identity verification"
 }
 
 resource "google_project_iam_member" "identity_datastore" {

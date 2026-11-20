@@ -222,7 +222,7 @@ test('stage and broker constraints replace the blanket coding fallback', () => {
 
 test('built-in bootstrap seals one registry shared by compatibility views', () => {
   const runtimes = require('./index');
-  const catalog = require('@ai-fleet/shared-core/agent/harness-catalog.json');
+  const catalog = require('@software-factory/shared-core/agent/harness-catalog.json');
   const available = catalog.harnesses.filter((entry) => entry.availability === 'available');
   const expectedIds = available.map((entry) => entry.id);
 

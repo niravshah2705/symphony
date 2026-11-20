@@ -15,7 +15,7 @@
 1. Install [ModHeader](https://modheader.com/) browser extension
 2. Click extension icon → **Create New Rule**
 3. Fill in:
-   - **Profile Name**: `API Fleet Docs` (or any name)
+   - **Profile Name**: `Software Factory API Docs` (or any name)
    - **Request headers → Add**:
      - **Name**: `x-ai-fleet-api-docs`
      - **Value**: `enabled`

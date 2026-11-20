@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createPipelineStart } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { createPipelineStart } = require('@software-factory/shared-core/pipeline/contracts');
 const { SnapshotPreflight } = require('./preflight');
 
 const clock = () => '2026-08-13T00:00:00.000Z';

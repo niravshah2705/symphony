@@ -16,7 +16,7 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
 
-const { EGRESS_ROUTES, EGRESS_SECRET_KEYS } = require('@ai-fleet/shared-core/egress');
+const { EGRESS_ROUTES, EGRESS_SECRET_KEYS } = require('@software-factory/shared-core/egress');
 const { normalizeTrustedUpstream } = require('../../services/proxy/src/credentials');
 
 const cloudRun = read('deploy', 'gcp', 'terraform', 'cloud_run.tf');

@@ -10,7 +10,7 @@ const fs = require('node:fs');
 // read config. The real data/store.json holds live secrets and must never be
 // touched by tests.
 const TMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-patch-test-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DATA;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DATA;
 
 const {
   sanitizeSettingsPatch,

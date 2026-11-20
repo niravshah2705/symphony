@@ -2,7 +2,7 @@
 #
 # Gateway service image (PUBLIC Cloud Run service, API-only).
 #
-# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared-core:
+# Build from the MONOREPO ROOT so npm workspaces can resolve @software-factory/shared-core:
 #   docker build -f deploy/gcp/Dockerfile.gateway -t <tag> .
 #
 # Base image is pinned by DIGEST (not just a mutable tag) per the
@@ -21,7 +21,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # The gateway is deliberately agent-free. Copy only its workspace and
-# @ai-fleet/shared-core so npm never sees or installs @ai-fleet/shared,
+# @software-factory/shared-core so npm never sees or installs @software-factory/shared,
 # LangChain, DeepAgent, or native agent SDK packages.
 COPY package.json package-lock.json ./
 COPY packages/shared-core/ ./packages/shared-core/
@@ -33,8 +33,8 @@ COPY go/harness/runtime-images.csv ./go/harness/runtime-images.csv
 # Reproducible production-only install, explicitly scoped even though only the
 # two permitted workspaces are present in this build context layer.
 RUN npm ci --omit=dev \
-      --workspace=@ai-fleet/shared-core \
-      --workspace=@ai-fleet/gateway \
+      --workspace=@software-factory/shared-core \
+      --workspace=@software-factory/gateway \
       --include-workspace-root=false \
     && npm cache clean --force
 
@@ -45,9 +45,9 @@ FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 
 # NODE_ENV=production selects the cloud config profile; state + logs go to /tmp
-# (Firestore is the real state backend — AI_FLEET_DATA_DIR only holds log files).
+# (Firestore is the real state backend — SOFTWARE_FACTORY_DATA_DIR only holds log files).
 ENV NODE_ENV=production \
-    AI_FLEET_DATA_DIR=/tmp
+    SOFTWARE_FACTORY_DATA_DIR=/tmp
 
 # Copy the installed workspace (node_modules + sources) from the builder.
 # NOTE: public/ is intentionally NEVER copied — the SPA ships to a GCS bucket

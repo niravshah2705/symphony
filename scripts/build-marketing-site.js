@@ -25,6 +25,11 @@ const CANONICAL_ORIGIN = 'https://www.archagentix.com';
 const PLATFORM_ORIGIN = 'https://platform.archagentix.com';
 const ADLC_DIR = 'adlc';
 const COMPANY_PAGES = ['pricing', 'about', 'careers', 'newsroom', 'contact'];
+// Static legal documents, generated into public/ by scripts/build-legal-pages.js.
+// They are promoted like any other page so a crawler that runs no JavaScript reads
+// the full policy from the www origin instead of an SPA shell.
+const LEGAL_PAGE_SLUGS = ['terms', 'privacy', 'refund-policy', 'shipping-policy'];
+const PUBLISHED_PAGES = [...COMPANY_PAGES, ...LEGAL_PAGE_SLUGS];
 const DISCOVERY_FILES = ['robots.txt', 'llms.txt', 'llms-full.txt'];
 
 // Specific rewrites first; the generic path promotion last.
@@ -183,7 +188,7 @@ function buildMarketingSite(options) {
   var adlcDir = path.join(srcDir, ADLC_DIR);
   var promoted = walkFiles(adlcDir);
   for (var i = 0; i < promoted.length; i += 1) copyFile(adlcDir, outDir, promoted[i]);
-  for (i = 0; i < COMPANY_PAGES.length; i += 1) copyFile(srcDir, outDir, COMPANY_PAGES[i] + '/index.html');
+  for (i = 0; i < PUBLISHED_PAGES.length; i += 1) copyFile(srcDir, outDir, PUBLISHED_PAGES[i] + '/index.html');
   for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i]);
   fs.writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemap(srcDir));
 
@@ -271,6 +276,8 @@ module.exports = {
   walkFiles: walkFiles,
   REWRITES: REWRITES,
   COMPANY_PAGES: COMPANY_PAGES,
+  LEGAL_PAGE_SLUGS: LEGAL_PAGE_SLUGS,
+  PUBLISHED_PAGES: PUBLISHED_PAGES,
   DISCOVERY_FILES: DISCOVERY_FILES,
   CANONICAL_ORIGIN: CANONICAL_ORIGIN,
   PLATFORM_ORIGIN: PLATFORM_ORIGIN,

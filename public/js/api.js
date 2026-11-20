@@ -23,7 +23,7 @@ function contextId(value) {
   return id && id.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
 }
 
-/** Set the validated native AI Fleet org/project context applied to API calls. */
+/** Set the validated native Software Factory org/project context applied to API calls. */
 export function setRequestContext(value) {
   requestContext = Object.freeze({
     organizationId: contextId(value && value.organizationId),
@@ -128,7 +128,7 @@ export function uploadToSignedUrl(url, file, { onProgress } = {}) {
 }
 
 function notifyAuthenticationRequired(error) {
-  window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
+  window.dispatchEvent(new CustomEvent('software-factory:auth-required', {
     detail: { message: error?.message || 'Authentication required' },
   }));
 }

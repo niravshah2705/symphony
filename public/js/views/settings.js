@@ -166,7 +166,7 @@ async function renderScopedPolicySettings(view) {
 
 /* ===================== Redesign: shell & scope ===================== */
 
-// Derive Settings Policy authority from the selected native AI Fleet context.
+// Derive Settings Policy authority from the selected native Software Factory context.
 // The Firebase/gateway identity can only carry one legacy org role, so it is not
 // authoritative when the user switches organizations. Personal/tracker projects
 // are intentionally excluded from this scope ladder.
@@ -332,7 +332,7 @@ function scopeLadder(scopeState, identity, rerender) {
       id: 'project',
       name: projectName,
       meta: !identity.defaultProjectId
-        ? 'No AI Fleet project selected'
+        ? 'No Software Factory project selected'
         : identity.isOrgAdmin || identity.isProjectAdmin ? 'Narrows the org list' : 'View only · project admins edit',
       enabled: Boolean(identity.defaultProjectId),
     },

@@ -23,7 +23,7 @@
 
 const fs = require('fs');
 const { MEMORY_SCOPES } = require('../memory');
-const { workspaceOrganizationKey } = require('@ai-fleet/shared-core/store/workspace-context');
+const { workspaceOrganizationKey } = require('@software-factory/shared-core/store/workspace-context');
 
 const DEFAULT_SCAN_CAP = 200;
 const DEFAULT_POOL_SIZE = 2;

@@ -2,7 +2,7 @@
 
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('../swagger.json');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 
 // Production mode requires this header to access API docs.
 // In dev/local (MESSAGING_MODE !== 'pubsub'), docs are always available.
@@ -84,7 +84,7 @@ function createSwaggerUISetup() {
       ],
     },
     customCss: `.swagger-ui .topbar { display: none }`,
-    customSiteTitle: 'AI Fleet Gateway API Docs',
+    customSiteTitle: 'Software Factory Gateway API Docs',
   });
 }
 

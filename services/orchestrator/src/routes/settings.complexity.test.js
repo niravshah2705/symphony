@@ -4,13 +4,13 @@
 const os = require('node:os');
 const path = require('node:path');
 const fs = require('node:fs');
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'aifleet-gw-'));
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'aifleet-gw-'));
 process.env.STORE_BACKEND = 'file';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const store = require('@ai-fleet/shared/store');
+const store = require('@software-factory/shared/store');
 
 function routeHandler(router, method, path) {
   const layer = router.stack.find((candidate) =>
@@ -80,7 +80,7 @@ test('planner PUT /complexity applies a tier to every task role and records hist
   assert.equal(record.perRolePicks.deployment.provider, 'claude');
   assert.equal(record.perRolePicks.deployment.model, 'claude-sonnet-5');
   assert.ok(typeof record.estMonthlyCostUsd === 'number', 'priced tier carries a numeric estimate');
-  const sonnet = require('@ai-fleet/shared/agent/model-presets')
+  const sonnet = require('@software-factory/shared/agent/model-presets')
     .publicCatalog().presets.find((preset) => preset.id === 'claude-sonnet-5');
   const perRole = 20 * sonnet.cost.inputPer1M + 4 * sonnet.cost.outputPer1M;
   assert.equal(record.estMonthlyCostUsd, Math.round(4 * perRole * 100) / 100,
@@ -100,7 +100,7 @@ test('PUT /complexity rejects an unknown tier without writing history', async (t
 
 test('GET settings reports the stored tier only while it still matches (else custom)', async (t) => {
   // Seed a store that exactly matches the balanced tier, then diverge one role.
-  const { settingsPatchForTier } = require('@ai-fleet/shared/agent/model-presets');
+  const { settingsPatchForTier } = require('@software-factory/shared/agent/model-presets');
   const balanced = settingsPatchForTier('balanced');
   const { router } = withRouter(t, { ...balanced, complexityTier: 'balanced' });
   const getHandler = routeHandler(router, 'get', '/');

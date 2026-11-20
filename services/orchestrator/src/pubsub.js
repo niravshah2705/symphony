@@ -1,19 +1,19 @@
 'use strict';
 
 const express = require('express');
-const { decodePushMessage } = require('@ai-fleet/shared/messaging/publisher');
-const { publishEvent, normalizeEventContext } = require('@ai-fleet/shared/messaging/events');
-const { pushAuth } = require('@ai-fleet/shared/messaging/oidc');
-const log = require('@ai-fleet/shared/logger');
-const scheduler = require('@ai-fleet/shared/agent/scheduler');
-const { CONFIG, normalizeLlmGatewayMode } = require('@ai-fleet/shared/config');
-const { cleanTraceparent } = require('@ai-fleet/shared/traceparent');
-const store = require('@ai-fleet/shared/store');
+const { decodePushMessage } = require('@software-factory/shared/messaging/publisher');
+const { publishEvent, normalizeEventContext } = require('@software-factory/shared/messaging/events');
+const { pushAuth } = require('@software-factory/shared/messaging/oidc');
+const log = require('@software-factory/shared/logger');
+const scheduler = require('@software-factory/shared/agent/scheduler');
+const { CONFIG, normalizeLlmGatewayMode } = require('@software-factory/shared/config');
+const { cleanTraceparent } = require('@software-factory/shared/traceparent');
+const store = require('@software-factory/shared/store');
 const {
   normalizeWorkspaceContext,
   runWithWorkspaceContext,
   currentWorkspaceContext,
-} = require('@ai-fleet/shared/store/workspace-context');
+} = require('@software-factory/shared/store/workspace-context');
 
 /**
  * Planner Pub/Sub push surface:

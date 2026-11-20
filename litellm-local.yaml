@@ -1,0 +1,62 @@
+# Local kind (flexprice-local) variant of litellm.yaml — same model list, but
+# DB/redis point at the flexprice namespace and credentials come from local secrets.
+image:
+  tag: lts
+  pullPolicy: IfNotPresent
+
+db:
+  useExisting: true
+  deployStandalone: false
+  endpoint: flexprice-postgresql.flexprice.svc.cluster.local
+  database: litellm
+  secret:
+    name: litellm-postgres
+    usernameKey: username
+    passwordKey: password
+
+redis:
+  enabled: false
+
+envVars:
+  REDIS_HOST: flexprice-redis-master.flexprice.svc.cluster.local
+  REDIS_PORT: "6379"
+  OPENROUTER_API_KEY: sk-or-local-placeholder  # dummy; real key only needed for live OpenRouter calls
+  PYTHONPATH: /callbacks
+  FLEXPRICE_API_URL: http://flexprice-api.flexprice.svc.cluster.local
+  FLEXPRICE_API_KEY: b622f8279bf1a1eef16bb57615672d57474d51b5c9a9a0c1  # local dev operator key — never commit for prod
+  FLEXPRICE_ENVIRONMENT_ID: "00000000-0000-0000-0000-000000000000"
+
+volumes:
+  - name: callbacks
+    configMap:
+      name: litellm-callback
+
+volumeMounts:
+  - name: callbacks
+    mountPath: /callbacks
+    readOnly: true
+
+replicaCount: 1
+autoscaling:
+  enabled: false
+
+proxy_config:
+  model_list:
+    - model_name: claude-sonnet-4
+      litellm_params:
+        model: openrouter/anthropic/claude-sonnet-4
+        api_key: os.environ/OPENROUTER_API_KEY
+    - model_name: "openrouter/*"
+      litellm_params:
+        model: "openrouter/*"
+        api_key: os.environ/OPENROUTER_API_KEY
+    - model_name: mock-gpt
+      litellm_params:
+        model: openai/mock-gpt
+        api_base: http://llm-mock:8000/v1
+        api_key: mock-key
+  litellm_settings:
+    drop_params: true
+    callbacks: flexprice_callback.flexprice_logger
+  general_settings:
+    master_key: os.environ/PROXY_MASTER_KEY

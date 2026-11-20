@@ -311,7 +311,46 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/shared-core/src/agent/registry deploy/kagent
           git commit -m "chore(kagent): record published skill artifact digests [skip ci]"
-          git push
+          # Any other PR merged while this publish ran moves the branch under
+          # this checkout, and a plain push from a stale base is a
+          # non-fast-forward: the artifact is already in the registry, the tag
+          # has already moved, and the digest that proves it is recorded
+          # nowhere. Re-derive the commit onto the new tip and retry.
+          BASE_SHA="$(git rev-parse HEAD^)"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
+              echo "Stamped the digests on attempt ${attempt}." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            # A row that moved under this run means this digest describes bytes
+            # the current manifest no longer names. Recording it would pin the
+            # wrong row, so it asks for a re-run instead.
+            if ! git diff --quiet "${BASE_SHA}" "origin/${GITHUB_REF_NAME}" -- "${MANIFEST}"; then
+              echo "${MANIFEST} moved while this run published: re-run with \`rebuild: all\`." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            # The stamp commit is derived output, so it is re-derived rather
+            # than replayed: two publishes of the same skill rebase-conflict on
+            # the same generated lines, and whichever one resolves it by hand
+            # decides which digest main names — while both runs' bytes are
+            # sitting in the registry under the moving tag. Reset onto the new
+            # tip and run the same two commands against the artifacts this run
+            # built, so the newer publish wins and every other row keeps what
+            # landed. Never --force: only this run's digest lines move.
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            node scripts/stamp-plugin-digest.js --refs-dir oci-refs
+            node scripts/gen-kagent-manifests.js
+            if git diff --quiet -- packages/shared-core/src/agent/registry deploy/kagent; then
+              echo "Another run already recorded these digests." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            git add packages/shared-core/src/agent/registry deploy/kagent
+            git commit -m "chore(kagent): record published skill artifact digests [skip ci]"
+            sleep "${attempt}"
+          done
+          echo "Lost the push race 5 times: the artifacts are published and unstamped." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       # Tag every pack with its AgentCard types and mirror the stamped
       # catalog into the Firestore `plugins` collection (idempotent across

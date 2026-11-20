@@ -1,0 +1,65 @@
+image:
+  tag: lts
+database:
+  writer:
+    host: postgres.internal.example.com
+    dbname: litellm
+redis:
+  host: redis.internal.example.com
+  ssl: true
+  sslCertReqs: required
+  passwordSecret:
+    name: litellm-redis
+gateway:
+  envSecrets: [litellm-env]
+  extraEnv:
+    - name: STORE_MODEL_IN_DB
+      value: "True"
+backend:
+  envSecrets: [litellm-env]
+  extraEnv:
+    - name: STORE_MODEL_IN_DB
+      value: "True"
+# Inject OPENROUTER_API_KEY and LITELLM_MASTER_KEY from the Kubernetes Secret
+envVarsFrom:
+  - secretRef:
+      name: litellm-secrets
+
+proxy_config:
+  model_list:
+    # Option A: Explicit model aliases (cleanest for kagent ModelConfig)
+    - model_name: claude-sonnet-4
+      litellm_params:
+        model: openrouter/anthropic/claude-sonnet-4
+        api_key: os.environ/OPENROUTER_API_KEY
+        # Optional: OpenRouter app attribution headers
+        extra_headers:
+          HTTP-Referer: "https://substrate.archagentix.com"
+          X-Title: "Archagentix Agent Substrate"
+
+    - model_name: gpt-5-codex
+      litellm_params:
+        model: openrouter/openai/gpt-5-codex
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    # Option B: Wildcard passthrough for any OpenRouter model
+    - model_name: "openrouter/*"
+      litellm_params:
+        model: "openrouter/*"
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: deepseekv4
+      litellm_params:
+        model: deepseekv4.1-flash-1017
+        api_key: os.environ/OPENROUTER_API_KEY
+
+  litellm_settings:
+    # Drop unsupported OpenAI parameters automatically when routing to non-OpenAI providers
+    drop_params: true
+    # Optional: enable OTEL tracing callbacks
+    callbacks: ["otel"]
+
+  general_settings:
+    master_key: os.environ/LITELLM_MASTER_KEY
+    dangerously_permit_weak_or_unset_master_key: true
+

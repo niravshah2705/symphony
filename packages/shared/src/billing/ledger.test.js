@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 
 // Isolate the JSON store + set deterministic billing config BEFORE config/store load.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-ledger-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.INITIAL_CREDIT_INR = '500';
 
 const store = require('../store');

@@ -4,7 +4,7 @@ const out = require('../output');
 const { follow } = require('../stream');
 
 const summary = 'End-to-end: business → plan → issues → coder → PR';
-const usage = `adlc run — drive the whole AI Fleet life cycle for one business/project
+const usage = `adlc run — drive the whole Software Factory life cycle for one business/project
 
 Steps: ensure a business + Linear project → ensure a role → enqueue planning and
 wait for issues → start the coder board monitor → report.

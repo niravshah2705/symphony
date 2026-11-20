@@ -10,7 +10,7 @@ const path = require('node:path');
 // whole contract is about what a ROW looks like after two writers and a retry,
 // and a mocked store would prove the mock.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-outbox-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
 const store = require('../store');

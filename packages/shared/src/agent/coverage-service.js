@@ -16,8 +16,8 @@
  * "recall scored this alone".
  */
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const { currentWorkspaceContext } = require('@ai-fleet/shared-core/store/workspace-context');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const { currentWorkspaceContext } = require('@software-factory/shared-core/store/workspace-context');
 
 const {
   mergeBank,
@@ -84,7 +84,7 @@ async function embedQuestions(questions, deps) {
   const texts = questions.map((question) => String(question.question).slice(0, MAX_TEXT_EMBED_CHARS));
   try {
     const embed = deps.embed || (async (values) => {
-      const { embedTexts } = require('@ai-fleet/shared-core/attachments/embed');
+      const { embedTexts } = require('@software-factory/shared-core/attachments/embed');
       return embedTexts(values, { workspaceContext: currentWorkspaceContext() });
     });
     const vectors = await embed(texts);
@@ -181,7 +181,7 @@ async function computeCoverage(options = {}) {
 
   let questions = Array.isArray(options.questions) ? options.questions : null;
   if (!questions) {
-    const store = deps.store || require('@ai-fleet/shared-core/store');
+    const store = deps.store || require('@software-factory/shared-core/store');
     questions = mergeBank(store.listGlobalQuestions ? store.listGlobalQuestions() : []);
   }
   questions = questions.filter((question) => question && question.active !== false);

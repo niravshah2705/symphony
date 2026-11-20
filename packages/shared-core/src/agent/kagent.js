@@ -9,7 +9,7 @@
 // dispatches them. It authenticates with a mounted Kubernetes service-account
 // token; provider credentials stay behind ModelConfig apiKeySecret /
 // RemoteMCPServer headersFrom references inside the cluster, so nothing here
-// reads or writes Fleet secrets.
+// reads or writes Software Factory secrets.
 //
 // Unconfigured cluster (the default) is inert: renders and saves still work,
 // publish/list/report kagent_not_configured (HTTP 503 territory).

@@ -1,18 +1,18 @@
 'use strict';
 
-const store = require('@ai-fleet/shared/store');
-const linear = require('@ai-fleet/shared/linear');
-const { repoParts } = require('@ai-fleet/shared/agent/workspace');
-const { runPlannedCoderLocal } = require('@ai-fleet/shared/agent/coder');
-const { startIssue, finishIssue } = require('@ai-fleet/shared/agent/apply');
+const store = require('@software-factory/shared/store');
+const linear = require('@software-factory/shared/linear');
+const { repoParts } = require('@software-factory/shared/agent/workspace');
+const { runPlannedCoderLocal } = require('@software-factory/shared/agent/coder');
+const { startIssue, finishIssue } = require('@software-factory/shared/agent/apply');
 const {
   StageExecutionError,
   assertLinearProjectScope,
   repositoryReference,
   resolveStageAgent,
-} = require('@ai-fleet/shared/agent/pipeline-stage-runtime');
-const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
-const { validateMergeReceipt } = require('@ai-fleet/shared/agent/repository-broker');
+} = require('@software-factory/shared/agent/pipeline-stage-runtime');
+const { redactSecrets } = require('@software-factory/shared/agent/tools/exec');
+const { validateMergeReceipt } = require('@software-factory/shared/agent/repository-broker');
 
 /**
  * Parse the agent's end-of-run verdict. The workflow prompt requires a

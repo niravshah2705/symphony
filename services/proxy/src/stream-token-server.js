@@ -93,7 +93,7 @@ if (require.main === module) {
   const bindHost = resolveBindHost();
   const server = createStreamTokenServer();
   server.listen(port, bindHost, () => {
-    brokerLogger.info(`AI Fleet stream-token broker listening on http://${bindHost}:${port}`);
+    brokerLogger.info(`Software Factory stream-token broker listening on http://${bindHost}:${port}`);
   });
 }
 

@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
-const { CONFIG, namespaceCollection } = require('@ai-fleet/shared-core/config');
+const { CONFIG, namespaceCollection } = require('@software-factory/shared-core/config');
 
 const DEFAULT_EXECUTION_LEASE_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_COLLECTION = 'aifleet_pipeline_worker_results';

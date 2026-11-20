@@ -143,13 +143,15 @@ const routes = Object.freeze({
   invite: route(() => import('./views/invite.js'), 'renderInvitation'),
   privacy: route(() => import('./views/legal.js'), 'renderPrivacy'),
   terms: route(() => import('./views/legal.js'), 'renderTerms'),
+  refund: route(() => import('./views/legal.js'), 'renderRefund'),
+  shipping: route(() => import('./views/legal.js'), 'renderShipping'),
 });
 
 // Authenticated users may legitimately exist before they create an organization
 // or accept an invitation. Keep both onboarding routes and the public legal
 // documents reachable in that state; workspace routes redirect to Organization.
-const ORGANIZATION_OPTIONAL_ROUTES = new Set(['organization', 'invite', 'privacy', 'terms']);
-const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms']);
+const ORGANIZATION_OPTIONAL_ROUTES = new Set(['organization', 'invite', 'privacy', 'terms', 'refund', 'shipping']);
+const AUTHENTICATION_INDEPENDENT_ROUTES = new Set(['privacy', 'terms', 'refund', 'shipping']);
 
 const routeMeta = {
   agent: { titleKey: 'agentWorkspace', eyebrowKey: 'workspace' },
@@ -169,6 +171,8 @@ const routeMeta = {
   invite: { titleKey: 'invitation', eyebrowKey: 'workspace' },
   privacy: { title: 'Privacy Notice', eyebrow: 'Legal' },
   terms: { title: 'Terms of Use', eyebrow: 'Legal' },
+  refund: { title: 'Refund and Cancellation Policy', eyebrow: 'Legal' },
+  shipping: { title: 'Delivery Policy', eyebrow: 'Legal' },
 };
 
 // These existing surfaces depend on the configured project-management connection.
@@ -696,10 +700,10 @@ function renderAuthControl() {
     const projectSelect = el('select', {
       id: 'account-project-select',
       disabled: projects.length === 0,
-      'aria-label': t('aiFleetProject'),
+      'aria-label': t('softwareFactoryProject'),
     });
     if (!projects.length) {
-      projectSelect.append(el('option', { value: '', selected: true }, t('noAiFleetProject')));
+      projectSelect.append(el('option', { value: '', selected: true }, t('noSoftwareFactoryProject')));
     } else {
       for (const item of projects) {
         projectSelect.append(el('option', {
@@ -741,7 +745,7 @@ function renderAuthControl() {
       ]),
       el('label', { class: 'account-context-field', for: 'account-project-select' }, [
         el('div', { class: 'account-context-field-header' }, [
-          el('span', { dataset: { i18n: 'aiFleetProject' } }, t('aiFleetProject')),
+          el('span', { dataset: { i18n: 'softwareFactoryProject' } }, t('softwareFactoryProject')),
           ...(projectTags.length ? [el('div', { class: 'account-context-tags' }, projectTags)] : []),
         ]),
         projectSelect,
@@ -888,7 +892,7 @@ function renderSignInRequired(name) {
   syncShell(name, view);
   syncSidebar(false);
   view.className = 'view view-standard';
-  // When a session was dropped mid-use (token rejected → ai-fleet:auth-required),
+  // When a session was dropped mid-use (token rejected → software-factory:auth-required),
   // expireAuthentication() records why, so the panel explains "session expired"
   // instead of the generic prompt an anonymous visitor sees.
   const { error: sessionError } = getAuthenticationState();
@@ -1130,7 +1134,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 });
 
-window.addEventListener('ai-fleet:locale-changed', async () => {
+window.addEventListener('software-factory:locale-changed', async () => {
   const session = getAuthenticationState();
   renderAuthControl();
   applyMenuPermissions(session);
@@ -1147,7 +1151,7 @@ window.addEventListener('ai-fleet:locale-changed', async () => {
   localize(document);
 });
 
-window.addEventListener('ai-fleet:auth-required', () => {
+window.addEventListener('software-factory:auth-required', () => {
   const session = getAuthenticationState();
   // A connected tool can legitimately return 401 in local mode; only an
   // enabled application-auth session reacts to an app-auth failure.

@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Convenience barrel for @ai-fleet/shared. Services normally import the specific
- * subpath they need (e.g. `require('@ai-fleet/shared/agent/scheduler')`), which
+ * Convenience barrel for @software-factory/shared. Services normally import the specific
+ * subpath they need (e.g. `require('@software-factory/shared/agent/scheduler')`), which
  * keeps their dependency surface explicit; this barrel is a shortcut for the
  * most common pieces and for interactive use.
  */

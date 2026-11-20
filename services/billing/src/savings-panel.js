@@ -1,7 +1,7 @@
 'use strict';
 
-const { priceActorUsage, savingsEstimate } = require('@ai-fleet/shared-core/billing/compute-pricing');
-const { ACTOR_SESSION_METRICS } = require('@ai-fleet/shared-core/billing/substrate-session');
+const { priceActorUsage, savingsEstimate } = require('@software-factory/shared-core/billing/compute-pricing');
+const { ACTOR_SESSION_METRICS } = require('@software-factory/shared-core/billing/substrate-session');
 
 const TIMEOUT_MS = 5000;
 const WINDOW_UNITS = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };

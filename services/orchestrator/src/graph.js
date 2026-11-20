@@ -1,6 +1,6 @@
 'use strict';
 
-const { PIPELINE_STAGES, normalizeRequestedStages } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { PIPELINE_STAGES, normalizeRequestedStages } = require('@software-factory/shared-core/pipeline/contracts');
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'cancelled']);
 
