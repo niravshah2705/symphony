@@ -1,0 +1,30 @@
+# Example LiteLLM proxy config for the FlexPrice integration.
+# Hierarchy convention: virtual keys are created under an organisation and a
+# team (project); callers tag requests via metadata.tags for billable products.
+model_list:
+  - model_name: gpt-5-mini
+    litellm_params:
+      model: openai/gpt-5-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: claude-opus-4-8
+    litellm_params:
+      model: anthropic/claude-opus-4-8
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  # Primary bridge: mounted custom callback (flexprice_callback.py next to
+  # this file; LiteLLM resolves the dotted path to the instance).
+  callbacks: flexprice_callback.flexprice_logger
+  # Keep prompt/response out of the usage path — FlexPrice only needs counts.
+  turn_off_message_logging: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+environment_variables:
+  FLEXPRICE_API_URL: os.environ/FLEXPRICE_API_URL
+  FLEXPRICE_API_KEY: os.environ/FLEXPRICE_API_KEY
+  FLEXPRICE_ENVIRONMENT_ID: os.environ/FLEXPRICE_ENVIRONMENT_ID
+  # Billing entity = LiteLLM organisation id (fallback: team id)
+  FLEXPRICE_ENTITY_FROM: "metadata.user_api_key_org_id"
+  FLEXPRICE_BILLABLE_TAGS: "planning,skill,mcp"
