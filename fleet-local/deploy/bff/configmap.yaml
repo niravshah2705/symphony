@@ -26,4 +26,6 @@ data:
     [{"id":"mock","label":"Mock GPT (offline)","model":"mock-gpt","default":true},
      {"id":"claude","label":"Claude Sonnet 4","model":"claude-sonnet-4"},
      {"id":"nemotron","label":"Nemotron 3 Ultra 550B (free)",
-      "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"}]
+      "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"},
+     {"id":"nemotron-claude","label":"Nemotron 550B (Claude Code runtime)",
+      "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free","runtime":"claude"}]

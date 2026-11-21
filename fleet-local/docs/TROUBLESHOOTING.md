@@ -526,6 +526,39 @@ trail of why each line exists.
     remaining lines** (only the first org was processed, exit 0, no error). Any interactive/exec call in
     a read-loop needs `</dev/null` unless its stdin is deliberate. Recovery: re-run the script (idempotent).
 
+28. **P7 claude harness — three kagent contract rules that look like they'd help but bite.**
+    (a) The `claude` harness **reserves every `ANTHROPIC_*` env var** (base URL, token, model, and the
+    Claude-Code-owned telemetry/credential vars): putting `ANTHROPIC_BASE_URL`/`ANTHROPIC_API_KEY`/
+    `ANTHROPIC_MODEL` in `Harness.spec.env` marks EVERY Agent on that Harness `Compatible=False`
+    ("conflicts with Claude-owned runtime configuration"). The adapter writes those vars itself — the
+    model/base URL come from an **Anthropic-provider ModelConfig** (`anthropic.baseUrl`, no `/v1`
+    suffix — the SDK appends `/v1/messages`), and the key NEVER touches the CR: the egress gateway
+    binds `ModelConfig.apiKeySecret` to the destination hostname and injects `x-api-key` per request
+    (rotation = update the Secret). (b) `workload.image` **rejects tags** — pin the manifest-list
+    digest (`docker buildx imagetools inspect <image>:<tag>` first line; CRD pattern
+    `^[^@]+@sha256:[a-f0-9]{64}$`). (c) the claude harness **rejects a ModelConfig that sets
+    `defaultHeaders`/`tls`/`tokenPassthrough`** — the static `x-fleet-*` attribution headers cannot
+    ride on claude turns; cost rows attribute via the tenant key (org/team) + traceparent, and
+    `raw_user` may be empty because the claude runtime doesn't add identity baggage. Chart guards
+    (a)+(b) in `_helpers.tpl`; `modelconfig.yaml` renders the `anthropic:` block and drops
+    `defaultHeaders` for Anthropic providers; `t26-tenant-model-catalog.sh` is runtime-aware
+    (`ORG_FILTER=<slug>` to do one tenant first).
+
+29. **P7 headless verification (`scripts/fixes/t28-claude-harness-probe.sh`) — the A2A wire shape.**
+    A first probe written from intuition used `/a2a/{ns}/{name}` + `method:"message/stream"` +
+    `role:"role_user"` — all wrong, and the failure was a silent non-SSE 404. The real contract
+    (canonical in `apps/control-plane/src/kagent/a2a.ts`): `POST {controller}/agents/{ns}/{name}`
+    with the **PascalCase** JSON-RPC methods (`SendStreamingMessage`), the mandatory
+    `A2A-Version: 1.0` header, `Accept: text/event-stream`, and message
+    `{messageId, role:"ROLE_USER", parts:[{text}]}`. Streaming events carry the payload under
+    `result.task` / `result.statusUpdate` / `result.artifactUpdate` (artifact text appears both on
+    the incremental `artifactUpdate` and the final task — hence a duplicated reply is normal).
+    Auth: port-forward svc/kagent-controller 18083:8083 and send a **self-signed** JWT
+    (`iss=https://accounts.google.com`, `email=<user>`) — trusted-proxy mode skips signature
+    verification by design; the :8083 NetworkPolicy is the control. Evidence the whole chain ran:
+    reply text `P7-CLAUDE-HARNESS-OK`, terminal `TASK_STATE_COMPLETED`, and a
+    `POST /v1/messages … 200` line in `kubectl -n litellm logs deploy/litellm`.
+
 ## Useful one-liners
 
 ```bash

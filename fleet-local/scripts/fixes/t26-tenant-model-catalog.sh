@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# T-26 (P6): upgrade EXISTING tenant releases to the per-model catalog
-# (one ModelConfig/AgentTemplate/Agent per FLEET_MODELS entry) without walking the browser
+# T-26 (P6+P7): upgrade EXISTING tenant releases to the per-model catalog
+# (one ModelConfig/AgentTemplate/Agent per FLEET_MODELS entry, plus the P7
+# claude-harness for runtime:"claude" entries) without walking the browser
 # wizard again. Mirrors apps/control-plane/src/onboarding/steps/workflow.ts
 # values exactly (that file stays canonical for NEW orgs).
 #
@@ -27,9 +28,15 @@ CATALOG=$(k -n fleet-system get cm fleet-bff-config -o jsonpath='{.data.FLEET_MO
 CHART=$(k -n fleet-system get cm fleet-bff-config -o jsonpath='{.data.TENANT_CHART_PATH}')
 LITELLM_URL=${LITELLM_URL:-http://litellm.litellm.svc.cluster.local:4000}
 
-MODELS=$(jq -c '[ .[] | {name:.id, provider:"OpenAI", model:.model, apiFormat:"chatCompletions", stream:true} ]' <<<"$CATALOG")
+CLAUDE_IMAGE='ghcr.io/kagent-dev/kagent/claude-harness@sha256:bfbb526739439af92cea2282553500a3863dc66fad30838c68d57b6865e55fe4'
+HAS_CLAUDE=$(jq -c '[ .[] | select(.runtime=="claude") ] | length > 0' <<<"$CATALOG")
+# P7: runtime:"claude" entries compile an Anthropic-provider ModelConfig (no
+# defaultHeaders — rejected on claude; key injected as x-api-key by the egress
+# gateway) and bind to the claude harness.
+MODELS=$(jq -c '[ .[] | if .runtime=="claude" then {name:.id, provider:"Anthropic", model:.model}
+                  else {name:.id, provider:"OpenAI", model:.model, apiFormat:"chatCompletions", stream:true} end ]' <<<"$CATALOG")
 TMPLS=$(jq -c '[ .[] | {name:(.id+"-coding"), modelConfig:.id, description:("Fleet coding workflow ("+.label+")"), systemPrompt:"You are a concise coding agent. Plan, then act.\n"} ]' <<<"$CATALOG")
-AGENTS=$(jq -c '[ .[] | {name:(.id+"-worker"), template:(.id+"-coding"), harness:"app"} ]' <<<"$CATALOG")
+AGENTS=$(jq -c '[ .[] | {name:(.id+"-worker"), template:(.id+"-coding"), harness:(if .runtime=="claude" then "claude" else "app" end)} ]' <<<"$CATALOG")
 DEF=$(jq -r 'map(select(.default))[0].id // .[0].id' <<<"$CATALOG")
 LMODELS=$(jq -c '[ .[].model, "openrouter/*" ] | unique' <<<"$CATALOG")
 
@@ -71,16 +78,21 @@ while IFS='|' read -r slug orgId projId projSlug projNs; do
   # 2) helm upgrade with the catalog values (mirror of workflowStep).
   vals=$(jq -n --argjson models "$MODELS" --argjson tmpls "$TMPLS" --argjson agents "$AGENTS" \
     --arg ns "$ns" --arg id "$slug" --arg snapRoot "s3://ate-snapshots/$slug" \
-    --arg secret "$secret" --arg url "$LITELLM_URL" --arg orgId "$orgId" --arg projId "$projId" '{
+    --arg secret "$secret" --arg url "$LITELLM_URL" --arg orgId "$orgId" --arg projId "$projId" \
+    --arg cimage "$CLAUDE_IMAGE" --argjson hasClaude "$HAS_CLAUDE" '{
     namespace: $ns,
     tenant: { id: $id, snapshotRoot: $snapRoot },
     workerPool: { name: $ns },
-    litellm: { baseUrl: ($url + "/v1"), apiKeySecret: $secret, apiKeySecretKey: "key" },
-    models: ($models | map(. + { defaultHeaders: { "x-fleet-org-id": $orgId, "x-fleet-project-id": $projId } })),
+    litellm: { baseUrl: ($url + "/v1"), anthropicBaseUrl: $url, apiKeySecret: $secret, apiKeySecretKey: "key" },
+    models: ($models | map(if .provider == "Anthropic" then . else . + { defaultHeaders: { "x-fleet-org-id": $orgId, "x-fleet-project-id": $projId } } end)),
     harnesses: [{ name: "app", type: "kagent", env: [
       { name: "OTEL_PROPAGATORS", value: "tracecontext,baggage" },
       { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "http://opentelemetry-collector.otel-system.svc:4317" },
-      { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }],
+      { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] } ]
+      + (if $hasClaude then [{ name: "claude", type: "claude", image: $cimage, env: [
+          { name: "OTEL_PROPAGATORS", value: "tracecontext,baggage" },
+          { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "http://opentelemetry-collector.otel-system.svc:4317" },
+          { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }] else [] end),
     templates: $tmpls,
     agents: $agents,
     commonLabels: { "fleet.local/org-id": $orgId, "fleet.local/project-id": $projId }
@@ -89,7 +101,7 @@ while IFS='|' read -r slug orgId projId projSlug projNs; do
   k "${BFF[@]}" exec -i "$BFF_TARGET" -- helm upgrade --install "$slug-kagent-tenant" "$CHART" -n "$ns" -f /tmp/t26-values.json >/dev/null </dev/null
   echo "helm release $slug-kagent-tenant upgraded"
 
-  # 3) every per-model Agent Ready (the first nemotron golden build pulls a snapshot).
+  # 3) every per-model Agent Ready (first nemotron/claude golden build pulls a snapshot).
   for m in $(jq -r '.[].id' <<<"$CATALOG"); do
     k -n "$ns" wait --for=condition=Ready "agents.api.kagent.dev/$slug-agent-$m-worker" --timeout=600s
   done

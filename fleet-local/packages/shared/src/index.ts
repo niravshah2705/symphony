@@ -43,11 +43,17 @@ export const MODELS = {
 
 // P6: the chat model is configuration. FLEET_MODELS (BFF configmap) holds a JSON
 // array of these entries; MODELS remains the fallback for the two originals.
+export type HarnessRuntime = 'kagent' | 'claude';
+
 export interface ModelCatalogEntry {
   id: string;
   label: string;
   model: string;
   default?: boolean;
+  // P7: which Harness compiles this agent. 'claude' routes through an
+  // Anthropic-provider ModelConfig (egress-injected x-api-key) on the
+  // claude-harness image; 'kagent' (default) keeps the OpenAI wire + headers.
+  runtime?: HarnessRuntime;
 }
 
 export const DEFAULT_MODEL_CATALOG: readonly ModelCatalogEntry[] = [
@@ -57,6 +63,12 @@ export const DEFAULT_MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     id: 'nemotron',
     label: 'Nemotron 3 Ultra 550B (free)',
     model: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+  },
+  {
+    id: 'nemotron-claude',
+    label: 'Nemotron 550B (Claude Code runtime)',
+    model: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+    runtime: 'claude',
   },
 ];
 
@@ -68,6 +80,9 @@ export function parseModelCatalog(json: string | undefined): ModelCatalogEntry[]
   for (const m of out) {
     if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(m.id ?? '') || !m.model || !m.label) {
       throw new Error(`FLEET_MODELS entry invalid: ${JSON.stringify(m)}`);
+    }
+    if (m.runtime !== undefined && m.runtime !== 'kagent' && m.runtime !== 'claude') {
+      throw new Error(`FLEET_MODELS entry runtime must be kagent|claude: ${JSON.stringify(m)}`);
     }
   }
   if (!out.some((m) => m.default)) out[0] = { ...out[0]!, default: true };
