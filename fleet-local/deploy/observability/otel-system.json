@@ -1,0 +1,418 @@
+{
+ "apiVersion": "v1",
+ "kind": "List",
+ "items": [
+  {
+   "apiVersion": "apps/v1",
+   "kind": "Deployment",
+   "metadata": {
+    "name": "jaeger",
+    "namespace": "otel-system",
+    "labels": {
+     "app": "jaeger"
+    }
+   },
+   "spec": {
+    "progressDeadlineSeconds": 600,
+    "replicas": 1,
+    "revisionHistoryLimit": 10,
+    "selector": {
+     "matchLabels": {
+      "app": "jaeger"
+     }
+    },
+    "strategy": {
+     "rollingUpdate": {
+      "maxSurge": "25%",
+      "maxUnavailable": "25%"
+     },
+     "type": "RollingUpdate"
+    },
+    "template": {
+     "metadata": {
+      "labels": {
+       "app": "jaeger"
+      }
+     },
+     "spec": {
+      "containers": [
+       {
+        "image": "jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17",
+        "imagePullPolicy": "IfNotPresent",
+        "name": "jaeger",
+        "ports": [
+         {
+          "containerPort": 4317,
+          "name": "otlp-grpc",
+          "protocol": "TCP"
+         },
+         {
+          "containerPort": 4318,
+          "name": "otlp-http",
+          "protocol": "TCP"
+         },
+         {
+          "containerPort": 16686,
+          "name": "query",
+          "protocol": "TCP"
+         }
+        ],
+        "resources": {},
+        "terminationMessagePath": "/dev/termination-log",
+        "terminationMessagePolicy": "File"
+       }
+      ],
+      "dnsPolicy": "ClusterFirst",
+      "restartPolicy": "Always",
+      "schedulerName": "default-scheduler",
+      "securityContext": {},
+      "terminationGracePeriodSeconds": 30
+     }
+    }
+   }
+  },
+  {
+   "apiVersion": "apps/v1",
+   "kind": "Deployment",
+   "metadata": {
+    "name": "opentelemetry-collector",
+    "namespace": "otel-system",
+    "labels": {
+     "app": "opentelemetry-collector"
+    }
+   },
+   "spec": {
+    "progressDeadlineSeconds": 600,
+    "replicas": 1,
+    "revisionHistoryLimit": 10,
+    "selector": {
+     "matchLabels": {
+      "app": "opentelemetry-collector"
+     }
+    },
+    "strategy": {
+     "rollingUpdate": {
+      "maxSurge": "25%",
+      "maxUnavailable": "25%"
+     },
+     "type": "RollingUpdate"
+    },
+    "template": {
+     "metadata": {
+      "labels": {
+       "app": "opentelemetry-collector"
+      }
+     },
+     "spec": {
+      "containers": [
+       {
+        "args": [
+         "--config=/conf/otel-collector-config.yaml"
+        ],
+        "image": "otel/opentelemetry-collector-contrib:0.163.2@sha256:7f22d2a6748110ffb6a59bc0df448bccbf501cdb667d610ede4c61d3863d5849",
+        "imagePullPolicy": "IfNotPresent",
+        "name": "otel-collector",
+        "ports": [
+         {
+          "containerPort": 4317,
+          "name": "otlp-grpc",
+          "protocol": "TCP"
+         },
+         {
+          "containerPort": 4318,
+          "name": "otlp-http",
+          "protocol": "TCP"
+         },
+         {
+          "containerPort": 8889,
+          "name": "prom",
+          "protocol": "TCP"
+         },
+         {
+          "containerPort": 8888,
+          "name": "self",
+          "protocol": "TCP"
+         }
+        ],
+        "resources": {},
+        "terminationMessagePath": "/dev/termination-log",
+        "terminationMessagePolicy": "File",
+        "volumeMounts": [
+         {
+          "mountPath": "/conf",
+          "name": "config"
+         }
+        ]
+       }
+      ],
+      "dnsPolicy": "ClusterFirst",
+      "restartPolicy": "Always",
+      "schedulerName": "default-scheduler",
+      "securityContext": {},
+      "terminationGracePeriodSeconds": 30,
+      "volumes": [
+       {
+        "configMap": {
+         "defaultMode": 420,
+         "items": [
+          {
+           "key": "otel-collector-config.yaml",
+           "path": "otel-collector-config.yaml"
+          }
+         ],
+         "name": "opentelemetry-collector-config"
+        },
+        "name": "config"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "apiVersion": "apps/v1",
+   "kind": "Deployment",
+   "metadata": {
+    "name": "prometheus",
+    "namespace": "otel-system",
+    "labels": {
+     "app": "prometheus"
+    }
+   },
+   "spec": {
+    "progressDeadlineSeconds": 600,
+    "replicas": 1,
+    "revisionHistoryLimit": 10,
+    "selector": {
+     "matchLabels": {
+      "app": "prometheus"
+     }
+    },
+    "strategy": {
+     "rollingUpdate": {
+      "maxSurge": "25%",
+      "maxUnavailable": "25%"
+     },
+     "type": "RollingUpdate"
+    },
+    "template": {
+     "metadata": {
+      "labels": {
+       "app": "prometheus"
+      }
+     },
+     "spec": {
+      "containers": [
+       {
+        "args": [
+         "--config.file=/etc/prometheus/prometheus.yml",
+         "--storage.tsdb.path=/prometheus"
+        ],
+        "image": "prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
+        "imagePullPolicy": "IfNotPresent",
+        "livenessProbe": {
+         "failureThreshold": 3,
+         "httpGet": {
+          "path": "/-/healthy",
+          "port": "web",
+          "scheme": "HTTP"
+         },
+         "initialDelaySeconds": 5,
+         "periodSeconds": 15,
+         "successThreshold": 1,
+         "timeoutSeconds": 3
+        },
+        "name": "prometheus",
+        "ports": [
+         {
+          "containerPort": 9090,
+          "name": "web",
+          "protocol": "TCP"
+         }
+        ],
+        "readinessProbe": {
+         "failureThreshold": 3,
+         "httpGet": {
+          "path": "/-/ready",
+          "port": "web",
+          "scheme": "HTTP"
+         },
+         "initialDelaySeconds": 5,
+         "periodSeconds": 5,
+         "successThreshold": 1,
+         "timeoutSeconds": 3
+        },
+        "resources": {
+         "limits": {
+          "memory": "512Mi"
+         },
+         "requests": {
+          "cpu": "100m",
+          "memory": "128Mi"
+         }
+        },
+        "securityContext": {
+         "allowPrivilegeEscalation": false,
+         "capabilities": {
+          "drop": [
+           "ALL"
+          ]
+         },
+         "readOnlyRootFilesystem": true
+        },
+        "terminationMessagePath": "/dev/termination-log",
+        "terminationMessagePolicy": "File",
+        "volumeMounts": [
+         {
+          "mountPath": "/etc/prometheus",
+          "name": "config",
+          "readOnly": true
+         },
+         {
+          "mountPath": "/prometheus",
+          "name": "storage"
+         },
+         {
+          "mountPath": "/tmp",
+          "name": "tmp"
+         }
+        ]
+       }
+      ],
+      "dnsPolicy": "ClusterFirst",
+      "restartPolicy": "Always",
+      "schedulerName": "default-scheduler",
+      "securityContext": {
+       "fsGroup": 65534,
+       "runAsGroup": 65534,
+       "runAsNonRoot": true,
+       "runAsUser": 65534,
+       "seccompProfile": {
+        "type": "RuntimeDefault"
+       }
+      },
+      "serviceAccount": "prometheus",
+      "serviceAccountName": "prometheus",
+      "terminationGracePeriodSeconds": 30,
+      "volumes": [
+       {
+        "configMap": {
+         "defaultMode": 420,
+         "name": "prometheus-config"
+        },
+        "name": "config"
+       },
+       {
+        "emptyDir": {},
+        "name": "storage"
+       },
+       {
+        "emptyDir": {},
+        "name": "tmp"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Service",
+   "metadata": {
+    "name": "jaeger",
+    "namespace": "otel-system"
+   },
+   "spec": {
+    "ports": [
+     {
+      "name": "otlp-grpc",
+      "port": 4317,
+      "protocol": "TCP",
+      "targetPort": 4317
+     },
+     {
+      "name": "otlp-http",
+      "port": 4318,
+      "protocol": "TCP",
+      "targetPort": 4318
+     },
+     {
+      "name": "query",
+      "port": 16686,
+      "protocol": "TCP",
+      "targetPort": 16686
+     }
+    ],
+    "selector": {
+     "app": "jaeger"
+    },
+    "sessionAffinity": "None"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Service",
+   "metadata": {
+    "name": "opentelemetry-collector",
+    "namespace": "otel-system"
+   },
+   "spec": {
+    "ports": [
+     {
+      "name": "otlp-grpc",
+      "port": 4317,
+      "protocol": "TCP",
+      "targetPort": 4317
+     },
+     {
+      "name": "otlp-http",
+      "port": 4318,
+      "protocol": "TCP",
+      "targetPort": 4318
+     },
+     {
+      "name": "prom",
+      "port": 8889,
+      "protocol": "TCP",
+      "targetPort": 8889
+     },
+     {
+      "name": "self",
+      "port": 8888,
+      "protocol": "TCP",
+      "targetPort": 8888
+     }
+    ],
+    "selector": {
+     "app": "opentelemetry-collector"
+    },
+    "sessionAffinity": "None"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Service",
+   "metadata": {
+    "name": "prometheus",
+    "namespace": "otel-system",
+    "labels": {
+     "app": "prometheus"
+    }
+   },
+   "spec": {
+    "ports": [
+     {
+      "name": "web",
+      "port": 9090,
+      "protocol": "TCP",
+      "targetPort": "web"
+     }
+    ],
+    "selector": {
+     "app": "prometheus"
+    },
+    "sessionAffinity": "None"
+   }
+  }
+ ]
+}

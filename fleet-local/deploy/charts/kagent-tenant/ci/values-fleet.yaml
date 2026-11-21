@@ -1,0 +1,54 @@
+# Canonical fleet tenant wiring (reference for the BFF onboarding step 4/5).
+# ORG_UUID / PROJECT_UUID are replaced at install time with the canonical UUIDs
+# minted in onboarding steps 1 and 2b — the SAME ids used in LiteLLM, Flexprice,
+# baggage and the namespace label fleet.local/org-id.
+namespace: org-demo
+tenant:
+  id: demo
+  snapshotRoot: s3://ate-snapshots/demo
+workerPool:
+  name: org-demo
+litellm:
+  baseUrl: http://litellm.litellm.svc.cluster.local:4000/v1
+  apiKeySecret: litellm-demo-default
+  apiKeySecretKey: key
+models:
+  - name: mock
+    provider: OpenAI
+    model: mock-gpt
+    apiFormat: chatCompletions
+    stream: true
+    defaultHeaders:
+      x-fleet-org-id: ORG_UUID
+      x-fleet-project-id: PROJECT_UUID
+  - name: claude
+    provider: OpenAI
+    model: claude-sonnet-4
+    apiFormat: chatCompletions
+    stream: true
+    defaultHeaders:
+      x-fleet-org-id: ORG_UUID
+      x-fleet-project-id: PROJECT_UUID
+harnesses:
+  - name: app
+    type: kagent
+    env:
+      - name: OTEL_PROPAGATORS
+        value: tracecontext,baggage
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://opentelemetry-collector.otel-system.svc:4317
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: fleet.org_id=ORG_UUID
+templates:
+  - name: coding
+    modelConfig: mock
+    description: Fleet coding workflow
+    systemPrompt: |
+      You are a concise coding agent. Plan, then act.
+agents:
+  - name: worker
+    template: coding
+    harness: app
+commonLabels:
+  fleet.local/org-id: ORG_UUID
+  fleet.local/project-id: PROJECT_UUID

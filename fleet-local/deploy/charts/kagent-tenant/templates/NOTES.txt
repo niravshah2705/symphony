@@ -1,0 +1,28 @@
+Tenant {{ .Values.tenant.id | quote }} installed as release {{ .Release.Name | quote }} in namespace {{ include "kagent-tenant.namespace" . | quote }}.
+
+Verify the objects landed and resolved:
+
+  kubectl get modelconfig,harness,agenttemplate,agent \
+    -n {{ include "kagent-tenant.namespace" . }} \
+    -l kagent.dev/tenant={{ .Values.tenant.id }}
+
+  kubectl get agent -n {{ include "kagent-tenant.namespace" . }} \
+    -l kagent.dev/tenant={{ .Values.tenant.id }} -o wide
+
+Each Agent reports READY once its Harness resolves to a WorkerPool and its
+ModelConfig resolves the referenced Secret. A stalled reconcile with no
+condition usually means one of those two references, not this chart.
+
+{{- if ne (include "kagent-tenant.namespace" .) "kagent" }}
+
+Namespace-scoped WorkerPool check — Harness.spec.substrate.workerPoolRef is
+resolved in this namespace, so the pool must exist HERE:
+
+  kubectl get workerpool {{ .Values.workerPool.name }} -n {{ include "kagent-tenant.namespace" . }}
+
+{{- end }}
+
+Snapshot prefix for this tenant: {{ .Values.tenant.snapshotRoot }}
+This is enforced isolation: Substrate issues each actor a storage grant scoped
+to its own prefix, so another tenant's objects are unreadable even from one
+namespace. It does not isolate the API — see charts/kagent-tenant/README.md.

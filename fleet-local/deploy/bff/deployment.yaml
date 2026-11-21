@@ -1,0 +1,71 @@
+# The control-plane BFF: serves the built SPA (SPA_ROOT) + the API, runs the
+# onboarding machine (helm/kubectl bundled in the image), proxies kagent A2A SSE,
+# and meters actor compute. Credentials arrive via Secret/fleet-bff-env; non-secret
+# config via ConfigMap/fleet-bff-config; the Google client id via Secret/google-oauth.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet-bff
+  namespace: fleet-system
+  labels:
+    app: fleet-bff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fleet-bff
+  template:
+    metadata:
+      labels:
+        app: fleet-bff
+    spec:
+      serviceAccountName: fleet-bff
+      containers:
+        - name: bff
+          image: fleet-bff:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: fleet-bff-config
+            - secretRef:
+                name: fleet-bff-env
+          env:
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-id
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-bff
+  namespace: fleet-system
+spec:
+  selector:
+    app: fleet-bff
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

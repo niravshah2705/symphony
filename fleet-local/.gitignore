@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+*.pem
+*.key
+deploy/oauth2-proxy/secret.yaml
+deploy/langfuse/secret.yaml

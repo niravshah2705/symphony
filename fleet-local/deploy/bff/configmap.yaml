@@ -1,0 +1,20 @@
+# Non-secret BFF configuration. In-cluster service DNS defaults already live in
+# src/config.ts; only values that differ or identify seeded resources are set here.
+# Credentials live in Secret/fleet-bff-env (created by scripts/50-bff-spa.sh).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fleet-bff-config
+  namespace: fleet-system
+data:
+  SPA_ROOT: /app/apps/spa/dist
+  TENANT_CHART_PATH: /app/deploy/charts/kagent-tenant
+  LANGFUSE_PUBLIC_KEY: pk-lf-fleet-local
+  FLEXPRICE_ENVIRONMENT_ID: "00000000-0000-0000-0000-000000000000"
+  # PLACEHOLDER — scripts/seed-flexprice.sh patches the real plan ID after the
+  # seed (each fresh Flexprice DB mints a new one) and restarts the BFF.
+  FLEXPRICE_PLAN_ID: plan_01M7T6D75Z1STVQ8JXMY5SP3Z0
+  DEFAULT_ORG_BUDGET_USD: "50"
+  DEFAULT_PROJECT_BUDGET_USD: "20"
+  DEFAULT_BUDGET_DURATION: 30d
+  SWEEPER_INTERVAL_SECONDS: "60"

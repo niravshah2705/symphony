@@ -1,0 +1,88 @@
+# oauth2-proxy in upstream (reverse-proxy) mode for app.fleet.dev. It authenticates
+# the user against Google OIDC, then forwards the verified Google ID token as
+# `Authorization: Bearer` plus X-Auth-Request-* to the BFF — the exact contract
+# the BFF (JWKS verify) and kagent trusted-proxy expect. Credentials come from
+# Secret/google-oauth; nothing secret is baked into this manifest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fleet-oauth2-proxy
+  namespace: fleet-system
+  labels:
+    app: fleet-oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fleet-oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: fleet-oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.14.0
+          args:
+            - --http-address=0.0.0.0:4180
+            - --provider=oidc
+            - --oidc-issuer-url=https://accounts.google.com
+            - --scope=openid email profile
+            - --email-domain=*
+            - --cookie-name=_fleet_oauth
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-refresh=55m
+            - --redirect-url=https://app.fleet.dev/oauth2/callback
+            - --upstream=http://fleet-bff.fleet-system.svc.cluster.local:8080
+            - --set-xauthrequest=true
+            - --set-authorization-header=true
+            - --pass-authorization-header=true
+            - --pass-user-headers=true
+            - --skip-provider-button=true
+            - --reverse-proxy=true
+            - --whitelist-domain=app.fleet.dev
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: cookie-secret
+          ports:
+            - containerPort: 4180
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-oauth2-proxy
+  namespace: fleet-system
+spec:
+  selector:
+    app: fleet-oauth2-proxy
+  ports:
+    - name: http
+      port: 4180
+      targetPort: 4180

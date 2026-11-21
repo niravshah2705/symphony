@@ -1,0 +1,16 @@
+# Merged onto the existing litellm release with --reuse-values.
+# Adds the fleet pre-call hook + langfuse to the callback chain, and injects the
+# langfuse API keys from a Secret (no plaintext credential in values).
+proxy_config:
+  litellm_settings:
+    callbacks:
+      - flexprice_callback.flexprice_logger
+      - fleet_metadata.fleet_hook
+      - langfuse
+environmentSecrets:
+  # Helm replaces LISTS on merge — reusing only [litellm-langfuse-keys] here
+  # silently dropped values-base's litellm-fleet-secrets and the restarted
+  # proxy crashed on "FLEXPRICE_API_URL and FLEXPRICE_API_KEY are required".
+  # Keep this list = values-base's list + the langfuse one.
+  - litellm-fleet-secrets
+  - litellm-langfuse-keys

@@ -1,0 +1,19 @@
+# Merged onto the kagent release with --reuse-values (scripts/40-kagent-fix.sh).
+# trusted-proxy: the controller reads the email claim from the Bearer JWT that
+# oauth2-proxy delivers (it does NOT verify the signature — the :8083
+# NetworkPolicy is what makes this safe). userIdClaim=email maps the Google ID
+# token's email to the controller principal.
+#
+# The UI nginx always forwards Authorization and always strips X-User-Id /
+# X-Agent-Name in trusted-proxy mode; the x-auth-request-* identity headers are
+# stripped from client requests unless allowlisted here, so they cannot be spoofed.
+config:
+  server:
+    auth:
+      mode: trusted-proxy
+      userIdClaim: email
+ui:
+  additionalForwardedHeaders:
+    - X-Auth-Request-Email
+    - X-Auth-Request-User
+    - X-Auth-Request-Preferred-Username
