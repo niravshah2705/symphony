@@ -1,0 +1,101 @@
+# webfetch: streamable-HTTP MCP server (mcp-server-fetch behind supergateway).
+# Built + loaded by scripts/fixes/t29-agent-web-access.sh (imagePullPolicy
+# Never — the image only exists inside kind).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webfetch
+  namespace: kagent
+  labels:
+    app: webfetch
+    app.kubernetes.io/part-of: kagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webfetch
+  template:
+    metadata:
+      labels:
+        app: webfetch
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: webfetch
+          image: fleet-webfetch:0.1.0
+          imagePullPolicy: Never
+          ports:
+            - name: mcp
+              containerPort: 8087
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: "1"
+              memory: 384Mi
+          readinessProbe:
+            tcpSocket: { port: mcp }
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webfetch
+  namespace: kagent
+  labels:
+    app: webfetch
+spec:
+  selector:
+    app: webfetch
+  ports:
+    - name: mcp
+      port: 8087
+      targetPort: mcp
+---
+# SSRF guard for the model-driven fetch: egress = public internet + DNS only.
+# Every in-cluster / private destination (pod net 10.244/16, svc net 10.96/12,
+# node net, link-local metadata) is excluded — a prompt-injected fetch_url can
+# not pivot to LiteLLM, Flexprice, the substrate router or the K8s API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: webfetch-egress-public-only
+  namespace: kagent
+spec:
+  podSelector:
+    matchLabels:
+      app: webfetch
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    # DNS (needed to resolve the requested hostname; the answer may be a
+    # private IP but the data-plane policy above still drops that connection).
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

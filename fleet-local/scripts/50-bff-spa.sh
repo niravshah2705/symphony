@@ -49,6 +49,11 @@ fi
 kubectl apply -f deploy/bff/configmap.yaml
 kubectl apply -f deploy/bff/rbac.yaml
 kubectl apply -f deploy/bff/deployment.yaml
+# imagePullPolicy + a mutable fleet-bff:local tag: with an unchanged manifest
+# `apply` rolls nothing, and a rebuilt image (e.g. new chart templates under
+# deploy/charts) would keep running from the OLD pod. Restart so the new image
+# is actually the one serving.
+kubectl -n "$NS" rollout restart deploy/fleet-bff
 kubectl -n "$NS" rollout status deploy/fleet-bff --timeout=240s
 
 echo "=== helm status unaffected; BFF pods ==="

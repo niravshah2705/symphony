@@ -79,7 +79,7 @@ Names first: a missing name would otherwise surface as a Go type error out of
 printf, or as an object literally named "acme-model-", which is worse — it
 applies cleanly and then never resolves.
 */}}
-{{- $lists := dict "models" "model" "harnesses" "harness" "templates" "template" "agents" "agent" }}
+{{- $lists := dict "models" "model" "harnesses" "harness" "templates" "template" "agents" "agent" "mcp" "mcp" }}
 {{- range $list, $kind := $lists }}
 {{- $seen := dict }}
 {{- range $entry := index $.Values $list }}
@@ -98,9 +98,21 @@ applies cleanly and then never resolves.
 {{- range $h := .Values.harnesses }}{{ $_ := set $harnesses $h.name "" }}{{ end }}
 {{- $templates := dict }}
 {{- range $t := .Values.templates }}{{ $_ := set $templates $t.name "" }}{{ end }}
+{{- $mcps := dict }}
+{{- range $mcp := .Values.mcp }}
+{{- if not $mcp.url }}
+  {{- fail (printf "mcp entry %q has no url" $mcp.name) }}
+{{- end }}
+{{- $_ := set $mcps $mcp.name "" }}
+{{- end }}
 {{- range $t := .Values.templates }}
 {{- if and $t.modelConfig (not (hasKey $models $t.modelConfig)) }}
   {{- fail (printf "templates[%q].modelConfig %q names no entry in models" $t.name $t.modelConfig) }}
+{{- end }}
+{{- range $r := $t.mcp | default list }}
+{{- if not (hasKey $mcps $r) }}
+  {{- fail (printf "templates[%q].mcp %q names no entry in mcp" $t.name $r) }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- range $h := .Values.harnesses }}

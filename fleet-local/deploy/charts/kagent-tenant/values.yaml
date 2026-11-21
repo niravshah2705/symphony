@@ -91,6 +91,17 @@ harnesses:
     # LiteLLM: OTEL_PROPAGATORS=tracecontext,baggage plus an OTLP endpoint.
     env: []
 
+# RemoteMCPServer objects: MCP servers the templates may bind. `name` is
+# suffixed onto <tenant.id>-mcp- and referenced from templates[].mcp below.
+# The fleet binds the shared webfetch server (ns kagent) so agents on any
+# harness can fetch URLs; streamable-HTTP is the only protocol all three
+# runtimes speak (codex/claude do not do SSE).
+mcp: []
+  # - name: webfetch
+  #   url: http://webfetch.kagent.svc.cluster.local:8087/mcp
+  #   protocol: STREAMABLE_HTTP   # default; SSE also exists
+  #   timeout: 30s
+
 # AgentTemplate objects: what an agent does. `modelConfig` is an unprefixed
 # name from `models` above; every other key below is passed through verbatim to
 # AgentTemplateSpec, so follow the CRD for their shape.
@@ -106,6 +117,8 @@ templates:
     outputSchemaFrom: {}
     outputSchemaStrict: false
     tools: []
+    # Unprefixed names from `mcp` above; each renders one tools[].mcp entry.
+    mcp: []
     skills: []
     plugins: []
 
