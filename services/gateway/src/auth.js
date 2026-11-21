@@ -190,6 +190,29 @@ function requireAuthenticated() {
   };
 }
 
+/**
+ * Route guard for the guest-only surface: allow an UNAUTHENTICATED caller, or
+ * any caller when auth is switched off locally, and refuse a signed-in one.
+ *
+ * The inversion is the point. `requirePermission` closes a signed-in user out of
+ * a guest route because they lack a permission; here a signed-in caller is
+ * refused because they have one — the click-only demo is the restricted view, and
+ * letting an account reach it would mean two code paths render the same feature
+ * and only one of them gets exercised by the signed-in tests.
+ *
+ * `mode === 'disabled'` passes even though auth.js stamps those requests
+ * `authenticated: true` with the admin role: local development has no real
+ * identity to check, and the e2e suite boots the gateway that way.
+ */
+function requireGuestOnly() {
+  return function guestOnly(req, res, next) {
+    if (req.method === 'OPTIONS') return next(); // CORS preflight — never gated
+    const auth = req.auth || PUBLIC_AUTH;
+    if (auth.mode === 'disabled' || auth.authenticated === false) return next();
+    return denyAccess(res, authorizationError('This demo is for visitors without an account. Use the signed-in workspace instead.'));
+  };
+}
+
 /** Public, non-secret Firebase web config for the SPA (safe to expose). */
 function publicAuthConfig(config = CONFIG.AUTH) {
   if (!config.enabled) return Object.freeze({ mode: 'disabled', enabled: false });
@@ -227,6 +250,7 @@ module.exports = {
   createAuthenticationMiddleware,
   requirePermission,
   requireAuthenticated,
+  requireGuestOnly,
   publicAuthConfig,
   verifyFirebaseIdToken,
   authEnabled,

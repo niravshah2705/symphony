@@ -100,6 +100,10 @@ jobs:
             orchestrator: ['services/orchestrator/**', 'deploy/gcp/Dockerfile.orchestrator']
             provisioner: ['services/provisioner/**', 'deploy/gcp/Dockerfile.provisioner']
             proxy:   ['services/proxy/**',   'deploy/gcp/Dockerfile.proxy']
+            # The guest preview broker is its own image: it is the only workload
+            # that can write the guest hosting site, so it must not travel inside
+            # the proxy artifact that every agent sidecar also runs.
+            guest:   ['services/guest-deployer/**', 'deploy/gcp/Dockerfile.guest-deployer']
             # A release-tooling change must publish the newly transformed SPA;
             # otherwise an obfuscator/default change would wait for an unrelated
             # public/** edit before reaching production.
@@ -138,6 +142,7 @@ jobs:
           ORCHESTRATOR: ${{ steps.filter.outputs.orchestrator }}
           PROVISIONER: ${{ steps.filter.outputs.provisioner }}
           PROXY: ${{ steps.filter.outputs.proxy }}
+          GUEST: ${{ steps.filter.outputs.guest }}
           SPA: ${{ steps.filter.outputs.spa }}
           INFRA: ${{ steps.filter.outputs.infra }}
           ORG: ${{ steps.filter.outputs.org }}
@@ -188,6 +193,12 @@ jobs:
           # Its image is built even while provisioning is disabled so enabling is a
           # one-var flip; terraform only creates the service when provisioning_enabled.
           if [ "$all" = "true" ] || [ "$PROVISIONER" = "true" ]; then push provisioner provisioner deploy/gcp/Dockerfile.provisioner . ; fi
+          # The guest broker renders its bundles from packages/shared-core, so a
+          # shared-code change must republish it — a stale image would release an
+          # old template under a new catalogue entry. Built even while the service
+          # is switched off, so enabling is a one-var flip (same rule as the
+          # provisioner).
+          if [ "$all" = "true" ] || [ "$GUEST" = "true" ]; then push guest guest-deployer deploy/gcp/Dockerfile.guest-deployer . ; fi
           # The org service builds from its own directory (its Dockerfile expects
           # services/org as the build context).
           if [ "$FORCE_ALL" = "true" ] || [ "$ORG" = "true" ]; then push org org-service services/org/Dockerfile services/org ; fi
@@ -369,6 +380,7 @@ jobs:
           SERVICES: ${{ needs.changes.outputs.services }}
           PROVISIONING_ENABLED: ${{ vars.PROVISIONING_ENABLED || 'false' }}
           LITELLM_ENABLED: ${{ vars.LITELLM_ENABLED || 'false' }}
+          GUEST_DEPLOYER_ENABLED: ${{ vars.GUEST_DEPLOYER_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           PROJECT="${{ vars.GCP_PROJECT_ID }}"
@@ -434,6 +446,10 @@ jobs:
             # It is built on every terraform-running deploy (see the plan step),
             # so it always resolves to the current SHA here.
             write_tag proxy resolve proxy proxy
+            # Optional service: while the gate is off terraform creates no
+            # service, so live_tag would describe a workload that does not exist
+            # and the plan would fail on a gcloud error instead of a no-op.
+            write_tag guest resolve_optional guest guest-deployer "$GUEST_DEPLOYER_ENABLED"
             write_tag org resolve org org-service
             write_tag settings resolve settings settings-service
             write_tag email resolve email email-service
@@ -728,6 +744,29 @@ jobs:
             -var="vpc_network=${{ vars.VPC_NETWORK }}"
             -var="vpc_subnet=${{ vars.VPC_SUBNET }}"
             -var="vpc_egress_mode=${{ vars.VPC_EGRESS_MODE || 'PRIVATE_RANGES_ONLY' }}"
+            # Guest guided demo. The demo routes are ON by default because the
+            # catalogue costs nothing to serve and a guest with no routes gets an
+            # input box that refuses everything; the BROKER is dark by default
+            # because it needs a dedicated Firebase project plus a versioned
+            # guest-deployer-internal-token, and half of that would hand visitors
+            # a preview URL that 404s. GUEST_FIREBASE_PROJECT must be EMPTY until
+            # it is real: terraform enables APIs on whatever it names.
+            -var="guest_demo_enabled=${{ vars.GUEST_DEMO_ENABLED || 'true' }}"
+            -var="guest_deployer_enabled=${{ vars.GUEST_DEPLOYER_ENABLED || 'false' }}"
+            -var="guest_firebase_project=${{ vars.GUEST_FIREBASE_PROJECT }}"
+            -var="guest_firebase_site=${{ vars.GUEST_FIREBASE_SITE || 'guest-previews' }}"
+            -var="guest_hosting_channel=${{ vars.GUEST_HOSTING_CHANNEL || 'live' }}"
+            -var="guest_preview_base_url=${{ vars.GUEST_PREVIEW_BASE_URL }}"
+            -var="guest_preview_ttl_ms=${{ vars.GUEST_PREVIEW_TTL_MS || '86400000' }}"
+            -var="guest_session_ttl_ms=${{ vars.GUEST_SESSION_TTL_MS || '86400000' }}"
+            -var="guest_worker_pool=${{ vars.GUEST_WORKER_POOL || 'guest-demo-pool' }}"
+            -var="guest_snapshot_location=${{ vars.GUEST_SNAPSHOT_LOCATION || 's3://ate-snapshots/guest/' }}"
+            -var="guest_max_messages=${{ vars.GUEST_MAX_MESSAGES || '40' }}"
+            -var="guest_max_sessions=${{ vars.GUEST_MAX_SESSIONS || '5000' }}"
+            -var="rate_limit_guest_window_ms=${{ vars.RATE_LIMIT_GUEST_WINDOW_MS || '60000' }}"
+            -var="rate_limit_guest_max=${{ vars.RATE_LIMIT_GUEST_MAX || '30' }}"
+            -var="rate_limit_knowledge_window_ms=${{ vars.RATE_LIMIT_KNOWLEDGE_WINDOW_MS || '60000' }}"
+            -var="rate_limit_knowledge_max=${{ vars.RATE_LIMIT_KNOWLEDGE_MAX || '20' }}"
             # Agent Substrate is the only execution pattern (#283 retired the Cloud
             # Run planner/coder harnesses), so these names are how a deployed agent
             # reaches a control plane at all. None of them had a CI path before:
@@ -775,6 +814,11 @@ jobs:
           [ -n "${{ steps.tags.outputs.billing }}" ] && apply_args+=(-var="billing_image_tag=${{ steps.tags.outputs.billing }}") || true
           [ -n "${{ steps.tags.outputs.laya }}" ] && apply_args+=(-var="laya_image_tag=${{ steps.tags.outputs.laya }}") || true
           [ -n "${{ steps.tags.outputs.clm }}" ] && apply_args+=(-var="clm_image_tag=${{ steps.tags.outputs.clm }}") || true
+          # The broker is counted, so the flag is harmless when
+          # guest_deployer_enabled is false: no resource reads the tag then, and
+          # without it a broker change would build and push an image the service
+          # never rolls onto.
+          [ -n "${{ steps.tags.outputs.guest }}" ] && apply_args+=(-var="guest_image_tag=${{ steps.tags.outputs.guest }}") || true
           # One resolved tag drives all three LiteLLM containers (see the tags step).
           [ -n "${{ steps.tags.outputs.litellm }}" ] && apply_args+=(
             -var="litellm_image_tag=${{ steps.tags.outputs.litellm }}"

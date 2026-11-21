@@ -1,0 +1,54 @@
+/* Shared stylesheet for every guest demo template. {{ACCENT}} is substituted by
+   the loader from the bundle's own allowlist, so a visitor cannot reach this
+   file with anything they typed. */
+:root {
+  --accent: {{ACCENT}};
+  --ink: #16202c;
+  --muted: #5d6b7c;
+  --panel: #ffffff;
+  --bg: #f5f7fa;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+main { max-width: 62rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+h1 { font-size: clamp(1.9rem, 4vw, 3rem); margin: 0 0 .35rem; }
+h2 { font-size: 1.25rem; margin: 2rem 0 .5rem; }
+p { margin: .5rem 0; }
+a { color: var(--accent); }
+
+.lede { color: var(--muted); max-width: 46rem; }
+.badge {
+  display: inline-block; padding: .2rem .6rem; border-radius: 999px;
+  background: var(--accent); color: #fff; font-size: .8rem; letter-spacing: .02em;
+}
+.card {
+  background: var(--panel); border: 1px solid #e2e8f0; border-radius: 14px;
+  padding: 1.25rem; margin: 1rem 0;
+}
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.toolbar { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin: 1.5rem 0; }
+button {
+  font: inherit; padding: .5rem .9rem; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+}
+button.ghost { background: transparent; color: var(--accent); }
+pre { overflow: auto; background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 12px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); }
+th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid #e2e8f0; }
+.price { font-weight: 650; }
+footer.site-footer {
+  margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #dbe2ea; color: var(--muted);
+}
+.nav { display: flex; gap: 1rem; align-items: center; }
+.nav a { text-decoration: none; font-weight: 550; }

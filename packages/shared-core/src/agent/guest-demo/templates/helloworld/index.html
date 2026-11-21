@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <p class="badge">{{ACCENT_NAME}} theme</p>
+  <h1>{{TITLE}}</h1>
+  <p class="lede">{{SUBTITLE}}</p>
+
+  <div class="toolbar">
+    <button id="greet" type="button">Say hello</button>
+    <button id="clear" class="ghost" type="button">Reset</button>
+    <output id="out" aria-live="polite"></output>
+  </div>
+
+  <div class="card">
+    <h2>How this page was made</h2>
+    <p>{{RUNTIME}}</p>
+    <p>{{ABOUT_LINK}}</p>
+  </div>
+  {{FOOTER}}
+</main>
+<script src="app.js"></script>
+</body>
+</html>

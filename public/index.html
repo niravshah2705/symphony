@@ -527,6 +527,47 @@
       </form>
     </dialog>
 
+    <!-- First-visit explanation for an unauthenticated visitor. Static markup on
+         purpose: a guest may open this page with no network and still needs to be
+         told why there is no text box. The notice sentences share their i18n keys
+         with the copy the catalogue serves (public/js/i18n-guest-parity.test.mjs
+         fails if the two ever read differently). -->
+    <dialog
+      class="guest-onboarding-dialog"
+      id="guest-onboarding-dialog"
+      aria-labelledby="guest-onboarding-title"
+      aria-describedby="guest-onboarding-description"
+    >
+      <div class="guest-onboarding-body">
+        <header>
+          <span class="guest-onboarding-eyebrow" data-i18n="guestOnboardingEyebrow">Guest demo</span>
+          <h2 id="guest-onboarding-title" data-i18n="guestOnboardingTitle">How this demo works</h2>
+          <p id="guest-onboarding-description" data-i18n="guestOnboardingBody">You are browsing as a guest, so the assistant takes clicks instead of typing. Pick an option, and it walks you through what a real run would do.</p>
+        </header>
+
+        <ol class="guest-onboarding-steps">
+          <li data-i18n="guestOnboardingStep1">Choose a starter option below the chat. There is nothing to type.</li>
+          <li data-i18n="guestOnboardingStep2">Answer the questions with the buttons it offers — each answer picks one variation.</li>
+          <li data-i18n="guestOnboardingStep3">Watch the run: the plan, the agent it would deploy, and a preview site built from that plan.</li>
+          <li data-i18n="guestOnboardingStep4">The preview and this conversation last one day. Sign in to keep your work and run it for real.</li>
+        </ol>
+
+        <p class="guest-restricted-note" data-i18n="guestRestrictedNotice">Restricted access: you are browsing as a guest. Pick from the options below — free text, tenant data and agent runs need an account.</p>
+
+        <a class="guest-onboarding-signin primary" href="#/login" data-guest-onboarding-signin data-i18n="guestSignInCta">Sign in for the full experience</a>
+
+        <label class="guest-onboarding-reviewed" for="guest-onboarding-reviewed">
+          <input id="guest-onboarding-reviewed" type="checkbox" />
+          <span data-i18n="guestOnboardingReviewed">I have reviewed this</span>
+        </label>
+
+        <div class="guest-onboarding-actions">
+          <button type="button" data-guest-onboarding-skip data-i18n="guestOnboardingSkip">Skip for now</button>
+          <button class="primary" type="button" data-guest-onboarding-done data-i18n="guestOnboardingClose">Close</button>
+        </div>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <!-- api.js imports /config.js as a module dependency, keeping deployment

@@ -546,6 +546,12 @@ test('authenticated users without an organization route to onboarding before wor
     // Surfacing any pending org/project invitation is part of the onboarding
     // landing (see organization view renderPendingInvitations).
     'GET /api/org/me/pending-invitations',
+    // The agreement record is global (per user, no organization behind it), and
+    // the first-login EULA decision has to be in hand before the first paint so
+    // the card is ready on the agent visit that follows onboarding. It is not a
+    // tenant workspace read, so it does not belong to the ordering this test
+    // protects.
+    'GET /api/eula',
   ]);
   expect(apiRequests.filter((request) => !onboardingRequests.has(request))).toEqual([]);
 });

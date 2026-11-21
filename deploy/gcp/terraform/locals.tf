@@ -51,6 +51,7 @@ locals {
   proxy_tag        = var.proxy_image_tag != "" ? var.proxy_image_tag : var.image_tag
   laya_tag         = var.laya_image_tag != "" ? var.laya_image_tag : var.image_tag
   clm_tag          = var.clm_image_tag != "" ? var.clm_image_tag : var.image_tag
+  guest_tag        = var.guest_image_tag != "" ? var.guest_image_tag : var.image_tag
 
   gateway_image      = "${local.image_base}/${var.gateway_service_name}:${local.gateway_tag}"
   orchestrator_image = "${local.image_base}/${var.orchestrator_service_name}:${local.orchestrator_tag}"
@@ -62,6 +63,25 @@ locals {
   proxy_image        = "${local.image_base}/${var.proxy_service_name}:${local.proxy_tag}"
   laya_image         = "${local.image_base}/${var.laya_service_name}:${local.laya_tag}"
   clm_image          = "${local.image_base}/${var.clm_service_name}:${local.clm_tag}"
+
+  # Guest preview broker (guest_deployer_service.tf). It is optional because it
+  # is useless without a dedicated Firebase project AND a versioned internal
+  # token, and a half-configured broker would mean the gateway hands visitors a
+  # preview URL that 500s. The gate therefore drives the service, the guest
+  # hosting site, the IAM bindings and the gateway's GUEST_DEPLOYER_URL together
+  # — there is no shape in which the gateway can reach a broker that does not
+  # exist, and no broker that no one can call.
+  guest_deployer_enabled = var.guest_deployer_enabled
+  guest_image            = "${local.image_base}/${var.guest_service_name}:${local.guest_tag}"
+  # Derived from the site rather than the service's own .uri: the broker needs
+  # its own URL in its own env (GUEST_PREVIEW_BASE_URL must agree with what the
+  # gateway stamps into the visitor's message), and referencing .uri from inside
+  # the service is a Terraform self-reference cycle. Same trick as clm_url.
+  guest_url = "https://${var.guest_service_name}-${local.run_url_suffix}"
+  # The preview origin the two services agree on. "*.web.app" is a different
+  # origin from the app, which is the point: generated guest HTML is served
+  # where the app's cookies and storage are out of reach.
+  guest_preview_origin = trimspace(var.guest_preview_base_url) != "" ? trimspace(var.guest_preview_base_url) : "https://${var.guest_firebase_site}.web.app"
 
   # Cloud Run's deterministic per-project URL:
   #   https://<service>-<project_number>.<region>.run.app

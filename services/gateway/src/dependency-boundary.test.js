@@ -116,10 +116,22 @@ test('only knowledge search bypasses agent authentication; tenant agent and code
 
   assert.match(
     gatewayIndex,
-    /app\.post\(\s*['"]\/api\/agent\/knowledge-search['"]\s*,\s*requirePermission\(\s*['"]workspace['"]\s*,\s*\{\s*level:\s*['"]read['"]\s*\}\s*\)\s*,\s*plannerProxy\s*\);/,
+    /app\.post\(\s*['"]\/api\/agent\/knowledge-search['"]\s*,\s*knowledgeRateLimit\s*,\s*requirePermission\(\s*['"]workspace['"]\s*,\s*\{\s*level:\s*['"]read['"]\s*\}\s*\)\s*,\s*plannerProxy\s*\);/,
+    'the one public agent endpoint must be per-address limited and read-gated before it reaches the planner proxy',
   );
   assert.ok(knowledgeSearch < agentCatchAll, 'the exact public route must win before the protected catch-all');
   assert.ok(workspaceStreamToken < agentCatchAll, 'the protected token mint must win before the agent catch-all');
+
+  // The guest demo is served by a local router on its own prefix, ahead of the
+  // agent catch-all, and its mount line carries no organization, EULA, or proxy
+  // middleware — the exact-bytes match is what keeps it that way.
+  assert.match(
+    gatewayIndex,
+    /app\.use\(\s*['"]\/api\/guest\/demo['"]\s*,\s*createGuestDemoRouter\(\)\s*\);/,
+    'the guest router must be mounted alone, with its guards inside the router',
+  );
+  const guestDemo = routeIndex('use', '/api/guest/demo');
+  assert.ok(guestDemo < agentCatchAll, 'a guest request must never fall through to the tenant agent proxy');
 
   assert.match(
     gatewayIndex,

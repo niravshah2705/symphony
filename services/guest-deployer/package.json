@@ -1,0 +1,26 @@
+{
+  "name": "@software-factory/guest-deployer",
+  "version": "1.0.0",
+  "description": "Software Factory guest preview broker — the only workload that can publish a guest demo site to Firebase Hosting.",
+  "private": true,
+  "main": "src/server.js",
+  "exports": {
+    ".": "./src/server.js",
+    "./service": "./src/service.js",
+    "./hosting": "./src/hosting.js",
+    "./releases": "./src/releases.js",
+    "./config": "./src/deploy-config.js"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=../../.env src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@software-factory/shared-core": "*",
+    "google-auth-library": "^11.0.1"
+  }
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{TITLE}} — component map</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <p class="badge">{{ACCENT_NAME}} theme</p>
+  <h1>What the {{TITLE}} sample is made of</h1>
+  <p class="lede">{{MAP_INTRO}}</p>
+
+  <div class="card">
+    <h2>Component map</h2>
+    <table>
+      <thead><tr><th>Component</th><th>Role</th><th>Rebuilt as</th></tr></thead>
+      <tbody>{{COMPONENT_ROWS}}</tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Clone plan</h2>
+    {{PLAN_STEPS}}
+    <p>{{MAP_LINK}}</p>
+  </div>
+  {{FOOTER}}
+</main>
+</body>
+</html>

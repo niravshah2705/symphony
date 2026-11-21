@@ -301,6 +301,10 @@ else
   build_push billing Dockerfile.billing
   build_push laya-inference Dockerfile.laya-inference
   build_push clm-inference Dockerfile.clm-inference
+  # The guest preview broker is a separate image on purpose: its service account
+  # is the only identity that can write the guest hosting site, and that
+  # privilege must not travel inside the proxy artifact every agent sidecar runs.
+  build_push guest-deployer Dockerfile.guest-deployer
   build_push_context org-service services/org/Dockerfile services/org
   # Settings copies the shared-core harness catalog, so it builds at repo root.
   build_push_context settings-service services/settings/Dockerfile .

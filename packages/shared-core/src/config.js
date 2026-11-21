@@ -568,6 +568,56 @@ const KAGENT = Object.freeze({
 });
 
 /**
+ * Guest demo — the click-only Agent workspace an unauthenticated visitor gets.
+ *
+ * Org-less by construction: a visitor has no organization, so there is no vault
+ * entry to resolve and nothing tenant-scoped this code is allowed to read. That
+ * is also why nothing here executes. The demo renders a real kagent four-CR set
+ * through the real renderer and deploys a first-party template; it never calls a
+ * model, never creates an actor and never reads `SUBSTRATE_*` — see
+ * `agent/guest-demo/catalog.js` for what the visitor can actually ask for.
+ *
+ * `workerPool` names the pool `deploy/gcp/guest-worker-pool.sh` creates. The
+ * name is only ever written into rendered YAML, so the gateway needs no cluster
+ * capability to produce it; the script default and this fallback are one
+ * contract and `deploy/gcp/guest-worker-pool.test.js` holds them together.
+ */
+const GUEST_DEMO = Object.freeze({
+  enabled: boolEnv(process.env, 'GUEST_DEMO_ENABLED', true),
+  workerPool: process.env.GUEST_WORKER_POOL || 'guest-demo-pool',
+  snapshotLocation: process.env.GUEST_SNAPSHOT_LOCATION || 's3://ate-snapshots/guest/',
+  // A preview is a throwaway: the visitor has no account to attach it to, so the
+  // only honest retention promise is "here for a day, then gone".
+  sessionTtlMs: Number(process.env.GUEST_SESSION_TTL_MS || 86400000),
+  previewTtlMs: Number(process.env.GUEST_PREVIEW_TTL_MS || 86400000),
+  maxMessages: Number(process.env.GUEST_MAX_MESSAGES || 40),
+  maxSessions: Number(process.env.GUEST_MAX_SESSIONS || 5000),
+  deployerUrl: process.env.GUEST_DEPLOYER_URL || '',
+  // A dedicated secret, deliberately not INTERNAL_API_TOKEN: the guest broker
+  // holds only the ability to write preview paths on one hosting site, and a
+  // shared S2S token would hand it the org and settings services as well.
+  deployerToken: process.env.GUEST_DEPLOYER_INTERNAL_TOKEN || '',
+  previewBaseUrl: process.env.GUEST_PREVIEW_BASE_URL || '',
+});
+
+/**
+ * Per-IP limits for the endpoints an unauthenticated visitor can reach. There
+ * is no guest principal to meter against — a browser is not an identity — so the
+ * address is the only handle, and it is advisory: a corporate NAT puts many
+ * visitors behind one IP. The durable bounds are the caps in GUEST_DEMO.
+ */
+const RATE_LIMIT = Object.freeze({
+  guest: Object.freeze({
+    windowMs: Number(process.env.RATE_LIMIT_GUEST_WINDOW_MS || 60000),
+    max: Number(process.env.RATE_LIMIT_GUEST_MAX || 30),
+  }),
+  knowledge: Object.freeze({
+    windowMs: Number(process.env.RATE_LIMIT_KNOWLEDGE_WINDOW_MS || 60000),
+    max: Number(process.env.RATE_LIMIT_KNOWLEDGE_MAX || 20),
+  }),
+});
+
+/**
  * Code-writer deep agent + workflow config (an equivalent of OpenAI Symphony's
  * WORKFLOW.md frontmatter). The agent works a Linear ticket end-to-end in an
  * isolated git workspace, driving it through the ticket state machine while
@@ -1053,6 +1103,8 @@ const CONFIG = Object.freeze({
   OPENROUTER,
   SUBSTRATE,
   KAGENT,
+  GUEST_DEMO,
+  RATE_LIMIT,
   CODER,
   MCP,
   TOOLS,

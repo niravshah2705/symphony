@@ -6,6 +6,11 @@ import { agentPauseCopy, agentPauseInfo, agentPauseNotice, hasAgentPauseContract
 import { state, setCurrentProject } from '../state.js';
 import { getAuthenticationState } from '../auth.js';
 import { activeWorkspaceProject, getWorkspaceContext } from '../workspace-context.js';
+import {
+  firstLoginEulaStorage,
+  markFirstLoginEulaSeen,
+  takePendingFirstLoginEula,
+} from '../first-login-eula.mjs';
 
 let workspaceStream = null; // EventSource: global status/jobs/coder/gate feed (replaces polling)
 let gateTimer = null; // display-only countdown tick for an awaiting approval gate (no fetch)
@@ -256,6 +261,7 @@ export async function renderAgent(view) {
     setComposerReady(scaffold.root, true);
     void refreshAttachmentChips(activeConversationId);
     requestAnimationFrame(scrollConversationToEnd);
+    showFirstLoginEula(stream);
 
     // Live updates over SSE replace the old 5s polling of /status + /jobs + /coder.
     // Initial state above is the one-shot seed; typed events keep it current.
@@ -282,15 +288,17 @@ export async function renderAgent(view) {
 function hydratePublicAgent(scaffold) {
   const publicThreads = el('aside', {
     class: 'conversation-rail',
-    'aria-label': 'Public Agent access',
+    'aria-label': t('guestThreadsLabel', 'Guest demo access'),
     dataset: { agentThreads: '' },
   }, [
     el('div', { class: 'conversation-rail-head' }, [
-      el('strong', {}, 'Public Agent'),
-      el('span', {}, 'Read only'),
+      el('strong', { dataset: { i18n: 'guestRailHeading', i18nFallback: 'Guest demo' } }, t('guestRailHeading', 'Guest demo')),
+      el('span', { dataset: { i18n: 'guestRailBadge', i18nFallback: 'No account' } }, t('guestRailBadge', 'No account')),
     ]),
-    el('p', { class: 'rail-copy' }, 'Search the reviewed ADLC documentation. Sign in for private history and workspace activity.'),
-    el('a', { class: 'btn', href: '#/settings' }, 'Sign in for workspace access'),
+    el('p', { class: 'rail-copy', dataset: { i18n: 'guestRailCopy', i18nFallback: 'Each click runs a scripted demo against first-party samples. Sign in for your own history and workspace activity.' } },
+      t('guestRailCopy', 'Each click runs a scripted demo against first-party samples. Sign in for your own history and workspace activity.')),
+    el('a', { class: 'btn', href: '#/settings', dataset: { i18n: 'guestSignInCta', i18nFallback: 'Sign in for the full experience' } },
+      t('guestSignInCta', 'Sign in for the full experience')),
   ]);
   scaffold.threadRail.replaceWith(publicThreads);
   scaffold.threadRail = publicThreads;
@@ -299,9 +307,10 @@ function hydratePublicAgent(scaffold) {
     el('div', { class: 'breadcrumbs' }, [
       el('span', {}, 'Workspace'),
       el('span', {}, '›'),
-      el('strong', {}, 'Public Agent'),
+      el('strong', { dataset: { i18n: 'guestRailHeading', i18nFallback: 'Guest demo' } }, t('guestRailHeading', 'Guest demo')),
     ]),
-    el('span', { class: 'privacy-chip' }, 'Reviewed docs only'),
+    el('span', { class: 'privacy-chip', dataset: { i18n: 'guestToolbarChip', i18nFallback: 'Scripted demos only' } },
+      t('guestToolbarChip', 'Scripted demos only')),
   ]);
   scaffold.toolbar.replaceWith(publicToolbar);
 
@@ -312,27 +321,480 @@ function hydratePublicAgent(scaffold) {
   }, 'Public access');
   scaffold.root.querySelector('[data-agent-rail-tabs]')?.replaceWith(publicTabs);
   scaffold.railBody.setAttribute('aria-labelledby', 'agent-public-tab');
+
+  // The hero is shared markup written for someone holding an account, and a
+  // guest has nothing to ask. Rewriting it here rather than in the scaffold keeps
+  // the signed-in view byte-identical.
+  const hero = scaffold.root.querySelector('[data-agent-hero]');
+  if (hero) {
+    clear(hero).append(
+      el('span', { class: 'omnibox-eyebrow' }, [
+        el('span', { class: 'omnibox-spark', 'aria-hidden': 'true' }, '✳'),
+        el('span', { dataset: { i18n: 'guestHeroEyebrow', i18nFallback: 'Guest demo · no account needed' } },
+          t('guestHeroEyebrow', 'Guest demo · no account needed')),
+      ]),
+      el('h1', { dataset: { i18n: 'guestHeroTitle', i18nFallback: 'See what a run does — by clicking, not typing.' } },
+        t('guestHeroTitle', 'See what a run does — by clicking, not typing.')),
+      el('p', { class: 'guest-hero-copy', dataset: { i18n: 'guestHeroBody', i18nFallback: 'Pick a starter option below and the demo plans it, shows the agent set it would deploy, and releases a preview site. Every answer is a button: there is nothing to type.' } },
+        t('guestHeroBody', 'Pick a starter option below and the demo plans it, shows the agent set it would deploy, and releases a preview site. Every answer is a button: there is nothing to type.')),
+      el('p', { class: 'guest-restricted-note', dataset: { guestNotice: 'restricted' } }, ''),
+    );
+    hero.classList.add('guest-hero');
+  }
+
   clear(scaffold.railBody).append(
-    railIntro('Read-only Agent', 'Public access is isolated from private organizations, projects, conversations, and run activity.'),
-    el('section', { class: 'route-policy-card', dataset: { panelSection: 'public-access' } }, [
+    railIntro(t('guestRailTitle', 'Read-only, and on purpose'),
+      t('guestRailBody', 'The guest demo is isolated from organizations, projects, conversations and run activity — those need an account.')),
+    el('section', { class: 'route-policy-card guest-restricted-card', dataset: { panelSection: 'public-access' } }, [
       el('span', { class: 'route-policy-icon', 'aria-hidden': 'true' }, '✳'),
-      el('strong', {}, 'Reviewed ADLC documentation'),
-      el('p', {}, 'Ask a documentation question here. Sign in before accessing tenant data or starting work.'),
+      el('strong', { dataset: { i18n: 'guestRestrictedCardTitle', i18nFallback: 'What a guest can and cannot do' } },
+        t('guestRestrictedCardTitle', 'What a guest can and cannot do')),
+      el('p', { dataset: { guestNotice: 'retrievability' } }, ''),
+      el('p', { dataset: { guestNotice: 'retention' } }, ''),
+      el('a', { class: 'rail-action-link', href: '#/settings', dataset: { i18n: 'guestSignInCta', i18nFallback: 'Sign in for the full experience' } },
+        t('guestSignInCta', 'Sign in for the full experience')),
     ]),
-    el('a', { class: 'rail-action-link', href: '#/settings' }, 'Sign in to continue'),
   );
 
   scaffold.stream.replaceChildren(
     assistantMessage(
-      'Public knowledge is ready.',
-      'Ask about ADLC or search the reviewed documentation. Private memory, conversations, projects, jobs, and agent actions stay unavailable until you sign in.',
-      [{ label: 'Sign in for private workspace access', href: '#/settings' }],
+      t('guestIntroTitle', 'Nothing to type — pick an option.'),
+      t('guestIntroBody', 'The starter buttons below run a scripted demo: a plan, the agent configuration it would deploy, and a preview site that lives for a day. Tenant data and real agent runs stay closed until you sign in.'),
+      [{ label: t('guestSignInCta', 'Sign in for the full experience'), href: '#/settings' }],
       'notice'
     )
   );
   scaffold.root.removeAttribute('data-i18n-skip');
   scaffold.root.dataset.agentScaffold = 'public';
   setComposerReady(scaffold.root, true);
+  renderGuestNotices(null);
+}
+
+// ---------------------------------------------------------------------------
+// The guest composer: clicks, never typing.
+//
+// An unauthenticated visitor is refused everything the free-text omnibox promises
+// (the gateway hands them `{ workspace: 'read' }` and the intent router has no
+// tenant to route to), so the input is removed rather than left to fail. What
+// replaces it is the server's own catalogue: ids issued by
+// GET /api/guest/demo/commands, echoed back by the runner as transcript text the
+// browser never typed. That is why nothing here renders a textarea and why a
+// failed catalogue fetch disables the buttons instead of falling back to free
+// text — a fallback would put back the exact promise this view exists to stop.
+// ---------------------------------------------------------------------------
+
+const GUEST_SESSION_STORAGE_KEY = 'aiFleetGuestSession';
+const GUEST_SESSION_ID = /^gcs_[0-9a-f-]{36}$/;
+
+function guestTabStorage() {
+  try {
+    return window.sessionStorage;
+  } catch (_) {
+    return null;
+  }
+}
+
+function readGuestSessionId() {
+  const storage = guestTabStorage();
+  let value = null;
+  try { value = storage && storage.getItem(GUEST_SESSION_STORAGE_KEY); } catch (_) { value = null; }
+  return typeof value === 'string' && GUEST_SESSION_ID.test(value) ? value : null;
+}
+
+function writeGuestSessionId(sessionId) {
+  const storage = guestTabStorage();
+  try { storage && storage.setItem(GUEST_SESSION_STORAGE_KEY, String(sessionId || '')); } catch (_) { /* per-tab only */ }
+}
+
+/** A session that 410s or is restarted has nothing left to carry over. */
+function clearGuestSessionId() {
+  const storage = guestTabStorage();
+  try { storage && storage.removeItem(GUEST_SESSION_STORAGE_KEY); } catch (_) { /* nothing to clear */ }
+}
+
+/** Days, because the notice reads as "1 day" and a millisecond figure reads as a bug. */
+function guestRetentionDays(ttlMs, fallback = 1) {
+  const ms = Number(ttlMs);
+  if (!Number.isFinite(ms) || ms <= 0) return fallback;
+  return Math.max(1, Math.round(ms / 86400000));
+}
+
+/**
+ * The restricted-access copy. It lives here and in the catalogue because the
+ * dialog and the notices must paint before any fetch resolves; the parity test
+ * (public/js/i18n-guest-parity.test.mjs) pins the English against the catalogue so
+ * the two cannot drift, and the retention number below is the one field that is
+ * genuinely data.
+ */
+function renderGuestNotices(catalogue) {
+  const days = guestRetentionDays(catalogue && catalogue.previewTtlMs);
+  const notices = [
+    ['[data-guest-notice="restricted"]', 'guestRestrictedNotice', 'Restricted access: you are browsing as a guest. Pick from the options below — free text, tenant data and agent runs need an account.', {}],
+    ['[data-guest-notice="retrievability"]', 'guestDataNotRetrievable', 'Guest conversations are not tied to an account and cannot be retrieved later. Sign in to keep your history.', {}],
+    ['[data-guest-notice="retention"]', 'guestPreviewExpiryNotice', 'Each demo session and the site it generates stay available for {days} day, then are deleted.', { days: String(days) }],
+  ];
+  for (const [selector, key, copy, replacements] of notices) {
+    for (const node of document.querySelectorAll(selector)) {
+      const value = t(key, copy, replacements);
+      if (node.textContent !== value) node.textContent = value;
+      node.dataset.i18n = key;
+      node.dataset.i18nFallback = copy;
+      // The locale pass re-derives the text from the dictionary, so it needs the
+      // same numbers this render had.
+      if (Object.keys(replacements).length) node.dataset.i18nArgs = JSON.stringify(replacements);
+    }
+  }
+}
+
+function buildGuestComposer(stream, railBody) {
+  const starters = el('div', {
+    class: 'guest-starter-row',
+    role: 'group',
+    'aria-label': t('guestStarterGroup', 'Guest demo starter options'),
+  });
+  const controller = { stream, railBody, starters, catalogue: null, busy: false };
+  const root = el('div', { class: 'chat-composer guest-composer', dataset: { guestComposer: '' } }, [
+    el('p', {
+      class: 'guest-composer-hint',
+      dataset: { i18n: 'guestComposerHint', i18nFallback: 'Pick one of these — a guest demo has no text box, because there is nothing a guest is asked to describe.' },
+    }, t('guestComposerHint', 'Pick one of these — a guest demo has no text box, because there is nothing a guest is asked to describe.')),
+    starters,
+    el('p', { class: 'guest-footer-note', dataset: { guestNotice: 'retrievability' } }, ''),
+  ]);
+  // Deferred to the next frame: the scaffold inserts this composer only after
+  // building it, and loadGuestStarters bails out while its host is detached (it
+  // then chains the session rail and the restore). Fetching now would fetch into
+  // a host nothing renders into.
+  requestAnimationFrame(() => void loadGuestStarters(controller));
+  return root;
+}
+
+async function loadGuestStarters(controller) {
+  const host = controller.starters;
+  if (!host.isConnected) return;
+  clear(host).append(el('span', { class: 'guest-starter-loading' }, t('guestStarterLoading', 'Loading the demo options…')));
+  let payload;
+  try {
+    payload = await api.getGuestCommands();
+  } catch (_) {
+    // Offline, rate-limited, or the feature is switched off server-side. The
+    // honest answer is "no options right now" — never a text box, which would put
+    // back the promise this view exists to stop. force-disabled so a later
+    // setComposerReady(true) cannot re-open the dead end; the retry is left live
+    // on purpose, because it is the control that gets the visitor unstuck.
+    clear(host).append(
+      el('button', { class: 'guest-starter', type: 'button', disabled: true, dataset: { forceDisabled: 'true' } },
+        t('guestStarterUnavailable', 'The demo options are unavailable right now.')),
+      el('button', { class: 'guest-starter-retry', type: 'button', onclick: () => loadGuestStarters(controller) },
+        t('guestStarterRetry', 'Try again')),
+    );
+    return;
+  }
+  // The fetch outlived its mount if the scaffold was torn down meanwhile: a
+  // detached host must not repaint or resume, or a stale controller drives the
+  // transcript slot.
+  if (!host.isConnected) return;
+  controller.catalogue = payload;
+  renderGuestNotices(payload);
+  const commands = Array.isArray(payload.commands) ? payload.commands : [];
+  clear(host).append(
+    ...commands.map((command) => el('button', {
+      class: 'guest-starter',
+      type: 'button',
+      dataset: { guestCommandId: command.id },
+      onclick: () => startGuestDemo(controller, command),
+    }, t(command.labelKey, command.label))),
+  );
+  void resumeGuestSession(controller);
+}
+
+/** Turn one clicked starter into a session, and the session into the transcript. */
+async function startGuestDemo(controller, command) {
+  if (controller.busy) return;
+  controller.busy = true;
+  setGuestStartersBusy(controller, true);
+  const label = t(command.labelKey, command.label);
+  try {
+    const payload = await api.runGuestCommand(command.id);
+    clear(controller.stream).append(
+      userMessage(label),
+      assistantMessage(t('guestDemoReplyTitle', 'Guest demo'), guestTurnText(payload.turn, label), [], ''),
+    );
+    rememberGuestSession(payload.session);
+    writeGuestFollowup(controller, payload);
+  } catch (error) {
+    handleGuestError(controller, error);
+  } finally {
+    controller.busy = false;
+    setGuestStartersBusy(controller, false);
+  }
+}
+
+function setGuestStartersBusy(controller, busy) {
+  for (const button of controller.starters.querySelectorAll('button[data-guest-command-id]')) button.disabled = busy;
+}
+
+/**
+ * The runner echoes the clicked label back as a `guest-echo` message and answers
+ * with the catalogue's own acknowledgement; either way the transcript text comes
+ * from the server, which is the point — the browser never supplied prose.
+ */
+function guestTurnText(turn, fallback) {
+  return (turn && typeof turn.text === 'string' && turn.text) || fallback;
+}
+
+function rememberGuestSession(session) {
+  if (session && GUEST_SESSION_ID.test(String(session.id || ''))) writeGuestSessionId(session.id);
+  else clearGuestSessionId();
+}
+
+/**
+ * A reload must not strand the visitor with a transcript and no way to continue,
+ * so the session is rehydrated from the server; the browser holds only its id. A
+ * session that no longer exists quietly disappears — the starter list is the
+ * entry point again, which is the 410 recovery rather than an error.
+ */
+async function resumeGuestSession(controller) {
+  const sessionId = readGuestSessionId();
+  if (!sessionId) return;
+  let payload;
+  try {
+    payload = await api.getGuestSession(sessionId);
+  } catch (_) {
+    clearGuestSessionId();
+    return;
+  }
+  if (!payload || !payload.session || !Array.isArray(payload.messages) || !payload.messages.length) {
+    clearGuestSessionId();
+    return;
+  }
+  clear(controller.stream).append(...payload.messages.map((message) =>
+    (message.role === 'user'
+      ? userMessage(message.text)
+      : assistantMessage(t('guestDemoReplyTitle', 'Guest demo'), message.text, [], ''))));
+  if (payload.session.previewUrl) {
+    controller.stream.append(assistantMessage(
+      t('guestDemoPreviewTitle', 'Your preview is still live'),
+      t('guestPreviewExpiryNotice', 'Each demo session and the site it generates stay available for {days} day, then are deleted.',
+        { days: String(guestRetentionDays(controller.catalogue && controller.catalogue.previewTtlMs)) }),
+      [{ label: t('guestDemoOpenPreview', 'Open the preview'), href: payload.session.previewUrl, external: true }],
+      'notice',
+    ));
+  }
+  writeGuestFollowup(controller, payload);
+}
+
+/** Render `next` under the transcript: the only controls a guest can act on. */
+function writeGuestFollowup(controller, payload) {
+  const next = payload ? payload.next : null;
+  if (payload && payload.flow) {
+    renderGuestDemoFlow(controller, payload.flow, payload.preview || (payload.session && payload.session.previewUrl) || null);
+  }
+  if (!next) {
+    // No next means the tree ran out, not that the tab broke: the starters stay
+    // up, so "start another" is a click and not a dead end.
+    controller.stream.append(assistantMessage(
+      t('guestDemoEnd', 'That is the end of this demo.'),
+      t('guestDemoEndBody', 'Sign in to run this for real, or pick another option below — each click opens a fresh session.'),
+      [{ label: t('guestSignInCta', 'Sign in for the full experience'), href: '#/settings' }],
+      'notice',
+    ));
+    return;
+  }
+  if (next.kind === 'restart') {
+    clearGuestSessionId();
+    controller.stream.append(assistantMessage(
+      t('guestDemoRestartTitle', 'Start another demo'),
+      t('guestDemoRestartBody', 'This session is closed. Pick any option below — each click opens a fresh one.'),
+    ));
+    return;
+  }
+  if (next.kind === 'terminal') {
+    controller.stream.append(assistantMessage(
+      t('guestDemoStopped', 'This demo session has reached its limit.'),
+      t(next.labelKey, next.label, { messages: next.messages }),
+      [{ label: t('guestSignInCta', 'Sign in for the full experience'), href: '#/settings' }],
+      'notice',
+    ));
+    return;
+  }
+  if (next.kind === 'flow') {
+    // A flow arriving as `next` (rather than alongside an answer) carries no
+    // rendered artifacts, so it shows as the step list it is.
+    renderGuestDemoFlow(controller, next, payload.preview || null);
+    return;
+  }
+  if (next.kind === 'knowledge-search') {
+    void runGuestKnowledgeSearch(controller, next);
+    return;
+  }
+  renderGuestFollowup(controller, next);
+}
+
+function renderGuestFollowup(controller, next) {
+  const answers = Array.isArray(next.answers) ? next.answers : [];
+  controller.stream.append(el('article', { class: 'conversation-message assistant guest-question' }, [
+    el('div', { class: 'message-avatar' }, 'S'),
+    el('div', { class: 'message-copy' }, [
+      el('strong', { class: 'message-title', dataset: { i18n: next.questionKey, i18nFallback: next.question } },
+        t(next.questionKey, next.question)),
+      el('p', {}, t('guestFollowupHint', 'Pick one — the answers are fixed, so there is nothing to type.')),
+      el('div', { class: 'guest-followup-actions', role: 'group', 'aria-label': t('guestFollowupGroup', 'Choose one') },
+        answers.map((answer) => el('button', {
+          class: 'guest-answer',
+          type: 'button',
+          dataset: { guestAnswerId: answer.id },
+          onclick: (event) => answerGuestDemo(controller, next, answer, event.currentTarget),
+        }, t(answer.labelKey, answer.label)))),
+    ]),
+  ]));
+  requestAnimationFrame(scrollConversationToEnd);
+}
+
+async function answerGuestDemo(controller, node, answer, button) {
+  if (controller.busy) return;
+  const sessionId = readGuestSessionId();
+  if (!sessionId) { void loadGuestStarters(controller); return; }
+  controller.busy = true;
+  button.disabled = true;
+  const label = t(answer.labelKey, answer.label);
+  try {
+    const payload = await api.answerGuestDemo({ sessionId, nodeId: node.id, answerId: answer.id });
+    controller.stream.append(
+      userMessage(label),
+      assistantMessage(t('guestDemoReplyTitle', 'Guest demo'), guestTurnText(payload.turn, label), [], ''),
+    );
+    rememberGuestSession(payload.session);
+    // Answering consumes the node: leaving the buttons live would offer a step
+    // the server now rejects with 409.
+    for (const control of controller.stream.querySelectorAll('.guest-followup-actions button')) control.disabled = true;
+    writeGuestFollowup(controller, payload);
+  } catch (error) {
+    handleGuestError(controller, error);
+  } finally {
+    controller.busy = false;
+  }
+}
+
+/**
+ * The one guest step that reaches a real endpoint, and the query is the
+ * server's: `next.query` comes from the catalogue, so a guest cannot search for
+ * anything the demo did not already choose to show.
+ */
+async function runGuestKnowledgeSearch(controller, next) {
+  controller.stream.append(el('article', { class: 'conversation-message assistant guest-question' }, [
+    el('div', { class: 'message-avatar' }, 'S'),
+    el('div', { class: 'message-copy' }, [
+      el('strong', { class: 'message-title', dataset: { i18n: next.labelKey, i18nFallback: next.label } }, t(next.labelKey, next.label)),
+      el('p', { class: 'guest-docs-searching' }, t('guestDocsSearching', 'Searching the reviewed documentation…')),
+    ]),
+  ]));
+  let response;
+  try {
+    response = await api.searchAgentKnowledge({ query: next.query });
+  } catch (error) {
+    handleGuestError(controller, error);
+    return;
+  }
+  const results = Array.isArray(response && response.results) ? response.results : [];
+  controller.stream.append(assistantMessage(
+    t('guestDocsResultTitle', 'What the documentation says'),
+    results.length
+      ? t('guestDocsResultBody', 'From {count} indexed documents — the full answer, with workspace memory, is available once you sign in.',
+        { count: String(response.indexedFiles || results.length) })
+      : t('guestDocsNoResults', 'Nothing in the reviewed documentation matched that. Sign in and ask in your own workspace.'),
+    [{ label: t('guestSignInCta', 'Sign in for the full experience'), href: '#/settings' }],
+    'notice',
+  ));
+  if (results.length) {
+    controller.stream.append(el('ul', { class: 'guest-docs-results' },
+      results.slice(0, 4).map((result) => el('li', {}, [
+        el('strong', {}, result.title || result.path || ''),
+        el('p', {}, result.snippet || ''),
+      ]))));
+  }
+  requestAnimationFrame(scrollConversationToEnd);
+}
+
+function handleGuestError(controller, error) {
+  // 410 (expired) and 409 (stale node) both mean "this tab's thread moved on";
+  // the recovery is the entry point again, not a message about an error.
+  if (error && error.status === 410) {
+    clearGuestSessionId();
+    void loadGuestStarters(controller);
+    toast(t('guestSessionExpired', 'That demo session expired. Pick an option to start a new one.'), 'warn');
+    return;
+  }
+  if (error && error.status === 409) {
+    clearGuestSessionId();
+    void loadGuestStarters(controller);
+    toast(t('guestStepStale', 'That step has already been answered. Pick an option to start a new one.'), 'warn');
+    return;
+  }
+  if (error && error.status === 403) {
+    toast(t('guestDemoSignedIn', 'You are signed in, so the guest demo is not needed here.'), 'warn');
+    return;
+  }
+  if (error && error.status === 429) {
+    toast(t('guestDemoRateLimited', 'That was quick — the guest demo is limited per address. Wait a moment and try again.'), 'warn');
+    return;
+  }
+  if (error && error.status === 400 && error.code === 'guest_session_id_invalid') {
+    clearGuestSessionId();
+    void loadGuestStarters(controller);
+    return;
+  }
+  toast(error && error.message ? error.message : t('guestDemoFailed', 'The guest demo could not continue.'), 'error');
+}
+
+/**
+ * The scripted run: the plan, the skill, the rendered CR set, the deploy, the URL.
+ * Shown as a guided-step list because the point is that a guest sees the same
+ * shape a real run takes — and the label over the YAML is the point of showing it
+ * at all: nothing was applied anywhere.
+ */
+function renderGuestDemoFlow(controller, flow, previewUrl) {
+  const steps = Array.isArray(flow.steps) ? flow.steps : [];
+  const days = String(guestRetentionDays(controller.catalogue && controller.catalogue.previewTtlMs));
+  const list = el('ol', { class: 'guest-demo-steps' }, steps.map((step) => el('li', {
+    class: `guest-demo-step status-${step.status || 'done'}`,
+    dataset: { guestDemoStep: step.id },
+  }, [
+    el('strong', { dataset: { i18n: step.labelKey, i18nFallback: step.label } }, t(step.labelKey, step.label, { days })),
+    step.note === 'preview-publishing-disabled'
+      ? el('p', {}, t('guestDemoPreviewSkipped', 'Preview publishing is not enabled on this deployment, so this step was skipped.'))
+      : null,
+    step.artifacts && typeof step.artifacts === 'object'
+      ? el('details', { class: 'guest-demo-artifact' }, Object.entries(step.artifacts).map(([name, body]) => el('div', {}, [
+        el('summary', {}, t('guestDemoArtifactSummary', 'The agent configuration this run would apply')),
+        el('pre', { dataset: { guestCrset: '' } }, `${name}\n${body}`),
+      ])))
+      : null,
+  ])));
+  controller.stream.append(el('article', { class: 'conversation-message assistant guest-flow' }, [
+    el('div', { class: 'message-avatar' }, 'S'),
+    el('div', { class: 'message-copy' }, [
+      el('strong', { class: 'message-title' }, t('guestDemoFlowTitle', 'Here is what this run produced')),
+      el('p', { class: 'guest-demo-simulated', dataset: { i18n: 'guestDemoSimulatedNotice', i18nFallback: 'Simulated preview — nothing was applied to a cluster.' } },
+        t('guestDemoSimulatedNotice', 'Simulated preview — nothing was applied to a cluster.')),
+      list,
+      previewUrl ? el('div', { class: 'message-links' }, [
+        el('a', {
+          href: previewUrl, target: '_blank', rel: 'noreferrer',
+          dataset: { guestPreviewLink: '', i18n: 'guestDemoOpenPreview', i18nFallback: 'Open the preview' },
+        }, t('guestDemoOpenPreview', 'Open the preview')),
+      ]) : null,
+      previewUrl ? el('p', {
+        class: 'guest-preview-expiry',
+        dataset: {
+          i18n: 'guestPreviewExpiryNotice',
+          i18nFallback: 'Each demo session and the site it generates stay available for {days} day, then are deleted.',
+          i18nArgs: JSON.stringify({ days }),
+        },
+      }, t('guestPreviewExpiryNotice', 'Each demo session and the site it generates stay available for {days} day, then are deleted.', { days })) : null,
+    ]),
+  ]));
+  requestAnimationFrame(scrollConversationToEnd);
 }
 
 /** Return the pre-rendered Agent shell, or create the same shell for a deep link. */
@@ -392,7 +854,14 @@ function ensureAgentScaffold(view, generation) {
   const composerSlot = root.querySelector('[data-agent-composer]');
   const tabsSlot = root.querySelector('[data-agent-rail-tabs]');
 
-  const composer = buildComposer(stream, railBody, generation);
+  // Same predicate renderAgent uses to call hydratePublicAgent: a guest gets the
+  // click-only composer, a signed-in visitor or a local no-auth dev profile keeps
+  // the omnibox. buildComposer is not touched, so the signed-in path is byte-identical.
+  const authState = getAuthenticationState();
+  const guest = authState.enabled && !authState.authenticated;
+  const composer = guest
+    ? buildGuestComposer(stream, railBody)
+    : buildComposer(stream, railBody, generation);
   composer.dataset.agentComposer = '';
   composerSlot.replaceWith(composer);
   setComposerReady(root, false);
@@ -1263,6 +1732,35 @@ async function ensureEulaAccepted() {
     // trust boundary and will still block the mutation if this is bypassed.
     return false;
   }
+}
+
+/**
+ * The EULA asked once at the start of a session rather than mid-task. app.js
+ * decides this at boot and hands the version over here, because this view owns
+ * the transcript; taking the flag clears it so a later mount in the same tab
+ * stays quiet. The work-intent gate above is the backstop for anyone who
+ * declined, and `requireEulaAccepted()` server-side remains the real boundary.
+ */
+function showFirstLoginEula(stream) {
+  const version = takePendingFirstLoginEula();
+  if (!version) return;
+  // Painting the card is the ask: recording it now means a reload is not a second
+  // prompt of a question that is still on screen.
+  markFirstLoginEulaSeen(firstLoginEulaStorage(), getAuthenticationState(), version);
+  const card = renderEulaGate({
+    version: version === 'unknown' ? null : version,
+    onAccept: async () => {
+      const record = await api.recordEulaDecision('accepted', 'user');
+      eulaStatus = { accepted: true, version: record && record.version };
+      card.replaceWith(assistantMessage(
+        'End User License Agreement accepted',
+        'You can run actions now. Asking questions and searching the workspace worked without it, and still does.'
+      ));
+      scrollConversationToEnd();
+    },
+    onReject: () => api.recordEulaDecision('rejected', 'user').catch(() => {}),
+  });
+  stream.append(card);
 }
 
 async function resolveOmniboxRequest(text) {

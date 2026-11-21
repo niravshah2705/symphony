@@ -404,6 +404,41 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 .cookie-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 .cookie-dialog-actions button { min-height: 40px; }
 
+/* Guest onboarding. Same shell as the cookie dialog: a guest may open this page
+   with no network at all, so the dialog is static markup and has to look like it
+   belongs to the page it is standing in. */
+.guest-onboarding-dialog {
+  width: min(560px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); padding: 0;
+  overflow: auto; border: 1px solid var(--border-strong); border-radius: 16px;
+  background: var(--panel); color: var(--text); box-shadow: 0 24px 80px rgba(0, 0, 0, .42);
+}
+.guest-onboarding-dialog:not([open]) { display: none; }
+.guest-onboarding-dialog::backdrop { background: var(--overlay); backdrop-filter: blur(2px); }
+.guest-onboarding-body { display: flex; flex-direction: column; gap: 20px; padding: clamp(22px, 5vw, 34px); }
+.guest-onboarding-body header h2 { margin: 5px 0 8px; font: 600 clamp(24px, 5vw, 31px)/1.15 var(--font-serif); letter-spacing: -.025em; }
+.guest-onboarding-body header p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.guest-onboarding-eyebrow { color: var(--accent-2); font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.guest-onboarding-steps { display: grid; gap: 10px; margin: 0; padding: 0 0 0 20px; color: var(--text); font-size: 11px; line-height: 1.6; }
+.guest-onboarding-steps li { padding-left: 2px; }
+.guest-restricted-note {
+  margin: 0; padding: 11px 13px; border: 1px solid var(--border-strong); border-radius: 11px;
+  background: var(--surface-subtle); color: var(--muted); font-size: 10px; line-height: 1.6;
+}
+.guest-onboarding-signin {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 40px;
+  padding: 0 15px; border-radius: 10px; background: var(--accent); color: white;
+  font-size: 11px; font-weight: 650; text-decoration: none;
+}
+.guest-onboarding-signin:hover { filter: brightness(1.04); }
+.guest-onboarding-reviewed {
+  display: flex; align-items: center; gap: 10px; margin: 0; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--surface-subtle);
+  color: var(--text); font-size: 11px; cursor: pointer;
+}
+.guest-onboarding-reviewed input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--accent); }
+.guest-onboarding-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
+.guest-onboarding-actions button { min-height: 40px; }
+
 /* Public, English-only legal documents. */
 .legal-document { width: min(100%, 860px); margin: 0 auto; padding-bottom: 36px; }
 .legal-document h1 { margin: 0 0 22px; font: 600 clamp(30px, 5vw, 44px)/1.12 var(--font-serif); letter-spacing: -.035em; }

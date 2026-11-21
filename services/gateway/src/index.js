@@ -10,6 +10,7 @@ const { requireBillingCaller, billingTrustedHeaders } = require('./billing-acces
 const eulaRoutes = require('./routes/eula');
 const { createPipelineRouter } = require('./routes/pipeline');
 const { createWorkflowsRouter } = require('./routes/workflows');
+const { createGuestDemoRouter } = require('./routes/guest-demo');
 const { createProxy } = require('./proxy');
 const { blockInternalProxy } = require('./settings-internal-guard');
 const { mountRemovedAgentRouteTombstones } = require('./removed-agent-routes');
@@ -32,6 +33,7 @@ const { enforcePinnedOrganization, requestContext, requireOrganizationContext, n
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
 const { createApiDocsGate, serveSwaggerJson, createSwaggerMiddleware, createSwaggerUISetup } = require('./swagger');
+const { createIpRateLimit } = require('./rate-limit');
 
 const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
 const pipelineAdmission = createPipelineAdmission();
@@ -43,6 +45,14 @@ const streamTokenHandlers = createStreamTokenHandlers({
   getConversation,
   matchesEventContext: events.matchesEventContext,
 });
+
+// Per-address limits for the two things an unauthenticated browser can make the
+// gateway do. Metered only when auth is actually on: with AUTH_MODE=disabled
+// every caller arrives as 127.0.0.1 (trust-proxy sets 0 hops), so an always-on
+// window would throttle local development and the e2e suite rather than abuse.
+// The durable bounds for the guest demo are the caps in CONFIG.GUEST_DEMO.
+const guestRateLimit = createIpRateLimit({ ...CONFIG.RATE_LIMIT.guest, enabled: CONFIG.AUTH.enabled });
+const knowledgeRateLimit = createIpRateLimit({ ...CONFIG.RATE_LIMIT.knowledge, enabled: CONFIG.AUTH.enabled });
 
 /**
  * Gateway service — the single browser-facing origin. It serves the SPA, owns
@@ -265,14 +275,21 @@ app.use('/api/workflows', requireAuthenticated(), requirePermission('workspace')
 app.post('/api/agent/enqueue', requirePermission('workspace'), requireOrganizationContext(), requireEulaAccepted(), publish.enqueue);
 app.post('/api/coder/run', requirePermission('workspace'), requireOrganizationContext(), publish.coderRun);
 
+// The click-only guest demo. Local router, guest-only guard, per-IP limit, and no
+// organization context: a visitor has none, and reaching the tenant proxies from
+// here must be impossible rather than merely refused. Its own path prefix, so it
+// is outside the /api/agent catch-all's workspace:write gate entirely.
+app.use('/api/guest/demo', createGuestDemoRouter());
+
 // All other agent surfaces are reverse-proxied to their isolated services.
 // Tenant state (jobs, conversations, memories, status, and configured model
 // discovery) requires a signed-in identity. Only the reviewed documentation
 // search below is public; otherwise an empty public context could expose legacy
 // or another tenant's shared-stack records.
 // Basic RAG over the reviewed repository documentation is safe for anonymous
-// visitors even though it uses POST for a bounded query body.
-app.post('/api/agent/knowledge-search', requirePermission('workspace', { level: 'read' }), plannerProxy);
+// visitors even though it uses POST for a bounded query body. It is still the
+// most expensive thing a guest can ask for, so it carries its own limit.
+app.post('/api/agent/knowledge-search', knowledgeRateLimit, requirePermission('workspace', { level: 'read' }), plannerProxy);
 // Preparing a business runs the real 6-stage pipeline (writes) — actual work, so
 // it needs EULA acceptance. Registered before the catch-all so this exact path
 // wins; everything else on /api/agent keeps the plain workspace:write gate.

@@ -37,7 +37,11 @@
 #   STREAM_TOKEN_SECRET (auto-generated if unset),
 #   IDENTITY_HASH_PEPPER (auto-generated if unset),
 #   EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
-#   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL.
+#   EMAIL_SMTP_SECURE, EMAIL_SMTP_REQUIRE_TLS, EMAIL_FROM, EMAIL_PUBLIC_APP_URL,
+#   GUEST_DEPLOYER_ENABLED (false — turns on the guest preview broker),
+#   GUEST_FIREBASE_PROJECT (the DEDICATED project guest previews live in;
+#   required when enabled), GUEST_FIREBASE_SITE (guest-previews),
+#   GUEST_DEPLOYER_INTERNAL_TOKEN (auto-generated when the broker is enabled).
 set -euo pipefail
 
 : "${PROJECT_ID:?set PROJECT_ID}"
@@ -55,6 +59,13 @@ FIREBASE_CUSTOM_DOMAIN="${FIREBASE_CUSTOM_DOMAIN:-platform.archagentix.com}"
 # (moved off the old Hostinger FTP push). Empty detaches the domain.
 MARKETING_CUSTOM_DOMAIN="${MARKETING_CUSTOM_DOMAIN:-www.archagentix.com}"
 EMAIL_PUBLIC_APP_URL="${EMAIL_PUBLIC_APP_URL:-https://${PROJECT_ID}.web.app}"
+# Guest previews stay dark until the operator names a DEDICATED Firebase project:
+# the broker writes whatever GUEST_FIREBASE_PROJECT says, so enabling it without
+# a project would publish generated guest HTML wherever the ambient credential
+# points — the app project, with the SPA's own sites.
+GUEST_FIREBASE_PROJECT="${GUEST_FIREBASE_PROJECT:-}"
+GUEST_FIREBASE_SITE="${GUEST_FIREBASE_SITE:-guest-previews}"
+GUEST_DEPLOYER_ENABLED="${GUEST_DEPLOYER_ENABLED:-false}"
 GOOGLE_ANALYTICS_MEASUREMENT_ID="${GOOGLE_ANALYTICS_MEASUREMENT_ID:-}"
 DEPLOYER="gh-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 TF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/terraform" && pwd)"
@@ -206,6 +217,15 @@ STREAM_TOKEN_SECRET="${STREAM_TOKEN_SECRET:-$(openssl rand -base64 32 2>/dev/nul
 seed stream-token-secret "$STREAM_TOKEN_SECRET"
 IDENTITY_HASH_PEPPER="${IDENTITY_HASH_PEPPER:-$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')}"
 seed identity-hash-pepper "$IDENTITY_HASH_PEPPER"
+# The guest broker's shared secret. Seeded only when the broker is switched on:
+# an empty container Terraform then manages would leave the service unable to
+# boot (deploy-config.js requires >= 16 characters and Cloud Run refuses a
+# secret with no enabled version), and a stale value would outlive the flip.
+if [ "$GUEST_DEPLOYER_ENABLED" = "true" ]; then
+  [ -n "$GUEST_FIREBASE_PROJECT" ] || { echo "ERROR: GUEST_DEPLOYER_ENABLED=true needs GUEST_FIREBASE_PROJECT — the broker must not guess which project holds the guest site." >&2; exit 1; }
+  GUEST_DEPLOYER_INTERNAL_TOKEN="${GUEST_DEPLOYER_INTERNAL_TOKEN:-$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '\n')}"
+  seed guest-deployer-internal-token "$GUEST_DEPLOYER_INTERNAL_TOKEN"
+fi
 # org-jwt-secret is Terraform-managed (random_password + version) — no seed here.
 ensure_secret github-token;     [ -n "${GITHUB_TOKEN:-}" ]      && seed github-token     "$GITHUB_TOKEN"      || true
 ensure_secret langsmith-api-key;[ -n "${LANGSMITH_API_KEY:-}" ] && seed langsmith-api-key "$LANGSMITH_API_KEY" || true
@@ -260,6 +280,15 @@ if command -v gh >/dev/null 2>&1; then
   [ -n "${FIREBASE_ALLOWED_DOMAIN:-}" ] && gh variable set FIREBASE_ALLOWED_DOMAIN --repo "$REPO" --body "$FIREBASE_ALLOWED_DOMAIN" || true
   [ -n "${FIREBASE_CUSTOM_DOMAIN:-}" ] && gh variable set FIREBASE_CUSTOM_DOMAIN --repo "$REPO" --body "$FIREBASE_CUSTOM_DOMAIN" || true
   [ -n "${MARKETING_CUSTOM_DOMAIN:-}" ] && gh variable set MARKETING_CUSTOM_DOMAIN --repo "$REPO" --body "$MARKETING_CUSTOM_DOMAIN" || true
+  gh variable set GUEST_DEPLOYER_ENABLED --repo "$REPO" --body "$GUEST_DEPLOYER_ENABLED"
+  if [ "$GUEST_DEPLOYER_ENABLED" = "true" ]; then
+    gh variable set GUEST_FIREBASE_PROJECT --repo "$REPO" --body "$GUEST_FIREBASE_PROJECT"
+    gh variable set GUEST_FIREBASE_SITE    --repo "$REPO" --body "$GUEST_FIREBASE_SITE"
+    # The guest project is a project this stack otherwise does not touch, and
+    # bootstrap only enables APIs where it can prove the credential. Say so
+    # rather than let a plan fail on a disabled API an hour later.
+    echo "  guest previews: enable Firebase + Hosting APIs on ${GUEST_FIREBASE_PROJECT}, then grant this deployer SA roles/firebase.admin THERE to let Terraform create the site."
+  fi
   echo "  set (FIREBASE_API_KEY is NOT needed — Terraform derives it from the web app)"
 else
   log "gh CLI not found — set these repo secrets/variables manually"
@@ -284,6 +313,11 @@ if command -v terraform >/dev/null 2>&1; then
       "$1" "$2" >/dev/null && echo "  $1: imported"; fi; }
   tfimport 'google_secret_manager_secret.stream_token_secret' "projects/${PROJECT_ID}/secrets/stream-token-secret"
   tfimport 'google_secret_manager_secret.identity_hash_pepper' "projects/${PROJECT_ID}/secrets/identity-hash-pepper"
+  # Counted resource: importing it while the gate is off would put a container in
+  # state that the next plan wants to create, so this mirrors the seed gate above.
+  if [ "$GUEST_DEPLOYER_ENABLED" = "true" ]; then
+    tfimport 'google_secret_manager_secret.guest_deployer_internal_token[0]' "projects/${PROJECT_ID}/secrets/guest-deployer-internal-token"
+  fi
   tfimport 'google_secret_manager_secret.extra["github-token"]'     "projects/${PROJECT_ID}/secrets/github-token"
   tfimport 'google_secret_manager_secret.extra["langsmith-api-key"]' "projects/${PROJECT_ID}/secrets/langsmith-api-key"
   tfimport 'google_secret_manager_secret.extra["langfuse-public-key"]' "projects/${PROJECT_ID}/secrets/langfuse-public-key"

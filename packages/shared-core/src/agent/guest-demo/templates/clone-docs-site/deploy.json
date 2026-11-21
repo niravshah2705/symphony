@@ -1,0 +1,25 @@
+{
+  "label": "Sample documentation site",
+  "variant": "../_shared/clone-variant.json",
+  "tokens": {
+    "TITLE": "Sample documentation site",
+    "SUBTITLE": "A first-party demo docs page: a contents rail, one article, and a code sample.",
+    "MAP_INTRO": "The blocks below are what the demo found in the sample documentation site, in build order.",
+    "COMPONENT_ROWS": "<tr><td>Contents rail</td><td>Anchor list for the page</td><td>A nav block in a two-column grid</td></tr><tr><td>Article</td><td>Heading, prose, sample</td><td>One card, prose first</td></tr><tr><td>Code sample</td><td>Copy-pasteable command</td><td>A pre block with the tokens escaped</td></tr><tr><td>Footer</td><td>Last updated, contact</td><td>Optional, added by the customisation step</td></tr>",
+    "PLAN_STEPS": "<ol><li>Split the page into the rail and the article column.</li><li>Move the prose into one card with its headings.</li><li>Escape the code sample into a pre block.</li><li>Release the files to the guest hosting site.</li></ol>",
+    "ABOUT_BODY": "A contents rail, one article, and one code sample. That is the whole documentation starter.",
+    "ABOUT_HOW": "Mapped from the sample documentation site by the guest demo, then rebuilt as static files. The prose is first-party copy, not scraped text.",
+    "SIDEBAR_LINKS": "        <a href=\"#install\">Install</a>\n        <a href=\"#first-run\">First run</a>\n        <a href=\"#troubleshooting\">Troubleshooting</a>",
+    "ARTICLE_HEADING": "First run",
+    "ARTICLE_BODY": "Start the gateway, then point the CLI at it. The article section is the widest column; the rail stays put while you scroll.",
+    "CODE_SAMPLE": "npm start\nadlc run plan --project demo-app"
+  },
+  "files": [
+    { "path": "index.html", "src": "../_shared/clone-map.html", "when": { "depth": ["map"] } },
+    { "path": "site.html", "src": "page.html", "when": { "depth": ["map"] } },
+    { "path": "index.html", "src": "page.html", "when": { "depth": ["full"] } },
+    { "path": "components.html", "src": "../_shared/clone-map.html", "when": { "depth": ["full"] } },
+    { "path": "styles.css", "src": "../_shared/styles.css" },
+    { "path": "about.html", "src": "../_shared/about.html", "when": { "extra": ["page"] } }
+  ]
+}

@@ -340,6 +340,9 @@ const DEFAULT_STORE = Object.freeze({
   // only proof that a quantity exists that has not yet been reported.
   billingOutbox: [],
   actorSessions: [],
+  // Unauthenticated demo transcripts. Global only — never written through
+  // readStore(), so they cannot surface in a tenant workspace.
+  guestSessions: [],
   billing: { lastAggregatedAt: null }, // sweep watermark (see billing/sweep.js)
 
   // Workflow designer, schema v2 (see docs/WORKFLOWS_DATABASE_DESIGN.md and
@@ -477,6 +480,7 @@ function normalizeStore(parsed) {
     rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents : [],
     billingOutbox: Array.isArray(source.billingOutbox) ? source.billingOutbox : [],
     actorSessions: Array.isArray(source.actorSessions) ? source.actorSessions : [],
+    guestSessions: Array.isArray(source.guestSessions) ? source.guestSessions : [],
     workflows: Array.isArray(source.workflows) ? source.workflows : [],
     agents: Array.isArray(source.agents) ? source.agents : [],
     personaGrants: Array.isArray(source.personaGrants) ? source.personaGrants : [],
@@ -539,6 +543,11 @@ const STORE_COLLECTION_KEYS = [
   // keyed by `id`, so no single document approaches the 1 MB limit and concurrent
   // appends never clobber one another (the ledger is the money source of truth).
   'usageRecords', 'ledgerEntries', 'billingAccounts', 'rechargeIntents', 'billingOutbox', 'actorSessions',
+  // Guest demo transcripts: org-less by construction, so they live on the global
+  // legacy backend only (see readLegacyStore in the guest section below). One doc
+  // per session because a session carries its own transcript and 5 000 of them
+  // must not share a document.
+  'guestSessions',
 ];
 
 const LEGACY_BACKEND_KEY = 'legacy';
@@ -1670,6 +1679,152 @@ function pruneConversations(keep = MAX_CONVERSATIONS) {
   return conversations;
 }
 
+/* ------------------------- Guest demo sessions -------------------------- */
+
+/**
+ * An unauthenticated visitor's transcript. These functions are the ONLY way in
+ * and out of `guestSessions`, and every one of them goes through
+ * `readLegacyStore`/`writeLegacyStore` — the global backend — rather than
+ * `readStore`, which resolves to the caller's org-keyed workspace. That is not a
+ * style preference: a guest has no organization, so the workspace selection is
+ * meaningless here, and reading through it would let an anonymous transcript
+ * appear in `listConversations()` for whichever org context happened to be
+ * active. Same posture as the EULA records above and `actorSessions`.
+ *
+ * Retention is 1 day and it is anchored to the moment the session was created.
+ * `touchGuestSession` deliberately does NOT extend `expiresAt`: a visitor who
+ * keeps answering questions is not buying more time on a throwaway transcript,
+ * and an extendable TTL under an unauthenticated route is an unbounded store.
+ */
+
+const MAX_GUEST_SESSIONS = CONFIG.GUEST_DEMO.maxSessions;
+const MAX_MESSAGES_PER_GUEST_SESSION = CONFIG.GUEST_DEMO.maxMessages;
+const GUEST_SESSION_TTL_MS = CONFIG.GUEST_DEMO.sessionTtlMs;
+
+/** Create one demo transcript bound to a clicked command. */
+function createGuestSession(session = {}) {
+  const current = readLegacyStore();
+  const now = Date.now();
+  const iso = new Date(now).toISOString();
+  const record = {
+    id: `gcs_${randomUUID()}`,
+    commandId: session.commandId || null,
+    nodeId: session.nodeId || null,
+    flowId: session.flowId || null,
+    template: session.template || null,
+    variant: { ...(session.variant || {}) },
+    nodesVisited: session.nodeId ? [session.nodeId] : [],
+    messages: Array.isArray(session.messages) ? session.messages.slice(0, MAX_MESSAGES_PER_GUEST_SESSION) : [],
+    previewToken: null,
+    previewExpiresAt: null,
+    createdAt: iso,
+    updatedAt: iso,
+    expiresAt: new Date(now + GUEST_SESSION_TTL_MS).toISOString(),
+  };
+  writeLegacyStore({ ...current, guestSessions: [record, ...current.guestSessions] });
+  return record;
+}
+
+/** The stored transcript for `id`, expired or not — expiry is the caller's call. */
+function getGuestSession(id) {
+  if (typeof id !== 'string') return null;
+  return readLegacyStore().guestSessions.find((session) => session.id === id) || null;
+}
+
+function isGuestSessionExpired(session, now = Date.now()) {
+  if (!session || !session.expiresAt) return true;
+  return Date.parse(session.expiresAt) <= now;
+}
+
+/**
+ * Append already-validated messages, keeping the newest
+ * MAX_MESSAGES_PER_GUEST_SESSION. Returns { session, overflow } — `overflow` true
+ * means the transcript is full and the flow must stop advancing rather than
+ * silently dropping the visitor's last turn.
+ */
+function appendGuestMessages(id, messages) {
+  const current = readLegacyStore();
+  const now = new Date().toISOString();
+  const stamped = (Array.isArray(messages) ? messages : [])
+    .slice(0, MAX_MESSAGES_PER_GUEST_SESSION)
+    .map((message) => ({ ...message, id: `gmsg_${randomUUID()}`, ts: now }));
+  let updated = null;
+  let overflow = false;
+  const guestSessions = current.guestSessions.map((session) => {
+    if (session.id !== id) return session;
+    const existing = session.messages || [];
+    overflow = existing.length + stamped.length > MAX_MESSAGES_PER_GUEST_SESSION;
+    updated = { ...session, messages: [...existing, ...stamped].slice(-MAX_MESSAGES_PER_GUEST_SESSION), updatedAt: now };
+    return updated;
+  });
+  if (updated) writeLegacyStore({ ...current, guestSessions });
+  return { session: updated, overflow };
+}
+
+/**
+ * Advance the tree: merge the position patch and the variant a clicked answer
+ * carries. A `nodeId` in the patch also appends to the visit trail, once — the
+ * trail is what proves the visitor walked the tree instead of jumping to a node
+ * they were never offered. `expiresAt` and `createdAt` are never touched.
+ */
+function touchGuestSession(id, patch = {}) {
+  const current = readLegacyStore();
+  const now = new Date().toISOString();
+  const { variant, ...position } = patch;
+  let updated = null;
+  const guestSessions = current.guestSessions.map((session) => {
+    if (session.id !== id) return session;
+    const trail = Array.isArray(session.nodesVisited) ? session.nodesVisited : [];
+    const visited = position.nodeId;
+    updated = {
+      ...session,
+      ...position,
+      variant: { ...session.variant, ...(variant || {}) },
+      nodesVisited: visited && !trail.includes(visited) ? [...trail, visited] : trail,
+      updatedAt: now,
+    };
+    return updated;
+  });
+  if (updated) writeLegacyStore({ ...current, guestSessions });
+  return updated;
+}
+
+/** Attach the deployed preview; the preview expiry is fixed at first deploy. */
+function setGuestPreview(id, { previewToken, previewExpiresAt } = {}) {
+  const current = readLegacyStore();
+  const now = new Date().toISOString();
+  let updated = null;
+  const guestSessions = current.guestSessions.map((session) => {
+    if (session.id !== id) return session;
+    updated = { ...session, previewToken, previewExpiresAt, updatedAt: now };
+    return updated;
+  });
+  if (updated) writeLegacyStore({ ...current, guestSessions });
+  return updated;
+}
+
+function removeGuestSession(id) {
+  const current = readLegacyStore();
+  const guestSessions = current.guestSessions.filter((session) => session.id !== id);
+  const removed = guestSessions.length !== current.guestSessions.length;
+  if (removed) writeLegacyStore({ ...current, guestSessions });
+  return removed;
+}
+
+/**
+ * Drop every expired transcript, then keep only the newest `keep`. The sweep runs
+ * on write from the guest routes — guests have no other traffic to hang it on —
+ * and it is what bounds the collection now that a visitor may open sessions
+ * freely. Returns the remaining list.
+ */
+function pruneGuestSessions(keep = MAX_GUEST_SESSIONS, now = Date.now()) {
+  const current = readLegacyStore();
+  const live = current.guestSessions.filter((session) => !isGuestSessionExpired(session, now));
+  const guestSessions = live.length > keep ? live.slice(0, keep) : live;
+  if (guestSessions.length !== current.guestSessions.length) writeLegacyStore({ ...current, guestSessions });
+  return guestSessions;
+}
+
 /* --------------------- Requirement approval gates ----------------------- */
 
 const MAX_APPROVAL_GATES = 200;
@@ -1836,6 +1991,17 @@ module.exports = {
   updateConversation,
   removeConversation,
   pruneConversations,
+  MAX_GUEST_SESSIONS,
+  MAX_MESSAGES_PER_GUEST_SESSION,
+  GUEST_SESSION_TTL_MS,
+  createGuestSession,
+  getGuestSession,
+  isGuestSessionExpired,
+  appendGuestMessages,
+  touchGuestSession,
+  setGuestPreview,
+  removeGuestSession,
+  pruneGuestSessions,
   MAX_APPROVAL_GATES,
   listApprovalGates,
   getApprovalGate,
