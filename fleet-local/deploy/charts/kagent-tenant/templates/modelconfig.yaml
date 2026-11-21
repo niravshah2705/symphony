@@ -17,17 +17,20 @@ spec:
   stream: {{ $model.stream }}
   {{- end }}
   {{- if eq ($model.provider | default "OpenAI") "OpenAI" }}
+  {{- /* codex harness: apiFormat responses is mandatory and NO other openAI
+  setting beyond baseUrl is accepted; noDefaultHeaders suppresses the fleet
+  attribution headers, which codex ModelConfigs reject outright. */}}
   openAI:
     baseUrl: {{ $model.baseUrl | default $.Values.litellm.baseUrl | quote }}
     apiFormat: {{ $model.apiFormat | default "chatCompletions" }}
   {{- else if eq $model.provider "Anthropic" }}
   {{- /* claude harness: the ONLY anthropic setting is baseUrl, and the destination
   hostname carries the egress-injected x-api-key. defaultHeaders is rejected on
-  claude ModelConfigs, so it is deliberately not rendered here. */}}
+  claude/codex ModelConfigs, so it is deliberately not rendered here. */}}
   anthropic:
     baseUrl: {{ $model.baseUrl | default $.Values.litellm.anthropicBaseUrl | quote }}
   {{- end }}
-  {{- if and (ne ($model.provider | default "OpenAI") "Anthropic") $model.defaultHeaders }}
+  {{- if and (ne ($model.provider | default "OpenAI") "Anthropic") (not $model.noDefaultHeaders) $model.defaultHeaders }}
   defaultHeaders:
     {{- toYaml $model.defaultHeaders | nindent 4 }}
   {{- end }}

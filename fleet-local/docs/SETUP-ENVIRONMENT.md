@@ -68,6 +68,12 @@ Entries may set `"runtime":"claude"` (P7): the agent compiles on the kagent
 **Anthropic-provider** ModelConfig at the LiteLLM root URL — base URL + model flow through the CR,
 the tenant key is injected as `x-api-key` by the egress gateway (never present in any CR or env),
 and `defaultHeaders` attribution is replaced by key-based org/team attribution.
+Entries may set `"runtime":"codex"` (P8): the agent compiles on the kagent `codex` Harness
+(image omitted → the release-bundled codex-harness digest) with an **OpenAI-provider** ModelConfig
+forced to `apiFormat: responses` and `defaultHeaders` dropped (codex rejects them); the key is
+likewise egress-injected. New harness + provider block render automatically via `FLEET_MODELS` —
+no code change to add another entry.
+
 **Existing tenants do not pick a catalog change up by themselves** — run
 `scripts/fixes/t26-tenant-model-catalog.sh` (idempotent; team/key model list +
 helm upgrade + wait Ready + `projects.agent_name` → default worker). T-15 item 27
@@ -92,15 +98,16 @@ Expected: `Atelet/Restore` ~10–15 s (cold, from golden snapshot), model 200 OK
 snippets from `scripts/fixes/t08-egress-np-fix.sh` + docs/NEXT-ACTIONS.md ("Headless
 wake verified 10:12 UTC").
 
-**P7 headless harness probe** — `bash scripts/fixes/t28-claude-harness-probe.sh [agent]`
-(default `test-agent-nemotron-claude-worker` in `org-test`) does the whole thing
-headlessly over the A2A JSON-RPC contract (`POST /agents/{ns}/{name}`,
-`SendStreamingMessage`, `A2A-Version: 1.0`): port-forwards the controller, mints the
-self-signed JWT, streams the reply, and greps the LiteLLM logs. Expected: reply
-`P7-CLAUDE-HARNESS-OK` (duplicated text is normal — artifact arrives both
-incrementally and on the final task) and a `POST /v1/messages … 200` line proving the
-Claude-Code runtime called LiteLLM's Anthropic wire. T-15 item 29 records the
-wire-shape traps.
+**P7/P8 headless harness probe** — `bash scripts/fixes/t28-claude-harness-probe.sh [agent]`
+(default `test-agent-nemotron-claude-worker` in `org-test`; `EXPECT=<token> WIRE=<messages|responses>`
+picks the reply token and the LiteLLM route to grep — use `WIRE=responses` for codex agents) does the
+whole thing headlessly
+over the A2A JSON-RPC contract (`POST /agents/{ns}/{name}`, `SendStreamingMessage`,
+`A2A-Version: 1.0`): port-forwards the controller, mints the self-signed JWT, streams the
+reply, and greps the LiteLLM logs. Expected: reply `P7-CLAUDE-HARNESS-OK` (duplicated text
+is normal — artifact arrives both incrementally and on the final task) and a
+`POST /v1/messages … 200` line proving the Claude-Code runtime called LiteLLM's Anthropic
+wire. T-15 item 29 records the wire-shape traps.
 
 ## Fresh-cluster ordering notes (why the run order ≠ the list order)
 

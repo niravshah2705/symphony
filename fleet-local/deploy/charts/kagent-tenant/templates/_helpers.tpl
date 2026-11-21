@@ -110,8 +110,8 @@ applies cleanly and then never resolves.
 {{- if and (eq $h.type "byo") (or (not $h.image) (not $h.command)) }}
   {{- fail (printf "harnesses[%q]: a byo Harness requires both workload.image, pinned by @sha256 digest, and workload.command" $h.name) }}
 {{- end }}
-{{- if and (eq $h.type "claude") (or $h.command $h.args) }}
-  {{- fail (printf "harnesses[%q]: a claude Harness accepts neither workload.command nor workload.args" $h.name) }}
+{{- if and (or (eq $h.type "codex") (eq $h.type "claude")) (or $h.command $h.args) }}
+  {{- fail (printf "harnesses[%q]: a %s Harness accepts neither workload.command nor workload.args" $h.name $h.type) }}
 {{- end }}
 {{- if eq $h.type "claude" }}
 {{- if and $h.image (not (regexMatch "@sha256:[a-f0-9]{64}$" $h.image)) }}
@@ -120,6 +120,16 @@ applies cleanly and then never resolves.
 {{- range $e := $h.env | default list }}
 {{- if hasPrefix "ANTHROPIC_" $e.name }}
   {{- fail (printf "harnesses[%q].env sets %q — ANTHROPIC_* vars are Claude-runtime-owned and the controller marks every Agent on the Harness Compatible=False; supply base URL/model/key via an Anthropic-provider ModelConfig instead" $h.name $e.name) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if eq $h.type "codex" }}
+{{- if and $h.image (not (regexMatch "@sha256:[a-f0-9]{64}$" $h.image)) }}
+  {{- fail (printf "harnesses[%q].image %q must be pinned by @sha256 digest — the Harness CRD rejects tags; leave it empty to run the release-bundled codex-harness image" $h.name $h.image) }}
+{{- end }}
+{{- range $e := $h.env | default list }}
+{{- if or (hasPrefix "OPENAI_" $e.name) (hasPrefix "CODEX_" $e.name) (hasPrefix "AWS_" $e.name) }}
+  {{- fail (printf "harnesses[%q].env sets %q — OPENAI_*/CODEX_*/AWS_* credential vars are compiled by the Codex adapter from the ModelConfig and the controller marks every Agent on the Harness Compatible=False (\"conflicts with Codex's compiled configuration\")" $h.name $e.name) }}
 {{- end }}
 {{- end }}
 {{- end }}
