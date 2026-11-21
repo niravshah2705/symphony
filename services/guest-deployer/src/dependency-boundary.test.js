@@ -27,6 +27,12 @@ const configSource = read('services', 'guest-deployer', 'src', 'deploy-config.js
 function javascriptFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const absolute = path.join(directory, entry.name);
+    // Installed dependencies are not the broker's shipped source. Without this,
+    // the host allowlist below reads whatever npm put in this workspace — a
+    // google-auth-library install alone adds ~75 files mentioning nodejs.org,
+    // example.com and sts., and the gate that must be deterministic turns on
+    // whether anyone ran `npm install` since the last clean checkout.
+    if (entry.name === 'node_modules') return [];
     if (entry.isDirectory()) return javascriptFiles(absolute);
     return entry.isFile() && entry.name.endsWith('.js') ? [absolute] : [];
   });
