@@ -515,6 +515,17 @@ trail of why each line exists.
     chars + restarts litellm. Recovery: `bash scripts/setup/s03-litellm.sh`.
     When piping keys into `base64`/`--from-literal`, always `printf %s`.
 
+27. **P6 live-tenant upgrade (`scripts/fixes/t26-tenant-model-catalog.sh`) — three API/shell traps.**
+    (a) LiteLLM 1.109.1 `GET /key/list` returns **hashed-token strings**, not key objects, even with
+    `?info=true`; `GET /key/info` (no id) errors. There is no alias→key_id enumeration path on this
+    build. Fix: address the tenant key by its **plaintext value** (read inline from the org Secret
+    `litellm-<slug>-<projSlug>` field `key`, piped via stdin) and `POST /key/update {key:<token>}`.
+    (b) `kubectl --context X -n ns deploy/foo exec …` → "flags cannot be placed before plugin name".
+    `exec` must come **before** the target: `kubectl -n ns exec deploy/foo -- cmd`.
+    (c) A `kubectl exec -i` **without an stdin redirect inside a `while read` loop swallows the loop's
+    remaining lines** (only the first org was processed, exit 0, no error). Any interactive/exec call in
+    a read-loop needs `</dev/null` unless its stdin is deliberate. Recovery: re-run the script (idempotent).
+
 ## Useful one-liners
 
 ```bash

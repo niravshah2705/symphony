@@ -20,7 +20,7 @@ export const keyStep: StepExecutor = async (ctx) => {
     const generated = await litellm.generateKey({
       key_alias: keyAlias(ctx.orgId, projectId),
       team_id: projectId,
-      models: litellmModelList(),
+      models: litellmModelList(config.modelCatalog),
       metadata: { fleet_org: ctx.orgId, fleet_project: projectId },
       max_budget: config.defaultProjectBudgetUsd,
       budget_duration: config.budgetDuration,

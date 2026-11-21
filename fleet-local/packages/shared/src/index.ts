@@ -41,6 +41,39 @@ export const MODELS = {
   claude: 'claude-sonnet-4',
 } as const;
 
+// P6: the chat model is configuration. FLEET_MODELS (BFF configmap) holds a JSON
+// array of these entries; MODELS remains the fallback for the two originals.
+export interface ModelCatalogEntry {
+  id: string;
+  label: string;
+  model: string;
+  default?: boolean;
+}
+
+export const DEFAULT_MODEL_CATALOG: readonly ModelCatalogEntry[] = [
+  { id: 'mock', label: 'Mock GPT (offline)', model: 'mock-gpt', default: true },
+  { id: 'claude', label: 'Claude Sonnet 4', model: 'claude-sonnet-4' },
+  {
+    id: 'nemotron',
+    label: 'Nemotron 3 Ultra 550B (free)',
+    model: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+  },
+];
+
+export function parseModelCatalog(json: string | undefined): ModelCatalogEntry[] {
+  if (!json) return [...DEFAULT_MODEL_CATALOG];
+  const parsed = JSON.parse(json) as unknown;
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('FLEET_MODELS must be a non-empty JSON array');
+  const out = parsed as ModelCatalogEntry[];
+  for (const m of out) {
+    if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(m.id ?? '') || !m.model || !m.label) {
+      throw new Error(`FLEET_MODELS entry invalid: ${JSON.stringify(m)}`);
+    }
+  }
+  if (!out.some((m) => m.default)) out[0] = { ...out[0]!, default: true };
+  return out;
+}
+
 export function encodeBaggage(entries: Record<string, string | undefined>): string {
   return Object.entries(entries)
     .filter(([, v]) => v !== undefined && v !== '')

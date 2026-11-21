@@ -2,6 +2,8 @@
 // k8s Secrets in deploy/bff); nothing secret is baked into the repo. Defaults
 // point at the in-cluster service DNS of the kind cluster `flexprice-local`.
 
+import { parseModelCatalog } from '@fleet-local/shared';
+
 function req(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`missing required env ${name}`);
@@ -61,6 +63,8 @@ export const config = {
   defaultProjectBudgetUsd: Number(opt('DEFAULT_PROJECT_BUDGET_USD', '20')),
   budgetDuration: opt('DEFAULT_BUDGET_DURATION', '30d'),
   sweeperIntervalSeconds: Number(opt('SWEEPER_INTERVAL_SECONDS', '60')),
+  // P6 model catalog (id/label/litellm model per chat-selectable model).
+  modelCatalog: parseModelCatalog(process.env.FLEET_MODELS),
 } as const;
 
 export type Config = typeof config;

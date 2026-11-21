@@ -7,6 +7,7 @@ export interface SessionRow {
   user_id: string;
   agent_name: string;
   agent_namespace: string;
+  model: string | null;
   kagent_session_id: string | null;
   kagent_task_id: string | null;
   status: string;
@@ -18,7 +19,7 @@ export interface SessionRow {
 }
 
 const COLS =
-  'id, org_id, project_id, user_id, agent_name, agent_namespace, kagent_session_id, kagent_task_id, status, tier, started_at, ended_at, duration_seconds, metered_at';
+  'id, org_id, project_id, user_id, agent_name, agent_namespace, model, kagent_session_id, kagent_task_id, status, tier, started_at, ended_at, duration_seconds, metered_at';
 
 export async function createSession(input: {
   orgId: string;
@@ -26,12 +27,13 @@ export async function createSession(input: {
   userId: string;
   agentName: string;
   agentNamespace: string;
+  model?: string;
   tier?: string;
 }): Promise<SessionRow> {
   const row = await one<SessionRow>(
-    `INSERT INTO sessions (org_id, project_id, user_id, agent_name, agent_namespace, tier)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COLS}`,
-    [input.orgId, input.projectId, input.userId, input.agentName, input.agentNamespace, input.tier ?? 'gvisor-default'],
+    `INSERT INTO sessions (org_id, project_id, user_id, agent_name, agent_namespace, model, tier)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COLS}`,
+    [input.orgId, input.projectId, input.userId, input.agentName, input.agentNamespace, input.model ?? null, input.tier ?? 'gvisor-default'],
   );
   if (!row) throw new Error('session insert returned no row');
   return row;

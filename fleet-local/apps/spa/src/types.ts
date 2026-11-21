@@ -19,6 +19,13 @@ export interface Project {
   agent_namespace: string | null;
 }
 
+export interface ModelOption {
+  id: string;
+  label: string;
+  model: string;
+  default: boolean;
+}
+
 export interface Session {
   id: string;
   org_id: string;
@@ -26,6 +33,7 @@ export interface Session {
   user_id: string;
   agent_name: string;
   agent_namespace: string;
+  model?: string | null;
   kagent_session_id: string | null;
   kagent_task_id: string | null;
   status: string;
