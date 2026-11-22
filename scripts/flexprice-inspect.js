@@ -42,7 +42,11 @@ const stackEnv = readEnvFile();
 const pick = (key) => process.env[key] || stackEnv[key] || '';
 const moneyKey = pick('FLEXPRICE_API_KEY_MONEY');
 const ingestKey = pick('FLEXPRICE_API_KEY_INGEST');
-const baseUrl = (process.env.FLEXPRICE_BASE_URL || 'http://127.0.0.1:18080').replace(/\/+$/, '');
+// The stack's own base URL lives in deploy/flexprice/.env (the kind install is
+// reached through the ingress host, not the 18080 default), so the file is a
+// first-class source here — otherwise every command silently targets a port
+// nothing listens on and reads as an outage.
+const baseUrl = (pick('FLEXPRICE_BASE_URL') || 'http://127.0.0.1:18080').replace(/\/+$/, '');
 
 // Same default as the bootstrap and the spike: the seeded Production environment
 // from migrations/postgres/V1__seed.sql. Not optional — every data route answers
@@ -68,12 +72,6 @@ const client = createFlexpriceClient({ config });
 
 // Routes the façade does not model — they are read-only and operator-facing, so
 // they take the transport's raw seam and print the body exactly as it arrived.
-// `one()` is the id guard: `/v1/wallets/undefined` answers 404 and reads like a
-// FlexPrice outage, when the operator just forgot the argument.
-const one = (arg, cmd) => {
-  if (!arg) throw new Error(`${cmd} needs an id (see --help)`);
-  return String(arg);
-};
 const wire = (method, route, body) => client.request({
   plane: 'money',
   method,
@@ -89,14 +87,27 @@ function flag(name, fallback = undefined) {
 const now = () => Math.floor(Date.now() / 1000);
 const iso = (epochSec) => new Date(epochSec * 1000).toISOString();
 
+const need = (arg, what) => {
+  if (!arg) throw new Error(`${what} is required (see --help)`);
+  return String(arg);
+};
+
+/** `/v1/wallets/<id>/…`: the caller-supplied id is one encoded path segment. */
+const walletPath = (id, suffix = '') => `wallets/${need(id, 'a wallet id')}${suffix}`;
+
 const COMMANDS = {
   health: () => client.getHealth(),
   environments: () => client.listEnvironments(),
   meters: () => client.listMeters(),
   customers: () => wire('GET', 'customers'),
-  customer: (arg) => wire('GET', `customers/${one(arg, 'customer')}`),
-  wallet: (arg) => wire('GET', `wallets/${one(arg, 'wallet')}`),
-  balance: (arg) => wire('GET', `wallets/${one(arg, 'balance')}/balance/real-time`),
+  customer: (arg) => wire('GET', `customers/${need(arg, 'a customer id')}`),
+  wallet: (arg) => wire('GET', walletPath(arg)),
+  balance: (arg) => wire('GET', walletPath(arg, '/balance/real-time')),
+  ledger: (arg) => client.walletTransactionsSearch({
+    walletId: need(arg, 'a wallet id'),
+    ...(flag('type') ? { type: String(flag('type')).toUpperCase() } : {}),
+    limit: Number(flag('limit', 20)),
+  }),
   // The metered quantity as FlexPrice computed it — the number the invoice should
   // match. Window defaults to the last 24h because a period that does not contain
   // the events reads as "0 usage", which looks like a billing bug and is not one.
@@ -147,6 +158,7 @@ const HELP = `usage: npm run billing:flexprice:inspect -- <command> [id] [flags]
   customer <id>                   one customer (accepts cust_... id)
   wallet <id>                     wallet row: balance, currency, config
   balance <id>                    real-time balance (what the gate would read)
+  ledger <walletId> [--type credit|debit] [--limit N]
   usage --meter <id> --customer <externalId> [--hours N]
   usage --event <name> --agg SUM|COUNT --customer <externalId> [--filter prop:v1,v2]
 

@@ -348,6 +348,26 @@ has its selector on every call, including the N-call breakdown fan-out; two orgs
 one router never observe each other's figures) and `trusted-caller.test.js` (each
 proof accepted, each forgery pinned).
 
+**Measured against the local stack, not only the fake client.** Two provisioned orgs
+(100 and 250 credits) and a third, unprovisioned UUID; the billing service run with
+`AUTH_MODE=firebase`, because `AUTH_MODE=disabled` is the default and its loopback
+proof would trust the very `curl` used to attack it:
+
+| Request | Answer |
+|---|---|
+| no proof, naming org A | `degraded`, `unscoped_caller`, null money |
+| wrong `x-internal-token`, naming org A | `degraded`, `unscoped_caller`, null money |
+| proof, org A / proof, org B | 100.00 / 250.00 — each its own, `orgId` echoed |
+| proof, unprovisioned UUID | `wallet_missing`, null money |
+| proof, org id `A\|overview` | pinned to the deployment org, `unscoped_caller` (the id fails `ORG_ID_RE` before it can reach a cache key) |
+| browser header `x-ai-fleet-billing-org-id: B` through the gateway | ignored — the gateway rebuilds its header object from `{}`, so the answer stayed A's |
+
+`deploy/flexprice/.env` is read by the `scripts/flexprice-*` tools only; `npm start`
+does not load it, so a local run that should talk to the kind install has to export
+`FLEXPRICE_ENABLED`, `FLEXPRICE_BASE_URL`, `FLEXPRICE_ENVIRONMENT_ID`, the two plane
+keys and `FLEXPRICE_SUPPLIER_STATE_CODE` (and `INTERNAL_API_TOKEN`, matching the
+gateway, once `AUTH_MODE` is not `disabled`).
+
 
 ## 7. What Phase 1 deletes
 
