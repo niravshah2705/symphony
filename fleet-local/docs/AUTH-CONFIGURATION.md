@@ -19,6 +19,12 @@ browser ─TLS(mkcert)─► ingress-nginx ─strip spoofables─► oauth2-prox
               LiteLLM ──fleet_metadata pre-call hook──► Flexprice ai.usage + Langfuse (UUID identity)
 ```
 
+Each hop enforces its OWN response deadline, so the shortest one on the path is
+the one that fails: nginx `proxy-read-timeout` 1800s, oauth2-proxy
+`--upstream-timeout` 1800s (was its 30s default — see T-18). Raising only the
+Ingress annotation buys nothing while the proxy in front of the BFF still gives up
+at 30s, which is exactly what a cold actor wake overruns.
+
 ## 1. Edge — Google OAuth via oauth2-proxy (upstream mode)
 
 * Provider: `--provider=oidc --oidc-issuer-url=https://accounts.google.com`,
@@ -27,7 +33,8 @@ browser ─TLS(mkcert)─► ingress-nginx ─strip spoofables─► oauth2-prox
   `https://app.fleet.dev/oauth2/callback`, `https://kagent.fleet.dev/oauth2/callback`.
 * Two proxies (ns `fleet-system`), host-only cookies `_fleet_oauth` /
   `_kagent_oauth` so the two apps never clobber each other's session.
-  `--cookie-refresh=55m`, `--skip-provider-button=true`.
+  `--cookie-refresh=55m`, `--skip-provider-button=true`,
+  `--upstream-timeout=1800s` (T-18: the 30s default `502`s `POST /chat`).
 * **The two flags that make trusted-proxy work**: `--set-authorization-header`
   (delivers the Google **ID token** as `Authorization: Bearer …` downstream) and
   `--set-xauthrequest` (adds `X-Auth-Request-Email/User/Preferred-Username`).

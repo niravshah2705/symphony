@@ -777,7 +777,51 @@ builds/deploys/binds/probes the whole chain; the notes below are why each piece 
     query. This is the check that would have caught items 4 and 11; curl alone
     proves only the backend half.
 
-## Useful one-liners
+## T-18 Chat returns an OAuth2-Proxy 502 page exactly 30s after send
+
+**Symptom:** the browser shows the stock `502 Bad Gateway / Secured with
+OAuth2 Proxy version v7.14.0` HTML (with a `Request ID`) instead of the chat
+stream. Everything else on `app.fleet.dev` — `/api/me`, `/sessions`, `/models`,
+the SPA assets — is fine, and the session list refreshes normally seconds later.
+**First place to look:** the proxy's OWN access log — the Request ID printed on
+that page is the log key, so the failing hop is identified without guessing:
+```bash
+kubectl -n fleet-system logs deploy/fleet-oauth2-proxy | grep <request-id>
+# 172.20.0.1 - 237cf33d… - niravshah2705@gmail.com [15:15:37] app.fleet.dev POST /
+#   "/api/orgs/…/projects/…/chat" … 502 2236 30.006
+# [error_page.go:91] Error proxying to upstream server: net/http: timeout awaiting response headers
+```
+**Cause:** oauth2-proxy's `--upstream-timeout` defaults to **30s**, and nothing in
+this stack set it. `30.006` latency + "timeout awaiting response headers" is that
+timer firing, not the BFF failing. The edge looks tuned — `deploy/ingress/app.yaml`
+raises nginx to `proxy-read-timeout: 1800` — but nginx is not the hop that died:
+**each proxy on the path enforces its own deadline, and the shortest one wins.**
+Chain: browser → ingress-nginx (1800s) → oauth2-proxy (**30s**) → fleet-bff.
+
+**Why only `/chat` breaks:** `apps/control-plane/src/kagent/proxy.ts` awaits
+`streamMessage(...)` (line 125) BEFORE `reply.hijack()` + `writeHead(200)` (line
+131). `fetch` resolves on upstream RESPONSE HEADERS, so the BFF emits zero bytes
+until kagent starts streaming — and a cold actor wake is 30–60s (T-15). The wake
+overruns the 30s budget by seconds, so the run usually SUCCEEDS behind a dead
+front: the actor finishes waking into a connection nobody is reading.
+**Fix:** `--upstream-timeout=1800s` on both proxies
+(`deploy/oauth2-proxy/fleet.yaml` + `kagent.yaml`), re-applied by
+`scripts/10-ingress-oauth.sh` (the manifests are the only source; `s09` delegates
+to that script). The value must stay >= the Ingress `proxy-read-timeout`, or the
+next-shortest hop simply becomes the failing one. Rollout does NOT log anyone
+out: the session lives in the cookie and `google-oauth/cookie-secret` is unchanged.
+**Guard:** `scripts/verify-e2e.sh` §10 now asserts both proxies report
+`upstream-timeout >= 1800`, so a fresh cluster that lost the flag fails loudly
+instead of showing a 502 only when someone happens to chat with a cold agent.
+**STATUS: RESOLVED (2026-11-22).**
+
+> Deeper fix, not taken: move `hijack()`/`writeHead`/the `event: session` frame
+> above the `await streamMessage(...)`, so headers flush at t=0 and NO
+> intermediate timeout can ever matter. Cost is error semantics — a failed kagent
+> call would arrive as an SSE error event instead of a 502 status the SPA
+> branches on. Revisit if a 502/timeout class returns on another long route.
+
+---
 
 ```bash
 # Flexprice admin calls (keys fetched inline, never printed; fresh-cluster

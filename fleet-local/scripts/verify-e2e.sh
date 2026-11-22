@@ -79,6 +79,12 @@ echo "$snip" | grep -qi 'x-auth-request-email' && ok "app ingress strips x-auth-
 allow=$(kubectl -n ingress-nginx get cm ingress-nginx-controller -o jsonpath='{.data.allow-snippet-annotations}' 2>/dev/null)
 [ "$allow" = "true" ] && ok "allow-snippet-annotations=true" || bad "snippets not permitted ($allow)"
 
+for d in fleet-oauth2-proxy kagent-oauth2-proxy; do
+  ut=$(kubectl -n fleet-system get deploy "$d" -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | tr ',' '\n' | sed -n 's/.*--upstream-timeout=\([0-9]*\)s.*/\1/p')
+  [ "${ut:-0}" -ge 1800 ] && ok "$d upstream-timeout=${ut}s" \
+    || bad "$d upstream-timeout=${ut:-30 (default)}s — POST /chat 502s during actor wake"
+done
+
 echo "=== 11. online claude-sonnet-4 via OpenRouter (interactive) ==="
 man "run a claude chat; real spend appears in Flexprice + LiteLLM + Langfuse"
 
