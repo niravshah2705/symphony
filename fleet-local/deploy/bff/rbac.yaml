@@ -1,0 +1,28 @@
+# The BFF runs the onboarding machine: it creates org namespaces, applies kagent
+# (api.kagent.dev) and Substrate (ate.dev) CRs, manages team-key Secrets, and
+# re-applies the substrate parent release with --reuse-values (which renders
+# cluster-scoped SandboxConfigs + RBAC). That last step needs cluster-wide write
+# access, so for this LOCAL single-cluster prototype the BFF SA is bound to
+# cluster-admin.
+#
+# PRODUCTION: replace this with a scoped ClusterRole (namespaces; api.kagent.dev
+# + ate.dev CRs; secrets/configmaps/serviceaccounts in org-* and ate-system;
+# rbac escalation only for the substrate release) — do not ship cluster-admin.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fleet-bff
+  namespace: fleet-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fleet-bff-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: fleet-bff
+    namespace: fleet-system

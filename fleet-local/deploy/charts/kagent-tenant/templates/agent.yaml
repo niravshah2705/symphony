@@ -1,0 +1,16 @@
+{{- range $agent := .Values.agents }}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: Agent
+metadata:
+  name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "agent" "name" $agent.name) }}
+  namespace: {{ include "kagent-tenant.namespace" $ }}
+  labels:
+    {{- include "kagent-tenant.labels" (dict "root" $) | nindent 4 }}
+spec:
+  template:
+    ref:
+      name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "template" "name" $agent.template) }}
+  harnessRef:
+    name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "harness" "name" $agent.harness) }}
+{{- end }}

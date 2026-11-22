@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# End-to-end verification against the 12-point plan gate. Automatable read-backs
+# run here; interactive gates (Google login, live chat, online spend) are printed
+# as MANUAL with the exact steps. Nothing is reported PASS unless observed.
+#   ORG_UUID=<uuid> scripts/verify-e2e.sh   # to exercise per-org Flexprice checks
+# Run scripts/port-forwards.sh first for the Langfuse/Prometheus/Jaeger read-backs.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+PASS=0; FAIL=0; MANUAL=0
+ok()   { echo "PASS  $1"; PASS=$((PASS+1)); }
+bad()  { echo "FAIL  $1"; FAIL=$((FAIL+1)); }
+man()  { echo "MANUAL $1"; MANUAL=$((MANUAL+1)); }
+
+ORG_UUID=${ORG_UUID:-}
+FP_KEY=$(kubectl -n litellm get deploy litellm -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="FLEXPRICE_API_KEY")].value}' 2>/dev/null)
+FP_ENV=$(kubectl -n litellm get deploy litellm -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="FLEXPRICE_ENVIRONMENT_ID")].value}' 2>/dev/null)
+fpcurl() { curl -sS --resolve api.flexprice.local:80:127.0.0.1 \
+  -H "x-api-key: $FP_KEY" -H "X-Environment-ID: $FP_ENV" -H 'Content-Type: application/json' "$@"; }
+
+echo "=== 1. edge: app/kagent https via nginx; flexprice hosts unchanged ==="
+for h in app.fleet.dev kagent.fleet.dev; do
+  code=$(curl -sk -o /dev/null -w '%{http_code}' --resolve "$h:443:127.0.0.1" "https://$h/" 2>/dev/null)
+  case "$code" in 200|302|401) ok "$h https responds ($code)";; *) bad "$h https ($code)";; esac
+done
+fpcode=$(curl -s -o /dev/null -w '%{http_code}' --resolve flexprice.local:80:127.0.0.1 http://flexprice.local/ 2>/dev/null)
+[ "$fpcode" != "000" ] && ok "flexprice.local still HTTP ($fpcode)" || bad "flexprice.local unreachable"
+ctrls=$(kubectl get pods -A -l app.kubernetes.io/name=ingress-nginx --no-headers 2>/dev/null | wc -l | tr -d ' ')
+[ "$ctrls" -ge 1 ] && ok "ingress-nginx present ($ctrls pod)" || bad "no ingress-nginx"
+
+echo "=== 2. observability NOT exposed (no Ingress) ==="
+obs_ing=$(kubectl get ingress -A -o jsonpath='{range .items[*]}{.spec.rules[*].host}{"\n"}{end}' 2>/dev/null | grep -E 'langfuse|jaeger|prometheus' || true)
+[ -z "$obs_ing" ] && ok "no langfuse/jaeger/prometheus Ingress" || bad "observability exposed: $obs_ing"
+
+echo "=== 3. onboarding org-demo (interactive) ==="
+man "Google login at https://app.fleet.dev -> wizard -> onboard org-demo; re-run = zero duplicates; ORG_UUID=$ORG_UUID"
+
+echo "=== 4. long-running multi-turn chat SSE (interactive) ==="
+man "chat >60s mock-gpt streams SSE; session/task ids recorded; kagent.fleet.dev SSO shows same agent"
+
+echo "=== 5. llm-mock echo: baggage fleet_user_id + x-fleet-org-id arrived ==="
+mocklog=$(kubectl -n litellm logs deploy/llm-mock --tail=200 2>/dev/null | grep -E 'fleet_user_id|x-fleet-org-id' | tail -1 || true)
+[ -n "$mocklog" ] && ok "llm-mock saw fleet headers/baggage" || man "no llm-mock echo yet — run a chat, then re-check (else per-user-key fallback)"
+
+echo "=== 6. Flexprice ai.usage + actor_compute (bare UUID customer) ==="
+if [ -n "$ORG_UUID" ]; then
+  ev=$(fpcurl -G "http://api.flexprice.local/v1/events" --data-urlencode "external_customer_id=$ORG_UUID" --data-urlencode 'limit=5' 2>/dev/null)
+  echo "$ev" | jq -e '(.events // .items // []) | length > 0' >/dev/null 2>&1 \
+    && ok "Flexprice events exist for $ORG_UUID" || bad "no Flexprice events for $ORG_UUID"
+  bare=$(echo "$ev" | jq -r '(.events // .items // [])[0].external_customer_id // empty' 2>/dev/null)
+  [ "$bare" = "$ORG_UUID" ] && ok "external_customer_id is bare UUID" || bad "customer id not bare UUID ($bare)"
+else
+  man "set ORG_UUID=<uuid> to verify Flexprice events / bare UUID / group_by rows"
+fi
+
+echo "=== 7. Langfuse trace userId/sessionId/cost (port-forward :3000) ==="
+if curl -s -o /dev/null http://localhost:3000/api/public/health 2>/dev/null; then
+  LFPK=$(kubectl -n langfuse get secret langfuse-stores -o jsonpath='{.data.langfuse-secret-key}' 2>/dev/null | base64 -d)
+  tr=$(curl -s -u "pk-lf-fleet-local:$LFPK" 'http://localhost:3000/api/public/traces?limit=1' 2>/dev/null)
+  echo "$tr" | jq -e '.data | length > 0' >/dev/null 2>&1 && ok "Langfuse traces present" || man "no Langfuse traces yet — run a chat"
+else
+  man "run scripts/port-forwards.sh (Langfuse :3000) to verify traces"
+fi
+
+echo "=== 8. Prometheus fleet series + Jaeger chain (port-forward) ==="
+if curl -s -o /dev/null http://localhost:9090/-/ready 2>/dev/null; then
+  ser=$(curl -s 'http://localhost:9090/api/v1/query?query=substrate_actor_running_seconds_total' 2>/dev/null)
+  echo "$ser" | jq -e '.data.result | length > 0' >/dev/null 2>&1 && ok "Prometheus fleet actor series" || man "no actor series yet — run a chat"
+else
+  man "run scripts/port-forwards.sh (Prometheus :9090, Jaeger :16686)"
+fi
+
+echo "=== 9. limits: LiteLLM native budget + Flexprice alert config ==="
+man "set key max_budget=0.001 -> next call 429 (LiteLLM native); Flexprice alert config fires natively"
+
+echo "=== 10. spoofed identity headers stripped by nginx snippet ==="
+snip=$(kubectl -n fleet-system get ingress fleet-app -o jsonpath='{.metadata.annotations.nginx\.ingress\.kubernetes\.io/configuration-snippet}' 2>/dev/null)
+echo "$snip" | grep -qi 'x-auth-request-email' && ok "app ingress strips x-auth-request-*" || bad "app ingress missing sanitize snippet"
+allow=$(kubectl -n ingress-nginx get cm ingress-nginx-controller -o jsonpath='{.data.allow-snippet-annotations}' 2>/dev/null)
+[ "$allow" = "true" ] && ok "allow-snippet-annotations=true" || bad "snippets not permitted ($allow)"
+
+echo "=== 11. online claude-sonnet-4 via OpenRouter (interactive) ==="
+man "run a claude chat; real spend appears in Flexprice + LiteLLM + Langfuse"
+
+echo "=== 12. helm status + no Cloud Run references ==="
+kst=$(helm status kagent -n kagent 2>/dev/null | awk '/STATUS:/{print $2}')
+[ "$kst" = "deployed" ] && ok "kagent STATUS=deployed" || bad "kagent STATUS=$kst"
+cr=$(grep -riE 'cloudrun|cloud-run|run\.app' deploy/ 2>/dev/null | grep -v 'kubectl run' || true)
+[ -z "$cr" ] && ok "no Cloud Run references in deploy/" || bad "Cloud Run reference found"
+
+echo
+echo "RESULT  PASS=$PASS FAIL=$FAIL MANUAL=$MANUAL"
+[ "$FAIL" -eq 0 ] || exit 1

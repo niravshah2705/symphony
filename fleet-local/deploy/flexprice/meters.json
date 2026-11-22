@@ -1,0 +1,51 @@
+[
+  {
+    "name": "LLM Input Tokens (untagged)",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "input_tokens" },
+    "filters": [{ "key": "tagged", "values": ["false"] }],
+    "reset_usage": "BILLING_PERIOD"
+  },
+  {
+    "name": "LLM Output Tokens (untagged)",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "output_tokens" },
+    "filters": [{ "key": "tagged", "values": ["false"] }],
+    "reset_usage": "BILLING_PERIOD"
+  },
+  {
+    "name": "LLM Passthrough Cost (untagged)",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "reported_cost" },
+    "filters": [{ "key": "tagged", "values": ["false"] }],
+    "reset_usage": "BILLING_PERIOD"
+  },
+  {
+    "name": "Planning Input Tokens",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "input_tokens" },
+    "filters": [{ "key": "tag_planning", "values": ["planning"] }],
+    "reset_usage": "BILLING_PERIOD"
+  },
+  {
+    "name": "Planning Output Tokens",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "output_tokens" },
+    "filters": [{ "key": "tag_planning", "values": ["planning"] }],
+    "reset_usage": "BILLING_PERIOD"
+  },
+  {
+    "name": "Skill Tokens",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "total_tokens" },
+    "filters": [{ "key": "tag_skill", "values": ["skill"] }],
+    "reset_usage": "BILLING_PERIOD"
+  },
+  {
+    "name": "MCP Tokens",
+    "event_name": "ai.usage",
+    "aggregation": { "type": "SUM", "field": "total_tokens" },
+    "filters": [{ "key": "tag_mcp", "values": ["mcp"] }],
+    "reset_usage": "BILLING_PERIOD"
+  }
+]

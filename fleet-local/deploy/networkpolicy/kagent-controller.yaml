@@ -1,0 +1,37 @@
+# LOAD-BEARING: the kagent controller's trusted-proxy auth parses the Bearer JWT
+# WITHOUT verifying its signature, so anyone who can reach :8083 could impersonate
+# any user. This policy admits :8083 only from the kagent namespace (the UI/tools)
+# and fleet-system (the BFF + oauth2-proxy). Every other source is denied.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kagent-controller-ingress
+  namespace: kagent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kagent
+      app.kubernetes.io/component: controller
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kagent
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fleet-system
+        # T-08: the actor bootstrap (GetBootstrapConfig) reaches :8083 THROUGH the
+        # atenet-egress agentgateway pods (ns ate-system, app atenet-egress). If
+        # this entry is missing their connects are packet-dropped, the gateway
+        # burns its ~3s connect deadline and every golden build crashes.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ate-system
+          podSelector:
+            matchLabels:
+              app: atenet-egress
+      ports:
+        - protocol: TCP
+          port: 8083

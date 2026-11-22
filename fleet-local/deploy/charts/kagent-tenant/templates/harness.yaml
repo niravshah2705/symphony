@@ -1,0 +1,51 @@
+{{- range $h := .Values.harnesses }}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: Harness
+metadata:
+  name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "harness" "name" $h.name) }}
+  namespace: {{ include "kagent-tenant.namespace" $ }}
+  labels:
+    {{- include "kagent-tenant.labels" (dict "root" $) | nindent 4 }}
+spec:
+  {{- if eq $h.type "kagent" }}
+  kagent:
+    {{- if $h.memory }}
+    memory:
+      {{- toYaml $h.memory | nindent 6 }}
+    {{- end }}
+    {{- if $h.compaction }}
+    compaction:
+      {{- toYaml $h.compaction | nindent 6 }}
+    {{- end }}
+    {{- if and (not $h.memory) (not $h.compaction) }} {}
+    {{- end }}
+  {{- else }}
+  {{ $h.type }}: {}
+  {{- end }}
+  {{- if or $h.image $h.command $h.args }}
+  workload:
+    {{- with $h.image }}
+    image: {{ . | quote }}
+    {{- end }}
+    {{- with $h.command }}
+    command:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $h.args }}
+    args:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- with $h.env }}
+  env:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  substrate:
+    workerPoolRef:
+      name: {{ $.Values.workerPool.name | quote }}
+    snapshotPolicy:
+      # Trailing slash kept: Substrate appends atespaces/<atespace>/actors/…,
+      # and a root without one resolves to a sibling of the intended prefix.
+      location: {{ printf "%s/" (trimSuffix "/" $.Values.tenant.snapshotRoot) | quote }}
+{{- end }}

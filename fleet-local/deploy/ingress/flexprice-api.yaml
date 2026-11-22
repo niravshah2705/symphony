@@ -1,0 +1,27 @@
+# Flexprice API over the retained ingress-nginx, HTTP only (no TLS, no
+# oauth2-proxy) — this mirrors the OLD cluster's ad-hoc `api.flexprice.local`
+# Ingress, which no setup script ever recreated (fresh-build finding T-15.21:
+# scripts/seed-flexprice.sh + verify-e2e.sh curl it via --resolve and got
+# nginx 404 -> jq "Invalid numeric literal"). s02 applies this file.
+# The flexprice.local UI and temporal.flexprice.local hosts are NOT recreated:
+# the fresh chart deploys no frontend/temporal-web (the SPA is the product UI;
+# docs/SETUP-ENVIRONMENT.md step 9 tail), and verify-e2e only requires them to
+# answer as HTTP rather than exist.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flexprice-api
+  namespace: flexprice
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.flexprice.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flexprice-api
+                port:
+                  number: 80

@@ -1,0 +1,58 @@
+# Offline mock model endpoint for LiteLLM (model_name mock-gpt). Echoes the
+# incoming fleet/baggage headers to stdout and in fleet_echo_headers so the P3
+# cost-header gate is observable. Recreated as a Deployment (was a bare Pod).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-mock
+  namespace: litellm
+  labels:
+    app: llm-mock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llm-mock
+  template:
+    metadata:
+      labels:
+        app: llm-mock
+    spec:
+      containers:
+        - name: mock
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "server.py"]
+          workingDir: /srv
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: srv
+              mountPath: /srv
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      volumes:
+        - name: srv
+          configMap:
+            name: llm-mock-srv
+---
+# The mock-gpt api_base is http://llm-mock:8000/v1 (litellm values-base) —
+# without this Service every mock call dies in LiteLLM as
+# "OpenAIException - Connection error" / socket.gaierror (T-15 item 25).
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-mock
+  namespace: litellm
+  labels:
+    app: llm-mock
+spec:
+  selector:
+    app: llm-mock
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

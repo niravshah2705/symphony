@@ -1,0 +1,68 @@
+# Rendered by CI and by hand to prove the chart covers a GKE-shaped tenant:
+# gs:// snapshots, a codex Harness, a byo Harness, two models and kagent
+# memory/compaction passthrough.
+namespace: kagent
+
+tenant:
+  id: northwind
+  snapshotRoot: gs://symphony-snapshots-prod/northwind
+
+workerPool:
+  name: kagent-default
+
+litellm:
+  baseUrl: http://litellm.litellm.svc.cluster.local:4000/v1
+  apiKeySecret: litellm-secrets
+  apiKeySecretKey: LITELLM_MASTER_KEY
+
+models:
+  - name: claude-sonnet-4
+    model: claude-sonnet-4
+    apiFormat: chatCompletions
+    defaultHeaders:
+      X-Title: Archagentix Agent Substrate
+  - name: gpt-5-codex
+    model: gpt-5-codex
+    apiFormat: responses
+
+harnesses:
+  - name: app
+    type: kagent
+    memory:
+      modelConfigRef:
+        name: northwind-model-claude-sonnet-4
+      ttlDays: 30
+    compaction:
+      compactionInterval: 10
+      overlapSize: 2
+  - name: codex
+    type: codex
+  - name: custom
+    type: byo
+    image: ghcr.io/kagent-dev/kagent/golang-adk@sha256:f62e9f2820d3325ca147a5d39802dc3e9c914bee97b3e021bd38f6f5df10e3bf
+    command:
+      - /app/adk
+
+templates:
+  - name: assistant
+    modelConfig: claude-sonnet-4
+    description: Northwind planning assistant
+    systemPrompt: |
+      You plan architecture changes. Be concise.
+  - name: codex-runner
+    modelConfig: gpt-5-codex
+    systemPrompt: You write and run code.
+
+agents:
+  - name: assistant
+    template: assistant
+    harness: app
+  - name: coder
+    template: codex-runner
+    harness: codex
+  - name: custom
+    template: assistant
+    harness: custom
+
+commonLabels:
+  ai-fleet.internal/tenant: northwind

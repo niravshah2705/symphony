@@ -1,0 +1,34 @@
+# Substrate (ate-system) fleet-local values — chart
+# oci://ghcr.io/kagent-dev/substrate/helm/substrate 1.0.1, applied AFTER
+# flexprice/docs/install-substrate-local.sh bootstrapped the signer/pools.
+# Rebuilt from the live release values; tenant entries the live cluster accrued
+# (org-demo/org-prod/org-fun) are intentionally ABSENT — the BFF onboarding gate
+# appends one namespacePolicies entry per tenant org via helm upgrade
+# --reuse-values (never split the podcert/atelet sub-releases out of this release).
+ateApi:
+  authorization:
+    bootstrapOwners:
+      # kagent controller bootstraps actors (GetBootstrapConfig on :8083)
+      - spiffe://cluster.local/ns/kagent/sa/kagent-controller
+      # substrate's own client (atecli / control plane)
+      - system:serviceaccount:ate-system:ate-client
+
+atenetRouter:
+  ingressAllowedSPIFFEIDs:
+    - spiffe://cluster.local/ns/kagent/sa/kagent-controller
+
+credentialProvider:
+  namespacePolicies:
+    - allowedNamespaces: [kagent]
+      atespace: kagent
+
+postgres:
+  clientCertificates:
+    enabled: true
+
+preview:
+  # PerTemplateSnapshotLocation: harness snapshotRoot s3://ate-snapshots/<org>/
+  # GoldenEgressPolicy: the atenet-egress agentgateway substrateEgress policy
+  # that injects the actor bootstrap Authorization header (load-bearing, T-08).
+  - PerTemplateSnapshotLocation
+  - GoldenEgressPolicy
