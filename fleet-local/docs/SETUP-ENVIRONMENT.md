@@ -141,6 +141,18 @@ ingress (hosts from `00-prereqs.sh`, no port-forward needed):
   gitignored `fleet-local/.env` as `FLEXPRICE_UI_PASSWORD` — the chart seeds
   `auths.token` as plaintext but Login does bcrypt-compare, so t30 step 4
   rewrites it with pgcrypto `crypt()` (T-17.4).
+- **Onboarding wizard pre-answered (t30 step 5).** A fresh login otherwise stops
+  at "Welcome to Flexprice — Just three quick questions", and submitting it
+  403s because the seed leaves `users.roles` NULL (a JWT carries no roles claim,
+  so RBAC reads the user row). Step 5 grants the seeded admin `super_admin` +
+  `type='owner'`, flushes the Redis `user:v1` cache that would otherwise keep
+  serving the stale `roles:[]`, and then fires the very call the wizard makes —
+  `PUT /v1/tenants/update` with `name` +
+  `metadata{onboarding_completed:"true", onboarding_referral_source,
+  onboarding_organization_url}`. Defaults are `Fleet Local`,
+  `ChatGPT / Perplexity / Gemini`, `http://flexprice.local`; override with
+  `TENANT_NAME=… ONBOARDING_REFERRAL=… ONBOARDING_ORG_URL=…` (T-17.8/9/10).
+  Already-set rows are skipped, so re-runs are no-ops.
 - **http://temporal.flexprice.local** — `temporalio/ui:2.31.2` pointed at
   `flexprice-temporal-frontend.flexprice.svc:7233`, namespace `default`. The
   pod needs `enableServiceLinks: false`: the `temporal-ui` Service otherwise

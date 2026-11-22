@@ -2,11 +2,11 @@
 # T-30: self-hosted Flexprice dashboard UI + Temporal Web UI on kind.
 #
 # What this gives you (port 80 via ingress-nginx, hosts via /etc/hosts):
-#   http://flexprice.local          -> flexprice-front (login: step 5)
+#   http://flexprice.local          -> flexprice-front (login: steps 4-5)
 #   http://temporal.flexprice.local -> Temporal UI on the billing cluster's
 #                                      flexprice-temporal-frontend:7233
 # Login: email admin@flexprice.dev; the password is generated on first run and
-# kept ONLY in gitignored fleet-local/.env as FLEXPRICE_UI_PASSWORD (step 5 —
+# kept ONLY in gitignored fleet-local/.env as FLEXPRICE_UI_PASSWORD (step 4 —
 # the chart seeds auths.token as plaintext but Login does
 # bcrypt.CompareHashAndPassword, so the seeded row can never log in as-is).
 #
@@ -21,7 +21,12 @@
 #   4) bootstrap the dashboard login: replace the plaintext seeded auths.token
 #      with a bcrypt hash (pgcrypto crypt()) of FLEXPRICE_UI_PASSWORD from
 #      fleet-local/.env, generating + storing one on first run
-#   5) verify: both hosts answer over :80, login returns a JWT, and the Temporal
+#   5) seed the workspace so the dashboard lands past its onboarding wizard:
+#      grant the seeded admin the super_admin role (the chart leaves
+#      users.roles NULL, and every RBAC-gated write then 403s) and PUT the
+#      tenant name + onboarding metadata the "Just three quick questions"
+#      screen would otherwise ask for
+#   6) verify: both hosts answer over :80, login returns a JWT, and the Temporal
 #      UI can reach its frontend
 set -euo pipefail
 CTX=${KCTX:-kind-flexprice-local}
@@ -86,7 +91,51 @@ UPDATE public.auths
 RETURNING user_id;
 EOSQL
 
-echo "== 5) verify over host :80 =="
+echo "== 5) super_admin role + onboarding values (skip the wizard) =="
+# The chart seeds users.roles NULL and the JWT carries no roles claim (the
+# resolver re-reads the user row per request), so a fresh install 403s on every
+# RBAC-gated write -- including the wizard's own PUT /v1/tenants/update.
+k -n flexprice exec -i flexprice-postgresql-0 -- env PGPASSWORD="$PGPW" \
+  psql -U flexprice -d flexprice -tA <<'EOSQL'
+UPDATE public.users
+   SET roles = '["super_admin"]'::jsonb, type = 'owner', updated_at = CURRENT_TIMESTAMP
+ WHERE id = '00000000-0000-0000-0000-000000000000'
+   AND (roles IS NULL OR roles <> '["super_admin"]'::jsonb OR type <> 'owner')
+RETURNING id;
+EOSQL
+# The user row is Redis-cached (internal/cache PrefixUser), and a raw UPDATE
+# bypasses the repository's invalidation -- without this the API keeps serving
+# the cached roles:[] and the PUT below 403s.
+k -n flexprice exec flexprice-redis-0 -- sh -c \
+  'for key in $(redis-cli --scan --pattern "*user:v1*"); do redis-cli del "$key" >/dev/null; done; echo user_cache_flushed'
+
+# Same contract the onboarding wizard uses: PUT /v1/tenants/update with
+# name + metadata{onboarding_completed,onboarding_referral_source,
+# onboarding_organization_url}. Dashboard JWTs also need X-Environment-ID.
+TENANT_NAME=${TENANT_NAME:-Fleet Local}
+ORGHREF=${ONBOARDING_ORG_URL:-http://flexprice.local}
+REFERRAL=${ONBOARDING_REFERRAL:-ChatGPT / Perplexity / Gemini}
+LOGIN_JSON=$(curl -s --resolve api.flexprice.local:80:127.0.0.1 -X POST \
+  http://api.flexprice.local/v1/auth/login -H 'Content-Type: application/json' \
+  -d "{\"email\":\"admin@flexprice.dev\",\"password\":\"$UIPW\"}")
+DASH_JWT=$(printf '%s' "$LOGIN_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("token",""))')
+if [ -z "$DASH_JWT" ]; then
+  echo "FAIL: no dashboard JWT (login body above) — cannot set tenant metadata"; exit 1
+fi
+code=$(curl -s --resolve api.flexprice.local:80:127.0.0.1 -o /tmp/t30-tenant.json -w '%{http_code}' \
+  -X PUT http://api.flexprice.local/v1/tenants/update \
+  -H "Authorization: Bearer $DASH_JWT" -H 'X-Environment-ID: 00000000-0000-0000-0000-000000000001' \
+  -H 'Content-Type: application/json' -d "$(cat <<EOF
+{"name":"$TENANT_NAME","metadata":{"onboarding_completed":"true","onboarding_referral_source":"$REFERRAL","onboarding_organization_url":"$ORGHREF"}}
+EOF
+)")
+if [ "$code" = "200" ]; then
+  echo "tenant seeded: $TENANT_NAME (onboarding_completed=true, referral=$REFERRAL, url=$ORGHREF)"
+else
+  echo "FAIL: PUT /v1/tenants/update -> $code (body in /tmp/t30-tenant.json)"; exit 1
+fi
+
+echo "== 6) verify over host :80 =="
 code=$(curl -s --resolve api.flexprice.local:80:127.0.0.1 -o /tmp/t30-login.json -w '%{http_code}' \
   -X POST http://api.flexprice.local/v1/auth/login -H 'Content-Type: application/json' \
   -d "{\"email\":\"admin@flexprice.dev\",\"password\":\"$UIPW\"}")
@@ -110,6 +159,9 @@ curl -fsS http://temporal.flexprice.local/api/v1/namespaces | grep -q '"default"
 
 echo
 echo "DONE."
-echo "  Flexprice dashboard: http://flexprice.local  (admin@flexprice.dev,"
-echo "    password: grep FLEXPRICE_UI_PASSWORD $ENVF)"
+echo "  Flexprice dashboard: http://flexprice.local"
+echo "    login: admin@flexprice.dev / grep FLEXPRICE_UI_PASSWORD $ENVF"
+echo "    step 5 pre-answers the onboarding wizard, so login lands in the"
+echo "    workspace; if the wizard still shows, clear the localStorage key"
+echo "    flexprice_onboarding_completed_v1 and reload"
 echo "  Temporal UI:         http://temporal.flexprice.local  (namespace: default)"

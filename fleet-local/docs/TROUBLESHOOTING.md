@@ -702,6 +702,47 @@ builds/deploys/binds/probes the whole chain; the notes below are why each piece 
    `/etc/hosts`, so no `kubectl port-forward` is needed for either UI.
    Rebuild trap as always: mutable `fleet-flexprice-ui:local` tag +
    `imagePullPolicy: Never` → `kind load` then `rollout restart` (t30 does both).
+8. **The seeded admin has no roles, so the dashboard 403s on every write.**
+   First login lands on the "Welcome to Flexprice — Just three quick questions"
+   onboarding wizard, and submitting it fails with
+   `{"message":"insufficient permissions"}` (403). Cause: the s02 migration seed
+   inserts `users.roles = NULL`, and a dashboard JWT carries **no roles claim** —
+   `internal/rest/middleware/auth.go` re-reads the user row on every request and
+   passes `user.Roles` into the context, so the RBAC middleware denies with
+   `access denied: caller has no roles assigned` / `"roles":[]` in the api log.
+   Fix (t30 step 5): `UPDATE users SET roles='["super_admin"]'::jsonb,
+   type='owner' WHERE id='0000…0000'` (`super_admin` is
+   `internal/types/rbac.go:14`; it is also what the frontend uses for the
+   owner badge).
+9. **…and the roles UPDATE appears to do nothing until you flush Redis.**
+   The user repository caches `GetByID` under `flexprice:local:<tenant>:<env>:
+   user:v1:<user_id>` (`internal/cache` `PrefixUser`, TTL
+   `ExpiryDefaultRedis`), and a raw `UPDATE` bypasses the repository's
+   invalidation — so the API keeps serving the cached `roles:[]` and the PUT
+   still 403s even though `psql` returns the new row. Deleting the keys fixes it
+   without a restart: `kubectl -n flexprice exec flexprice-redis-0 -- sh -c
+   'for k in $(redis-cli --scan --pattern "*user:v1*"); do redis-cli del "$k";
+   done'` (t30 step 5 does this; `rollout restart deploy/flexprice-api` is the
+   hammer). Tenant reads are cached the same way, but those go through
+   `Tenant.Update`, which invalidates — only out-of-band SQL writes need this.
+10. **Setting the wizard's answers from the CLI.** The three questions are one
+    call: `PUT /v1/tenants/update` with
+    `{"name":..., "metadata":{"onboarding_completed":"true",
+    "onboarding_referral_source":..., "onboarding_organization_url":...}}`
+    (`src/pages/onboarding/useOnboardingTenant.ts` → `TenantApi.updateTenant`;
+    the metadata key constant is `TenantMetadataKey.ONBOARDING_COMPLETED` in
+    `src/models/Tenant.ts:27`, and `onboarding.tsx`'s `referralSourceOptions`
+    are free-form strings stored verbatim — use one of the seven exact option
+    values, e.g. `ChatGPT / Perplexity / Gemini`, so the UI echoes it back
+    sanely). Send it with the **dashboard JWT plus `X-Environment-ID`** — that is
+    the pair the wizard itself uses. An `x-api-key` also passes RBAC (config
+    operator keys are granted `super_admin` explicitly; vault keys carry
+    `secrets.roles`), but then the actor recorded on the change is the key, not
+    the admin user. t30 step 5 seeds `Fleet Local` /
+    `http://flexprice.local`, which is why a fresh login skips the wizard. The
+    router also honours a localStorage shortcut
+    (`flexprice_onboarding_completed_v1`): if the wizard still shows after
+    seeding, that stale key is the reason, not the server.
 
 ## Useful one-liners
 
