@@ -710,10 +710,14 @@ builds/deploys/binds/probes the whole chain; the notes below are why each piece 
    `internal/rest/middleware/auth.go` re-reads the user row on every request and
    passes `user.Roles` into the context, so the RBAC middleware denies with
    `access denied: caller has no roles assigned` / `"roles":[]` in the api log.
-   Fix (t30 step 5): `UPDATE users SET roles='["super_admin"]'::jsonb,
-   type='owner' WHERE id='0000…0000'` (`super_admin` is
-   `internal/types/rbac.go:14`; it is also what the frontend uses for the
-   owner badge).
+   Fix (t30 step 5): `UPDATE users SET roles='["super_admin"]'::jsonb WHERE
+   id='0000…0000'` (`super_admin` is `internal/types/rbac.go:14`).
+   **Do not also set `type='owner'`** — that was my first attempt and it trades
+   a 403 for a 400: `users.type` is a `UserType` enum of `user` /
+   `service_account` only (`internal/types/user.go:9-16`), and the dashboard
+   passes `user.type` into `GET /v1/rbac/roles?user_type=...`, which answers
+   `validation_error: User type must be 'user' or 'service_account'`. Owner-ship
+   in a self-hosted tenant is expressed by the role, not the type.
 9. **…and the roles UPDATE appears to do nothing until you flush Redis.**
    The user repository caches `GetByID` under `flexprice:local:<tenant>:<env>:
    user:v1:<user_id>` (`internal/cache` `PrefixUser`, TTL
@@ -743,6 +747,35 @@ builds/deploys/binds/probes the whole chain; the notes below are why each piece 
     router also honours a localStorage shortcut
     (`flexprice_onboarding_completed_v1`): if the wizard still shows after
     seeding, that stale key is the reason, not the server.
+
+11. **"Authentication is not configured for this deployment." on the login form
+    — while `curl /v1/auth/login` returns a token.** The build arg
+    `VITE_APP_ENV` was missing, so it defaulted to `APP_ENV.Local`
+    (`src/config/config.ts:296`), and `LoginForm.handleLogin` branches on
+    `config.app.env !== APP_ENV.SelfHosted`: it then calls
+    `supabase.auth.signInWithPassword`, which in a self-hosted deploy is the
+    **mock client** in `src/core/services/supbase/config.ts` returning exactly
+    that message. The SPA never issues the HTTP call, so the backend log stays
+    empty and curl-based checks pass — the failure is invisible outside a
+    browser. Fix: build with `--build-arg VITE_APP_ENV=self-hosted` (t30 does
+    this; the same flag is what makes `AuthService` read the JWT out of
+    `localStorage.token` instead of a Supabase session). Guard against the
+    silent version of this trap: the image now ships
+    `/usr/share/nginx/html/build-info.json` (`{"apiUrl","appEnv"}`), which t30
+    step 2 compares against the intended build args and rebuilds on mismatch —
+    because Vite inlines env at BUILD time, a present-but-stale image otherwise
+    keeps serving the old choice.
+12. **Verifying a login the way a user does.**
+    `node scripts/fixes/t30-ui-login-check.mjs admin@flexprice.dev "$(grep
+    ^FLEXPRICE_UI_PASSWORD= .env | cut -d= -f2-)"` drives the real form in
+    Chromium, asserts the bundle stamp, that `/v1/auth/login` was actually
+    called and returned 200, that no toast error is showing, that the URL left
+    `/login`, and that `localStorage.token` holds the session. Requires
+    `npx playwright install chromium` once. It also sweeps every `/v1` response
+    for 4xx/5xx after landing, which is how the `user_type=owner` mistake in
+    item 8 was found — a login can pass while the dashboard sits on a broken
+    query. This is the check that would have caught items 4 and 11; curl alone
+    proves only the backend half.
 
 ## Useful one-liners
 

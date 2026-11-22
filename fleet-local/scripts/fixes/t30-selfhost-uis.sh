@@ -26,8 +26,10 @@
 #      users.roles NULL, and every RBAC-gated write then 403s) and PUT the
 #      tenant name + onboarding metadata the "Just three quick questions"
 #      screen would otherwise ask for
-#   6) verify: both hosts answer over :80, login returns a JWT, and the Temporal
-#      UI can reach its frontend
+#   6) verify: both hosts answer over :80, login returns a JWT, the served
+#      bundle carries the intended build args, and a headless browser completes
+#      the real login form (t30-ui-login-check.mjs), and the Temporal UI can
+#      reach its frontend
 set -euo pipefail
 CTX=${KCTX:-kind-flexprice-local}
 KIND_CLUSTER=${KIND_CLUSTER:-flexprice-local}
@@ -38,6 +40,9 @@ FRONT_DEFAULT=/Users/niravshah/git/flexprice-front-pinned-${FRONT_REF}
 FRONT=${FLEXPRICE_FRONT_CHECKOUT:-$FRONT_DEFAULT}
 IMAGE=fleet-flexprice-ui:local
 API_URL=${VITE_API_URL:-http://api.flexprice.local/v1}
+# Must be 'self-hosted' or the built SPA's login button calls the Supabase mock
+# instead of /v1/auth/login (T-17.11).
+APP_ENV=${VITE_APP_ENV:-self-hosted}
 
 echo "== 1) pinned flexprice-front checkout =="
 if [ ! -f "$FRONT/package.json" ]; then
@@ -48,12 +53,31 @@ echo "frontend source: $FRONT ($(git -C "$FRONT" describe --tags --always 2>/dev
 
 echo "== 2) build + load $IMAGE =="
 # --network host: npm ci in the vite build stage needs registry access from the
-# default kind-buildx bridge; rebuild only when the image is absent (FORCE=1 to force).
-if ! docker image inspect "$IMAGE" >/dev/null 2>&1 || [ "${FORCE:-0}" = 1 ]; then
-  docker build -f "$ROOT/deploy/uis/flexprice-ui/Dockerfile" \
-    --build-arg VITE_API_URL="$API_URL" -t "$IMAGE" "$FRONT"
+# default kind-buildx bridge; rebuild only when the image is absent, is older
+# than the inlined build args, or FORCE=1.
+image_build_info() {
+  docker run --rm --entrypoint cat "$IMAGE" /usr/share/nginx/html/build-info.json 2>/dev/null || true
+}
+want="{\"apiUrl\":\"$API_URL\",\"appEnv\":\"$APP_ENV\"}"
+have=$(tr -d ' \n' <<<"$(image_build_info)")
+if [ "${FORCE:-0}" = 1 ]; then
+  echo "FORCE=1: rebuilding"
+elif [ -z "$have" ]; then
+  echo "image missing (or predates build-info.json — the pre-self-hosted builds had no stamp): building"
+elif [ "$have" != "$want" ]; then
+  echo "image inlined a different build config:"
+  echo "  have: $have"
+  echo "  want: $want"
 else
-  echo "image present, skipping build (FORCE=1 to rebuild)"
+  echo "image present with the right build args, skipping build (FORCE=1 to rebuild)"
+fi
+if [ "${FORCE:-0}" = 1 ] || [ "$have" != "$want" ]; then
+  docker build -f "$ROOT/deploy/uis/flexprice-ui/Dockerfile" \
+    --build-arg VITE_API_URL="$API_URL" --build-arg VITE_APP_ENV="$APP_ENV" \
+    -t "$IMAGE" "$FRONT"
+  # An unchanged 'want' still needs one rebuild pass to become comparable:
+  have=$(tr -d ' \n' <<<"$(image_build_info)")
+  [ "$have" = "$want" ] || { echo "FAIL: build stamp $have != $want"; exit 1; }
 fi
 kind load docker-image "$IMAGE" --name "$KIND_CLUSTER"
 
@@ -95,12 +119,16 @@ echo "== 5) super_admin role + onboarding values (skip the wizard) =="
 # The chart seeds users.roles NULL and the JWT carries no roles claim (the
 # resolver re-reads the user row per request), so a fresh install 403s on every
 # RBAC-gated write -- including the wizard's own PUT /v1/tenants/update.
+# roles ONLY: users.type stays 'user'. 'owner' is not a valid UserType
+# (internal/types/user.go:9-16 accepts user|service_account), and the dashboard
+# passes user.type to GET /v1/rbac/roles?user_type=..., which then 400s with
+# "User type must be 'user' or 'service_account'".
 k -n flexprice exec -i flexprice-postgresql-0 -- env PGPASSWORD="$PGPW" \
   psql -U flexprice -d flexprice -tA <<'EOSQL'
 UPDATE public.users
-   SET roles = '["super_admin"]'::jsonb, type = 'owner', updated_at = CURRENT_TIMESTAMP
+   SET roles = '["super_admin"]'::jsonb, updated_at = CURRENT_TIMESTAMP
  WHERE id = '00000000-0000-0000-0000-000000000000'
-   AND (roles IS NULL OR roles <> '["super_admin"]'::jsonb OR type <> 'owner')
+   AND (roles IS NULL OR roles <> '["super_admin"]'::jsonb)
 RETURNING id;
 EOSQL
 # The user row is Redis-cached (internal/cache PrefixUser), and a raw UPDATE
@@ -145,6 +173,23 @@ else
   echo "FAIL: login returned $code (body in /tmp/t30-login.json)"; exit 1
 fi
 curl -fsS -o /tmp/t30-flexprice-ui.html -w 'flexprice.local -> %{http_code}\n' http://flexprice.local/
+# The served bundle must be the one step 2 just built (Vite inlines env at build
+# time, so a stale image would still answer 200 above):
+served=$(curl -fsS http://flexprice.local/build-info.json 2>/dev/null | tr -d ' \n' || true)
+if [ "$served" = "$want" ]; then
+  echo "served bundle build config: $served"
+else
+  echo "FAIL: served build-info.json is '$served', expected '$want' — pod is running an older image; re-run with FORCE=1 and check the rollout"; exit 1
+fi
+# Browser-level login: this is the only check that catches the SPA taking the
+# Supabase branch instead of calling /v1/auth/login (T-17.11). Skipped when
+# Playwright's chromium is not installed.
+if node -e 'import("playwright").then(p=>p.chromium.executablePath())' >/dev/null 2>&1; then
+  node "$ROOT/scripts/fixes/t30-ui-login-check.mjs" admin@flexprice.dev "$UIPW" \
+    || { echo "FAIL: browser login check (see above)"; exit 1; }
+else
+  echo "NOTE: skipping the browser login check (npx playwright install chromium)"
+fi
 # SPA shell: the built index.html must reference /assets (Vite output), not the
 # dev-server template.
 grep -q '/assets/' /tmp/t30-flexprice-ui.html && echo "flexprice.local serves the built SPA" \

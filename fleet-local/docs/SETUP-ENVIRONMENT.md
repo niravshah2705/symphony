@@ -135,8 +135,19 @@ ingress (hosts from `00-prereqs.sh`, no port-forward needed):
 - **http://flexprice.local** — `flexprice/flexprice-front` (pinned `v2.0.22`,
   cloned to `~/git/flexprice-front-pinned-v2.0.22`) built by
   `deploy/uis/flexprice-ui/Dockerfile`: multi-stage vite build with
-  `--build-arg VITE_API_URL=http://api.flexprice.local/v1` (Vite inlines env at
-  BUILD time — container env cannot change it), served as static files by nginx.
+  `--build-arg VITE_API_URL=http://api.flexprice.local/v1` **and**
+  `--build-arg VITE_APP_ENV=self-hosted` (Vite inlines env at BUILD time —
+  container env cannot change it), served as static files by nginx.
+  `VITE_APP_ENV` is not cosmetic: without it the SPA defaults to `APP_ENV.Local`
+  and the login button calls the Supabase **mock** client — toast "Authentication
+  is not configured for this deployment", with no HTTP request to the backend at
+  all (T-17.11). Step 2 compares the image's `/build-info.json` stamp against the
+  intended args and rebuilds on mismatch, so a stale image cannot keep serving
+  the old choice.
+  Verify it the way a user does (real browser, not curl):
+  `node scripts/fixes/t30-ui-login-check.mjs admin@flexprice.dev "$(grep
+  ^FLEXPRICE_UI_PASSWORD= .env | cut -d= -f2-)"` (needs
+  `npx playwright install chromium` once; T-17.12).
   Login `admin@flexprice.dev`; password is generated on first run into
   gitignored `fleet-local/.env` as `FLEXPRICE_UI_PASSWORD` — the chart seeds
   `auths.token` as plaintext but Login does bcrypt-compare, so t30 step 4
@@ -144,8 +155,10 @@ ingress (hosts from `00-prereqs.sh`, no port-forward needed):
 - **Onboarding wizard pre-answered (t30 step 5).** A fresh login otherwise stops
   at "Welcome to Flexprice — Just three quick questions", and submitting it
   403s because the seed leaves `users.roles` NULL (a JWT carries no roles claim,
-  so RBAC reads the user row). Step 5 grants the seeded admin `super_admin` +
-  `type='owner'`, flushes the Redis `user:v1` cache that would otherwise keep
+  so RBAC reads the user row). Step 5 grants the seeded admin the
+  `super_admin` role (leaving `users.type='user'` — `owner` is not a valid
+  `UserType` and would 400 the roles endpoint, T-17.8),
+  flushes the Redis `user:v1` cache that would otherwise keep
   serving the stale `roles:[]`, and then fires the very call the wizard makes —
   `PUT /v1/tenants/update` with `name` +
   `metadata{onboarding_completed:"true", onboarding_referral_source,
