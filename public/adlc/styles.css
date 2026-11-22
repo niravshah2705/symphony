@@ -59,26 +59,11 @@ a {
 }
 
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  padding: 7px 6px;
-  border-radius: 7px;
+  width: 30px; height: 24px; display: block; flex: 0 0 auto;
   background: var(--dark);
+  -webkit-mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
+          mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
 }
-
-.brand-mark span {
-  width: 4px;
-  display: block;
-  border-radius: 99px;
-  background: var(--paper);
-}
-
-.brand-mark span:nth-child(1) { height: 8px; }
-.brand-mark span:nth-child(2) { height: 15px; }
-.brand-mark span:nth-child(3) { height: 11px; }
 
 .site-header nav {
   gap: 22px;

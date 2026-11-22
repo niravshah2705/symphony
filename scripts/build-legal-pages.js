@@ -267,7 +267,7 @@ function renderMarkdown(source) {
 
 function pageTemplate(page, bodyHtml, headings) {
   const url = `${CANONICAL_ORIGIN}/${page.slug}/`;
-  const description = `${ENTITY} ${page.title.split(' — ')[0]}: governing terms, cancellation windows, refund eligibility and digital delivery timelines for the Archagentix platform. Questions: ${SUPPORT_EMAIL} or ${SUPPORT_PHONE_DISPLAY}.`;
+  const description = `${page.title.split(' — ')[0]} for the Archagentix platform: terms, cancellation and refund windows, and delivery timelines. Contact ${SUPPORT_EMAIL}.`;
   const toc = headings
     .filter((heading) => heading.level === 2)
     .map((heading) => `<li><a href="#${heading.id}">${escapeHtml(heading.text)}</a></li>`)
@@ -281,6 +281,10 @@ function pageTemplate(page, bodyHtml, headings) {
     <meta name="description" content="${escapeHtml(description)}" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="theme-color" content="#16201d" />
+    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
     <link rel="canonical" href="${url}" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
     <link rel="stylesheet" href="/adlc/styles.css" />
@@ -289,6 +293,12 @@ function pageTemplate(page, bodyHtml, headings) {
     <meta property="og:url" content="${url}" />
     <meta property="og:title" content="${escapeHtml(page.title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:image" content="${CANONICAL_ORIGIN}/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Archagentix — the Agentic Development Life Cycle" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="${CANONICAL_ORIGIN}/brand/og-image.png" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -300,6 +310,7 @@ function pageTemplate(page, bodyHtml, headings) {
           { "@type": "PropertyValue", "propertyID": "GSTIN", "value": "${GSTIN}" }
         ],
         "url": "${CANONICAL_ORIGIN}/",
+        "logo": "${CANONICAL_ORIGIN}/brand/icon-512.png",
         "email": "${SUPPORT_EMAIL}",
         "telephone": "${SUPPORT_PHONE_SCHEMA}",
         "address": {
@@ -328,7 +339,7 @@ function pageTemplate(page, bodyHtml, headings) {
   <body>
     <header class="site-header">
       <a class="brand" href="/adlc/" aria-label="Archagentix home">
-        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-mark" aria-hidden="true"></span>
         <span>Archagentix</span>
       </a>
       <nav aria-label="Primary">
@@ -360,7 +371,7 @@ ${bodyHtml}
     <footer class="site-footer" aria-label="Site footer">
       <div class="footer-brand">
         <a class="brand" href="/adlc/" aria-label="Archagentix home">
-          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-mark" aria-hidden="true"></span>
           <span>Archagentix</span>
         </a>
         <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>

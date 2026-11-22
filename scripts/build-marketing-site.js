@@ -34,6 +34,12 @@ const DISCOVERY_FILES = ['robots.txt', 'llms.txt', 'llms-full.txt'];
 // Search Console verifies a URL-prefix property by fetching this token file from
 // the property's own host, so the app copy under public/ must be published too.
 const VERIFICATION_FILES = ['googleca0fdd26d71dc36f.html'];
+// Brand assets live at one path on both hosts (/brand/...), so they are promoted as a
+// directory rather than riding the /adlc/ -> / rewrite: a page copied verbatim to www
+// would otherwise point at a url that only exists on the platform origin.
+const BRAND_DIR = 'brand';
+const BINARY_EXT = /\.(?:png|jpe?g|ico|webp|avif|gif|woff2?|ttf|otf)$/i;
+const isBinary = (rel) => BINARY_EXT.test(rel);
 
 // Specific rewrites first; the generic path promotion last.
 const REWRITES = [
@@ -71,10 +77,12 @@ function walkFiles(dir, prefix) {
 }
 
 function copyFile(srcDir, outDir, rel) {
-  var text = rewriteText(fs.readFileSync(path.join(srcDir, rel), 'utf8'));
+  var out = isBinary(rel)
+    ? fs.readFileSync(path.join(srcDir, rel))
+    : rewriteText(fs.readFileSync(path.join(srcDir, rel), 'utf8'));
   var dest = path.join(outDir, rel);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, text);
+  fs.writeFileSync(dest, out);
 }
 // public/sitemap.xml documents the app tree, where the ADLC pages sit under /adlc/.
 // On www those are legacy urls served by a rewrite, never canonical urls, so the
@@ -143,6 +151,7 @@ function validateTree(outDir, srcDir) {
   var files = walkFiles(outDir);
   var i;
   for (i = 0; i < files.length; i += 1) {
+    if (isBinary(files[i])) continue;
     var text = fs.readFileSync(path.join(outDir, files[i]), 'utf8');
     if (text.indexOf('/adlc/') !== -1) {
       throw new Error(files[i] + ' still references /adlc/; www serves that path from the promoted file');
@@ -194,6 +203,11 @@ function buildMarketingSite(options) {
   for (i = 0; i < PUBLISHED_PAGES.length; i += 1) copyFile(srcDir, outDir, PUBLISHED_PAGES[i] + '/index.html');
   for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i]);
   for (i = 0; i < VERIFICATION_FILES.length; i += 1) copyFile(srcDir, outDir, VERIFICATION_FILES[i]);
+  var brandDir = path.join(srcDir, BRAND_DIR);
+  if (fs.existsSync(brandDir)) {
+    var brand = walkFiles(brandDir).map(function (rel) { return BRAND_DIR + '/' + rel; });
+    for (i = 0; i < brand.length; i += 1) copyFile(srcDir, outDir, brand[i]);
+  }
   fs.writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemap(srcDir));
 
   return {
@@ -280,6 +294,7 @@ module.exports = {
   walkFiles: walkFiles,
   REWRITES: REWRITES,
   COMPANY_PAGES: COMPANY_PAGES,
+  BRAND_DIR: BRAND_DIR,
   LEGAL_PAGE_SLUGS: LEGAL_PAGE_SLUGS,
   PUBLISHED_PAGES: PUBLISHED_PAGES,
   DISCOVERY_FILES: DISCOVERY_FILES,
