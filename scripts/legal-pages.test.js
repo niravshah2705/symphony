@@ -112,7 +112,7 @@ test('terms and privacy name the company and governing law in Pune', () => {
 });
 
 test('internal links on a policy page resolve to a real published page', () => {
-  const { PUBLISHED_PAGES } = require('./build-marketing-site.js');
+  const { PUBLISHED_PAGES, BRAND_DIR } = require('./build-marketing-site.js');
   const published = new Set([
     '/', ...PUBLISHED_PAGES.map((slug) => `/${slug}/`),
     // On the marketing host these promote out of /adlc/, but both forms exist in
@@ -120,6 +120,9 @@ test('internal links on a policy page resolve to a real published page', () => {
     '/adlc/', '/adlc/blog/', '/adlc/brief/', '/blog/', '/brief/',
     '/legal/terms.md', '/legal/privacy.md', '/legal/refund.md', '/legal/shipping.md',
     '/llms.txt', '/llms-full.txt', '/adlc/styles.css', '/styles.css',
+    // Brand assets ride along as a directory on both hosts, so every file in the
+    // source is a live path.
+    ...fs.readdirSync(path.join(PUBLIC, BRAND_DIR)).map((name) => `/${BRAND_DIR}/${name}`),
   ]);
   for (const page of LEGAL_PAGES) {
     const html = read(page.slug, 'index.html');

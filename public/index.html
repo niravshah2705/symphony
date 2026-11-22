@@ -11,6 +11,15 @@
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="application-name" content="Archagentix" />
     <meta name="theme-color" content="#15181f" />
+    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
+    <meta property="og:image" content="https://platform.archagentix.com/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Archagentix — the Agentic Development Life Cycle" />
+    <meta name="twitter:image" content="https://platform.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://platform.archagentix.com/" />
     <link rel="sitemap" type="application/xml" href="/sitemap-platform.xml" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
@@ -22,7 +31,7 @@
       property="og:description"
       content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
     />
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Archagentix Platform — ADLC (Agentic Development Life Cycle)" />
     <meta
       name="twitter:description"
@@ -96,6 +105,7 @@
         ],
         "alternateName": ["Archagentix", "ADLC"],
         "url": "https://www.archagentix.com/",
+        "logo": "https://www.archagentix.com/brand/icon-512.png",
         "email": "support@archagentix.com",
         "telephone": "+91-9370580836",
         "address": {
@@ -140,9 +150,12 @@
       .topbar { height: var(--topbar-height); display: grid; grid-template-columns: var(--sidebar-width) minmax(180px,1fr) auto; align-items: center; padding: 0 18px; position: relative; z-index: 50; border-bottom: 1px solid var(--border-strong); background: var(--topbar); }
       .brand-area, .brand, .topbar-actions, .topbar-context, .conn { min-width: 0; display: flex; align-items: center; }
       .brand { gap: 10px; font-size: 15px; font-weight: 680; }
-      .brand-mark { width: 27px; height: 27px; display: flex; align-items: flex-end; gap: 2px; padding: 6px 5px; border-radius: 7px; background: var(--text); }
-      .brand-mark span { width: 4px; display: block; border-radius: 3px; background: var(--panel); }
-      .brand-mark span:nth-child(1) { height: 8px; } .brand-mark span:nth-child(2) { height: 14px; } .brand-mark span:nth-child(3) { height: 11px; }
+      .brand-mark {
+        width: 27px; height: 22px; display: block; flex: 0 0 auto;
+        background: var(--text);
+        -webkit-mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
+                mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
+      }
       .topbar-context { justify-self: center; gap: 8px; color: var(--muted); font-size: 11px; }
       .topbar-context > span { font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
       .topbar-context > span::after { content: '/'; margin-left: 8px; color: var(--border-strong); }
@@ -204,10 +217,6 @@
     <link rel="preload" href="/styles.css" as="style" />
     <link rel="stylesheet" href="/styles.css" media="print" data-shared-style onload="this.media='all';this.dataset.loaded='true'" />
     <noscript><link rel="stylesheet" href="/styles.css" /></noscript>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>"
-    />
     <!-- Apply the saved theme before first paint to avoid a flash of the wrong theme. -->
     <script>
       (function () {
@@ -255,7 +264,7 @@
           <span data-icon="menu"></span>
         </button>
         <a class="brand" href="#/agent" aria-label="Software Factory agent workspace" data-i18n-skip>
-          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-mark" aria-hidden="true"></span>
           <span>Software Factory</span>
         </a>
       </div>
