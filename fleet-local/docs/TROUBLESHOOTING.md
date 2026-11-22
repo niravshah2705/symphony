@@ -823,6 +823,113 @@ instead of showing a 502 only when someone happens to chat with a cold agent.
 
 ---
 
+## T-19 Chat answers `(no output)` after the 502 class is gone
+
+**Symptom:** a turn ends with no text at all and the SPA renders the literal
+`(no output)`. Nothing else looks wrong: the request completed, no proxy error
+page, the session closes. The kagent controller log DID name the reason, e.g.
+`Error 401: user_message: Invalid API key #1005` (an expired OpenRouter key
+behind LiteLLM — see the rotation note below), and the user never sees it.
+
+**Where the reason went — three separate losses, all in the BFF:**
+1. `kagent/proxy.ts` typed the frame's `status` as `{ state?: string }` and read
+   only the state, so `status.message` — the agent's own explanation, which IS
+   on the wire — was parsed away before it ever reached the browser.
+2. `parseEvent` had no notion of a non-terminal-but-not-running state, so
+   `TASK_STATE_INPUT_REQUIRED` was treated as terminal. Approval and `ask_user`
+   were structurally impossible: the row closed, the meter stopped, and the
+   resume the client wanted to send had nothing to re-arm.
+3. The BFF answered failures with `{ "error": "<string>" }`. assistant-ui's A2A
+   client builds an `A2AError` from `{error:{code,status,message,details}}` and
+   nothing else, so any string body arrives as `A2A request failed: 409` — the
+   status code survives, the reason does not.
+
+**The same blind spot was billing, not just UX.** `markTerminal` fired for ANY
+terminal state and for stream errors, and the sweeper meters
+`WHERE status='closed'`, so a run that produced zero tokens behind a dead
+provider key was invoiced as full wall-clock `fleet.actor_compute`. Worse, the
+relay's terminal set spelled cancel `TASK_STATE_CANCELLED` while the proto name
+is `TASK_STATE_CANCELED` (one L) — a cancelled task matched nothing, so it was
+never closed and never metered at all. And because a conversation is ONE
+`sessions` row, only turn 1 could ever be billed: `metered_at` was stamped once
+and never cleared.
+
+**Fix: the BFF speaks A2A.** `src/a2a/` + `routes/a2a.ts` mount a per-project
+A2A server (`/api/a2a/orgs/{orgId}/projects/{projectId}/…`) that the browser
+drives with the standard client, so there is no private `event: session` frame
+and no bespoke reader to lose a field in:
+`agent-card.json` (URLs rewritten to the facade; the controller guards the card
+with the same auth as the RPC endpoint, so that GET needs the identity headers
+too — a bare one answers 401), `message:stream`,
+`message:send`, `tasks/{id}`, `tasks/{id}:cancel`, `tasks/{id}:subscribe`.
+Controller frames are relayed **verbatim** — the client normalises
+`TASK_STATE_*`/`ROLE_*` itself, so re-shaping only adds ways to be wrong — and
+read *tolerantly* for bookkeeping (`a2a/translate.ts inspectFrame`). All
+classification lives in `a2a/contract.ts`: `outcome` + `close_reason` are now
+columns on the session row, `input-required`/`auth-required` are **paused, not
+terminal**, and every error leaves this process in the `{error:{…}}` shape.
+Metering is per turn: `meter_seconds` accumulates the time a stream was
+actually open (never the human's think-time on a paused task), `billed_seconds`
+is what has been invoiced, and the sweeper bills the delta under an event id
+keyed on `session:turn`. `settlementPolicy` encodes "depends on the failure
+type": a turn the PLATFORM broke (`upstream_error`, `no_events`) is written off
+with 0 seconds and never re-swept; a turn the agent answered wrongly, the user
+cancelled, or the browser abandoned does bill, because that compute happened.
+
+**Task ids are not tenant-scoped upstream**, so `tasks/*` never trusts the
+client's project id: the facade resolves the id through its own `sessions` row
+(`findSessionByTask`) and confirms the task's `contextId` against
+`listContextIds(org, project)`. A context or task this facade never minted is a
+404, not a new conversation — org-level agents are shared across projects, so
+accepting an unknown `contextId` would let one project append to another's.
+
+**A dead provider key is NOT an agent failure.** On the wire kagent reports it as
+an ordinary `TASK_STATE_FAILED` whose `status.message` is the provider's own text
+(`llm error response (code STREAM_ERROR): "OpenAI API error: 401 Unauthorized"`).
+`isPlatformFault` recognises that class (auth / quota / rate-limit / no-upstream
+signatures) and re-labels the turn `upstream_error`, so the policy writes it off
+at 0 seconds; an unrecognised failure stays `failed` and **is** billed, because
+the agent really did run. The list is deliberately conservative — a failure we
+cannot name is charged, never silently written off.
+
+**A completion can also be legitimately empty.** The `mock` worker settles a turn
+with no artifacts and no `status.message` at all (proved live: the completed task
+has only the echoed user message), which is the second way to get an empty
+bubble. `inspectFrame` therefore tracks whether any artifact / message / status
+part arrived, and a silent completion records
+`the agent completed the turn without producing any output` in `close_reason` —
+still outcome `completed`, still billable compute, but explainable to the user.
+
+**Guard:** `scripts/fixes/t31-a2a-facade-check.sh` proves the card rewrite, the
+401-is-JSON routing, a relayed `message:stream` turn, the ownership refusals, and
+the `outcome`/`meter_seconds` read-back against the live cluster.
+**STATUS: IMPLEMENTED + unit-tested + verified in-cluster (2026-11-23).**
+`t31-a2a-facade-check.sh` passes all 20 gates against `kind-flexprice-local`;
+the SPA still uses the legacy `/chat` relay until PR 2 of this plan lands, and
+the two paths share `pumpTurn`, so they cannot disagree about a turn's outcome.
+Observed live: a `message:stream` turn relays 4 controller frames verbatim and
+binds `contextId`; the mock worker's silent completion records
+`the agent completed the turn without producing any output`; a nemotron turn
+behind the dead OpenRouter key lands as
+`upstream_error | "…OpenAI API error: 401 Unauthorized" | meter_seconds=3.017 |
+metered_seconds=0` — the reason the user never saw, and 0 seconds billed.
+
+**If a gate reports `000` on every call** it is not the protocol: with
+`replicas=1` and a 25%/25% rolling update the Deployment can run with zero ready
+endpoints for minutes while an in-flight SSE holds the old pod terminating. The
+script now waits for `/healthz` (bounded by `READY_WAIT`) instead of a fixed
+`sleep 2`, and fails with the `kubectl -n fleet-system get pods` hint.
+
+> Prerequisite operator action, unrelated to this code: the OpenRouter key
+> behind LiteLLM is dead. `/api/v1/models` answers 200 with a dead key, so only
+> a generation call proves it. Rotate, then
+> `kubectl -n litellm patch secret litellm-fleet-secrets` (`OPENROUTER_API_KEY`)
+> and `kubectl -n litellm rollout restart deploy/litellm` — the `openrouter/*`
+> wildcard group reads `os.environ/OPENROUTER_API_KEY`, so one rotation covers
+> every model.
+
+---
+
 ```bash
 # Flexprice admin calls (keys fetched inline, never printed; fresh-cluster
 # shape = litellm-fleet-secrets; the deploy-env literal only exists on old clusters)

@@ -20,6 +20,7 @@ export interface A2AMessage {
   parts: { text: string }[];
   contextId?: string;
   taskId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export function userMessage(text: string, contextId?: string, taskId?: string): A2AMessage {
@@ -111,8 +112,66 @@ export async function listTasks(namespace: string, name: string, headers: Record
   return res.result?.tasks ?? [];
 }
 
-export async function agentCard(namespace: string, name: string) {
+// The controller guards the card with the SAME auth as the RPC endpoint (a bare
+// GET answers 401), so identity headers are not optional here.
+export async function agentCard(namespace: string, name: string, headers: Record<string, string> = {}) {
   return fetchJson(`${agentUrl(namespace, name)}/.well-known/agent-card.json`, {
-    headers: { 'A2A-Version': '1.0' },
+    headers: { 'A2A-Version': '1.0', ...headers },
+  });
+}
+
+export interface RpcResult {
+  status: number;
+  body: unknown;
+}
+
+// The A2A facade forwards the controller's JSON-RPC envelope VERBATIM: the
+// browser client unwraps {jsonrpc,result} and drops a flat `kind` itself, so
+// re-shaping here would only add a way to get it wrong. Note that kagent reports
+// an application failure as HTTP 200 with an `error` member (e.g. -32001 "task
+// not found"), which is why the status code alone can never be the verdict.
+export async function rpcEnvelope(
+  namespace: string,
+  name: string,
+  headers: Record<string, string>,
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs = 30000,
+): Promise<RpcResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(agentUrl(namespace, name), {
+      method: 'POST',
+      headers: { ...headers, Accept: 'application/json' },
+      body: JSON.stringify(envelope(method, params)),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let body: unknown = {};
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = { jsonrpc: '2.0', error: { code: -32603, message: `non-JSON upstream response: ${text.slice(0, 200)}` } };
+    }
+    return { status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Method names are the proto RPC names (PascalCase), confirmed against the live
+// controller: tasks/cancel answers METHOD_NOT_FOUND, CancelTask answers
+// TASK_NOT_FOUND. SubscribeToTask is a real streaming method.
+export function cancelTask(namespace: string, name: string, headers: Record<string, string>, taskId: string): Promise<RpcResult> {
+  return rpcEnvelope(namespace, name, headers, 'CancelTask', { id: taskId });
+}
+
+// Long-running like streamMessage: no client timeout, body piped through as SSE.
+export function subscribeTask(namespace: string, name: string, headers: Record<string, string>, taskId: string): Promise<Response> {
+  return fetch(agentUrl(namespace, name), {
+    method: 'POST',
+    headers: { ...headers, Accept: 'text/event-stream' },
+    body: JSON.stringify(envelope('SubscribeToTask', { id: taskId })),
   });
 }

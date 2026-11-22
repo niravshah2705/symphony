@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { a2aHeaders, makeTraceparent, userMessage, type FleetIdentity } from '../src/kagent/a2a.ts';
+import { a2aHeaders, agentCard, makeTraceparent, userMessage, type FleetIdentity } from '../src/kagent/a2a.ts';
 import { BAGGAGE_KEYS, FLEET_HEADERS, STRIPPED_CLIENT_HEADERS, decodeBaggage } from '@fleet-local/shared';
 
 const id: FleetIdentity = {
@@ -67,4 +67,28 @@ test('edge strip list covers every spoofable identity/fleet header', () => {
   ]) {
     assert.ok(STRIPPED_CLIENT_HEADERS.includes(name as never), `missing strip: ${name}`);
   }
+});
+
+// The controller guards the card with the same auth as the RPC endpoint, so a
+// bare GET answers 401 and the facade degrades to "agent card unavailable" —
+// proven live by t31 gate 2. The headers are not optional on this call.
+test('agentCard forwards identity headers and keeps the A2A-Version contract', async () => {
+  const calls: { url: string; headers: Record<string, string> }[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: URL | string, init?: RequestInit) => {
+    calls.push({ url: String(url), headers: (init?.headers ?? {}) as Record<string, string> });
+    return new Response(JSON.stringify({ name: 'mock worker' }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const card = await agentCard('org-test', 'test-agent-mock-worker', a2aHeaders(id, 'tok'));
+    assert.deepEqual(card, { name: 'mock worker' });
+  } finally {
+    globalThis.fetch = real;
+  }
+  const seen = calls[0];
+  assert.ok(seen, 'no upstream call made');
+  assert.ok(seen.url.endsWith('/agents/org-test/test-agent-mock-worker/.well-known/agent-card.json'), seen.url);
+  assert.equal(seen.headers['A2A-Version'], '1.0');
+  assert.equal(seen.headers.Authorization, 'Bearer tok');
+  assert.equal(seen.headers[FLEET_HEADERS.orgId], id.orgId);
 });

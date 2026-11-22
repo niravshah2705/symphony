@@ -1,3 +1,5 @@
+export * from './a2a.ts';
+
 export const FLEET_HEADERS = {
   orgId: 'x-fleet-org-id',
   projectId: 'x-fleet-project-id',

@@ -5,6 +5,7 @@ import authPlugin from './auth/plugin.ts';
 import { authRoutes } from './routes/auth.ts';
 import { orgRoutes } from './routes/orgs.ts';
 import { chatRoutes } from './routes/chat.ts';
+import { a2aRoutes } from './routes/a2a.ts';
 import { migrate, close } from './db/client.ts';
 import { startSweeper } from './metering/sweeper.ts';
 import { shutdownMetrics } from './metering/otlp.ts';
@@ -24,6 +25,12 @@ async function build() {
   await app.register(authRoutes);
   await app.register(orgRoutes);
   await app.register(chatRoutes);
+  // Registered as a child scope on purpose: the `application/a2a+json` parser and
+  // the A2A-shaped error handler belong to the facade routes only, and must not
+  // change how every other endpoint reports an error. Both stay before
+  // fastifyStatic, whose SPA fallback would otherwise answer a mis-typed A2A call
+  // with index.html.
+  await app.register(a2aRoutes);
 
   if (config.spaRoot) {
     await app.register(fastifyStatic, { root: config.spaRoot, prefix: '/' });

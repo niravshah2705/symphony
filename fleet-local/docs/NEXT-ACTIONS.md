@@ -74,3 +74,53 @@ recon time (user ran an upgrade in another thread) — confirm it reached
   failures for 2 min, ate-idp-server stable).
 - If OOM recurs: Docker Desktop memory first, then trim flexprice-frontend /
   langfuse-web requests+limits.
+
+## T-31 chat: BFF as an A2A facade (in progress, 2026-11-23)
+
+Root cause write-up lives in TROUBLESHOOTING.md T-19 (`(no output)` + the
+billing blind spot). Four PRs, one seam:
+
+- **PR 1 — facade (landed, 20/20 in-cluster gates pass).** `apps/control-plane/src/a2a/`
+  (`contract.ts` classification + settlement policy, `translate.ts` wire reading
+  + card rewrite, `facade.ts` orchestration + SSE pump) and `routes/a2a.ts`
+  (one wildcard per project under `/api/a2a/orgs/{orgId}/projects/{projectId}`,
+  `application/a2a+json` parser, A2A-shaped error handler). `sessions` gains
+  `outcome`, `close_reason`, cumulative `meter_seconds`, `billed_seconds`,
+  `awaiting_since`, `turn`, `metered_seconds`, `metered_outcome`; the sweeper
+  bills the **delta** per turn and writes off a platform-fault turn at 0.
+  Two rules the live cluster forced into the open: a dead provider key arrives
+  as an ordinary `TASK_STATE_FAILED` with the provider's text, so
+  `isPlatformFault` re-labels it `upstream_error` (never billed) while any
+  failure it cannot name stays billable; and a task can complete with **no
+  artifact at all** (the mock worker does), which is now recorded as
+  `the agent completed the turn without producing any output` instead of an
+  unexplained empty bubble. The card GET needs the identity headers too — the
+  controller 401s a bare one, which is how `agentCard()` lost discovery.
+  Legacy `/chat` still works — `kagent/proxy.ts` now shares the same pump.
+  Gate: `scripts/fixes/t31-a2a-facade-check.sh` (read-only; `REBUILD=1` to roll;
+  waits for `/healthz` because a 1-replica rolling update can leave zero ready
+  endpoints for minutes and every curl then answers `000`).
+- **PR 2 — SPA switch** to `@assistant-ui/react` + `@assistant-ui/react-a2a`
+  (headless primitives, no Tailwind/shadcn), `FleetA2AClient` for the model
+  metadata, and the failure/status surface: `incomplete (error)` + the agent's
+  own reason inline + Retry, `TaskStatusBar` for the 9 states, `ThoughtPanel`
+  fed by the reasoning artifact. Model choice rides on message **metadata**,
+  proven live: gate 5 posts `{"fleet.dev/model":"not-a-model"}` and gets a 400
+  `unknown_model`, so the facade is reading it (and strips it before kagent
+  sees it). The `x-fleet-model` header path is the redundant fallback — PR 2
+  should delete it unless another client needs it. Also carry the facade gaps:
+  it does NOT rewrite the card's `capabilities`, which advertises
+  `pushNotifications: true` and `extendedAgentCard: true` while the facade
+  answers both with `501` (`push_notifications_unsupported`), and `message:send`
+  exists server-side but the SPA never uses it (it streams).
+- **PR 3 — delete the bespoke relay:** `/chat`, `Chat.tsx`, `api.chat`, the
+  private `event: session` frame, `verify-e2e.sh` §4 wording.
+- **PR 4 — make the unreachable features real:** `mcp_require_approval` in the
+  tenant chart (no Agent CR sets `requireApproval` today), HITL extension
+  declaration + approval payload, and thought-part emission. The card already
+  advertises `https://kagent.dev/extensions/hitl/v1`, so only the CR field and
+  the harness emission are missing.
+
+Blocking any visible test: the OpenRouter key behind LiteLLM is dead
+(`/api/v1/models` lies with a 200 — only generation proves it). Rotate, patch
+`litellm-fleet-secrets` `OPENROUTER_API_KEY`, `rollout restart deploy/litellm`.

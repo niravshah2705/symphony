@@ -75,3 +75,36 @@ CREATE INDEX IF NOT EXISTS projects_org_idx ON projects (org_id);
 -- P6: chat sessions record the chosen model id (run the schema on every boot,
 -- so the ADD COLUMN is how an existing fleet_control upgrades in place).
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS model text;
+
+-- A2A facade: what a turn turned out to be, and why. status='closed' alone could
+-- not tell a completed turn from one whose agent stream produced nothing, which
+-- is how every failure — including a dead provider key — was billed as if it had
+-- succeeded. Legacy rows keep outcome NULL and read as 'completed'.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS outcome text;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS close_reason text;
+-- A turn paused on input-required is not billable wall time; only the seconds an
+-- agent stream actually ran are. meter_seconds accumulates them for the whole
+-- conversation and billed_seconds records how much of that has been invoiced, so
+-- the sweeper always bills the delta and a turn can never be lost or doubled.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS meter_seconds double precision;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS billed_seconds double precision;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS awaiting_since timestamptz;
+-- Which turn an event belongs to: the event id is keyed on it, so a continuing
+-- conversation bills more than once while a retry of the same turn still dedups.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS turn integer NOT NULL DEFAULT 1;
+-- What the sweeper last emitted, so a disputed line on a statement can be
+-- explained from the row alone. A turn the platform broke is acknowledged with
+-- metered_seconds = 0 and never re-enters the sweep.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metered_seconds double precision;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metered_outcome text;
+
+-- Rows metered before this migration already invoiced their wall clock; mark
+-- them fully billed so the delta logic never re-bills history. Idempotent: after
+-- the first pass billed_seconds equals meter_seconds (or the legacy duration).
+UPDATE sessions
+   SET billed_seconds = COALESCE(meter_seconds, duration_seconds, 0)
+ WHERE metered_at IS NOT NULL AND billed_seconds IS NULL;
+
+-- The facade's conversation handle is the A2A contextId (not a BFF-private
+-- session id), so continuing a conversation looks the context up directly.
+CREATE INDEX IF NOT EXISTS sessions_context_idx ON sessions (project_id, kagent_session_id);

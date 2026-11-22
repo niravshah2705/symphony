@@ -1,19 +1,17 @@
-import { Readable } from 'node:stream';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config.ts';
 import { assertMember } from '../db/users.ts';
 import { findProjectById } from '../db/projects.ts';
-import { createSession, getSession, markTerminal, setKagentIds, type SessionRow } from '../db/sessions.ts';
+import { createSession, getSession, type SessionRow } from '../db/sessions.ts';
 import { findOrgById } from '../db/orgs.ts';
+import { pumpTurn } from '../a2a/facade.ts';
 import { modelAgentName, orgNamespace } from '../onboarding/names.ts';
 import { a2aHeaders, makeTraceparent, streamMessage, userMessage } from './a2a.ts';
 
-const TERMINAL = new Set([
-  'TASK_STATE_COMPLETED',
-  'TASK_STATE_FAILED',
-  'TASK_STATE_CANCELLED',
-  'TASK_STATE_REJECTED',
-]);
+// The bespoke pre-A2A-facade chat relay, kept alive only until the SPA moves to
+// the standard client (PR 3 deletes it). Everything protocol-level — reading the
+// frames, classifying how a turn ended, settling the row for metering — now lives
+// in a2a/facade.ts and a2a/contract.ts, so the two paths cannot drift apart.
 
 function httpError(statusCode: number, message: string): Error & { statusCode: number } {
   const err = new Error(message) as Error & { statusCode: number };
@@ -21,8 +19,6 @@ function httpError(statusCode: number, message: string): Error & { statusCode: n
   return err;
 }
 
-// Resolve (or create) the BFF session row that owns this chat turn. The SPA tracks
-// the BFF session id; the kagent contextId is stored on it for continuation.
 async function resolveSession(
   orgId: string,
   projectId: string,
@@ -42,35 +38,6 @@ async function resolveSession(
   return createSession({ orgId, projectId, userId, agentName, agentNamespace, model });
 }
 
-interface ParsedEvent {
-  contextId?: string;
-  taskId?: string;
-  state?: string;
-}
-
-// Pull identity/state out of one A2A SSE data payload (task / statusUpdate /
-// artifactUpdate variants all carry contextId; terminal state lives on status).
-function parseEvent(data: string): ParsedEvent | undefined {
-  let env: { result?: Record<string, unknown> };
-  try {
-    env = JSON.parse(data);
-  } catch {
-    return undefined;
-  }
-  const result = env.result;
-  if (!result) return undefined;
-  const task = result.task as { id?: string; contextId?: string; status?: { state?: string } } | undefined;
-  const statusUpdate = result.statusUpdate as { taskId?: string; contextId?: string; status?: { state?: string } } | undefined;
-  const artifactUpdate = result.artifactUpdate as { taskId?: string; contextId?: string } | undefined;
-  const node = task ?? statusUpdate ?? artifactUpdate;
-  if (!node) return undefined;
-  return {
-    contextId: node.contextId,
-    taskId: task?.id ?? statusUpdate?.taskId ?? artifactUpdate?.taskId,
-    state: task?.status?.state ?? statusUpdate?.status?.state,
-  };
-}
-
 export async function streamChat(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -88,7 +55,8 @@ export async function streamChat(
   // model, rendered by the tenant release); an EXISTING session stays on the
   // agent it started with — the checkpointed actor belongs to that ModelConfig.
   const catalog = config.modelCatalog;
-  const modelId = input.model ?? catalog.find((m) => m.default)?.id ?? catalog[0]!.id;
+  const modelId = input.model ?? catalog.find((m) => m.default)?.id ?? catalog[0]?.id;
+  if (!modelId) throw httpError(500, 'no models configured (FLEET_MODELS is empty)');
   const entry = catalog.find((m) => m.id === modelId);
   if (!entry) throw httpError(400, `unknown model "${modelId}" — pick one from /models`);
   const org = await findOrgById(input.orgId);
@@ -140,42 +108,26 @@ export async function streamChat(
     `event: session\ndata: ${JSON.stringify({ sessionId: session.id, model: session.model ?? entry.id, agent: targetAgent })}\n\n`,
   );
 
-  let buffer = '';
-  let identified = false;
-  const handleEvent = (parsed: ParsedEvent) => {
-    if (!identified && parsed.contextId) {
-      identified = true;
-      void setKagentIds(session.id, parsed.contextId, parsed.taskId);
-    }
-    if (parsed.state && TERMINAL.has(parsed.state)) {
-      void markTerminal(session.id);
-    }
-  };
+  let aborted = false;
+  request.raw.once('aborted', () => {
+    aborted = true;
+  });
+  reply.raw.once('close', () => {
+    if (!reply.raw.writableEnded) aborted = true;
+  });
 
   try {
-    for await (const chunk of Readable.fromWeb(upstream.body as never)) {
-      const text = (chunk as Buffer).toString('utf8');
-      reply.raw.write(chunk);
-      buffer += text;
-      let sep: number;
-      while ((sep = buffer.indexOf('\n\n')) >= 0) {
-        const block = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-        const dataLine = block
-          .split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice(5).trim())
-          .join('');
-        if (dataLine) {
-          const parsed = parseEvent(dataLine);
-          if (parsed) handleEvent(parsed);
-        }
-      }
-    }
-  } catch {
-    // Client disconnect or upstream drop: close out the turn so it can be metered.
-    void markTerminal(session.id);
+    await pumpTurn({
+      upstream,
+      write: (chunk) => reply.raw.write(chunk),
+      session,
+      // The legacy SPA has no reasoning UI, so no synthetic artifacts here.
+      thoughts: false,
+      aborted: () => aborted,
+      log: (msg) => request.log.warn(msg),
+    });
   } finally {
     reply.raw.end();
   }
+  if (aborted) await upstream.body.cancel().catch(() => undefined);
 }
