@@ -41,5 +41,5 @@ kc -n flexprice wait --for=condition=Available deploy --all --timeout=5m
 # curl it via --resolve; the old cluster had this Ingress only ad-hoc — T-15.21).
 kc apply -f fleet-local/deploy/ingress/flexprice-api.yaml
 say "STEP2 OK — flexprice api/consumer/worker + postgres/clickhouse/kafka/redis/temporal up, api Ingress applied"
-say "(no flexprice.local UI host: the chart ships no frontend — the fleet SPA at app.fleet.dev is the UI)"
+say "(no dashboard UI yet: the chart ships no frontend — run scripts/fixes/t30-selfhost-uis.sh for flexprice.local + temporal.flexprice.local; the fleet SPA at app.fleet.dev remains the operator UI)"
 say "next: fleet meters/plan/price seed runs in step 9 (scripts/seed-flexprice.sh) once LiteLLM exists"

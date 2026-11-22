@@ -126,6 +126,30 @@ t28 probe with `PROMPT=… EXPECT=P9-WEBFETCH-OK` on one agent per harness).
 T-16 records the transport choice, the Debian-trixie-npm trap, and the
 `exec -i` / `node -e` argv gotchas.
 
+## Self-hosted billing UIs — Flexprice dashboard + Temporal (t30)
+
+The Flexprice chart ships no frontend and `temporalio/auto-setup` no web UI;
+`bash scripts/fixes/t30-selfhost-uis.sh` adds both over the existing nginx
+ingress (hosts from `00-prereqs.sh`, no port-forward needed):
+
+- **http://flexprice.local** — `flexprice/flexprice-front` (pinned `v2.0.22`,
+  cloned to `~/git/flexprice-front-pinned-v2.0.22`) built by
+  `deploy/uis/flexprice-ui/Dockerfile`: multi-stage vite build with
+  `--build-arg VITE_API_URL=http://api.flexprice.local/v1` (Vite inlines env at
+  BUILD time — container env cannot change it), served as static files by nginx.
+  Login `admin@flexprice.dev`; password is generated on first run into
+  gitignored `fleet-local/.env` as `FLEXPRICE_UI_PASSWORD` — the chart seeds
+  `auths.token` as plaintext but Login does bcrypt-compare, so t30 step 4
+  rewrites it with pgcrypto `crypt()` (T-17.4).
+- **http://temporal.flexprice.local** — `temporalio/ui:2.31.2` pointed at
+  `flexprice-temporal-frontend.flexprice.svc:7233`, namespace `default`. The
+  pod needs `enableServiceLinks: false`: the `temporal-ui` Service otherwise
+  injects `TEMPORAL_UI_PORT=tcp://…` which the UI parses as its integer port
+  and crashloops (T-17.6).
+
+The fleet SPA at app.fleet.dev remains the operator UI; these two are the
+billing-plane consoles.
+
 ## Fresh-cluster ordering notes (why the run order ≠ the list order)
 
 - **Langfuse after Substrate AND step 8**: the S3 backend is RustFS inside
