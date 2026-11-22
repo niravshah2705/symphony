@@ -109,6 +109,23 @@ is normal — artifact arrives both incrementally and on the final task) and a
 `POST /v1/messages … 200` line proving the Claude-Code runtime called LiteLLM's Anthropic
 wire. T-15 item 29 records the wire-shape traps.
 
+## Agent internet access — webfetch MCP (P9)
+
+Agents have **no raw egress**; web read access is one shared MCP tool server:
+`mcp-server-fetch` behind supergateway as **streamable-HTTP** (`deploy/webfetch/`,
+Deployment+Service `webfetch.kagent.svc:8087`) — the only MCP transport all three
+harnesses speak. A **NetworkPolicy** restricts that pod to public 80/443 + DNS
+(all private/link-local ranges excepted), so a model-chosen URL can never pivot
+into LiteLLM/Flexprice/substrate/k8s-internal. The tenant chart renders one
+`RemoteMCPServer` CR per org (`<slug>-mcp-webfetch`, new `mcp:` values block) and
+`templates[].mcp` binds it on every catalog agent; `workflow.ts` and t26 pass it
+always-on for local. Bring it up / re-verify with
+`bash scripts/fixes/t29-agent-web-access.sh` (build+load image → apply+restart →
+socket-level SSRF proof → direct MCP `fetch_url` handshake → BFF rebuild + t26 →
+t28 probe with `PROMPT=… EXPECT=P9-WEBFETCH-OK` on one agent per harness).
+T-16 records the transport choice, the Debian-trixie-npm trap, and the
+`exec -i` / `node -e` argv gotchas.
+
 ## Fresh-cluster ordering notes (why the run order ≠ the list order)
 
 - **Langfuse after Substrate AND step 8**: the S3 backend is RustFS inside

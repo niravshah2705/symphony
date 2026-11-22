@@ -34,7 +34,11 @@ spec:
   {{- if $template.outputSchemaStrict }}
   outputSchemaStrict: true
   {{- end }}
-  {{- with $template.tools }}
+  {{- $tools := $template.tools | default list }}
+  {{- range $m := $template.mcp | default list }}
+  {{- $tools = append $tools (dict "mcp" (dict "server" (dict "kind" "RemoteMCPServer" "name" (include "kagent-tenant.objectName" (dict "root" $ "kind" "mcp" "name" $m))))) }}
+  {{- end }}
+  {{- with $tools }}
   tools:
     {{- toYaml . | nindent 4 }}
   {{- end }}

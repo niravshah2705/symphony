@@ -573,6 +573,86 @@ trail of why each line exists.
     `EXPECT=P8-CODEX-HARNESS-OK WIRE=responses scripts/fixes/t28-claude-harness-probe.sh
     test-agent-nemotron-codex-worker`.
 
+## T-16 P9 agent internet access — webfetch MCP (no built-in web tool in kagent 1.0)
+
+The chat run `https://www.archagentix.com/ summarise what's it says` failed on the
+openai/kagent agent: there is **no web tool at all** in the fleet — the kagent 1.0
+chart ships no websearch component and the kagent-tools MCP only has k8s/cluster
+tools. Fix = one shared fetch MCP the agents call as a tool. `scripts/fixes/t29-agent-web-access.sh`
+builds/deploys/binds/probes the whole chain; the notes below are why each piece is shaped like it is.
+
+1. **Transport: streamable-HTTP, not SSE.** The binding must work on ALL THREE
+   harnesses. kagent speaks both; the claude and codex adapters only mount MCP
+   servers over **streamable-HTTP** (SSE is rejected), so the server is
+   `mcp-server-fetch` (stdio, the reference Python fetch tool) fronted by
+   `supergateway --outputTransport streamableHttp --port 8087` — one process, no
+   custom tool code. **supergateway must be v4** — v2's CLI has no
+   streamable-HTTP output (`--outputTransport` choices are stdio|sse|ws; a bogus
+   `--outputChannel` flag is silently ignored) so the pod serves SSE and every
+   agent POST to `/mcp` gets Express `Cannot POST /mcp`. v4:
+   `--outputTransport streamableHttp` (path defaults to `/mcp`).
+2. **One shared Deployment, one CR per tenant.** `deploy/webfetch/webfetch.yaml`
+   runs `webfetch` in ns `kagent` (the fetch tool is stateless; per-org
+   deployments would buy nothing). The tenant chart renders a
+   `RemoteMCPServer` CR `<slug>-mcp-webfetch` in the TENANT namespace pointing at
+   `http://webfetch.kagent.svc.cluster.local:8087/mcp` — `allowedNamespaces`
+   defaults to Same, so a same-namespace server is what the AgentTemplate can
+   actually reference. Chart sugar: `values.mcp[]` (servers) +
+   `templates[].mcp[]` (names to bind); `_helpers.tpl` fails the render on an
+   unknown name or a missing url. The CRD's required list is
+   `[description, url]` — a first cut that only set `url` made the whole helm
+   upgrade fail server-side-apply (`spec.description: Required value`), so the
+   chart always emits a description (value or `"<name> MCP server"` default).
+3. **SSRF is the whole security story.** `fetch_url` is model-driven — the LLM
+   picks the URL — so the webfetch pod carries a NetworkPolicy that allows egress
+   ONLY to the public internet (TCP 80/443 `0.0.0.0/0` **except**
+   10/8, 100.64/10, 127/8, 169.254/16, 172.16/12, 192.168/16) plus DNS 53.
+   Without the policy, a prompt-injected agent could exfil via
+   `fetch_url http://litellm…/key/info` or the k8s API. t29 step 3 proves the
+   posture at the socket layer (internal svc + metadata IP must be unreachable,
+   public 443 must be reachable) before anything touches the agents.
+4. **Actor → MCP reachability.** The actor talks to the in-cluster Service IP,
+   which is inside the substrate egress path. This works as-is on the local
+   atenet setup because egress permits pod-network destinations; if a future
+   stack drops it, the symptom is the tool call hanging and the remedy is an
+   explicit `EgressPolicy` allowing `webfetch.kagent.svc` (kagent compiles
+   `EgressPoliciesApplied` on the Agent — check that condition first).
+5. **Probe = fetch + token, per harness.** t28 gained `PROMPT=<text>` so the
+   same headless A2A wake proves tool execution, not just the ModelConfig path:
+   `PROMPT="Use your web fetch tool to open https://www.archagentix.com/ … reply
+   with exactly: P9-WEBFETCH-OK" EXPECT=P9-WEBFETCH-OK
+   scripts/fixes/t28-claude-harness-probe.sh <agent>` for
+   `test-agent-nemotron-worker` (kagent), `-claude-worker`, and
+   `WIRE=responses … -codex-worker`. If the reply lacks the token, check
+   `kubectl -n kagent logs deploy/webfetch` — a fetch reached the server but the
+   model ignored the tool means prompt/harness binding; no log line means the
+   CR binding or egress (items 2/4). Two handshake details the direct probe must
+   tolerate: supergateway streamableHttp is **stateless by default** (a valid
+   `initialize` returns 200 with the result and **no** `mcp-session-id` header —
+   do not require it), and the fetch tool's `tools/list` name is
+   version-dependent (`fetch` vs `fetch_url`) — match it by regex.
+6. **Dockerfile base: `python:3.12-bookworm` + NodeSource, never the slim
+   default.** `python:*-slim` moved to trixie, whose apt `nodejs`/`npm` pull
+   ~300 node-* debs and npm's own installer rejects the jest-debundundle shim
+   ("This is not the npm installer"). NodeSource `setup_22.x` on bookworm is
+   the supported path. Also note `imagePullPolicy: Never` + a mutable local tag
+   means `kubectl apply` alone will NOT pick up a rebuilt image — t29 does a
+   `rollout restart` after apply. The same trap bit `50-bff-spa.sh`: an unchanged
+   `deployment.yaml` means `apply` rolls nothing, so a rebuilt `fleet-bff:local`
+   (with new chart templates under `deploy/charts`) kept serving from the OLD
+   pod — helm upgrades run IN that pod and silently used the pre-P9 chart, so no
+   RemoteMCPServer rendered. The script now does `rollout restart` + wait.
+7. **`kubectl exec` + heredoc needs `-i`, and `node -e` args start at
+   `argv[1]`.** The SSRF socket probe (`python3 - <<'PY'`) silently ran on empty
+   stdin without `-i` (exit 0, no output — looked like a pass), and with
+   `node -e` there is no script path in argv, so `slice(2)` shifted the MCP URL
+   into the wrong variable and the probe POSTed `initialize` to the public site.
+   Both fixed in t29; the symptom of the second is `no mcp-session-id 404`
+   followed by the target site's HTML. Same family: a **single quote inside the
+   single-quoted `node -e '...'`** closes the shell string mid-script (surfaces
+   as a JS `ReferenceError` over bash word salad) — use double quotes or a
+   regex literal in inline scripts.
+
 ## Useful one-liners
 
 ```bash

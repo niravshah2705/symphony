@@ -8,6 +8,8 @@
 #   by the egress gateway — never in the CR) -> nemotron reply -> Checkpoint.
 # Usage: bash scripts/fixes/t28-claude-harness-probe.sh [agent-name]
 #        EXPECT=<token> WIRE=<messages|responses> to change the evidence line.
+#        PROMPT=<text> to send something other than the echo probe (t29 uses
+#        a fetch-and-quote prompt).
 set -euo pipefail
 CTX=${KCTX:-kind-flexprice-local}
 k() { kubectl --context "$CTX" "$@"; }
@@ -15,6 +17,7 @@ AGENT=${1:-test-agent-nemotron-claude-worker}
 EXPECT=${EXPECT:-P7-CLAUDE-HARNESS-OK}
 WIRE=${WIRE:-messages}
 NS=${NS:-org-test}
+PROMPT=${PROMPT:-}
 EMAIL=${EMAIL:-$(k -n flexprice exec -i flexprice-postgresql-0 \
   -- env PGPASSWORD="$(k -n flexprice get secret flexprice-postgresql -o jsonpath='{.data.password}' | base64 -d)" \
   psql -U flexprice -d fleet_control -tAc "select email from users limit 1;" </dev/null)}
@@ -24,7 +27,7 @@ PF=$!; trap 'kill $PF 2>/dev/null || true' EXIT
 sleep 2
 
 node -e '
-const [host, ns, name, email, expect] = process.argv.slice(1);
+const [host, ns, name, email, expect, prompt] = process.argv.slice(1);
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 // trusted-proxy mode does NOT verify signatures (the :8083 NetworkPolicy is the
 // control) — a structurally-correct JWT with the right iss + email is accepted.
@@ -37,7 +40,7 @@ const H = {
 };
 const body = { jsonrpc: "2.0", id: 1, method: "SendStreamingMessage", params: { message: {
   messageId: "probe-" + Date.now(), role: "ROLE_USER",
-  parts: [{ text: "Reply with exactly: " + expect }] } } };
+  parts: [{ text: prompt || ("Reply with exactly: " + expect) }] } } };
 (async () => {
   const r = await fetch(`http://${host}/agents/${ns}/${name}`, { method: "POST", headers: H, body: JSON.stringify(body) });
   if (!r.ok || !r.body) { console.error("HTTP", r.status, (await r.text()).slice(0, 300)); process.exit(1); }
@@ -64,7 +67,7 @@ const body = { jsonrpc: "2.0", id: 1, method: "SendStreamingMessage", params: { 
   console.log("reply:", text.slice(0, 200) || "(no text artifact)");
   process.exit(completed ? 0 : 1);
 })().catch((e) => { console.error(String(e).slice(0, 300)); process.exit(1); });
-' 127.0.0.1:18083 "$NS" "$AGENT" "$EMAIL" "$EXPECT"
+' 127.0.0.1:18083 "$NS" "$AGENT" "$EMAIL" "$EXPECT" "$PROMPT"
 
 echo "--- LiteLLM /v1/$WIRE traffic (last 5 min) ---"
 k -n litellm logs deploy/litellm --since=5m 2>/dev/null | grep -E "v1/$WIRE" | tail -5 || true

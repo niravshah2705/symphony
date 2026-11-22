@@ -6,6 +6,15 @@ import type { StepExecutor } from '../machine.ts';
 
 const ACTOR_OTLP = 'http://opentelemetry-collector.otel-system.svc:4317';
 
+// P9: the shared web-fetch MCP server (deploy/webfetch) — streamable-HTTP is
+// the only MCP protocol all three harnesses speak, and the tenant renders a
+// same-namespace RemoteMCPServer pointing at it, bound on every template.
+const WEBFETCH_MCP = {
+  name: 'webfetch',
+  description: 'Web page fetch (public internet only)',
+  url: 'http://webfetch.kagent.svc.cluster.local:8087/mcp',
+};
+
 // P7: claude-harness release for the installed controller contract; the Harness
 // CRD rejects tag references, so this is pinned to the manifest-list digest.
 const CLAUDE_HARNESS_IMAGE =
@@ -78,11 +87,13 @@ export const workflowStep: StepExecutor = async (ctx) => {
       // Empty image = the codex-harness shipped with the installed kagent release.
       ...(hasCodex ? [{ name: 'codex', type: 'codex', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }] : []),
     ],
+    mcp: [WEBFETCH_MCP],
     templates: catalog.map((m) => ({
       name: `${m.id}-coding`,
       modelConfig: m.id,
       description: `Fleet coding workflow (${m.label})`,
       systemPrompt: 'You are a concise coding agent. Plan, then act.\n',
+      mcp: [WEBFETCH_MCP.name],
     })),
     agents: catalog.map((m) => ({
       name: `${m.id}-worker`,

@@ -41,7 +41,7 @@ HAS_CODEX=$(jq -c '[ .[] | select(.runtime=="codex") ] | length > 0' <<<"$CATALO
 MODELS=$(jq -c '[ .[] | if .runtime=="claude" then {name:.id, provider:"Anthropic", model:.model}
                   elif .runtime=="codex" then {name:.id, provider:"OpenAI", model:.model, apiFormat:"responses", noDefaultHeaders:true}
                   else {name:.id, provider:"OpenAI", model:.model, apiFormat:"chatCompletions", stream:true} end ]' <<<"$CATALOG")
-TMPLS=$(jq -c '[ .[] | {name:(.id+"-coding"), modelConfig:.id, description:("Fleet coding workflow ("+.label+")"), systemPrompt:"You are a concise coding agent. Plan, then act.\n"} ]' <<<"$CATALOG")
+TMPLS=$(jq -c '[ .[] | {name:(.id+"-coding"), modelConfig:.id, description:("Fleet coding workflow ("+.label+")"), systemPrompt:"You are a concise coding agent. Plan, then act.\n", mcp:["webfetch"]} ]' <<<"$CATALOG")
 AGENTS=$(jq -c '[ .[] | {name:(.id+"-worker"), template:(.id+"-coding"), harness:(if .runtime=="claude" then "claude" elif .runtime=="codex" then "codex" else "app" end)} ]' <<<"$CATALOG")
 DEF=$(jq -r 'map(select(.default))[0].id // .[0].id' <<<"$CATALOG")
 LMODELS=$(jq -c '[ .[].model, "openrouter/*" ] | unique' <<<"$CATALOG")
@@ -103,6 +103,7 @@ while IFS='|' read -r slug orgId projId projSlug projNs; do
           { name: "OTEL_PROPAGATORS", value: "tracecontext,baggage" },
           { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "http://opentelemetry-collector.otel-system.svc:4317" },
           { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }] else [] end)),
+    mcp: [{ name: "webfetch", url: "http://webfetch.kagent.svc.cluster.local:8087/mcp" }],
     templates: $tmpls,
     agents: $agents,
     commonLabels: { "fleet.local/org-id": $orgId, "fleet.local/project-id": $projId }
