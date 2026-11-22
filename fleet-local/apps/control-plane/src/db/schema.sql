@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id           uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   agent_name        text NOT NULL,
   agent_namespace   text NOT NULL,
+  model             text,
   kagent_session_id text,
   kagent_task_id    text,
   status            text NOT NULL DEFAULT 'running',
@@ -70,3 +71,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS sessions_org_idx ON sessions (org_id);
 CREATE INDEX IF NOT EXISTS sessions_meter_idx ON sessions (status, metered_at);
 CREATE INDEX IF NOT EXISTS projects_org_idx ON projects (org_id);
+
+-- P6: chat sessions record the chosen model id (run the schema on every boot,
+-- so the ADD COLUMN is how an existing fleet_control upgrades in place).
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS model text;

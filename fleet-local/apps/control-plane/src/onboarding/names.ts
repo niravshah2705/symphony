@@ -1,8 +1,6 @@
 // One place for every derived name, so the onboarding steps, the chat proxy and
 // the attach step all agree. UUIDs are canonical; slugs only shape k8s names.
 
-import { MODELS } from '@fleet-local/shared';
-
 export const orgNamespace = (orgSlug: string) => `org-${orgSlug}`;
 export const workerPoolName = (orgSlug: string) => `org-${orgSlug}`;
 export const tenantId = (orgSlug: string) => orgSlug;
@@ -11,12 +9,15 @@ export const litellmSecretName = (orgSlug: string, projectSlug: string) => `lite
 export const litellmSecretKey = 'key';
 export const keyAlias = (orgId: string, projectId: string) => `fleet:${orgId}:${projectId}`;
 
-// The chart renders <tenant.id>-agent-<name>; one coding agent per tenant.
+// The chart renders <tenant.id>-agent-<name>; P6 renders one agent per catalog
+// model, named "<modelId>-worker" (the legacy single agent was just "worker").
 export const agentName = (orgSlug: string, agent = 'worker') => `${orgSlug}-agent-${agent}`;
+export const modelAgentName = (orgSlug: string, modelId: string) => agentName(orgSlug, `${modelId}-worker`);
 
-// LiteLLM model list for teams/keys: the platform model aliases.
-export function litellmModelList(): string[] {
-  return [...new Set(Object.values(MODELS))];
+// LiteLLM model list for teams/keys: the catalog verbatim plus the OpenRouter
+// passthrough wildcard, so new openrouter/<author>/<model> ids need no re-mint.
+export function litellmModelList(catalog: readonly { model: string }[]): string[] {
+  return [...new Set([...catalog.map((m) => m.model), 'openrouter/*'])];
 }
 
 export function assertRfc1123Slug(slug: string): void {

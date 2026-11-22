@@ -1,4 +1,4 @@
-import { FLEET_HEADERS, MODELS } from '@fleet-local/shared';
+import { FLEET_HEADERS } from '@fleet-local/shared';
 import { config } from '../../config.ts';
 import { helmUpgradeInstall } from '../../clients/k8s.ts';
 import { helmRelease, litellmSecretKey, orgNamespace, tenantId, workerPoolName } from '../names.ts';
@@ -15,11 +15,12 @@ const OTEL_ENV = [
 // so the harness can carry the org attribute.
 const fleetOrgAttr = (orgId: string) => ({ name: 'OTEL_RESOURCE_ATTRIBUTES', value: `fleet.org_id=${orgId}` });
 
-// Diagram 3: install the tenant's kagent execution surface from the vendored
-// chart — one ModelConfig per platform model, one kagent Harness, and the
-// single "worker" Agent the chat talks to. Static x-fleet-* headers carry the
-// canonical UUIDs; Harness env turns on W3C baggage propagation so the caller's
-// fleet_user_id / conversation id reach LiteLLM. --wait=false; the agent step polls.
+// Diagram 3 (+P6): install the tenant's kagent execution surface from the
+// vendored chart. One ModelConfig + AgentTemplate + Agent per catalog model
+// (agent "<id>-worker"), so the chat can pick the model by session. Static
+// x-fleet-* headers carry the canonical UUIDs; Harness env turns on W3C baggage
+// propagation so the caller's fleet_user_id / conversation id reach LiteLLM.
+// --wait=false; the agent step polls.
 export const workflowStep: StepExecutor = async (ctx) => {
   const projectId = ctx.results.project?.projectId as string | undefined;
   const secretName = ctx.results.key?.secretName as string | undefined;
@@ -28,6 +29,7 @@ export const workflowStep: StepExecutor = async (ctx) => {
   const ns = orgNamespace(ctx.orgSlug);
   const id = tenantId(ctx.orgSlug);
   const fleetHeaders = { [FLEET_HEADERS.orgId]: ctx.orgId, [FLEET_HEADERS.projectId]: projectId };
+  const catalog = config.modelCatalog;
 
   const values = {
     namespace: ns,
@@ -38,24 +40,26 @@ export const workflowStep: StepExecutor = async (ctx) => {
       apiKeySecret: secretName,
       apiKeySecretKey: litellmSecretKey,
     },
-    models: Object.entries(MODELS).map(([name, model]) => ({
-      name,
+    models: catalog.map((m) => ({
+      name: m.id,
       provider: 'OpenAI',
-      model,
+      model: m.model,
       apiFormat: 'chatCompletions',
       stream: true,
       defaultHeaders: fleetHeaders,
     })),
     harnesses: [{ name: 'app', type: 'kagent', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }],
-    templates: [
-      {
-        name: 'coding',
-        modelConfig: 'mock',
-        description: 'Fleet coding workflow',
-        systemPrompt: 'You are a concise coding agent. Plan, then act.\n',
-      },
-    ],
-    agents: [{ name: 'worker', template: 'coding', harness: 'app' }],
+    templates: catalog.map((m) => ({
+      name: `${m.id}-coding`,
+      modelConfig: m.id,
+      description: `Fleet coding workflow (${m.label})`,
+      systemPrompt: 'You are a concise coding agent. Plan, then act.\n',
+    })),
+    agents: catalog.map((m) => ({
+      name: `${m.id}-worker`,
+      template: `${m.id}-coding`,
+      harness: 'app',
+    })),
     commonLabels: { 'fleet.local/org-id': ctx.orgId, 'fleet.local/project-id': projectId },
   };
 

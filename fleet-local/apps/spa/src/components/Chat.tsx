@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
-import type { Org, Project, Session } from '../types';
+import type { ModelOption, Org, Project, Session } from '../types';
 
 const TERMINAL = new Set([
   'TASK_STATE_COMPLETED',
@@ -35,6 +35,8 @@ export function Chat({ org }: { org: Org }) {
   const [liveAgent, setLiveAgent] = useState('');
   const [taskState, setTaskState] = useState('');
   const [input, setInput] = useState('');
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [model, setModel] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const agentBuf = useRef('');
@@ -56,6 +58,13 @@ export function Chat({ org }: { org: Org }) {
 
   useEffect(() => {
     if (!projectId) return;
+    api
+      .models(org.id, projectId)
+      .then(({ models }) => {
+        setModels(models);
+        setModel((models.find((m) => m.default) ?? models[0])?.id ?? '');
+      })
+      .catch(() => setModels([]));
     api
       .listSessions(org.id, projectId)
       .then(({ sessions }) => setSessions(sessions))
@@ -108,11 +117,13 @@ export function Chat({ org }: { org: Org }) {
         projectId,
         text,
         sessionRef.current,
+        sessionRef.current ? undefined : model || undefined,
         (event, data) => {
           if (event === 'session') {
-            const { sessionId } = JSON.parse(data) as { sessionId: string };
+            const { sessionId, model: bound } = JSON.parse(data) as { sessionId: string; model?: string };
             sessionRef.current = sessionId;
             setSessionId(sessionId);
+            if (bound) setModel(bound);
             return;
           }
           if (event !== 'message') return;
@@ -205,6 +216,19 @@ export function Chat({ org }: { org: Org }) {
         </div>
 
         <form className="composer" onSubmit={send}>
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={Boolean(sessionId) || models.length === 0}
+            title={sessionId ? 'Locked: each session runs on one model/agent' : 'Model for the next new session'}
+          >
+            {models.length === 0 ? <option value={model}>mock-gpt</option> : null}
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -234,6 +258,7 @@ export function Chat({ org }: { org: Org }) {
                 }}
               >
                 {s.id.slice(0, 8)} · {s.status}
+                {s.model ? ` · ${models.find((m) => m.id === s.model)?.label ?? s.model}` : ''}
               </button>
               <span className="muted small">
                 {s.duration_seconds != null ? `${Math.round(s.duration_seconds)}s` : 'running'}

@@ -44,6 +44,30 @@ in-cluster Secrets / `deploy/flexprice/.env`, never printed).
 | 10 | auth documentation | — | [`AUTH-CONFIGURATION.md`](./AUTH-CONFIGURATION.md): every hop, header, claim and guard of the Google-OAuth → trusted-proxy → actor chain. |
 | 11 | e2e gate | `setup/s11-verify.sh` | `verify-e2e.sh` (12-point gate) + the headless wake recipe below. |
 
+## Model catalog & chat model selection (P6)
+
+The chat model list is **configuration**: `FLEET_MODELS` (JSON array of
+`{id,label,model,default?}`) in ConfigMap `fleet-system/fleet-bff-config`
+(`deploy/bff/configmap.yaml`; default seed = mock-gpt, claude-sonnet-4,
+`openrouter/nvidia/nemotron-3-ultra-550b-a55b:free`). One entry per model, the
+`default` one is the chat default. The BFF parses it at boot
+(`parseModelCatalog` in `@fleet-local/shared`), so: edit -> `kubectl apply -f
+deploy/bff/configmap.yaml` -> `rollout restart deploy/fleet-bff`.
+
+Effects of an entry (all derived, nothing hardcoded per model):
+- onboarding wizard step 4-5 renders a ModelConfig `<t>-model-<id>`, AgentTemplate
+  `<id>-coding` and Agent `<slug>-agent-<id>-worker` via the vendored chart;
+- LiteLLM org/team/key `models` get every catalog `model` **plus the `openrouter/*`
+  wildcard** (`litellmModelList`), so new OpenRouter models need no key re-mint;
+- `GET /api/orgs/:o/projects/:p/models` feeds the SPA dropdown; `POST .../chat`
+  takes `model` (catalog id) — a NEW session binds to that model's agent, an
+  EXISTING session stays on the agent it started with (checkpointed actor).
+
+**Existing tenants do not pick a catalog change up by themselves** — run
+`scripts/fixes/t26-tenant-model-catalog.sh` (idempotent; team/key model list +
+helm upgrade + wait Ready + `projects.agent_name` -> default worker). T-15 item 27
+records the API/shell traps it navigates.
+
 ## Headless wake probe (step 11, no browser)
 
 Proves the full chain end-to-end: OAuth-less MCP call → controller trusted-proxy

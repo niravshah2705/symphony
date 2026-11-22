@@ -4,6 +4,8 @@ import { config } from '../config.ts';
 import { assertMember } from '../db/users.ts';
 import { findProjectById } from '../db/projects.ts';
 import { createSession, getSession, markTerminal, setKagentIds, type SessionRow } from '../db/sessions.ts';
+import { findOrgById } from '../db/orgs.ts';
+import { modelAgentName, orgNamespace } from '../onboarding/names.ts';
 import { a2aHeaders, makeTraceparent, streamMessage, userMessage } from './a2a.ts';
 
 const TERMINAL = new Set([
@@ -27,6 +29,7 @@ async function resolveSession(
   userId: string,
   agentName: string,
   agentNamespace: string,
+  model: string,
   sessionId?: string,
 ): Promise<SessionRow> {
   if (sessionId) {
@@ -36,7 +39,7 @@ async function resolveSession(
     }
     return existing;
   }
-  return createSession({ orgId, projectId, userId, agentName, agentNamespace });
+  return createSession({ orgId, projectId, userId, agentName, agentNamespace, model });
 }
 
 interface ParsedEvent {
@@ -71,7 +74,7 @@ function parseEvent(data: string): ParsedEvent | undefined {
 export async function streamChat(
   request: FastifyRequest,
   reply: FastifyReply,
-  input: { orgId: string; projectId: string; text: string; sessionId?: string },
+  input: { orgId: string; projectId: string; text: string; sessionId?: string; model?: string },
 ): Promise<void> {
   const user = request.fleetUser;
   if (!user) throw httpError(401, 'unauthenticated');
@@ -81,16 +84,28 @@ export async function streamChat(
   if (!project || project.org_id !== input.orgId) throw httpError(404, 'project not found');
   if (!project.agent_name || !project.agent_namespace) throw httpError(409, 'project onboarding incomplete');
 
+  // P6: a NEW session picks its agent from the model catalog (one agent per
+  // model, rendered by the tenant release); an EXISTING session stays on the
+  // agent it started with — the checkpointed actor belongs to that ModelConfig.
+  const catalog = config.modelCatalog;
+  const modelId = input.model ?? catalog.find((m) => m.default)?.id ?? catalog[0]!.id;
+  const entry = catalog.find((m) => m.id === modelId);
+  if (!entry) throw httpError(400, `unknown model "${modelId}" — pick one from /models`);
+  const org = await findOrgById(input.orgId);
+  if (!org) throw httpError(404, 'org not found');
+  const agentName = modelAgentName(org.slug, entry.id);
+
   const session = await resolveSession(
     input.orgId,
     input.projectId,
     user.id,
-    project.agent_name,
-    project.agent_namespace,
+    agentName,
+    orgNamespace(org.slug),
+    entry.id,
     input.sessionId,
   );
-  const targetAgent = session.agent_name;
-  const targetNamespace = session.agent_namespace;
+  const targetAgent = input.sessionId ? session.agent_name : agentName;
+  const targetNamespace = input.sessionId ? session.agent_namespace : orgNamespace(org.slug);
 
   const bearer = request.cookies[config.sessionCookie];
   if (!bearer) throw httpError(401, 'no session token');
@@ -122,7 +137,7 @@ export async function streamChat(
   });
   // Hand the SPA our session id first so it can continue the conversation.
   reply.raw.write(
-    `event: session\ndata: ${JSON.stringify({ sessionId: session.id, agent: targetAgent })}\n\n`,
+    `event: session\ndata: ${JSON.stringify({ sessionId: session.id, model: session.model ?? entry.id, agent: targetAgent })}\n\n`,
   );
 
   let buffer = '';

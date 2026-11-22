@@ -10,7 +10,7 @@ export const DEFAULT_PROJECT_SLUG = 'default';
 // under the org, with its own native budget.
 export const projectStep: StepExecutor = async (ctx) => {
   const project = await ensureProject(ctx.orgId, DEFAULT_PROJECT_SLUG, 'Default project');
-  const models = litellmModelList();
+  const models = litellmModelList(config.modelCatalog);
   const budget = { max_budget: config.defaultProjectBudgetUsd, budget_duration: config.budgetDuration };
   if (!(await litellm.teamInfo(project.id))) {
     try {

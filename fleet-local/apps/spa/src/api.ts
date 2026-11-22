@@ -1,5 +1,6 @@
 import type {
   LangfuseTrace,
+  ModelOption,
   Org,
   Project,
   ReconciledCosts,
@@ -69,6 +70,8 @@ export async function postSSE(
 }
 
 export const api = {
+  models: (orgId: string, projectId: string) =>
+    json<{ models: ModelOption[] }>(`/api/orgs/${orgId}/projects/${projectId}/models`),
   me: () => json<{ user: User; orgs: Org[] }>('/api/me'),
   logout: () => json<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   listOrgs: () => json<{ orgs: Org[] }>('/api/orgs'),
@@ -97,9 +100,10 @@ export const api = {
     projectId: string,
     text: string,
     sessionId: string | undefined,
+    model: string | undefined,
     onEvent: (e: string, d: string) => void,
     signal?: AbortSignal,
-  ) => postSSE(`/api/orgs/${orgId}/projects/${projectId}/chat`, { text, sessionId }, onEvent, signal),
+  ) => postSSE(`/api/orgs/${orgId}/projects/${projectId}/chat`, { text, sessionId, model }, onEvent, signal),
   closeSession: (orgId: string, sessionId: string) =>
     json<{ session: Session }>(`/api/orgs/${orgId}/sessions/${sessionId}/close`, { method: 'POST' }),
   agentCard: (orgId: string, projectId: string) =>
