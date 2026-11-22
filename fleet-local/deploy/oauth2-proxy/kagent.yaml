@@ -33,6 +33,9 @@ spec:
             - --cookie-refresh=55m
             - --redirect-url=https://kagent.fleet.dev/oauth2/callback
             - --upstream=http://kagent-ui.kagent.svc.cluster.local:8080
+            # Default is 30s; kept aligned with the fleet proxy and the Ingress
+            # proxy-read-timeout so no hop is the shortest deadline on the path.
+            - --upstream-timeout=1800s
             - --set-xauthrequest=true
             - --set-authorization-header=true
             - --pass-authorization-header=true

@@ -35,6 +35,9 @@ spec:
             - --cookie-refresh=55m
             - --redirect-url=https://app.fleet.dev/oauth2/callback
             - --upstream=http://fleet-bff.fleet-system.svc.cluster.local:8080
+            # Default is 30s, which kills POST /chat mid actor-wake (30–60s before
+            # the BFF writes any header). Must stay >= the Ingress proxy-read-timeout.
+            - --upstream-timeout=1800s
             - --set-xauthrequest=true
             - --set-authorization-header=true
             - --pass-authorization-header=true
