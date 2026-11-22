@@ -41,6 +41,9 @@ workerPool:
 # this chart.
 litellm:
   baseUrl: "http://litellm.litellm.svc.cluster.local:4000/v1"
+  # Anthropic-wire root (NO /v1 — the SDK appends /v1/messages itself). Used by
+  # models[].provider: Anthropic, i.e. the claude harness path.
+  anthropicBaseUrl: "http://litellm.litellm.svc.cluster.local:4000"
   apiKeySecret: litellm-secrets
   apiKeySecretKey: LITELLM_MASTER_KEY
 
@@ -59,7 +62,8 @@ models:
     baseUrl: ""
     apiKeySecret: ""
     apiKeySecretKey: ""
-    # Extra headers sent upstream (OpenRouter attribution, etc.).
+    # Extra headers sent upstream (fleet attribution; rejected on Anthropic
+    # provider ModelConfigs, so the claude harness path leaves it unset).
     defaultHeaders: {}
 
 # Harness objects: how an agent is allowed to run. `type` is exactly one of

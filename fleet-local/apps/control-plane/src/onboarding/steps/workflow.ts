@@ -6,20 +6,29 @@ import type { StepExecutor } from '../machine.ts';
 
 const ACTOR_OTLP = 'http://opentelemetry-collector.otel-system.svc:4317';
 
+// P7: claude-harness release for the installed controller contract; the Harness
+// CRD rejects tag references, so this is pinned to the manifest-list digest.
+const CLAUDE_HARNESS_IMAGE =
+  'ghcr.io/kagent-dev/kagent/claude-harness@sha256:bfbb526739439af92cea2282553500a3863dc66fad30838c68d57b6865e55fe4';
+
 const OTEL_ENV = [
   { name: 'OTEL_PROPAGATORS', value: 'tracecontext,baggage' },
   { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: ACTOR_OTLP },
 ];
 
 // spec.env OTEL_RESOURCE_ATTRIBUTES is merged with the controller's own values,
-// so the harness can carry the org attribute.
+// so both harnesses can carry the org attribute.
 const fleetOrgAttr = (orgId: string) => ({ name: 'OTEL_RESOURCE_ATTRIBUTES', value: `fleet.org_id=${orgId}` });
 
-// Diagram 3 (+P6): install the tenant's kagent execution surface from the
+// Diagram 3 (+P6/P7): install the tenant's kagent execution surface from the
 // vendored chart. One ModelConfig + AgentTemplate + Agent per catalog model
 // (agent "<id>-worker"), so the chat can pick the model by session. Static
 // x-fleet-* headers carry the canonical UUIDs; Harness env turns on W3C baggage
 // propagation so the caller's fleet_user_id / conversation id reach LiteLLM.
+// runtime:"claude" entries compile on the claude-harness image instead: an
+// Anthropic-provider ModelConfig (baseUrl + Secret-referenced key injected as
+// x-api-key by the egress gateway — the adapter owns every ANTHROPIC_* env var
+// and rejects defaultHeaders, so fleet attribution rides on the key).
 // --wait=false; the agent step polls.
 export const workflowStep: StepExecutor = async (ctx) => {
   const projectId = ctx.results.project?.projectId as string | undefined;
@@ -30,6 +39,9 @@ export const workflowStep: StepExecutor = async (ctx) => {
   const id = tenantId(ctx.orgSlug);
   const fleetHeaders = { [FLEET_HEADERS.orgId]: ctx.orgId, [FLEET_HEADERS.projectId]: projectId };
   const catalog = config.modelCatalog;
+  const hasClaude = catalog.some((m) => m.runtime === 'claude');
+
+  const harnessName = (runtime?: string) => (runtime === 'claude' ? 'claude' : 'app');
 
   const values = {
     namespace: ns,
@@ -37,18 +49,26 @@ export const workflowStep: StepExecutor = async (ctx) => {
     workerPool: { name: workerPoolName(ctx.orgSlug) },
     litellm: {
       baseUrl: `${config.litellmUrl}/v1`,
+      anthropicBaseUrl: config.litellmUrl,
       apiKeySecret: secretName,
       apiKeySecretKey: litellmSecretKey,
     },
-    models: catalog.map((m) => ({
-      name: m.id,
-      provider: 'OpenAI',
-      model: m.model,
-      apiFormat: 'chatCompletions',
-      stream: true,
-      defaultHeaders: fleetHeaders,
-    })),
-    harnesses: [{ name: 'app', type: 'kagent', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }],
+    models: catalog.map((m) =>
+      m.runtime === 'claude'
+        ? { name: m.id, provider: 'Anthropic', model: m.model }
+        : {
+            name: m.id,
+            provider: 'OpenAI',
+            model: m.model,
+            apiFormat: 'chatCompletions',
+            stream: true,
+            defaultHeaders: fleetHeaders,
+          },
+    ),
+    harnesses: [
+      { name: 'app', type: 'kagent', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] },
+      ...(hasClaude ? [{ name: 'claude', type: 'claude', image: CLAUDE_HARNESS_IMAGE, env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }] : []),
+    ],
     templates: catalog.map((m) => ({
       name: `${m.id}-coding`,
       modelConfig: m.id,
@@ -58,7 +78,7 @@ export const workflowStep: StepExecutor = async (ctx) => {
     agents: catalog.map((m) => ({
       name: `${m.id}-worker`,
       template: `${m.id}-coding`,
-      harness: 'app',
+      harness: harnessName(m.runtime),
     })),
     commonLabels: { 'fleet.local/org-id': ctx.orgId, 'fleet.local/project-id': projectId },
   };
