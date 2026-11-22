@@ -428,4 +428,7 @@ module.exports = {
   resolveGatePolicy,
   reportBoot,
   refresh,
+  // The billing service's read-only FlexPrice routes resolve the same wallet this
+  // gate reads; a second implementation would be a second answer to "which wallet".
+  resolveWalletId,
 };

@@ -180,8 +180,19 @@ about the environment you would actually deploy.
 ```bash
 set -a; . deploy/flexprice/.env; set +a
 curl -s http://127.0.0.1:18080/health
-curl -s -H "x-api-key: $FLEXPRICE_API_KEY" http://127.0.0.1:18080/v1/tenants
+# The is-my-key-working probe — it needs no environment header and lists the ids:
+curl -s -H "x-api-key: $FLEXPRICE_API_KEY" http://127.0.0.1:18080/v1/environments
+# Every other /v1 read also sends X-Environment-ID: <one of those ids>, or the API
+# answers 403 "Invalid or inaccessible environment".
+# Do NOT use /v1/tenants as a probe: it is not routed in v2.1.48 and 404s whatever
+# the key. A 404 is not proof a route is absent either — GET on a POST-only route
+# 404s here rather than returning 405.
 ```
+
+The kind-based install (`flexprice/infrastructure/helm/values-local.yaml`) serves the
+same API at `http://api.flexprice.local`; its `flexprice.local` host is the FlexPrice
+UI, not the API. See `docs/FLEXPRICE_FINDINGS.md` §15a for reading that install's
+operator key out of its own values file instead of patching the cluster.
 
 There is no FlexPrice dashboard in this stack by design — review the data through
 our own UI and these endpoints. The two `dev`-profile UIs (Temporal, Kafka) exist

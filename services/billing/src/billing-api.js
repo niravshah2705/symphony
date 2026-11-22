@@ -15,6 +15,7 @@ const gst = require('@ai-fleet/shared-core/billing/gst');
 const moneyWire = require('@ai-fleet/shared-core/billing/money-wire');
 const providers = require('./payment-providers');
 const { settle, allowsMockPayments } = require('./recharge-settle');
+const { createFlexpriceReadsRouter } = require('./flexprice-reads');
 
 /**
  * Cost-monitoring + billing API. Billing state lives in the shared JS store;
@@ -34,6 +35,11 @@ const { settle, allowsMockPayments } = require('./recharge-settle');
  */
 
 const router = express.Router();
+
+// The read-only FlexPrice surface for the Usage page. Built here rather than
+// required as a ready router so `resolveCallerOrg` — the one trusted source of the
+// caller's org — is injected instead of re-implemented a second time.
+const flexpriceReads = createFlexpriceReadsRouter({ resolveCallerOrg });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = Object.freeze({ day: 1, week: 7, month: 30 });
@@ -749,6 +755,20 @@ function settlementView(result) {
   };
 }
 
+/**
+ * Settle, then drop what the FlexPrice read routes cached for that org.
+ *
+ * `settle()` invalidates the admission gate itself (`recharge-settle.js:378`);
+ * these routes keep their own wallet lookup and last-known-view caches, so a
+ * recharge that leaves the Usage page showing the pre-payment numbers for a TTL
+ * is indistinguishable from a recharge that did not land.
+ */
+async function settleAndRefresh(callSpec) {
+  const result = await settle(callSpec);
+  flexpriceReads.invalidate(result && result.orgId);
+  return result;
+}
+
 // POST /api/billing/recharge/create-order — quote + persist + provider order.
 // `provider` in the body picks the gateway; an org's saved preference is the default.
 router.post('/recharge/create-order', asyncHandler((req, res) => createRechargeOrder(req, res)));
@@ -759,7 +779,7 @@ router.post('/recharge/settle', asyncHandler(async (req, res) => {
   if (!requireAdmin(caller, res)) return;
   const orderId = String(req.body && req.body.orderId || '').trim();
   if (!orderId) return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
-  const result = await settle({ orderId, orgId: caller.orgId, actor: caller.userId || 'recharge-settle-route' });
+  const result = await settleAndRefresh({ orderId, orgId: caller.orgId, actor: caller.userId || 'recharge-settle-route' });
   res.json(settlementView(result));
 }));
 
@@ -793,7 +813,7 @@ router.post('/razorpay/verify-order', asyncHandler(async (req, res) => {
       });
     }
   }
-  const result = await settle({ orderId, orgId: caller.orgId, actor: caller.userId || 'razorpay-verify' });
+  const result = await settleAndRefresh({ orderId, orgId: caller.orgId, actor: caller.userId || 'razorpay-verify' });
   res.json(settlementView(result));
 }));
 
@@ -805,7 +825,7 @@ router.post('/cashfree/verify-order', asyncHandler(async (req, res) => {
   if (!requireAdmin(caller, res)) return;
   const orderId = String(req.body && req.body.orderId || '').trim();
   if (!orderId) return res.status(400).json({ error: 'orderId is required', code: 'missing_order_id' });
-  const result = await settle({ orderId, orgId: caller.orgId, actor: caller.userId || 'cashfree-verify' });
+  const result = await settleAndRefresh({ orderId, orgId: caller.orgId, actor: caller.userId || 'cashfree-verify' });
   res.json(settlementView(result));
 }));
 
@@ -918,7 +938,7 @@ router.post('/cashfree/webhook', asyncHandler(async (req, res) => {
     const orderId = order.order_id || (data.payment && data.payment.order_id);
     if (orderId && store.getRechargeIntent(orderId)) {
       try {
-        const result = await settle({ orderId, actor: 'cashfree-webhook' });
+        const result = await settleAndRefresh({ orderId, actor: 'cashfree-webhook' });
         log.info('cashfree_webhook_settled', { orderId, status: result.status });
       } catch (err) {
         // A 5xx here is deliberate: a transient FlexPrice outage must make Cashfree
@@ -951,13 +971,19 @@ router.post('/razorpay/webhook', asyncHandler(async (req, res) => {
     return res.status(401).json({ error: 'Invalid webhook signature', code: 'webhook_signature_invalid' });
   }
   if (event.event === 'ORDER_PAID_SUCCESS' && event.orderId && store.getRechargeIntent(event.orderId)) {
-    const result = await settle({ orderId: event.orderId, actor: 'razorpay-webhook' });
+    const result = await settleAndRefresh({ orderId: event.orderId, actor: 'razorpay-webhook' });
     log.info('razorpay_webhook_settled', { orderId: event.orderId, status: result.status });
   }
   res.json({ status: 'ok' });
 }));
 
+// GET /api/billing/flexprice/* — the Usage page's read surface (overview,
+// heatmap, trend, log). Read-only, org-resolved server-side, display values only;
+// see services/billing/src/flexprice-reads.js for why the isolation lives there.
+router.use('/flexprice', flexpriceReads);
+
 module.exports = router;
 module.exports.resolveCallerOrg = resolveCallerOrg;
 module.exports.scopedUsageRecords = scopedUsageRecords;
 module.exports.bySourceWindow = bySourceWindow;
+module.exports.flexpriceReads = flexpriceReads;

@@ -136,6 +136,9 @@ const routes = Object.freeze({
   board: route(() => import('./views/board.js'), 'renderBoard', ['/styles/planning.css']),
   analytics: route(() => import('./views/analytics.js'), 'renderAnalytics', ['/styles/operations.css']),
   cost: route(() => import('./views/cost.js'), 'renderCost', ['/styles/operations.css']),
+  // The FlexPrice-sourced usage page. Its own stylesheet, because the grid and the
+  // chart shapes here have nothing in common with the Cost table.
+  usage: route(() => import('./views/usage.js'), 'renderUsage', ['/styles/operations.css', '/styles/usage.css']),
   troubleshooting: route(() => import('./views/troubleshooting.js'), 'renderTroubleshooting', ['/styles/operations.css']),
   identity: route(() => import('./views/identity.js'), 'renderIdentity', ['/styles/operations.css']),
   settings: route(() => import('./views/settings.js'), 'renderSettings', ['/styles/settings.css']),
@@ -162,6 +165,7 @@ const routeMeta = {
   board: { titleKey: 'board', eyebrowKey: 'planning' },
   analytics: { titleKey: 'analytics', eyebrowKey: 'insights' },
   cost: { titleKey: 'cost', eyebrowKey: 'insights' },
+  usage: { titleKey: 'usage', eyebrowKey: 'insights' },
   troubleshooting: { titleKey: 'troubleshooting', eyebrowKey: 'system' },
   identity: { title: 'Identity verification', eyebrow: 'System' },
   settings: { titleKey: 'settings', eyebrowKey: 'system' },

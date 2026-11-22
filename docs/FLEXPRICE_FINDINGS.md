@@ -229,8 +229,10 @@ were going to write, which is why they are here rather than buried in §5–§7:
    dropped; `metadata.auto_completed` is the real lever (§6b).
 4. **Read RBAC is shadow-only** (`observe()` = `Shadow()`), so no FlexPrice API key
    can be scoped to read-less-than-everything-within-its-tenant, even though
-   cross-*tenant* access is genuinely impossible (§7). B1 gets two keys, and a
-   browser must never reach a FlexPrice read.
+   cross-*tenant* access is genuinely impossible (§7). B1 gets two keys, and no
+   FlexPrice read reaches a browser directly: the browser-visible surface is the
+   read-only, org-resolved, display-value GET routes in
+   `services/billing/src/flexprice-reads.js`.
 5. **Usage grouping by event property works**, so the per-project/per-user Usage
    dashboard can be served by FlexPrice instead of by our own `usageRecords`
    (§7c) — the plan assumed the opposite.
@@ -759,8 +761,11 @@ So:
   privacy/compliance incident, and it means our two-plane design must not share one
   key: give the ingest path (`B3` outbox drain) and the money path (`B1` client)
   **separate keys**, so the higher-volume, more-exposed one cannot read balances.
-- Read-scoping must be enforced at our gateway. Never expose a FlexPrice read to a
-  browser.
+- Read-scoping must be enforced by us, not by the key. No FlexPrice read is exposed
+  to a browser: what a browser sees is the mediated, org-resolved, display-value GET
+  surface in `services/billing/src/flexprice-reads.js`, which resolves the org from
+  the trusted caller (`resolveCallerOrg`) and never accepts an org selector from the
+  client.
 
 **No per-customer API key exists.** The only per-customer credential is the
 **customer-portal session token** (`SessionTokenAuthMiddleware`,
@@ -805,7 +810,9 @@ money key) is **required**, not a hardening suggestion, and B1 must mount a
 config-map key. But **do not present read confinement as a boundary in the design
 doc or the threat model** — it does not exist in this release. The boundary we do
 have is tenant + environment scoping on writes; reads are confined only by our own
-gateway never exposing a FlexPrice read to a browser.
+server code — the key stays server-side and every browser-visible read resolves the
+org from the trusted caller (`flexprice-reads.js` + `resolveCallerOrg`), so a client
+can never ask for another tenant's numbers.
 
 ## 7b. Our org ↔ FlexPrice customer mapping is directly supported
 
@@ -1318,4 +1325,122 @@ verify script asserts it is still zero, so it fails rather than silently agreein
   `staleSent()` returns it as the standing alarm, and the corrected event aggregates
   to 700. Nothing about the balance moves and nothing about the balance freezes: the
   complaint is the mechanism.
+
+## 15. Measured live for the Usage page reads (2026-11-20 → 2026-11-22, `kind-flexprice-local`, FlexPrice v2.1.48)
+
+Probed against `http://api.flexprice.local` (the ingress for `flexprice-api:80`;
+`flexprice.local` is the UI, not the API). Every read needs
+`X-Environment-ID` — without it the API answers 403 `Invalid or inaccessible
+environment`, which reads like a permissions bug but is a missing header. Data lives
+in the **Sandbox** environment `00000000-…-000000000000`; the Production environment
+`…-000000000001` is empty, so a probe that defaults to Production observes a silent
+zero everywhere.
+This install has **no fleet meters provisioned** — no `llm-cost` meter and no
+`fleet.llm_cost` event (only `actor-compute`/`fleet.actor_compute`, the LiteLLM
+`ai.usage` meters, and two generated storage/api_call meters), and its customers are
+`litellm-org:*` rather than bare org ids. So the windowing/filter/paging contracts
+below were measured on `fleet.actor_compute` and on the one real INR prepaid wallet
+(`wallet_01M7V11T8NKQYG932MKE1X8FA5`, ₹100 granted by `FREE_CREDIT_GRANT`).
+
+- **`POST /v1/events/usage` with `window_size:"DAY"` answers
+  `{"results":[{"window_size":"<bucket start ISO>","value":<number>}], "event_name", "type"}`
+  and no envelope `value`.** So the window total must be summed from the buckets —
+  which is what `seriesFromUsage` does, and why the trend headline is the sum of the
+  cells it draws rather than a second read.
+- **`bucket_size` is the field that keeps both.** Sending `bucket_size:"DAY"` (with or
+  without `window_size`) returns the buckets *and* the envelope `value`; `window_size`
+  alone returns the buckets and drops the scalar. The scalar equals the bucket sum on
+  the same range, so a cross-check total is available for free if we ever want one —
+  the shipped read deliberately does not ask for it, because a total the page did not
+  draw is a total that can disagree with the grid.
+- **`timezone` decides the shape of the bucket key, and a wrong one shifts every day.**
+  `timezone:"UTC"` (what `usageSeries` sends) yields `"2026-11-20T00:00:00Z"`; omitting
+  `timezone` also yields UTC. `timezone:"Asia/Kolkata"` yields
+  `"2026-11-20T00:00:00+05:30"`, which `isoDay()` re-attributes to **`2026-11-19`** —
+  the correct absolute instant, but the wrong cell if anything else on the page keys
+  the day off the first ten characters of the string. That is why the route pins UTC
+  rather than inheriting the install's default.
+- **One windowed call covers the whole grid.** A 91-day range is a single
+  `POST /v1/events/usage` answered in ~120 ms. The per-day fan-out shape (91 calls at
+  concurrency 8) measured 1.8 s and is not used by any shipped read.
+- **Days with no events are absent from `results`, not returned as zero.** A 91-day
+  window with one day of data returned exactly one bucket. Absent therefore means a
+  measured 0, and only an unparseable bucket is "unknown" — the distinction the
+  heatmap's `usage-cell-unknown` styling depends on.
+- **A filter that matches nothing returns `{"event_name","type"}` with no `results`
+  key at all** (not `results: []`). Both a dotted `properties.org_id` filter and a
+  wrong `external_customer_id` look exactly like this. It is not an error and not a
+  failed read: it renders as an all-zero grid. `external_customer_id` matching the
+  customer's real `external_id` does filter correctly.
+- **On this install the only `external_customer_id` that matches is `litellm-org:*`.**
+  `external_customer_id:"org_nirav"` → 0 while `"litellm-org:org_nirav"` → 173, because
+  every customer here was created by the LiteLLM spike, not by fleet provisioning. This
+  is *not* evidence the routes are wrong — `billing-outbox.js:204` stamps events with
+  `external_customer_id = row.orgId` and `flexprice-provision.js:465` creates the
+  customer with `external_id = orgId`, both bare, so our own ingest and our own read
+  agree. It does mean the org selector is still unmeasured against a real
+  fleet-provisioned org, and the local all-zero heatmap is that gap, not a bug.
+- `group_by` is ignored for SUM (same single bucket), and `property_filters` is
+  ignored too — it returned the unfiltered tenant total. `filters` keyed on the
+  **bare** property name is the one that works (§7c confirmed again).
+- **`GET /v1/wallets?customer_id=…` ignores the `customer_id` filter** and returns
+  every wallet in the environment. It is also an **undocumented** route — it is not in
+  the OpenAPI spec, so it exists as a side effect of the router and its filter behavior
+  is unspecified. No shipped code calls it: the customer-scoped read
+  `GET /v1/customers/:id/wallets` (what `flexprice-client.js:210` and therefore
+  `gate.resolveWalletId` use) returned a bare array containing exactly the one correct
+  wallet, and `GET /v1/wallets/:id` returned `200` with `credit_balance`. The
+  environment-wide leak above is a hazard for *hand-written probes*, which is how it
+  was first hit here. `resolveWalletId`'s client-side
+  `currency === INR && wallet_type === PRE_PAID` selection stays as the guard.
+- `POST /v1/wallets/transactions/search` (note: `/v1/wallets/…`; the singular
+  `/v1/wallet/transactions/search` is 404) is **newest-first and `offset` pages
+  correctly**. Its `pagination` is `{total, limit, offset}` with `offset` written as
+  `offset + limit` — `{"total":3,"limit":1,"offset":2}` for `offset=1&limit=1` — so
+  `total` is usable for "Showing 1 to 12 of 3,482" and `offset` never is.
+- **`limit` is capped at 1000 and the rejection is a `400` whose message says
+  "Invalid filter"** — a misleading string for a paging parameter, so a caller that
+  treats non-2xx messages literally will chase the wrong bug. `sort:[{field,direction}]`
+  is accepted and lowercase `direction` values are not rejected (the spec's enum is not
+  enforced), so a sort that appears to succeed may still be silently unsorted — the log
+  route relies on the measured newest-first default instead.
+- Debits are as sparse as §2 predicted: the INR wallet has **0** debit rows and one
+  credit row, so the Usage page's "Used" tab is legitimately empty there and the
+  explanatory note is the whole answer.
+- Reasons observed live: `FREE_CREDIT_GRANT`, `PURCHASED_CREDIT_DIRECT`,
+  `PURCHASED_CREDIT_INVOICED`, `CREDIT_ADJUSTMENT`, `INVOICE_VOID_REFUND`,
+  `WALLET_TERMINATION`. All are named in `flexprice-reads.js`'s `REASON_LABELS`.
+- **Usage reads ride the `ingest` plane, not the money plane** —
+  `eventsUsage`/`eventsUsageMeter` are bound to `PLANES.ingest` in
+  `flexprice-client.js:258-259`. A deployment configured with only the money key
+  degrades `/heatmap` and `/trend` with `reasonDetail` naming the missing plane,
+  while `/overview` and `/log` work. Provisioning must therefore supply both keys.
+
+### 15a. How to get a working key for a local probe (no cluster change)
+
+The earlier notes in this section describe appending a temporary hash to
+`FLEXPRICE_AUTH_API_KEY_KEYS` and reverting it. **That is no longer necessary and
+should not be repeated.** The install records its own operator key as a comment in
+`flexprice/infrastructure/helm/values-local.yaml` (the `# Operator key:` line in the
+Auth block), and that raw token hashes to exactly the entry the Deployment's
+`FLEXPRICE_AUTH_API_KEY_KEYS` map already accepts — so a probe can authenticate with
+zero mutation, zero rollout, and nothing to revert. The public
+`sk_local_flexprice_test_key` also works, via the seeded `secrets` row (the DB
+fallback in the auth middleware) rather than the config map.
+
+Practical traps found doing it:
+- `local-dev-secret-not-used-in-api-key-mode` is `auth.secret` (session signing), not
+  an API key. Sending it as `x-api-key` 401s and proves nothing.
+- FlexPrice **caches a validated key**, so re-sending a raw whose hash was just removed
+  can still return 200. A revert is not proven by a 200-with-old-key; prove it with a
+  never-issued token 401ing plus the pod env being byte-identical to the original.
+- During and after a rollout, **two API pods share the Service rotation** and may answer
+  from different key maps — the symptom is alternating 200/401, not a stable failure.
+  Wait for a single `Running` pod and for several consecutive acceptances before
+  believing any auth result.
+- `GET /v1/tenants` is **not routed** in v2.1.48 (it 404s regardless of the key), so it
+  cannot be used as an "is my key valid" gate; `GET /v1/environments` can. Note
+  generally that FlexPrice returns 404 rather than 405 for GET-on-a-POST-only route, so
+  a 404 does not prove a route is absent — see also `deploy/flexprice/README.md`, whose
+  `/v1/tenants` curl example was stale.
 

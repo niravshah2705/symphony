@@ -20,6 +20,9 @@ export const MENU_PERMISSIONS = Object.freeze({
   board: { domain: 'planning', level: 'read' },
   analytics: { domain: 'insights', level: 'read' },
   cost: { domain: 'insights', level: 'read' },
+  // Same visibility as Cost: it reads the org's own wallet, and every write it can
+  // make is the Cashfree recharge, which the server re-checks at org-admin.
+  usage: { domain: 'insights', level: 'read' },
   troubleshooting: { domain: 'insights', level: 'read' },
   // Signed-in viewers already have settings:read. The view renders a scoped
   // policy-only surface for them, so selected ORG_ADMIN/PROJECT_ADMIN roles can
