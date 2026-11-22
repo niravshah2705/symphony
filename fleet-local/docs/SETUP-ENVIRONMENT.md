@@ -126,6 +126,55 @@ t28 probe with `PROMPT=… EXPECT=P9-WEBFETCH-OK` on one agent per harness).
 T-16 records the transport choice, the Debian-trixie-npm trap, and the
 `exec -i` / `node -e` argv gotchas.
 
+## Self-hosted billing UIs — Flexprice dashboard + Temporal (t30)
+
+The Flexprice chart ships no frontend and `temporalio/auto-setup` no web UI;
+`bash scripts/fixes/t30-selfhost-uis.sh` adds both over the existing nginx
+ingress (hosts from `00-prereqs.sh`, no port-forward needed):
+
+- **http://flexprice.local** — `flexprice/flexprice-front` (pinned `v2.0.22`,
+  cloned to `~/git/flexprice-front-pinned-v2.0.22`) built by
+  `deploy/uis/flexprice-ui/Dockerfile`: multi-stage vite build with
+  `--build-arg VITE_API_URL=http://api.flexprice.local/v1` **and**
+  `--build-arg VITE_APP_ENV=self-hosted` (Vite inlines env at BUILD time —
+  container env cannot change it), served as static files by nginx.
+  `VITE_APP_ENV` is not cosmetic: without it the SPA defaults to `APP_ENV.Local`
+  and the login button calls the Supabase **mock** client — toast "Authentication
+  is not configured for this deployment", with no HTTP request to the backend at
+  all (T-17.11). Step 2 compares the image's `/build-info.json` stamp against the
+  intended args and rebuilds on mismatch, so a stale image cannot keep serving
+  the old choice.
+  Verify it the way a user does (real browser, not curl):
+  `node scripts/fixes/t30-ui-login-check.mjs admin@flexprice.dev "$(grep
+  ^FLEXPRICE_UI_PASSWORD= .env | cut -d= -f2-)"` (needs
+  `npx playwright install chromium` once; T-17.12).
+  Login `admin@flexprice.dev`; password is generated on first run into
+  gitignored `fleet-local/.env` as `FLEXPRICE_UI_PASSWORD` — the chart seeds
+  `auths.token` as plaintext but Login does bcrypt-compare, so t30 step 4
+  rewrites it with pgcrypto `crypt()` (T-17.4).
+- **Onboarding wizard pre-answered (t30 step 5).** A fresh login otherwise stops
+  at "Welcome to Flexprice — Just three quick questions", and submitting it
+  403s because the seed leaves `users.roles` NULL (a JWT carries no roles claim,
+  so RBAC reads the user row). Step 5 grants the seeded admin the
+  `super_admin` role (leaving `users.type='user'` — `owner` is not a valid
+  `UserType` and would 400 the roles endpoint, T-17.8),
+  flushes the Redis `user:v1` cache that would otherwise keep
+  serving the stale `roles:[]`, and then fires the very call the wizard makes —
+  `PUT /v1/tenants/update` with `name` +
+  `metadata{onboarding_completed:"true", onboarding_referral_source,
+  onboarding_organization_url}`. Defaults are `Fleet Local`,
+  `ChatGPT / Perplexity / Gemini`, `http://flexprice.local`; override with
+  `TENANT_NAME=… ONBOARDING_REFERRAL=… ONBOARDING_ORG_URL=…` (T-17.8/9/10).
+  Already-set rows are skipped, so re-runs are no-ops.
+- **http://temporal.flexprice.local** — `temporalio/ui:2.31.2` pointed at
+  `flexprice-temporal-frontend.flexprice.svc:7233`, namespace `default`. The
+  pod needs `enableServiceLinks: false`: the `temporal-ui` Service otherwise
+  injects `TEMPORAL_UI_PORT=tcp://…` which the UI parses as its integer port
+  and crashloops (T-17.6).
+
+The fleet SPA at app.fleet.dev remains the operator UI; these two are the
+billing-plane consoles.
+
 ## Fresh-cluster ordering notes (why the run order ≠ the list order)
 
 - **Langfuse after Substrate AND step 8**: the S3 backend is RustFS inside

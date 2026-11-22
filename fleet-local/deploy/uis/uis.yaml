@@ -1,0 +1,144 @@
+# Self-hosted UI companions for the Flexprice billing stack (ns flexprice).
+#
+#   flexprice.local            -> flexprice-ui  (flexprice-front static build)
+#   temporal.flexprice.local   -> temporal-ui   (official Temporal Web UI)
+#   api.flexprice.local        -> flexprice-api (existing, from s02)
+#
+# kind maps host :80 to ingress-nginx and scripts/00-prereqs.sh adds the
+# /etc/hosts entries for all three flexprice.local hosts, so no extra port
+# forward is needed — open http://flexprice.local in the host browser.
+#
+# The flexprice-ui image must be built from the pinned flexprice-front checkout
+# and loaded into kind BEFORE applying this file (VITE_API_URL is baked in at
+# build time); scripts/fixes/t30-selfhost-uis.sh does all of it idempotently.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flexprice-ui
+  namespace: flexprice
+  labels:
+    app: flexprice-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flexprice-ui
+  template:
+    metadata:
+      labels:
+        app: flexprice-ui
+    spec:
+      containers:
+        - name: ui
+          image: fleet-flexprice-ui:local
+          # Mutable local tag + kind-loaded image: Never is what the other
+          # fleet-local apps use; rebuilds must roll the pod (t30 does it).
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flexprice-ui
+  namespace: flexprice
+spec:
+  selector:
+    app: flexprice-ui
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flexprice-ui
+  namespace: flexprice
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: flexprice.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flexprice-ui
+                port:
+                  number: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-ui
+  namespace: flexprice
+  labels:
+    app: temporal-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-ui
+  template:
+    metadata:
+      labels:
+        app: temporal-ui
+    spec:
+      # REQUIRED, not hygiene: a Service named temporal-ui makes kubelet inject
+      # TEMPORAL_UI_PORT=tcp://<clusterip>:8080 into every pod in the namespace,
+      # and the UI binary reads TEMPORAL_UI_PORT as its own integer port —
+      # crashloop with "cannot unmarshal !!str `tcp://1...` into int".
+      enableServiceLinks: false
+      containers:
+        - name: ui
+          # Pinned to the release era of the chart's temporalio/auto-setup:1.26.2
+          # server; the UI speaks the frontend gRPC API and newer UI builds assume
+          # newer server features. arm64 manifests exist for this tag.
+          image: temporalio/ui:2.31.2
+          env:
+            - name: TEMPORAL_ADDRESS
+              value: flexprice-temporal-frontend.flexprice.svc.cluster.local:7233
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-ui
+  namespace: flexprice
+spec:
+  selector:
+    app: temporal-ui
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: temporal-ui
+  namespace: flexprice
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: temporal.flexprice.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: temporal-ui
+                port:
+                  number: 8080

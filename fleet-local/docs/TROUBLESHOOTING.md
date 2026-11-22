@@ -653,6 +653,130 @@ builds/deploys/binds/probes the whole chain; the notes below are why each piece 
    as a JS `ReferenceError` over bash word salad) — use double quotes or a
    regex literal in inline scripts.
 
+## T-17 Self-hosted Flexprice dashboard UI + Temporal UI (flexprice.local)
+
+`scripts/fixes/t30-selfhost-uis.sh` + `deploy/uis/uis.yaml`. What bit us, in order:
+
+1. **The backend chart ships no frontend.** `flexprice-pinned-*` (v2.1.48) has no
+   UI directory — the dashboard is the separate repo `flexprice/flexprice-front`
+   (we pin tag `v2.0.22`, released after the backend commit). Clone is done by
+   t30 into `/Users/niravshah/git/flexprice-front-pinned-<tag>`.
+2. **`VITE_API_URL` is a BUILD arg, not a container env.** Vite inlines
+   `import.meta.env.*` at compile time (`src/config/config.ts:312`), so the image
+   must be built with `--build-arg VITE_API_URL=http://api.flexprice.local/v1`
+   (note the `/v1` suffix — the default includes it; the api ingress serves the
+   raw backend). Changing the URL later means rebuilding the image.
+3. **Upstream's own Dockerfile ends with `npm run start`** — that is the vite DEV
+   server, not the built app. Our `deploy/uis/flexprice-ui/Dockerfile` builds
+   `dist/` and serves it with plain nginx (SPA `try_files ... /index.html`
+   fallback, port 80).
+4. **Dashboard login cannot work against the seeded DB as-is.** The migration
+   job seeds `auths.token = 'sk_local_flexprice_test_key'` (plaintext), but
+   `flexpriceAuth.Login` does `bcrypt.CompareHashAndPassword` — 403
+   "Invalid email or password" forever, and `/v1/auth/signup` refuses because
+   the user row exists. Fix (t30 step 4): overwrite the hash with pgcrypto —
+   `UPDATE auths SET token = crypt(:'PW', gen_salt('bf',8)) WHERE
+   provider='flexprice' AND user_id='0000…0000'` — password generated once into
+   gitignored `fleet-local/.env` as `FLEXPRICE_UI_PASSWORD` and reused on
+   re-runs. Email is `admin@flexprice.dev`. Again: `kubectl exec` + heredoc
+   needs `-i` or psql sees empty stdin and exits 0 (silent no-op, T-16.7).
+5. **CORS is not an obstacle**: `internal/rest/middleware/cors.go` sets
+   `Access-Control-Allow-Origin: *` (upstream TODO), so
+   `flexprice.local → api.flexprice.local` works with no backend config. The UI
+   picks the environment per request via `X-Environment-ID` (Sandbox/Production
+   seeded by s02) — no extra setup.
+6. **Temporal UI**: no web component ships with `temporalio/auto-setup:1.26.2`;
+   we run standalone `temporalio/ui:2.31.2` (era-matched tag, arm64 exists —
+   verify with `docker manifest inspect` before pinning on this arm host) with
+   `TEMPORAL_ADDRESS=flexprice-temporal-frontend.flexprice.svc.cluster.local:7233`.
+   The UI proxies gRPC server-side, so only port 8080 (HTTP) needs ingress.
+   Namespace `default` is the one s02 registers. **`enableServiceLinks: false`
+   is mandatory on the pod**: a Service named `temporal-ui` makes kubelet inject
+   `TEMPORAL_UI_PORT=tcp://<clusterip>:8080` into every pod in the namespace,
+   and the UI reads `TEMPORAL_UI_PORT` as its own int port — crashloop with
+   `config file corrupted: cannot unmarshal !!str 'tcp://1…' into int` (the
+   "config file" framing is a red herring; it is env contamination).
+7. **Host wiring**: kind maps host `:80/:443` to ingress-nginx, and
+   `00-prereqs.sh` now appends
+   `127.0.0.1 flexprice.local api.flexprice.local temporal.flexprice.local` to
+   `/etc/hosts`, so no `kubectl port-forward` is needed for either UI.
+   Rebuild trap as always: mutable `fleet-flexprice-ui:local` tag +
+   `imagePullPolicy: Never` → `kind load` then `rollout restart` (t30 does both).
+8. **The seeded admin has no roles, so the dashboard 403s on every write.**
+   First login lands on the "Welcome to Flexprice — Just three quick questions"
+   onboarding wizard, and submitting it fails with
+   `{"message":"insufficient permissions"}` (403). Cause: the s02 migration seed
+   inserts `users.roles = NULL`, and a dashboard JWT carries **no roles claim** —
+   `internal/rest/middleware/auth.go` re-reads the user row on every request and
+   passes `user.Roles` into the context, so the RBAC middleware denies with
+   `access denied: caller has no roles assigned` / `"roles":[]` in the api log.
+   Fix (t30 step 5): `UPDATE users SET roles='["super_admin"]'::jsonb WHERE
+   id='0000…0000'` (`super_admin` is `internal/types/rbac.go:14`).
+   **Do not also set `type='owner'`** — that was my first attempt and it trades
+   a 403 for a 400: `users.type` is a `UserType` enum of `user` /
+   `service_account` only (`internal/types/user.go:9-16`), and the dashboard
+   passes `user.type` into `GET /v1/rbac/roles?user_type=...`, which answers
+   `validation_error: User type must be 'user' or 'service_account'`. Owner-ship
+   in a self-hosted tenant is expressed by the role, not the type.
+9. **…and the roles UPDATE appears to do nothing until you flush Redis.**
+   The user repository caches `GetByID` under `flexprice:local:<tenant>:<env>:
+   user:v1:<user_id>` (`internal/cache` `PrefixUser`, TTL
+   `ExpiryDefaultRedis`), and a raw `UPDATE` bypasses the repository's
+   invalidation — so the API keeps serving the cached `roles:[]` and the PUT
+   still 403s even though `psql` returns the new row. Deleting the keys fixes it
+   without a restart: `kubectl -n flexprice exec flexprice-redis-0 -- sh -c
+   'for k in $(redis-cli --scan --pattern "*user:v1*"); do redis-cli del "$k";
+   done'` (t30 step 5 does this; `rollout restart deploy/flexprice-api` is the
+   hammer). Tenant reads are cached the same way, but those go through
+   `Tenant.Update`, which invalidates — only out-of-band SQL writes need this.
+10. **Setting the wizard's answers from the CLI.** The three questions are one
+    call: `PUT /v1/tenants/update` with
+    `{"name":..., "metadata":{"onboarding_completed":"true",
+    "onboarding_referral_source":..., "onboarding_organization_url":...}}`
+    (`src/pages/onboarding/useOnboardingTenant.ts` → `TenantApi.updateTenant`;
+    the metadata key constant is `TenantMetadataKey.ONBOARDING_COMPLETED` in
+    `src/models/Tenant.ts:27`, and `onboarding.tsx`'s `referralSourceOptions`
+    are free-form strings stored verbatim — use one of the seven exact option
+    values, e.g. `ChatGPT / Perplexity / Gemini`, so the UI echoes it back
+    sanely). Send it with the **dashboard JWT plus `X-Environment-ID`** — that is
+    the pair the wizard itself uses. An `x-api-key` also passes RBAC (config
+    operator keys are granted `super_admin` explicitly; vault keys carry
+    `secrets.roles`), but then the actor recorded on the change is the key, not
+    the admin user. t30 step 5 seeds `Fleet Local` /
+    `http://flexprice.local`, which is why a fresh login skips the wizard. The
+    router also honours a localStorage shortcut
+    (`flexprice_onboarding_completed_v1`): if the wizard still shows after
+    seeding, that stale key is the reason, not the server.
+
+11. **"Authentication is not configured for this deployment." on the login form
+    — while `curl /v1/auth/login` returns a token.** The build arg
+    `VITE_APP_ENV` was missing, so it defaulted to `APP_ENV.Local`
+    (`src/config/config.ts:296`), and `LoginForm.handleLogin` branches on
+    `config.app.env !== APP_ENV.SelfHosted`: it then calls
+    `supabase.auth.signInWithPassword`, which in a self-hosted deploy is the
+    **mock client** in `src/core/services/supbase/config.ts` returning exactly
+    that message. The SPA never issues the HTTP call, so the backend log stays
+    empty and curl-based checks pass — the failure is invisible outside a
+    browser. Fix: build with `--build-arg VITE_APP_ENV=self-hosted` (t30 does
+    this; the same flag is what makes `AuthService` read the JWT out of
+    `localStorage.token` instead of a Supabase session). Guard against the
+    silent version of this trap: the image now ships
+    `/usr/share/nginx/html/build-info.json` (`{"apiUrl","appEnv"}`), which t30
+    step 2 compares against the intended build args and rebuilds on mismatch —
+    because Vite inlines env at BUILD time, a present-but-stale image otherwise
+    keeps serving the old choice.
+12. **Verifying a login the way a user does.**
+    `node scripts/fixes/t30-ui-login-check.mjs admin@flexprice.dev "$(grep
+    ^FLEXPRICE_UI_PASSWORD= .env | cut -d= -f2-)"` drives the real form in
+    Chromium, asserts the bundle stamp, that `/v1/auth/login` was actually
+    called and returned 200, that no toast error is showing, that the URL left
+    `/login`, and that `localStorage.token` holds the session. Requires
+    `npx playwright install chromium` once. It also sweeps every `/v1` response
+    for 4xx/5xx after landing, which is how the `user_type=owner` mistake in
+    item 8 was found — a login can pass while the dashboard sits on a broken
+    query. This is the check that would have caught items 4 and 11; curl alone
+    proves only the backend half.
+
 ## Useful one-liners
 
 ```bash

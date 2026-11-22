@@ -65,6 +65,14 @@ else
   printf '127.0.0.1 app.fleet.dev kagent.fleet.dev\n' | sudo tee -a /etc/hosts >/dev/null \
     || echo "WARN: could not edit /etc/hosts — add '127.0.0.1 app.fleet.dev kagent.fleet.dev' manually"
 fi
+# Billing stack hosts: api (ingress from s02), dashboard UI + Temporal UI (t30).
+if grep -qE 'api\.flexprice\.local' /etc/hosts; then
+  echo "/etc/hosts already maps api.flexprice.local"
+else
+  echo "adding flexprice.local hosts to /etc/hosts (sudo)"
+  printf '127.0.0.1 flexprice.local api.flexprice.local temporal.flexprice.local\n' | sudo tee -a /etc/hosts >/dev/null \
+    || echo "WARN: could not edit /etc/hosts — add '127.0.0.1 flexprice.local api.flexprice.local temporal.flexprice.local' manually"
+fi
 
 # --- postgres databases ------------------------------------------------------
 PGPW=$(kubectl -n flexprice get secret flexprice-postgresql -o jsonpath='{.data.password}' | base64 -d)
