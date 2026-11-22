@@ -23,12 +23,15 @@ const { createFlexpriceReadsRouter } = require('./flexprice-reads');
  *
  * CROSS-TENANT ISOLATION (critical): the gateway resolves the caller's billing
  * org + admin flag SERVER-SIDE from the org service and forwards them as the
- * `x-ai-fleet-billing-*` headers below. Those headers are trustworthy because
- * this service is bound to the gateway's service account by Cloud Run IAM and
- * the gateway proxy builds its request headers from scratch — a browser value
- * can never arrive here uninvited. Every read scopes to that org, and mutations
- * additionally require org-admin (re-checked here, not only at the edge). On the
- * shared free-tier account (SHARED_ORG_ID) the per-project/user drill-down is
+ * `x-ai-fleet-billing-*` headers below. Those headers are honored only behind a
+ * proof that the request came from the gateway — `INTERNAL_API_TOKEN` in direct
+ * mode, an ID token from `BILLING_TRUSTED_SERVICE_ACCOUNTS` in cloud mode, or the
+ * loopback development profile (`trusted-caller.js`). Without one, `resolveCallerOrg`
+ * answers with this deployment's own org, so an unauthenticated peer cannot name a
+ * tenant at all: isolation is a property of this endpoint, not only of the network
+ * in front of it. Every read scopes to that org, and mutations additionally
+ * require org-admin (re-checked here, not only at the edge). On the shared
+ * free-tier account (SHARED_ORG_ID) the per-project/user drill-down is
  * additionally scoped to the caller's own user so personal tenants can't see
  * each other's project names. Money is integer paise internally; INR is exposed
  * only for display.
@@ -45,9 +48,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = Object.freeze({ day: 1, week: 7, month: 30 });
 const MAX_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a single top-up
 
-const BILLING_ORG_HEADER = 'x-ai-fleet-billing-org-id';
-const BILLING_ROLE_HEADER = 'x-ai-fleet-billing-org-role';
-const BILLING_USER_HEADER = 'x-ai-fleet-billing-user-id';
+const { callerOf } = require('./trusted-caller');
 
 /**
  * Rupees in, integer paise out — on the digits, via `money-wire`. The previous
@@ -167,17 +168,13 @@ function newOrderId(orgId) {
 
 /**
  * The caller's billing org + admin flag, taken from the gateway's server-derived
- * context. Absent headers resolve to the deployment's own org with no admin
- * rights, so a direct caller (or a gateway that could not identify the user)
- * reads the tenant it belongs to and can never mutate it.
+ * context — which is only read when the request PROVED it came from the gateway
+ * (`trusted-caller.js`). Absent that proof the headers are ignored and the
+ * deployment's own org answers with no admin rights, so a direct caller reads the
+ * tenant it belongs to and can neither name another nor mutate it.
  */
 function resolveCallerOrg(req) {
-  const orgId = String(req.get(BILLING_ORG_HEADER) || '').trim()
-    || CONFIG.BILLING.orgId
-    || SHARED_ORG_ID;
-  const userId = String(req.get(BILLING_USER_HEADER) || '').trim() || null;
-  const isAdmin = String(req.get(BILLING_ROLE_HEADER) || '').trim().toUpperCase() === 'ORG_ADMIN';
-  return { orgId, userId, isAdmin };
+  return callerOf(req);
 }
 
 /** Usage records for a caller, strictly scoped to their org (+ user on shared). */

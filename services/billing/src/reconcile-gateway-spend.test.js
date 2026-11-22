@@ -161,10 +161,10 @@ test('a reconcile run writes one report per org and touches no money API', async
   assert.equal(report.flexprice_says.spendPaise, 4250);
   assert.equal(report.flexprice_delta.verdict, 'match');
   assert.deepEqual(meterCalls, [{
-    meter_id: 'meter_llm',
-    external_customer_id: ORG,
-    start_time: '2026-11-04T00:00:00.000Z',
-    end_time: '2026-11-06T00:00:00.000Z',
+    meterId: 'meter_llm',
+    externalCustomerId: ORG,
+    startTime: '2026-11-04T00:00:00.000Z',
+    endTime: '2026-11-06T00:00:00.000Z',
   }]);
   assert.deepEqual(summary.window, { since: '2026-11-04T00:00:00.000Z', until: '2026-11-06T00:00:00.000Z' });
 

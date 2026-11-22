@@ -51,18 +51,20 @@ function selectAccounts(storeApi) {
 function pendingRows(payload, cutoff, reportLimit = DEFAULT_REPORT_LIMIT) {
   const pending = [];
   for (const row of rowsOf(payload)) {
-    const available = Number(row && row.credits_available);
+    const available = Number(row && row.creditsAvailable);
     if (!Number.isFinite(available) || available <= 0) continue;
     let expiry;
     try {
-      expiry = validDate(row.expiry_date, 'row expiry_date');
+      // `expiryDate` is a `Date` on the model; `validDate` keeps the one check for
+      // both that and an ISO string from a fixture.
+      expiry = validDate(row.expiryDate, 'row expiryDate');
     } catch (_) {
       continue;
     }
     if (expiry.getTime() >= cutoff.getTime()) continue;
     pending.push({
       transactionId: row.id || null,
-      creditsAvailable: String(row.credits_available),
+      creditsAvailable: String(row.creditsAvailable),
       expiryDate: expiry.toISOString(),
     });
   }
@@ -78,8 +80,8 @@ async function inspectAccount(account, options) {
   const response = await options.client.walletTransactionsSearch({
     id: walletId,
     type: 'credit',
-    credits_available_gt: '0',
-    expiry_date_before: options.now.toISOString(),
+    creditsAvailableGt: '0',
+    expiryDateBefore: options.now.toISOString(),
     limit: options.searchLimit,
   });
   const limited = { items: rowsOf(response).slice(0, options.searchLimit) };

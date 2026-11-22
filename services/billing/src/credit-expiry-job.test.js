@@ -67,8 +67,8 @@ test('searches each wallet with the exact bounded expiry query', async () => {
   assert.deepEqual(calls, [{
     id: 'wallet_a',
     type: 'credit',
-    credits_available_gt: '0',
-    expiry_date_before: NOW.toISOString(),
+    creditsAvailableGt: '0',
+    expiryDateBefore: NOW.toISOString(),
     limit: MAX_SEARCH_LIMIT,
   }]);
   assert.equal(summary.searchLimit, MAX_SEARCH_LIMIT);
@@ -76,16 +76,19 @@ test('searches each wallet with the exact bounded expiry query', async () => {
 });
 
 test('reports only positive expired rows older than grace as pending materialization', async () => {
+  // `creditsAvailable` is a decimal string and `expiryDate` a `Date` on the model;
+  // the row that cannot be parsed as a date is a string, which is what a fixture
+  // from before the SDK looked like.
   const response = {
     items: [
-      { id: 'old_1', credits_available: '2.5', expiry_date: '2026-11-13T11:58:59.999Z' },
-      { id: 'boundary', credits_available: '4', expiry_date: '2026-11-13T11:59:00.000Z' },
-      { id: 'recent', credits_available: '3', expiry_date: '2026-11-13T11:59:30.000Z' },
-      { id: 'empty', credits_available: '0', expiry_date: '2026-11-01T00:00:00.000Z' },
-      { id: 'bad-credit', credits_available: 'not-a-number', expiry_date: '2026-11-01T00:00:00.000Z' },
-      { id: 'bad-expiry', credits_available: '9', expiry_date: 'not-a-date' },
-      { id: 'old_2', credits_available: '1', expiry_date: '2026-11-12T00:00:00.000Z' },
-      { id: 'old_3', credits_available: '1', expiry_date: '2026-11-11T00:00:00.000Z' },
+      { id: 'old_1', creditsAvailable: '2.5', expiryDate: new Date('2026-11-13T11:58:59.999Z') },
+      { id: 'boundary', creditsAvailable: '4', expiryDate: new Date('2026-11-13T11:59:00.000Z') },
+      { id: 'recent', creditsAvailable: '3', expiryDate: new Date('2026-11-13T11:59:30.000Z') },
+      { id: 'empty', creditsAvailable: '0', expiryDate: new Date('2026-11-01T00:00:00.000Z') },
+      { id: 'bad-credit', creditsAvailable: 'not-a-number', expiryDate: new Date('2026-11-01T00:00:00.000Z') },
+      { id: 'bad-expiry', creditsAvailable: '9', expiryDate: 'not-a-date' },
+      { id: 'old_2', creditsAvailable: '1', expiryDate: new Date('2026-11-12T00:00:00.000Z') },
+      { id: 'old_3', creditsAvailable: '1', expiryDate: new Date('2026-11-11T00:00:00.000Z') },
     ],
   };
   const { summary, warnings } = await runJob({
@@ -104,8 +107,8 @@ test('reports only positive expired rows older than grace as pending materializa
 test('accepts rowsOf response shapes and bounds rows even if the server over-returns', () => {
   const rows = Array.from({ length: 5 }, (_, index) => ({
     id: `row_${index}`,
-    credits_available: '1',
-    expiry_date: '2026-11-01T00:00:00.000Z',
+    creditsAvailable: '1',
+    expiryDate: '2026-11-01T00:00:00.000Z',
   }));
   const result = pendingRows({ data: rows }, new Date('2026-11-13T11:59:00.000Z'), 2);
   assert.equal(result.count, 5);
@@ -118,7 +121,7 @@ test('isolates wallet failures and continues checking other organizations', asyn
     accounts: [account(ORG_A, 'wallet_a'), account(ORG_B, 'wallet_b')],
     failures: { wallet_a: new Error('timeout') },
     responses: {
-      wallet_b: [{ id: 'old', credits_available: '1', expiry_date: '2026-11-01T00:00:00.000Z' }],
+      wallet_b: [{ id: 'old', creditsAvailable: '1', expiryDate: new Date('2026-11-01T00:00:00.000Z') }],
     },
   });
 

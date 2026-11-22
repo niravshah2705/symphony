@@ -33,6 +33,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@flexprice/sdk": "^2.1.51",
     "@google-cloud/firestore": "^8.7.1",
     "@google-cloud/pubsub": "^6.0.0",
     "@google-cloud/run": "^4.0.0",

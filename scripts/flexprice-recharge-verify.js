@@ -171,11 +171,11 @@ async function main() {
 
   const readBalance = async (walletId) => {
     const balance = await client.walletRealTimeBalance(walletId);
-    return Number(balance.real_time_credit_balance);
+    return Number(balance.realTimeCreditBalance);
   };
   const readCreditRows = async (walletId) => {
     const search = await client.walletTransactionsSearch({ id: walletId, type: 'credit', limit: 50 });
-    return search.items || search.data || [];
+    return search.items || [];
   };
 
   try {
@@ -343,10 +343,10 @@ async function main() {
       `real_time_credit_balance=${await readBalance(walletId)}`);
     const couponIntent = store.getRechargeIntent(couponId);
     check('the bonus is a FREE_CREDIT_GRANT row, not a bonus field on the purchase',
-      (await readCreditRows(walletId)).some((r) => r.transaction_reason === 'FREE_CREDIT_GRANT'
-        && Number(r.credits_available) === 50
-        && String(r.idempotency_key || '').endsWith(':promo')),
-      `bonusPaise=${couponIntent.bonusPaise} rows=${(await readCreditRows(walletId)).map((r) => `${r.transaction_reason}:${r.credits_available}`).join(' ')}`);
+      (await readCreditRows(walletId)).some((r) => r.transactionReason === 'FREE_CREDIT_GRANT'
+        && Number(r.creditsAvailable) === 50
+        && String(r.idempotencyKey || '').endsWith(':promo')),
+      `bonusPaise=${couponIntent.bonusPaise} rows=${(await readCreditRows(walletId)).map((r) => `${r.transactionReason}:${r.creditsAvailable}`).join(' ')}`);
 
     // 7. Razorpay: second gateway, same settle(). ₹1,000 → 18% GST → ₹1,180 → 1,000 credits.
     section('7. Razorpay — second gateway, same settle()');
@@ -383,17 +383,17 @@ async function main() {
     // 8. The credit rows themselves: GST never appears as a credit.
     section('8. credit-row proof');
     const allRows = await readCreditRows(walletId);
-    const purchaseRows = allRows.filter((r) => r.transaction_reason === 'PURCHASED_CREDIT_DIRECT');
-    const granted = purchaseRows.reduce((sum, r) => sum + Number(r.credit_amount || 0), 0);
+    const purchaseRows = allRows.filter((r) => r.transactionReason === 'PURCHASED_CREDIT_DIRECT');
+    const granted = purchaseRows.reduce((sum, r) => sum + Number(r.creditAmount || 0), 0);
     check('three purchase rows totalling 2,000 credits — never 2,270 (₹590+₹590+₹1,180)',
       purchaseRows.length === 3 && granted === 2000,
-      `rows=${purchaseRows.length} sum=${granted} reasons=${[...new Set(allRows.map((r) => r.transaction_reason))].join(',')}`);
+      `rows=${purchaseRows.length} sum=${granted} reasons=${[...new Set(allRows.map((r) => r.transactionReason))].join(',')}`);
     check('every purchase row carries priority 1 and the direct type',
-      purchaseRows.every((r) => Number(r.priority) === 1 && r.transaction_reason === 'PURCHASED_CREDIT_DIRECT' && r.type === 'credit'),
-      [...new Set(purchaseRows.map((r) => `${r.type}/${r.transaction_reason}/${r.priority}`))].join(','));
+      purchaseRows.every((r) => Number(r.priority) === 1 && r.transactionReason === 'PURCHASED_CREDIT_DIRECT' && r.type === 'credit'),
+      [...new Set(purchaseRows.map((r) => `${r.type}/${r.transactionReason}/${r.priority}`))].join(','));
     check('each row’s idempotency key is the recharge order',
-      purchaseRows.every((r) => String(r.idempotency_key || '').startsWith('recharge:order_')),
-      purchaseRows.map((r) => r.idempotency_key).join(' | '));
+      purchaseRows.every((r) => String(r.idempotencyKey || '').startsWith('recharge:order_')),
+      purchaseRows.map((r) => r.idempotencyKey).join(' | '));
     check('GST metadata on the row is the ₹90, recorded but never credited',
       purchaseRows.every((r) => String(r.metadata?.gst_paise || '') === '9000'
         || String(r.metadata?.gst_paise || '') === '18000'),

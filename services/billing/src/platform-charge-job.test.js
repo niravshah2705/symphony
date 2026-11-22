@@ -30,7 +30,7 @@ function clientFixture({ balance = 4000 } = {}) {
       },
       walletRealTimeBalance: async (walletId) => {
         calls.push(['balance', walletId]);
-        return { real_time_credit_balance: String(currentBalance) };
+        return { realTimeCreditBalance: String(currentBalance) };
       },
       searchInvoices: async (filter) => {
         calls.push(['search', filter]);
@@ -47,8 +47,8 @@ function clientFixture({ balance = 4000 } = {}) {
         const debit = {
           id: 'txn_1',
           type: 'debit',
-          transaction_reason: 'MANUAL_BALANCE_DEBIT',
-          idempotency_key: body.idempotencyKey,
+          transactionReason: 'MANUAL_BALANCE_DEBIT',
+          idempotencyKey: body.idempotencyKey,
         };
         debits.set(body.idempotencyKey, debit);
         currentBalance -= Number(body.credits);
@@ -68,9 +68,11 @@ test('month, keys and exact invoice search reject ambiguous input', () => {
   });
   assert.deepEqual(invoiceSearch(`platform-charge-invoice:${ORG}:${MONTH}`), {
     filters: [{
+      // `field` is FlexPrice's own column name, so it stays snake on the model too;
+      // `dataType` is the model's key.
       field: 'idempotency_key',
       operator: 'eq',
-      data_type: 'string',
+      dataType: 'string',
       value: { string: `platform-charge-invoice:${ORG}:${MONTH}` },
     }],
     limit: 2,
@@ -83,16 +85,19 @@ test('month, keys and exact invoice search reject ambiguous input', () => {
 test('the statement shape is ₹3000, finalized and tax/payment free', () => {
   const body = invoiceBody({ orgId: ORG, customerId: 'cust_1', month: MONTH });
   assert.equal(CHARGE_CREDITS, 3000);
-  assert.equal(body.customer_id, 'cust_1');
-  assert.equal(body.invoice_type, 'ONE_OFF');
-  assert.equal(body.billing_reason, 'MANUAL');
-  assert.equal(body.invoice_status, 'FINALIZED');
+  assert.equal(body.customerId, 'cust_1');
+  assert.equal(body.invoiceType, 'ONE_OFF');
+  assert.equal(body.billingReason, 'MANUAL');
+  assert.equal(body.invoiceStatus, 'FINALIZED');
   assert.equal(body.subtotal, '3000');
   assert.equal(body.total, '3000');
-  assert.equal(body.amount_due, '3000');
-  assert.equal(body.line_items[0].amount, '3000');
+  assert.equal(body.amountDue, '3000');
+  assert.equal(body.lineItems[0].amount, '3000');
+  assert.equal(body.lineItems[0].displayName, `AI Fleet platform charge ${MONTH}`);
   assert.equal(body.metadata.auto_completed, 'true');
-  for (const forbidden of ['external_customer_id', 'payment_status', 'amount_paid', 'subscription_id', 'tax_rates']) {
+  // The SDK model's own spellings: the request is camelCase, so a key in the snake
+  // form would not even reach the wire — these are the names it could have used.
+  for (const forbidden of ['externalCustomerId', 'paymentStatus', 'amountPaid', 'subscriptionId', 'taxRates']) {
     assert.equal(Object.hasOwn(body, forbidden), false, forbidden);
   }
   assert.equal(Object.hasOwn(body.metadata, 'wallet_transaction_id'), false);
@@ -116,7 +121,7 @@ test('running twice creates one invoice identity and one idempotent debit', asyn
     filters: [{
       field: 'idempotency_key',
       operator: 'eq',
-      data_type: 'string',
+      dataType: 'string',
       value: { string: `platform-charge:${ORG}:${MONTH}` },
     }],
     limit: 2,

@@ -64,6 +64,10 @@ test('the scan actually covers the money code', () => {
     'packages/shared-core/src/billing/gate.js',
     'packages/shared-core/src/billing/ledger.js',
     'packages/shared-core/src/billing/sweep.js',
+    // The two halves of the FlexPrice path: the façade that names the money
+    // operations and the transport that will or will not carry them.
+    'packages/shared-core/src/billing/flexprice-client.js',
+    'packages/shared-core/src/billing/flexprice-sdk.js',
     'services/billing/src/billing-api.js',
     'services/billing/src/auto-recharge-job.js',
     'services/billing/src/recharge-settle.js',

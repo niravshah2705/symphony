@@ -12,6 +12,7 @@ const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
 const { processBillingSweep } = require('@ai-fleet/shared-core/billing/sweep');
 const outboxDrain = require('@ai-fleet/shared-core/billing/outbox-drain');
 const billingApi = require('./billing-api');
+const { createTrustedCallerMiddleware } = require('./trusted-caller');
 const { sweepActorSessions } = require('./actor-session-sweeper');
 const { renderDashboardHtml } = require('./ui');
 
@@ -90,8 +91,15 @@ function createApp(options = {}) {
 
   // Billing API. Mounted under /api/billing for the gateway proxy and under / for
   // callers that use the bare paths.
-  app.use('/api/billing', billingApi);
-  app.use('/', billingApi);
+  //
+  // The trusted-caller middleware runs ahead of both mounts: the routes derive the
+  // org they serve from `x-ai-fleet-billing-*`, and those headers mean something
+  // only when the peer proved it is the gateway. The probes and the sweep tick above
+  // deliberately sit outside it — they read no tenant's data.
+  const requireTrustedCaller = options.requireTrustedCaller
+    || createTrustedCallerMiddleware(options.trustedCaller || {});
+  app.use('/api/billing', requireTrustedCaller, billingApi);
+  app.use('/', requireTrustedCaller, billingApi);
 
   // Central JSON error handler. Without it every asyncHandler rejection falls to
   // Express's default handler, which answers with an HTML 500: the gateway copies

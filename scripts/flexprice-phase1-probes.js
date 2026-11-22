@@ -73,33 +73,34 @@ const truncateBody = (body, max = 220) => {
 };
 
 async function makeCustomer(tag) {
+  // `external_id` stays the local/probe spelling (it is what the findings record
+  // and the ingest body use); only the request body is the SDK's camelCase model.
   const external_id = `${RUN}.${tag}`;
   const c = await money.createCustomer({
-    external_id,
+    externalId: external_id,
     name: `${RUN} ${tag}`,
-    address_line1: '1 Test Street',
-    address_city: 'Ahmedabad',
-    address_state: 'Gujarat',
-    address_postal_code: '380001',
-    address_country: 'IN',
+    addressLine1: '1 Test Street',
+    addressCity: 'Ahmedabad',
+    addressState: 'Gujarat',
+    addressPostalCode: '380001',
+    addressCountry: 'IN',
   });
   return { id: c.id, external_id };
 }
 
 async function makeWallet(customer, conversionRate, name) {
-  const w = await money.createWallet({
-    external_customer_id: customer.external_id,
+  return money.createWallet({
+    externalCustomerId: customer.external_id,
     currency: 'INR',
-    wallet_type: 'PRE_PAID',
-    name: name || `${RUN} ${conversionRate}`,
-    conversion_rate: conversionRate,
+    walletType: 'PRE_PAID',
+    description: name || `${RUN} ${conversionRate}`,
+    conversionRate,
   });
-  return w;
 }
 
 async function credits(walletId) {
   const b = await money.walletRealTimeBalance(walletId);
-  return Number(b.real_time_credit_balance || 0);
+  return Number(b.realTimeCreditBalance || 0);
 }
 
 /**
@@ -110,10 +111,10 @@ async function credits(walletId) {
 async function pollUsage(meterId, externalCustomerId, expected, timeoutMs = 120000) {
   const now = Date.now();
   const body = {
-    meter_id: meterId,
-    external_customer_id: externalCustomerId,
-    start_time: new Date(now - 6 * 3600 * 1000).toISOString(),
-    end_time: new Date(now + 600 * 1000).toISOString(),
+    meterId: meterId,
+    externalCustomerId: externalCustomerId,
+    startTime: new Date(now - 6 * 3600 * 1000).toISOString(),
+    endTime: new Date(now + 600 * 1000).toISOString(),
   };
   const started = Date.now();
   let last = 0;
@@ -142,13 +143,13 @@ const probes = [
       const w1 = await makeWallet(c1, '1');
       const w2 = await makeWallet(c2, '2');
 
-      await money.topUpWallet(w1.id, { credits_to_add: '100', transaction_reason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.a1` });
-      const at1 = await money.topUpWallet(w2.id, { credits_to_add: '100', transaction_reason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.a2` });
+      await money.topUpWallet(w1.id, { creditsToAdd: '100', transactionReason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.a1` });
+      const at1 = await money.topUpWallet(w2.id, { creditsToAdd: '100', transactionReason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.a2` });
       const creditsFromRate2 = await credits(w2.id);
       // Second wallet, `amount` instead of `credits_to_add`: the DTO says
       // amount = credits_to_add * conversion_rate, so ₹100 at rate 2 should buy
       // 50 credits.
-      await money.topUpWallet(w2.id, { amount: '100.00', transaction_reason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.a3` });
+      await money.topUpWallet(w2.id, { amount: '100.00', transactionReason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.a3` });
       const afterAmount = await credits(w2.id);
 
       const observed = {
@@ -238,46 +239,50 @@ const probes = [
       const quote = gst.quote({ subtotalPaise: 50000, supplierStateCode: '24', customerStateCode: '24' });
       const rupees = (p) => decimalFromPaise(p);
       const amounts = [rupees(quote.subtotalPaise), rupees(quote.components[0].paise), rupees(quote.components[1].paise)];
+      // Line-item dates are typed `Date` on the model, and the façade's ISO->Date
+      // conversion covers the invoice header only, so the probe hands over Dates.
       const period = {
-        period_start: new Date(Date.now() - 3600e3).toISOString(),
-        period_end: new Date().toISOString(),
+        periodStart: new Date(Date.now() - 3600e3),
+        periodEnd: new Date(),
       };
       const names = ['principal', 'CGST @ 9%', 'SGST @ 9%'];
       const line = (i, priced) => ({
         // A priced line carries the catalog link; a plain one carries a label.
         // Both MUST produce the same document, or D3's connector depends on which
         // kind of line we happened to write.
-        ...(priced ? { price_id: [principal.id, cgst.id, sgst.id][i] } : { display_name: names[i] }),
+        ...(priced ? { priceId: [principal.id, cgst.id, sgst.id][i] } : { displayName: names[i] }),
         quantity: String(quote.subtotalPaise / 100),
         amount: amounts[i],
         ...period,
       });
       const which = (id) => (id === principal.id ? 'principal' : id === cgst.id ? 'cgst' : id === sgst.id ? 'sgst' : 'other');
+      // The record keeps the wire spellings — that is what the findings table
+      // compares against — but they are read off the SDK's camelCase model.
       const read = (x) => ({
         id: x.id,
-        number: x.invoice_number || null,
-        status: x.status || x.invoice_status,
+        number: x.invoiceNumber || null,
+        status: x.status || x.invoiceStatus,
         subtotal: x.subtotal,
         total: x.total,
-        amount_due: x.amount_due,
-        total_tax: x.total_tax !== undefined ? x.total_tax : null,
-        payment_status: x.payment_status,
-        line_sum_paise: (x.line_items || []).reduce((s, li) => s + paiseFromDecimal(String(li.amount)), 0),
-        lines: (x.line_items || []).map((li) => ({ which: which(li.price_id || ''), price_id: li.price_id || null, quantity: li.quantity, amount: li.amount })),
+        amount_due: x.amountDue,
+        total_tax: x.totalTax !== undefined ? x.totalTax : null,
+        payment_status: x.paymentStatus,
+        line_sum_paise: (x.lineItems || []).reduce((s, li) => s + paiseFromDecimal(String(li.amount)), 0),
+        lines: (x.lineItems || []).map((li) => ({ which: which(li.priceId || ''), price_id: li.priceId || null, quantity: li.quantity, amount: li.amount })),
       });
       const create = async (tag, { priced, subtotal, amountDue }) => {
         try {
           const inv = await money.createInvoice({
-            invoice_type: 'ONE_OFF',
-            billing_reason: 'MANUAL',
+            invoiceType: 'ONE_OFF',
+            billingReason: 'MANUAL',
             currency: 'INR',
-            customer_id: c.id,
-            invoice_status: 'FINALIZED',
+            customerId: c.id,
+            invoiceStatus: 'FINALIZED',
             metadata: { auto_completed: 'true', fleet_probe: `${RUN}.C.${tag}` },
             subtotal,
             total: subtotal,
-            amount_due: amountDue,
-            line_items: [0, 1, 2].map((i) => line(i, priced)),
+            amountDue,
+            lineItems: [0, 1, 2].map((i) => line(i, priced)),
           });
           // Their finalize is asynchronous (draft -> compute -> finalize), so a
           // re-read is the only version of this number worth recording.
@@ -369,7 +374,7 @@ const probes = [
         admin_key_mints_a_key: adminMint,
         minted_then_revoked: revoked,
         ingest_key_creates_meter: await outcome(() => ingestOnly.createMeter({ name: `${RUN} nope`, event_name: `${RUN}.nope`, aggregation: { type: 'SUM', field: 'qty' } })),
-        ingest_key_tops_up_wallet: await outcome(() => ingestOnly.topUpWallet(w.id, { credits_to_add: '1', transaction_reason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.d.topup` })),
+        ingest_key_tops_up_wallet: await outcome(() => ingestOnly.topUpWallet(w.id, { creditsToAdd: '1', transactionReason: 'PURCHASED_CREDIT_DIRECT' }, { idempotencyKey: `${RUN}.d.topup` })),
         ingest_key_debits_wallet: await outcome(() => ingestOnly.debitWallet(w.id, { credits: '1', idempotencyKey: `${RUN}.d.debit` })),
         ingest_key_ingests_event: await outcome(() => ingestOnly.ingestEvent({
           event_id: `${RUN}.d.event`, event_name: 'fleet.llm_cost', external_customer_id: c.external_id,

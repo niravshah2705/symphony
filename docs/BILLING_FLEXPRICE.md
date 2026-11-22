@@ -252,7 +252,8 @@ Non-negotiable, inherited from the repo's egress model:
   FlexPrice is *not* an egress route and *not* a vault secret, so
   `egress-secret-parity.test.js` must pass unchanged and no provider-key env
   fallback may be added to the proxy. Agents/actors/workloads never see it.
-- Org identity is never client-asserted; it comes from `billing-access.js`.
+- Org identity is never client-asserted; it comes from `billing-access.js`, and the
+  billing endpoint now verifies the caller that presents it (§6.1).
 - Webhooks are **advisory only** — the non-Svix transport adds no signature at all.
 - The UI renders FlexPrice-authored strings (invoice labels, coupon codes) with
   `el()` + `textContent`. **No `innerHTML`.**
@@ -291,6 +292,62 @@ Both plane keys must be **DB-minted** (`POST /v1/users` with
 `super_admin` with a caller-chosen environment and therefore cannot be confined at
 all. Environment-bound keys, by contrast, ignore a foreign `X-Environment-ID` —
 confinement measured.
+
+### 6.1 The trust boundary at the billing endpoint
+
+The sentence above — "read-scoping is enforced at our gateway" — was true only as
+long as nothing else could reach the billing service. It can: the `npm start`
+topology, a VPC peer, a mis-widened Cloud Run IAM binding, an operator
+port-forward. So the property is now held by the endpoint itself, in three places,
+each with a test that names the other tenant:
+
+1. **Who may name an org** — `services/billing/src/trusted-caller.js`. The
+   gateway's `x-ai-fleet-billing-*` headers are honored only behind a proof:
+   `x-internal-token` = `INTERNAL_API_TOKEN`, a Google OIDC ID token whose audience
+   is this service and whose signer is in `BILLING_TRUSTED_SERVICE_ACCOUNTS`
+   (`verifyPushToken`), or the local development profile (`AUTH_MODE=disabled`,
+   refused in production by `config.js:194`) reached over a **loopback socket** —
+   `socket.remoteAddress`, never `X-Forwarded-For`, because the gateway writes that
+   header and trusting it would let any caller claim to be loopback. With no proof
+   the request is *scoped*, not rejected: `CONFIG.BILLING.orgId`, `isAdmin: false`,
+   `trusted: false`, and its org header ignored. `req.billingCaller` is then the
+   only input a route body may use to pick an org (`callerOf`), so a router mounted
+   without the middleware answers for the deployment org rather than re-deriving one
+   from headers.
+2. **Which org the upstream query addresses** — `guard()` in
+   `services/billing/src/flexprice-reads.js` refuses before any network call
+   (`reason: 'unscoped_caller'` / `'unscoped_org_id'`, HTTP 200 with null money, per
+   §3's degraded contract), and `external_customer_id` / the wallet id stay
+   server-derived. `POST /v1/events/usage` without a customer selector is the whole
+   tenant's total, so it is also refused at the client
+   (`FlexpriceScopeError`, `flexprice-client.js` rule 4) — an unscoped money query is
+   unrepresentable at both layers.
+3. **Whose wallet a stored id names** — `account.flexprice.walletId` is a cache, not
+   an answer. `packages/shared-core/src/billing/wallet-scope.js` proves it against
+   the org's own customer (`getCustomerByExternalId` → `listWalletsByCustomer` →
+   membership) before any balance or ledger read, keyed by the *claim* so the first
+   org to verify a wallet id never vouches for a second org holding the same id. A
+   mismatch reads as `wallet_org_mismatch` and **suppresses the last-known-view
+   fallback** — serving cached numbers there would print another tenant's money under
+   this org's name. A 5xx or timeout is rethrown unchanged: FlexPrice being
+   unreachable is not evidence of a cross-tenant record.
+
+Cache partitions are `sha256(orgId)` prefixes rather than concatenated org ids, for
+the same reason: the org id is the isolation key and `|` was the separator.
+
+**Deploy consequence (fail-closed by design).** `INTERNAL_API_TOKEN` must be set on
+both gateway and billing, and `BILLING_TRUSTED_CALLER_AUDIENCE` +
+`BILLING_TRUSTED_SERVICE_ACCOUNTS` on billing in pubsub mode. Unset, every proxied
+request loses trust and the Usage page degrades to `unscoped_caller` — which is the
+correct failure, and `reportBoot` says so at startup (`billing_caller_trust_unconfigured`).
+The gate's own policy line (`billing_gate_policy`) is unaffected.
+
+Proof of the property, not of the code: `flexprice-reads-isolation.test.js` (an
+unproven caller names another org and records **zero** FlexPrice calls; a proven one
+has its selector on every call, including the N-call breakdown fan-out; two orgs on
+one router never observe each other's figures) and `trusted-caller.test.js` (each
+proof accepted, each forgery pinned).
+
 
 ## 7. What Phase 1 deletes
 
