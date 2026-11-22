@@ -536,7 +536,7 @@ trail of why each line exists.
     binds `ModelConfig.apiKeySecret` to the destination hostname and injects `x-api-key` per request
     (rotation = update the Secret). (b) `workload.image` **rejects tags** — pin the manifest-list
     digest (`docker buildx imagetools inspect <image>:<tag>` first line; CRD pattern
-    `^[^@]+@sha256:[a-f0-9]{64}$`). (c) the claude harness **rejects a ModelConfig that sets
+    `^[^@]+@sha256:[a-f0-9]{64}$`). (c) claude/codex harnesses **reject a ModelConfig that sets
     `defaultHeaders`/`tls`/`tokenPassthrough`** — the static `x-fleet-*` attribution headers cannot
     ride on claude turns; cost rows attribute via the tenant key (org/team) + traceparent, and
     `raw_user` may be empty because the claude runtime doesn't add identity baggage. Chart guards
@@ -558,6 +558,20 @@ trail of why each line exists.
     verification by design; the :8083 NetworkPolicy is the control. Evidence the whole chain ran:
     reply text `P7-CLAUDE-HARNESS-OK`, terminal `TASK_STATE_COMPLETED`, and a
     `POST /v1/messages … 200` line in `kubectl -n litellm logs deploy/litellm`.
+
+30. **P8 codex harness — same pattern, different contract.**
+    The `codex` harness block is empty and its ModelConfig stays on the **OpenAI** provider but MUST
+    set `openAI.apiFormat: responses` (LiteLLM serves `/v1/responses` and bridges to OpenRouter) —
+    no other `openAI` key beyond `baseUrl`. Like claude it **rejects `defaultHeaders`/`tls`/
+    `tokenPassthrough`**, so attribution rides on the tenant key. Reserved env (sets → every Agent
+    `Compatible=False`, "conflicts with Codex's compiled configuration"): `CODEX_HOME`,
+    `OPENAI_API_KEY`, `AWS_*` — the adapter compiles them from the ModelConfig + egress injection.
+    `workload.image` may be **omitted**: kagent 1.0.0 ships a digest-pinned codex-harness default
+    (`kubectl -n kagent get cm kagent-controller -o yaml | grep codex` to read it; the Agent echoes
+    the resolved image on `status.workloadImage`). Because both harness types share the OTEL trio and
+    the wire evidence differs, the t28 probe now takes `EXPECT=<token> WIRE=<messages|responses>`:
+    `EXPECT=P8-CODEX-HARNESS-OK WIRE=responses scripts/fixes/t28-claude-harness-probe.sh
+    test-agent-nemotron-codex-worker`.
 
 ## Useful one-liners
 

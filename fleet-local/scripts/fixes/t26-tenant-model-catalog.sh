@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# T-26 (P6+P7): upgrade EXISTING tenant releases to the per-model catalog
+# T-26 (P6+P7+P8): upgrade EXISTING tenant releases to the per-model catalog
 # (one ModelConfig/AgentTemplate/Agent per FLEET_MODELS entry, plus the P7
-# claude-harness for runtime:"claude" entries) without walking the browser
+# claude-harness / P8 codex-harness for runtime:"claude"/"codex" entries)
+# without walking the browser
 # wizard again. Mirrors apps/control-plane/src/onboarding/steps/workflow.ts
 # values exactly (that file stays canonical for NEW orgs).
 #
@@ -30,13 +31,18 @@ LITELLM_URL=${LITELLM_URL:-http://litellm.litellm.svc.cluster.local:4000}
 
 CLAUDE_IMAGE='ghcr.io/kagent-dev/kagent/claude-harness@sha256:bfbb526739439af92cea2282553500a3863dc66fad30838c68d57b6865e55fe4'
 HAS_CLAUDE=$(jq -c '[ .[] | select(.runtime=="claude") ] | length > 0' <<<"$CATALOG")
+HAS_CODEX=$(jq -c '[ .[] | select(.runtime=="codex") ] | length > 0' <<<"$CATALOG")
 # P7: runtime:"claude" entries compile an Anthropic-provider ModelConfig (no
 # defaultHeaders — rejected on claude; key injected as x-api-key by the egress
 # gateway) and bind to the claude harness.
+# P8: runtime:"codex" entries keep the OpenAI provider but MUST use
+# apiFormat:responses and drop defaultHeaders (codex rejects them); the codex
+# harness omits workload.image -> the release-bundled codex-harness image.
 MODELS=$(jq -c '[ .[] | if .runtime=="claude" then {name:.id, provider:"Anthropic", model:.model}
+                  elif .runtime=="codex" then {name:.id, provider:"OpenAI", model:.model, apiFormat:"responses", noDefaultHeaders:true}
                   else {name:.id, provider:"OpenAI", model:.model, apiFormat:"chatCompletions", stream:true} end ]' <<<"$CATALOG")
 TMPLS=$(jq -c '[ .[] | {name:(.id+"-coding"), modelConfig:.id, description:("Fleet coding workflow ("+.label+")"), systemPrompt:"You are a concise coding agent. Plan, then act.\n"} ]' <<<"$CATALOG")
-AGENTS=$(jq -c '[ .[] | {name:(.id+"-worker"), template:(.id+"-coding"), harness:(if .runtime=="claude" then "claude" else "app" end)} ]' <<<"$CATALOG")
+AGENTS=$(jq -c '[ .[] | {name:(.id+"-worker"), template:(.id+"-coding"), harness:(if .runtime=="claude" then "claude" elif .runtime=="codex" then "codex" else "app" end)} ]' <<<"$CATALOG")
 DEF=$(jq -r 'map(select(.default))[0].id // .[0].id' <<<"$CATALOG")
 LMODELS=$(jq -c '[ .[].model, "openrouter/*" ] | unique' <<<"$CATALOG")
 
@@ -79,20 +85,24 @@ while IFS='|' read -r slug orgId projId projSlug projNs; do
   vals=$(jq -n --argjson models "$MODELS" --argjson tmpls "$TMPLS" --argjson agents "$AGENTS" \
     --arg ns "$ns" --arg id "$slug" --arg snapRoot "s3://ate-snapshots/$slug" \
     --arg secret "$secret" --arg url "$LITELLM_URL" --arg orgId "$orgId" --arg projId "$projId" \
-    --arg cimage "$CLAUDE_IMAGE" --argjson hasClaude "$HAS_CLAUDE" '{
+    --arg cimage "$CLAUDE_IMAGE" --argjson hasClaude "$HAS_CLAUDE" --argjson hasCodex "$HAS_CODEX" '{
     namespace: $ns,
     tenant: { id: $id, snapshotRoot: $snapRoot },
     workerPool: { name: $ns },
     litellm: { baseUrl: ($url + "/v1"), anthropicBaseUrl: $url, apiKeySecret: $secret, apiKeySecretKey: "key" },
-    models: ($models | map(if .provider == "Anthropic" then . else . + { defaultHeaders: { "x-fleet-org-id": $orgId, "x-fleet-project-id": $projId } } end)),
-    harnesses: [{ name: "app", type: "kagent", env: [
+    models: ($models | map(if (.provider == "Anthropic") or .noDefaultHeaders then . else . + { defaultHeaders: { "x-fleet-org-id": $orgId, "x-fleet-project-id": $projId } } end)),
+    harnesses: ([{ name: "app", type: "kagent", env: [
       { name: "OTEL_PROPAGATORS", value: "tracecontext,baggage" },
       { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "http://opentelemetry-collector.otel-system.svc:4317" },
-      { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] } ]
+      { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }]
       + (if $hasClaude then [{ name: "claude", type: "claude", image: $cimage, env: [
           { name: "OTEL_PROPAGATORS", value: "tracecontext,baggage" },
           { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "http://opentelemetry-collector.otel-system.svc:4317" },
-          { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }] else [] end),
+          { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }] else [] end)
+      + (if $hasCodex then [{ name: "codex", type: "codex", env: [
+          { name: "OTEL_PROPAGATORS", value: "tracecontext,baggage" },
+          { name: "OTEL_EXPORTER_OTLP_ENDPOINT", value: "http://opentelemetry-collector.otel-system.svc:4317" },
+          { name: "OTEL_RESOURCE_ATTRIBUTES", value: ("fleet.org_id=" + $orgId) } ] }] else [] end)),
     templates: $tmpls,
     agents: $agents,
     commonLabels: { "fleet.local/org-id": $orgId, "fleet.local/project-id": $projId }

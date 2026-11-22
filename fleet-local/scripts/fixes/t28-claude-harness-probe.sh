@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# T-28 (P7 verification): headless wake of a claude-harness agent.
+# T-28 (P7/P8 verification): headless wake of a claude- or codex-harness agent.
 # Proves the whole chain without a browser:
 #   self-signed trusted-proxy JWT -> kagent-controller A2A SendStreamingMessage
-#   -> actor Restore on the claude-harness image -> Claude Code calls LiteLLM
-#   /v1/messages (Anthropic ModelConfig; model + base URL from the CR, key
-#   injected by the egress gateway — never in the CR) -> nemotron reply ->
-#   Checkpoint.
+#   -> actor Restore on the harness image -> Claude Code calls LiteLLM
+#   /v1/messages (Anthropic ModelConfig) or Codex calls /v1/responses (OpenAI
+#   ModelConfig, apiFormat responses; model + base URL from the CR, key injected
+#   by the egress gateway — never in the CR) -> nemotron reply -> Checkpoint.
 # Usage: bash scripts/fixes/t28-claude-harness-probe.sh [agent-name]
+#        EXPECT=<token> WIRE=<messages|responses> to change the evidence line.
 set -euo pipefail
 CTX=${KCTX:-kind-flexprice-local}
 k() { kubectl --context "$CTX" "$@"; }
 AGENT=${1:-test-agent-nemotron-claude-worker}
-EXPECT=P7-CLAUDE-HARNESS-OK
+EXPECT=${EXPECT:-P7-CLAUDE-HARNESS-OK}
+WIRE=${WIRE:-messages}
 NS=${NS:-org-test}
 EMAIL=${EMAIL:-$(k -n flexprice exec -i flexprice-postgresql-0 \
   -- env PGPASSWORD="$(k -n flexprice get secret flexprice-postgresql -o jsonpath='{.data.password}' | base64 -d)" \
@@ -64,6 +66,6 @@ const body = { jsonrpc: "2.0", id: 1, method: "SendStreamingMessage", params: { 
 })().catch((e) => { console.error(String(e).slice(0, 300)); process.exit(1); });
 ' 127.0.0.1:18083 "$NS" "$AGENT" "$EMAIL" "$EXPECT"
 
-echo "--- LiteLLM /v1/messages traffic (last 5 min) ---"
-k -n litellm logs deploy/litellm --since=5m 2>/dev/null | grep -E "v1/messages" | tail -5 || true
-echo "T28 OK — $AGENT woke on the ModelConfig -> LiteLLM /v1/messages path"
+echo "--- LiteLLM /v1/$WIRE traffic (last 5 min) ---"
+k -n litellm logs deploy/litellm --since=5m 2>/dev/null | grep -E "v1/$WIRE" | tail -5 || true
+echo "T28 OK — $AGENT woke on the ModelConfig -> LiteLLM /v1/$WIRE path"

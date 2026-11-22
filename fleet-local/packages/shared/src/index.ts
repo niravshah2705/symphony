@@ -43,7 +43,7 @@ export const MODELS = {
 
 // P6: the chat model is configuration. FLEET_MODELS (BFF configmap) holds a JSON
 // array of these entries; MODELS remains the fallback for the two originals.
-export type HarnessRuntime = 'kagent' | 'claude';
+export type HarnessRuntime = 'kagent' | 'claude' | 'codex';
 
 export interface ModelCatalogEntry {
   id: string;
@@ -52,7 +52,9 @@ export interface ModelCatalogEntry {
   default?: boolean;
   // P7: which Harness compiles this agent. 'claude' routes through an
   // Anthropic-provider ModelConfig (egress-injected x-api-key) on the
-  // claude-harness image; 'kagent' (default) keeps the OpenAI wire + headers.
+  // claude-harness image; 'codex' stays on the OpenAI provider but requires
+  // apiFormat responses and rejects defaultHeaders; 'kagent' (default) keeps
+  // the OpenAI wire + headers.
   runtime?: HarnessRuntime;
 }
 
@@ -70,6 +72,12 @@ export const DEFAULT_MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     model: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
     runtime: 'claude',
   },
+  {
+    id: 'nemotron-codex',
+    label: 'Nemotron 550B (Codex runtime)',
+    model: 'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free',
+    runtime: 'codex',
+  },
 ];
 
 export function parseModelCatalog(json: string | undefined): ModelCatalogEntry[] {
@@ -81,8 +89,8 @@ export function parseModelCatalog(json: string | undefined): ModelCatalogEntry[]
     if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(m.id ?? '') || !m.model || !m.label) {
       throw new Error(`FLEET_MODELS entry invalid: ${JSON.stringify(m)}`);
     }
-    if (m.runtime !== undefined && m.runtime !== 'kagent' && m.runtime !== 'claude') {
-      throw new Error(`FLEET_MODELS entry runtime must be kagent|claude: ${JSON.stringify(m)}`);
+    if (m.runtime !== undefined && m.runtime !== 'kagent' && m.runtime !== 'claude' && m.runtime !== 'codex') {
+      throw new Error(`FLEET_MODELS entry runtime must be kagent|claude|codex: ${JSON.stringify(m)}`);
     }
   }
   if (!out.some((m) => m.default)) out[0] = { ...out[0]!, default: true };

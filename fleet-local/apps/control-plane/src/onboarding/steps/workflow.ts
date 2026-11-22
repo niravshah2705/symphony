@@ -20,7 +20,7 @@ const OTEL_ENV = [
 // so both harnesses can carry the org attribute.
 const fleetOrgAttr = (orgId: string) => ({ name: 'OTEL_RESOURCE_ATTRIBUTES', value: `fleet.org_id=${orgId}` });
 
-// Diagram 3 (+P6/P7): install the tenant's kagent execution surface from the
+// Diagram 3 (+P6/P7/P8): install the tenant's kagent execution surface from the
 // vendored chart. One ModelConfig + AgentTemplate + Agent per catalog model
 // (agent "<id>-worker"), so the chat can pick the model by session. Static
 // x-fleet-* headers carry the canonical UUIDs; Harness env turns on W3C baggage
@@ -29,6 +29,10 @@ const fleetOrgAttr = (orgId: string) => ({ name: 'OTEL_RESOURCE_ATTRIBUTES', val
 // Anthropic-provider ModelConfig (baseUrl + Secret-referenced key injected as
 // x-api-key by the egress gateway — the adapter owns every ANTHROPIC_* env var
 // and rejects defaultHeaders, so fleet attribution rides on the key).
+// runtime:"codex" entries compile on the release-bundled codex-harness image:
+// OpenAI-provider ModelConfig with apiFormat responses and NO defaultHeaders
+// (codex rejects them); the adapter compiles OPENAI_API_KEY/CODEX_HOME/AWS_*
+// from the ModelConfig, so those names stay out of Harness env.
 // --wait=false; the agent step polls.
 export const workflowStep: StepExecutor = async (ctx) => {
   const projectId = ctx.results.project?.projectId as string | undefined;
@@ -40,8 +44,9 @@ export const workflowStep: StepExecutor = async (ctx) => {
   const fleetHeaders = { [FLEET_HEADERS.orgId]: ctx.orgId, [FLEET_HEADERS.projectId]: projectId };
   const catalog = config.modelCatalog;
   const hasClaude = catalog.some((m) => m.runtime === 'claude');
+  const hasCodex = catalog.some((m) => m.runtime === 'codex');
 
-  const harnessName = (runtime?: string) => (runtime === 'claude' ? 'claude' : 'app');
+  const harnessName = (runtime?: string) => (runtime === 'claude' ? 'claude' : runtime === 'codex' ? 'codex' : 'app');
 
   const values = {
     namespace: ns,
@@ -56,18 +61,22 @@ export const workflowStep: StepExecutor = async (ctx) => {
     models: catalog.map((m) =>
       m.runtime === 'claude'
         ? { name: m.id, provider: 'Anthropic', model: m.model }
-        : {
-            name: m.id,
-            provider: 'OpenAI',
-            model: m.model,
-            apiFormat: 'chatCompletions',
-            stream: true,
-            defaultHeaders: fleetHeaders,
-          },
+        : m.runtime === 'codex'
+          ? { name: m.id, provider: 'OpenAI', model: m.model, apiFormat: 'responses', noDefaultHeaders: true }
+          : {
+              name: m.id,
+              provider: 'OpenAI',
+              model: m.model,
+              apiFormat: 'chatCompletions',
+              stream: true,
+              defaultHeaders: fleetHeaders,
+            },
     ),
     harnesses: [
       { name: 'app', type: 'kagent', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] },
       ...(hasClaude ? [{ name: 'claude', type: 'claude', image: CLAUDE_HARNESS_IMAGE, env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }] : []),
+      // Empty image = the codex-harness shipped with the installed kagent release.
+      ...(hasCodex ? [{ name: 'codex', type: 'codex', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }] : []),
     ],
     templates: catalog.map((m) => ({
       name: `${m.id}-coding`,

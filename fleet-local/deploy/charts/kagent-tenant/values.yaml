@@ -55,15 +55,14 @@ models:
     model: openai/gpt-4o-mini
     # OpenAI wire format. The CRD enum is exactly "responses" or
     # "chatCompletions" (camelCase — "chat_completions" is rejected), and the
-    # API default is chatCompletions.
+    # API default is chatCompletions. The codex runtime requires "responses".
     apiFormat: responses
     stream: true
     # Per-model overrides of the litellm block; empty inherits it.
     baseUrl: ""
     apiKeySecret: ""
     apiKeySecretKey: ""
-    # Extra headers sent upstream (fleet attribution; rejected on Anthropic
-    # provider ModelConfigs, so the claude harness path leaves it unset).
+    # Extra headers sent upstream (OpenRouter attribution, etc.).
     defaultHeaders: {}
 
 # Harness objects: how an agent is allowed to run. `type` is exactly one of
