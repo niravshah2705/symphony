@@ -123,6 +123,13 @@ test('platform faults are recognised narrowly', () => {
     'no healthy upstream',
     '429 Too Many Requests',
     'insufficient quota',
+    // A retired model id, in both spellings the gateway actually uses (proved
+    // live with the rotated key): the provider's words, and kagent's envelope.
+    'anthropic/claude-sonnet-4 is no longer available on OpenRouter: no provider serves this model anymore',
+    'llm error response (code STREAM_ERROR): "OpenAI API error: 404 Not Found"',
+    'OpenAI API error: 404 Not Found',
+    // A run the controller refused to start.
+    'input was not accepted; retry after the session becomes available',
   ]) {
     assert.equal(isPlatformFault(reason), true, `should be a platform fault: ${reason}`);
     assert.equal(classifyStreamEnd({ state: 'failed', failureMessage: reason }).outcome, 'upstream_error');
@@ -131,6 +138,10 @@ test('platform faults are recognised narrowly', () => {
     'the agent reached its step limit',
     'sandbox exited with code 1',
     'no such tool: filesystem_read',
+    // The agent's OWN 404, from a tool it chose to call, is not the platform's
+    // fault: that compute happened and the model really was contacted.
+    'web_fetch returned HTTP 404 for https://example.invalid/missing',
+    'file not found: src/missing.ts',
     undefined,
     '',
   ]) {
@@ -140,7 +151,8 @@ test('platform faults are recognised narrowly', () => {
   assert.equal(settlementPolicy('closed', classifyStreamEnd({ state: 'failed', failureMessage: 'tool call rejected' }).outcome), 'meter');
 });
 
-test('reasons reaching a human are truncated, bodies are not', () => {  const long = 'x'.repeat(2000);
+test('reasons reaching a human are truncated, bodies are not', () => {
+  const long = 'x'.repeat(2000);
   assert.equal(truncate(long).length, 501);
   assert.equal(truncate('short'), 'short');
 });

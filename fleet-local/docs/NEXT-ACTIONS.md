@@ -94,7 +94,14 @@ billing blind spot). Four PRs, one seam:
   failure it cannot name stays billable; and a task can complete with **no
   artifact at all** (the mock worker does), which is now recorded as
   `the agent completed the turn without producing any output` instead of an
-  unexplained empty bubble. The card GET needs the identity headers too — the
+  unexplained empty bubble. Rotating the key then exposed a THIRD member of the
+  same class, and it was being billed: a **retired model id** (`404 … is no
+  longer available on OpenRouter`) and a run the controller **refused to start**
+  (`input was not accepted; retry after the session becomes available`) both
+  settled as `failed` and billed 49-82 s of harness retry for a turn that never
+  reached a model. `MODEL_UNAVAILABLE` + `RUN_NOT_STARTED` now cover them — a
+  bare `404` is deliberately not matched, because an agent's own tool can hit
+  one and that compute is real. The card GET needs the identity headers too — the
   controller 401s a bare one, which is how `agentCard()` lost discovery.
   Legacy `/chat` still works — `kagent/proxy.ts` now shares the same pump.
   Gate: `scripts/fixes/t31-a2a-facade-check.sh` (read-only; `REBUILD=1` to roll;
@@ -134,10 +141,13 @@ billing blind spot). Four PRs, one seam:
   while the facade answers both with `501`. `message:send` exists server-side
   and the SPA never uses it (it streams). Browser click-through is still manual:
   a normal answer, an inline 401 with Retry, a >60 s turn, an `input-required`
-  pause. Gate 8 asserts answer *content* only when `ANSWER_MODEL` names a model
-  that actually generates: on this cluster the mock worker completes with no
-  text at all and `claude` ended `failed`, so nothing was available to assert
-  it against today.
+  pause. Gate 8 asserts answer *content* when `ANSWER_MODEL` names a model that
+  actually generates, and the gate's own assertion passes for each of the three
+  healthy catalog entries — `nemotron`, `nemotron-claude` and `nemotron-codex`
+  (the claude harness delivers its text in `artifactUpdate` frames, the other two
+  in the task's status message; all three reach the client). `mock` still
+  completes with no text at all, which is the silent-completion case the notice
+  exists for.
 - **PR 3 — delete the bespoke relay:** `/chat`, `Chat.tsx`, `api.chat`, the
   private `event: session` frame, `verify-e2e.sh` §4 wording.
 - **PR 4 — make the unreachable features real:** `mcp_require_approval` in the
@@ -146,6 +156,15 @@ billing blind spot). Four PRs, one seam:
   advertises `https://kagent.dev/extensions/hitl/v1`, so only the CR field and
   the harness emission are missing.
 
-Blocking any visible test: the OpenRouter key behind LiteLLM is dead
-(`/api/v1/models` lies with a 200 — only generation proves it). Rotate, patch
-`litellm-fleet-secrets` `OPENROUTER_API_KEY`, `rollout restart deploy/litellm`.
+The OpenRouter key behind LiteLLM was dead and **was rotated 2026-11-23** into
+`litellm-fleet-secrets` `OPENROUTER_API_KEY` (+ `rollout restart deploy/litellm`);
+`nemotron`, `nemotron-claude` and `nemotron-codex` now answer real text through
+the facade and the browser client. What is still broken is a **retired model id**:
+the `claude` catalog entry maps to `openrouter/anthropic/claude-sonnet-4`, which
+OpenRouter no longer serves at all (`404 … is no longer available … no provider
+serves this model anymore`). Fix = a live slug in **two** places that must move
+together: `deploy/litellm/values-base.yaml` `model_list` (e.g.
+`anthropic/claude-sonnet-4.6`) and `deploy/bff/configmap.yaml`'s `FLEET_MODELS`
+`model` field — LiteLLM matches `model_name` verbatim, so one without the other
+just moves the failure. `/api/v1/models` lies with a 200 either way; only
+generation proves it.

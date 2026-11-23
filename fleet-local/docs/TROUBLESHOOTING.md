@@ -883,14 +883,24 @@ client's project id: the facade resolves the id through its own `sessions` row
 404, not a new conversation — org-level agents are shared across projects, so
 accepting an unknown `contextId` would let one project append to another's.
 
-**A dead provider key is NOT an agent failure.** On the wire kagent reports it as
-an ordinary `TASK_STATE_FAILED` whose `status.message` is the provider's own text
+**A platform fault is NOT an agent failure — and there are three kinds.** On the
+wire kagent reports it as an ordinary `TASK_STATE_FAILED` whose `status.message`
+is the provider's own text
 (`llm error response (code STREAM_ERROR): "OpenAI API error: 401 Unauthorized"`).
-`isPlatformFault` recognises that class (auth / quota / rate-limit / no-upstream
-signatures) and re-labels the turn `upstream_error`, so the policy writes it off
-at 0 seconds; an unrecognised failure stays `failed` and **is** billed, because
-the agent really did run. The list is deliberately conservative — a failure we
-cannot name is charged, never silently written off.
+`isPlatformFault` recognises that class in three shapes:
+`PLATFORM_FAULT` (auth / quota / rate-limit / no-upstream), `MODEL_UNAVAILABLE`
+(a **retired model id** — `anthropic/claude-sonnet-4 is no longer available on
+OpenRouter: no provider serves this model anymore`, surfaced as a 404), and
+`RUN_NOT_STARTED` (the controller refused to begin
+— `input was not accepted; retry after the session becomes available`). All three
+re-label the turn `upstream_error`, so the policy writes it off at 0 seconds; an
+unrecognised failure stays `failed` and **is** billed, because the agent really
+did run. The list is deliberately conservative — a failure we cannot name is
+charged, never silently written off — and deliberately narrow on `404`: an agent
+that fetches a dead URL hit a real model with real compute, so only a 404 that
+comes out of the LLM error envelope counts as the platform's. The two extra
+classes were found by rotating the key: the retired slug had been billing 49-82
+seconds of harness retry per attempt for a turn that could never reach a model.
 
 **A completion can also be legitimately empty.** The `mock` worker settles a turn
 with no artifacts and no `status.message` at all (proved live: the completed task
@@ -899,6 +909,9 @@ bubble. `inspectFrame` therefore tracks whether any artifact / message / status
 part arrived, and a silent completion records
 `the agent completed the turn without producing any output` in `close_reason` —
 still outcome `completed`, still billable compute, but explainable to the user.
+Only `mock` does this: with a working credential the OpenRouter-backed models
+answer with real artifact frames, so an empty bubble from `nemotron*` is a
+regression, not the harness's nature.
 
 **Guard:** `scripts/fixes/t31-a2a-facade-check.sh` proves the card rewrite, the
 401-is-JSON routing, a relayed `message:stream` turn, the ownership refusals, and
@@ -934,13 +947,20 @@ endpoints for minutes while an in-flight SSE holds the old pod terminating. The
 script now waits for `/healthz` (bounded by `READY_WAIT`) instead of a fixed
 `sleep 2`, and fails with the `kubectl -n fleet-system get pods` hint.
 
-> Prerequisite operator action, unrelated to this code: the OpenRouter key
-> behind LiteLLM is dead. `/api/v1/models` answers 200 with a dead key, so only
-> a generation call proves it. Rotate, then
-> `kubectl -n litellm patch secret litellm-fleet-secrets` (`OPENROUTER_API_KEY`)
-> and `kubectl -n litellm rollout restart deploy/litellm` — the `openrouter/*`
-> wildcard group reads `os.environ/OPENROUTER_API_KEY`, so one rotation covers
-> every model.
+> Operator actions, unrelated to this code. The OpenRouter key behind LiteLLM
+> **was rotated on 2026-11-23** (`kubectl -n litellm patch secret
+> litellm-fleet-secrets` `OPENROUTER_API_KEY`, then `rollout restart
+> deploy/litellm` — the `openrouter/*` wildcard group reads
+> `os.environ/OPENROUTER_API_KEY`, so one rotation covers every model).
+> `/api/v1/models` answers 200 with a dead key, so only a generation call proves
+> it. What that rotation exposed is a **retired model id**: the `claude` catalog
+> entry points at `openrouter/anthropic/claude-sonnet-4`, which OpenRouter no
+> longer serves. Fixing it means moving `deploy/litellm/values-base.yaml`
+> (`model_list`) and `deploy/bff/configmap.yaml` (`FLEET_MODELS`) together —
+> LiteLLM matches `model_name` verbatim, so a slug fixed in only one of them
+> still fails, just with a different error. Until then the `claude` option in the
+> chat model selector is a known-broken path: it now shows its 404 inline and
+> bills nothing, which is the correct behaviour, not a fix.
 
 ---
 

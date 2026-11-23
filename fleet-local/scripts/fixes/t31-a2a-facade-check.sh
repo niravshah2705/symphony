@@ -14,8 +14,9 @@
 #   5) the refusal paths are honest: unknown conversation, unknown model, push
 #      notifications, and a task belonging to someone else
 #   6) the legacy /chat relay still works (PR 1 is additive; PR 3 deletes it)
-#   7) a broken provider credential is classified as the platform's fault and is
-#      NOT metered (FAULT_MODEL names the model whose key is dead; empty skips)
+#   7) a turn the PLATFORM could not run (dead credential or retired model id) is
+#      classified upstream_error and is NOT metered (FAULT_MODEL names it; empty
+#      skips)
 #   8) the SPA's real A2A client (FleetA2AClient over @assistant-ui/react-a2a)
 #      parses the card, types the frames, and lands its model choice on the row
 set -uo pipefail
@@ -202,15 +203,19 @@ code=$(curl -s -o /tmp/t31-legacy.txt -w '%{http_code}' "${C[@]}" -H 'Content-Ty
   && pass "legacy /chat still streams + emits its private session frame" \
   || fail "legacy /chat -> $code: $(head -c 200 /tmp/t31-legacy.txt)"
 
-say "7) a broken provider credential is the platform's fault, and is not billed"
-# The failure the user actually hit: kagent reports an expired key as an ordinary
-# TASK_STATE_FAILED carrying the provider's text. It must land as upstream_error
-# (skipped by the settlement policy) with the reason preserved for the UI — not
-# as billable compute. FAULT_MODEL must name a model whose credential is dead;
-# set it empty to skip ("FAULT_MODEL=nemotron" is the live case today).
-FAULT=${FAULT_MODEL:-nemotron}
+say "7) a turn the platform could not run is not billed"
+# The failure the user actually hit, and its sibling: kagent reports BOTH a dead
+# credential and a retired model id as an ordinary TASK_STATE_FAILED carrying the
+# provider's text ("...401 Unauthorized" from an expired key; "anthropic/...
+# is no longer available on OpenRouter" / "OpenAI API error: 404 Not Found" from
+# a slug that no longer exists). Either way the platform broke the turn, so it
+# must land as upstream_error (skipped by the settlement policy) with the reason
+# preserved for the UI — never as billable compute. FAULT_MODEL must name a model
+# the platform currently cannot serve; set it empty to skip. The live case since
+# the key was rotated is `claude`, whose OpenRouter slug is retired.
+FAULT=${FAULT_MODEL:-claude}
 if [ -z "$FAULT" ]; then
-  echo "   skipped (FAULT_MODEL empty): no dead credential to exercise"
+  echo "   skipped (FAULT_MODEL empty): no platform-broken model to exercise"
 else
   fbody=$(jq -nc --arg t "$TEXT" --arg m "$FAULT" \
     '{message:{role:"ROLE_USER",metadata:{"fleet.dev/model":$m},parts:[{kind:"text",text:$t}]}}')
@@ -236,7 +241,7 @@ else
     echo "   $row  (waited ${waited}s for the sweeper)"
     [ "${row%%|*}" = "upstream_error" ] && pass "a provider fault classifies as upstream_error, not 'failed'" \
       || fail "provider fault outcome: ${row%%|*} (want upstream_error)"
-    echo "$row" | grep -qi '401\|unauthorized\|api key\|rate limit\|quota\|no healthy upstream' \
+    echo "$row" | grep -qi '401\|404\|unauthorized\|api key\|rate limit\|quota\|no healthy upstream\|no longer available\|not accepted' \
       && pass "the provider's own words reach the row (the UI can show them)" \
       || fail "close_reason lost the provider error: $row"
     sent=$(echo "$row" | awk -F'|' '{print $4}')
