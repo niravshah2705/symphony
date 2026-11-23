@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
 import { t, formatNumber, formatDate } from '../i18n.js';
-import { payRecharge, isSettled } from '../recharge.js';
+import { payRecharge, isSettled, packageLabel } from '../recharge.js';
 import { heatmapSpec, trendSpec, mount } from '../usage-charts.mjs';
 
 // The Usage page: credit buckets, consumption and the credits log, every number
@@ -412,6 +412,11 @@ function footerText(log, count) {
  * tax rule in the browser is what made the old "Add credits" button lie. Mandates
  * and Razorpay stay on the Cost page — this page's job is the wallet, not the
  * payment-method settings.
+ *
+ * The browser no longer picks an AMOUNT at all. `summary.rechargePackages` is the rate
+ * card's offer list, a `packageId` is the only thing posted, and `amountInr` in a
+ * request body is a 400 — a stale bundle fails loudly instead of buying a
+ * different thing than the one on screen.
  */
 function purchasePanel(view, summary, overview) {
   const isAdmin = Boolean(overview.isAdmin ?? summary.isAdmin);
@@ -424,52 +429,68 @@ function purchasePanel(view, summary, overview) {
   const form = el('div', { class: 'usage-purchase-form', hidden: 'hidden' });
   toggle.addEventListener('click', () => {
     form.hidden = !form.hidden;
-    if (!form.hidden) form.querySelector('input')?.focus();
+    if (!form.hidden) form.querySelector('select')?.focus();
   });
 
-  const amount = el('input', { type: 'number', min: '1', step: '1', placeholder: t('usageAmountPlaceholder', 'Amount (INR)') });
-  const quoteBox = el('div', { class: 'usage-quote' }, el('span', {}, t('usageQuoteEmpty', 'Enter an amount to see the GST breakdown.')));
+  const quoteBox = el('div', { class: 'usage-quote' }, el('span', {}, t('usageQuoteEmpty', 'Pick a package to see the GST breakdown.')));
   const payBtn = el('button', { type: 'button', class: 'btn primary' }, t('usagePay', 'Pay and add credits'));
+  payBtn.disabled = true;
+  const packages = Array.isArray(summary.rechargePackages) ? summary.rechargePackages : [];
+  let chosen = null;
 
-  // Guards the quote against a fast typist: only the newest response may write.
-  let quoteToken = 0;
-  amount.addEventListener('input', async () => {
-    const value = Number(amount.value);
-    const token = quoteToken + 1;
-    quoteToken = token;
-    if (!Number.isFinite(value) || value <= 0) {
-      clear(quoteBox).append(el('span', {}, t('usageQuoteEmpty', 'Enter an amount to see the GST breakdown.')));
-      return;
-    }
-    try {
-      const data = await api.billing.rechargeQuote(value);
-      if (token !== quoteToken) return;
-      const q = data.quote;
-      clear(quoteBox).append(
-        el('div', {}, `Recharge ${inr(q.subtotalInr)}`),
-        ...(q.components || []).map((c) => el('div', {}, `${c.name} ${(c.rateBps / 100)}% · ${inr(c.inr)}`)),
-        el('strong', {}, `Total payable ${inr(q.totalInr)}`),
-        el('div', {}, t('usageQuoteCredits', '{credits} credits added · 1 credit = ₹1, so the {gst} GST is collected and never spendable', { credits: formatNumber(q.credits), gst: inr(q.gstInr) })),
-        q.bonusTokenCredits ? el('div', {}, t('usageQuoteBonus', 'Coupon bonus {bonus}, credited separately', { bonus: inr(q.bonusInr) })) : null,
-        ...(data.warnings || []).map((warning) => el('small', {}, warning === 'saved_tax_id_invalid'
-          ? t('usageGstinInvalid', 'Your saved GSTIN is not valid, so it was ignored for this quote.')
-          : warning)),
-      );
-    } catch (err) {
-      if (token !== quoteToken) return;
-      // The server owns the amount rules (whole rupees, cap); this is its 400.
-      clear(quoteBox).append(el('span', {}, (err && err.message) || t('usageQuoteFailed', 'That amount cannot be quoted.')));
-    }
-  });
+  if (!packages.length) {
+    // The card ships inside the image, and the server answers with an empty offer list
+    // rather than a guess when it cannot read it. An empty chooser would read as "this
+    // org cannot buy credits", so the page names what is actually missing.
+    form.append(el('span', { class: 'muted' }, t('usageNoPackages', 'No credit packages are configured on this deployment, so credits cannot be purchased from here.')));
+  } else {
+    const chooser = el('select', { 'aria-label': t('usagePackageAria', 'Credit package') }, [
+      el('option', { value: '' }, t('usagePackagePick', 'Choose a package…')),
+      ...packages.map((pkg) => el('option', { value: pkg.packageId }, packageLabel(pkg))),
+    ]);
+
+    // Guards the quote against a fast clicker: only the newest response may write.
+    let quoteToken = 0;
+    chooser.addEventListener('change', async () => {
+      const packageId = chooser.value;
+      const token = quoteToken + 1;
+      quoteToken = token;
+      chosen = packages.find((pkg) => pkg.packageId === packageId) || null;
+      payBtn.disabled = !chosen;
+      if (!chosen) {
+        clear(quoteBox).append(el('span', {}, t('usageQuoteEmpty', 'Pick a package to see the GST breakdown.')));
+        return;
+      }
+      try {
+        const data = await api.billing.rechargeQuote(packageId);
+        if (token !== quoteToken) return;
+        const q = data.quote;
+        clear(quoteBox).append(
+          el('div', {}, `${t('usageRecharge', 'Recharge')} ${inr(q.subtotalInr)}`),
+          ...(q.components || []).map((c) => el('div', {}, `${c.name} ${(c.rateBps / 100)}% · ${inr(c.inr)}`)),
+          el('strong', {}, t('usagePayable', 'Pay {total} incl. GST {gst}', { total: inr(q.totalInr), gst: inr(q.gstInr) })),
+          el('div', {}, t('usageQuoteCredits', '{credits} credits added · 1 credit = ₹1, so the {gst} GST is collected and never spendable', { credits: formatNumber(q.prepaidCredits), gst: inr(q.gstInr) })),
+          q.bonusTokenCredits ? el('div', {}, t('usageQuoteBonus', '{bonus} bonus credits, credited separately and expiring {days} days after payment', { bonus: formatNumber(Number(q.bonusCredits)), days: chosen.bonusValidDays })) : null,
+          ...(data.warnings || []).map((warning) => el('small', {}, warning === 'saved_tax_id_invalid'
+            ? t('usageGstinInvalid', 'Your saved GSTIN is not valid, so it was ignored for this quote.')
+            : warning)),
+        );
+      } catch (err) {
+        if (token !== quoteToken) return;
+        // The server owns the money rules; this is its refusal, in its words.
+        clear(quoteBox).append(el('span', {}, (err && err.message) || t('usageQuoteFailed', 'That package cannot be quoted.')));
+      }
+    });
+    form.append(chooser, payBtn, quoteBox);
+  }
 
   payBtn.addEventListener('click', async () => {
-    const value = Number(amount.value);
-    if (!Number.isFinite(value) || value <= 0) return toast(t('usageAmountRequired', 'Enter a positive amount'), 'warn');
+    if (!chosen) return toast(t('usagePackageRequired', 'Choose a credit package'), 'warn');
     payBtn.disabled = true;
     const pi = summary.paymentInfo || {};
     try {
       const settlement = await payRecharge({
-        amountInr: value,
+        packageId: chosen.packageId,
         provider: 'cashfree',
         customer: {
           customerName: pi.billingName || 'Admin',
@@ -480,8 +501,13 @@ function purchasePanel(view, summary, overview) {
         onStatus: (message) => toast(message, 'ok'),
       });
       if (isSettled(settlement)) {
-        const bonus = settlement.bonusCredits ? ` + ${settlement.bonusCredits} ${t('bonusCredits', 'bonus credits')}` : '';
-        toast(`${t('usagePaid', 'Paid')} ${inr(settlement.totalInr)} · ${settlement.creditsAdded} ${t('creditsAdded', 'credits added')}${bonus}`, 'ok');
+        const bonus = settlement.bonusCredits ? ` + ${formatNumber(settlement.bonusCredits)} ${t('bonusCredits', 'bonus credits')}` : '';
+        // A bonus that lapsed between paying and settling is skipped, not silently
+        // missing: the customer paid ₹2,360 and needs to know they got 2,000 credits.
+        const skipped = settlement.bonusSkipped === 'expired'
+          ? ` · ${t('usageBonusExpired', 'the bonus window had closed, so no bonus credits were added')}`
+          : '';
+        toast(`${t('usagePaid', 'Paid')} ${inr(settlement.payableInr)} · ${formatNumber(settlement.totalCredits)} ${t('creditsAdded', 'credits added')}${bonus}${skipped}`, 'ok');
       } else {
         toast(t('usageNotSettled', 'The gateway answered, but nothing was credited.'), 'warn');
       }
@@ -494,7 +520,6 @@ function purchasePanel(view, summary, overview) {
     }
   });
 
-  form.append(amount, payBtn, quoteBox);
   return el('section', { class: 'usage-purchase' }, [
     el('strong', {}, t('usagePurchaseTitle', 'Add credits')),
     el('span', { class: 'muted' }, t('usagePurchaseBody', 'Credits are 1:1 with rupees and GST is collected on top, never spendable.')),

@@ -1,13 +1,15 @@
 import { api } from './api.js';
+import { t, formatNumber } from './i18n.js';
 
 // The recharge flow, in one place: quote → create order → provider checkout →
 // settle. Two views need it (Cost and Organization) and both previously carried
 // their own copy, which is how the "Add credits" button survived after the
 // server stopped crediting on a bare POST.
 //
-// Nothing here decides what a payment is worth. The server's `quote` is rendered
-// as-is — ₹500 + CGST ₹45 + SGST ₹45 = ₹590 for 500 credits — and the settle
-// response is the only thing that may say "credits added".
+// Nothing here decides what a payment is worth. The offers come from the server's
+// rate card (`summary.rechargePackages`), the `quote` is rendered as-is — ₹2,000 + CGST
+// ₹180 + SGST ₹180 = ₹2,360 for 3,500 credits — and the settle response is the
+// only thing that may say "credits added".
 
 const SDKS = {
   cashfree: { global: 'Cashfree', src: 'https://sdk.cashfree.com/js/v3/cashfree.js' },
@@ -27,25 +29,36 @@ function loadSdk(provider) {
   });
 }
 
-/** The GST breakdown for a subtotal, exactly as the server computed it. */
-export async function rechargeQuote(amountInr, couponBps) {
-  return api.billing.rechargeQuote(amountInr, couponBps);
+/**
+ * One card offer, in the words a customer chooses between: what it costs, what it
+ * buys. The credits are the number being purchased, so they lead; the ₹ is the price
+ * of that number and appears exactly once. Every view that offers a package uses this
+ * so the three purchase panels cannot drift into describing the same offer apart.
+ */
+export function packageLabel(pkg) {
+  const bonus = pkg.bonusCredits ? ` (+${formatNumber(pkg.bonusCredits)} ${t('bonusCredits', 'bonus credits')})` : '';
+  return `₹${formatNumber(pkg.priceInr)} → ${formatNumber(pkg.credits)} ${t('creditsWord', 'credits')}${bonus}`;
+}
+
+/** The GST breakdown for one package, exactly as the server computed it. */
+export async function rechargeQuote(packageId) {
+  return api.billing.rechargeQuote(packageId);
 }
 
 /**
  * Pay for one recharge and return the settlement.
  *
  * @param {object} args
- * @param {number|string} args.amountInr  the pre-tax subtotal in rupees
- * @param {string} [args.provider]        'cashfree' | 'razorpay'
- * @param {object} [args.customer]        name/email/phone for the gateway
+ * @param {string} args.packageId     a `summary.rechargePackages[].packageId` from the rate card
+ * @param {string} [args.provider]    'cashfree' | 'razorpay'
+ * @param {object} [args.customer]    name/email/phone for the gateway
  * @param {string} [args.returnUrl]
  * @param {(msg: string) => void} [args.onStatus]
  */
-export async function payRecharge({ amountInr, provider = 'cashfree', customer = {}, returnUrl = '', onStatus = () => {} } = {}) {
+export async function payRecharge({ packageId, provider = 'cashfree', customer = {}, returnUrl = '', onStatus = () => {} } = {}) {
   const order = provider === 'razorpay'
-    ? await api.billing.createRazorpayOrder({ amountInr, ...customer, returnUrl })
-    : await api.billing.createCashfreeOrder({ amountInr, ...customer, returnUrl });
+    ? await api.billing.createRazorpayOrder({ packageId, ...customer, returnUrl })
+    : await api.billing.createCashfreeOrder({ packageId, ...customer, returnUrl });
 
   // A deployment with no gateway keys has no checkout to open; settle() applies
   // the same flag to the credit, so this branch cannot mint free balance on its own.

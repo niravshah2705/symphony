@@ -17,9 +17,18 @@
  *   3. it has not been settled — `QUOTED → SETTLED` happens once;
  *   4. the GST recomputes to the totals the intent carries — a quote that cannot
  *      be reproduced from its own inputs is not a quote we agreed to;
- *   5. the provider says PAID for exactly `totalPaise` (₹590 for a ₹500 recharge);
+ *   5. the provider says PAID for exactly `totalPaise` (₹2,360 for a ₹2,000 package);
  *   6. the wallet is credited `tokenCreditsToCredits(subtotalPaise)` — the *subtotal*,
- *      so the ₹90 GST never becomes spendable — and the read-back agrees.
+ *      so the ₹360 GST never becomes spendable — plus the package's bonus as a
+ *      separate expiring promotional row unless its window has already closed, and
+ *      the read-back agrees.
+ *
+ * Nothing here reads `deploy/billing/credit-rates.yaml`. The card is what a customer
+ * is SHOWN; the intent is what they AGREED to. Consulting the card at settlement
+ * would let an operator edit or retire a package mid-flight and either reprice a
+ * payment already collected or strand a paid order with no credit. That is why
+ * `packageId`, `couponBps` and `bonusValidDays` are frozen onto the intent, and why
+ * `bonus_drift` re-derives from those inputs instead of re-resolving the offer.
  *
  * Two gates are deliberately here rather than in the adapters:
  *
@@ -236,12 +245,23 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
 
   // 3: once, and only forward.
   if (intent.status === 'SETTLED') {
+    const landed = intent.flexprice_settlement || {};
     return {
       status: 'already_processed',
       orderId: key,
       orgId,
-      creditCount: intent.creditCount,
+      provider: intent.provider,
+      packageId: intent.packageId || null,
+      subtotalPaise: intent.subtotalPaise,
+      gstPaise: intent.gstPaise,
       totalPaise: intent.totalPaise,
+      creditCount: intent.creditCount,
+      // What the wallet actually received, not what was offered: a bonus that had
+      // already expired was skipped the first time, and a replay must not hand it
+      // back as though it had landed.
+      promoCredits: landed.promoCredits || 0,
+      bonusSkipped: landed.bonusSkipped || null,
+      promoExpiresAt: intent.promoExpiresAt || null,
       settledAt: intent.settledAt || null,
     };
   }
@@ -256,10 +276,32 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
       `This order was quoted at ₹${moneyWire.decimalFromPaise(intent.totalPaise)} (tax ₹${moneyWire.decimalFromPaise(intent.gstPaise)}), which no longer recomputes to ₹${moneyWire.decimalFromPaise(quote.totalPaise)} (tax ₹${moneyWire.decimalFromPaise(quote.gstPaise)}). Nothing was credited.`,
       { intent, quote: { gstPaise: quote.gstPaise, totalPaise: quote.totalPaise } });
   }
+  // The third money number on an order, and until packages existed the only one
+  // nobody compared: a subtotal that re-derives exactly while the advertised bonus
+  // does not is a customer being handed a different offer than the one the invoice
+  // discloses. `couponBps` is frozen with the rest of the intent, so this can only
+  // fire if the bonus arithmetic itself changed under a live order.
+  if ((quote.bonusTokenCredits || 0) !== (intent.bonusTokenCredits || 0)) {
+    throw new SettleError(500, 'bonus_drift',
+      `This order was quoted with ${moneyWire.creditsFromTokenCredits(intent.bonusTokenCredits || 0)} bonus credits, which no longer re-derives to ${moneyWire.creditsFromTokenCredits(quote.bonusTokenCredits || 0)}. Nothing was credited.`,
+      {
+        orderId: key,
+        intentBonusTokenCredits: intent.bonusTokenCredits || 0,
+        quoteBonusTokenCredits: quote.bonusTokenCredits || 0,
+      });
+  }
 
   const crediting = credits.topUpCrediting({ quote, expiresAt: intent.promoExpiresAt || null });
   const prepaidCredits = wholeCredits(crediting.prepaidTokenCredits, 'the recharge amount');
-  const promoCredits = wholeCredits(crediting.promoTokenCredits, 'the coupon bonus');
+  const offeredPromoCredits = wholeCredits(crediting.promoTokenCredits, 'the coupon bonus');
+  // The bonus window belongs to the offer, not to the org forever: someone who
+  // completes a checkout a month after quoting gets the credits they paid for and
+  // not the expired promo. The prepaid half still credits — that money was
+  // collected, and refusing to release it would turn a lapsed offer into a refund.
+  const bonusExpired = offeredPromoCredits > 0 && Boolean(intent.promoExpiresAt)
+    && Date.parse(intent.promoExpiresAt) <= Date.parse(now());
+  const promoCredits = bonusExpired ? 0 : offeredPromoCredits;
+  const bonusSkipped = bonusExpired ? 'expired' : null;
   if (intent.creditCount != null && intent.creditCount !== prepaidCredits) {
     throw new SettleError(500, 'credit_count_drift',
       `The intent records ${intent.creditCount} credits but ₹${moneyWire.decimalFromPaise(intent.subtotalPaise)} is ${prepaidCredits} credits.`);
@@ -336,6 +378,17 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
   const replayTopUp = Boolean(topUp && topUp.alreadyExists);
 
   let promoGrant = null;
+  if (bonusExpired) {
+    logImpl.warn('recharge_bonus_expired', {
+      orderId: key,
+      orgId,
+      packageId: intent.packageId || null,
+      promoExpiresAt: intent.promoExpiresAt,
+      bonusCredits: offeredPromoCredits,
+      prepaidCredits,
+      actor,
+    });
+  }
   if (promoCredits > 0) {
     promoGrant = await client.grantPromo(walletId, {
       credits: promoCredits,
@@ -364,6 +417,7 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
       walletId,
       prepaidCredits,
       promoCredits,
+      bonusSkipped,
       replayTopUp,
       balanceBeforeCredits: before.credits,
       balanceAfterCredits: after.credits,
@@ -385,11 +439,13 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
     orderId: key,
     orgId,
     provider: adapter.name,
+    packageId: intent.packageId || null,
     subtotalPaise: intent.subtotalPaise,
     gstPaise: intent.gstPaise,
     collectedPaise,
     prepaidCredits,
     promoCredits,
+    bonusSkipped,
     balanceCredits: after.credits,
     mock: Boolean(verification.mock),
     actor,
@@ -400,12 +456,15 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
     orderId: key,
     orgId,
     provider: adapter.name,
+    packageId: intent.packageId || null,
     subtotalPaise: intent.subtotalPaise,
     gstPaise: intent.gstPaise,
     totalPaise: intent.totalPaise,
     collectedPaise,
     creditCount: prepaidCredits,
     promoCredits,
+    bonusSkipped,
+    promoExpiresAt: intent.promoExpiresAt || null,
     balanceCredits: after.credits,
     walletId,
     mock: Boolean(verification.mock),

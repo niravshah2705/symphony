@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
 import { formatNumber, formatDate, getLocale } from '../i18n.js';
-import { payRecharge, isSettled } from '../recharge.js';
+import { payRecharge, isSettled, packageLabel } from '../recharge.js';
 
 // Cost monitoring + billing. Per-organization / project / user / task usage with
 // task drill-down, backed by first-party LLM metering (services/gateway billing
@@ -319,37 +319,51 @@ function adminPanel(view, summary) {
   const ar = summary.autoRecharge || {};
   const currentMode = ar.mode || 'amount';
 
-  const amount = el('input', { type: 'number', min: '1', step: '1', placeholder: 'Amount (INR)' });
+  // The offer list is the server's rate card, not a field to type into. `packageId`
+  // is the only thing this panel sends, and the quote it renders is the quote the
+  // order will be created from.
+  const packages = Array.isArray(summary.rechargePackages) ? summary.rechargePackages : [];
+  const chooser = packages.length
+    ? el('select', { 'aria-label': 'Credit package' }, [
+      el('option', { value: '' }, 'Choose a package…'),
+      ...packages.map((pkg) => el('option', { value: pkg.packageId }, packageLabel(pkg))),
+    ])
+    : el('span', { class: 'muted' }, 'No credit package is configured on this deployment, so credits cannot be purchased from here.');
   const preferredProvider = (summary.paymentInfo && summary.paymentInfo.provider) === 'razorpay' ? 'razorpay' : 'cashfree';
   const payCashfree = el('input', { type: 'radio', name: 'rechargeProvider', value: 'cashfree', ...(preferredProvider === 'cashfree' ? { checked: 'checked' } : {}) });
   const payRazorpay = el('input', { type: 'radio', name: 'rechargeProvider', value: 'razorpay', ...(preferredProvider === 'razorpay' ? { checked: 'checked' } : {}) });
-  const quoteBox = el('div', { class: 'recharge-quote muted' }, 'Enter an amount to see the GST breakdown.');
+  const quoteBox = el('div', { class: 'recharge-quote muted' }, packages.length ? 'Pick a package to see the GST breakdown.' : 'Nothing to quote until the rate card has an enabled package.');
+  const payBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay and add credits');
+  payBtn.disabled = true;
+  let chosen = null;
 
-  // The quote comes from the server because it IS the server's: ₹500 + ₹45 + ₹45
-  // = ₹590 for 500 credits, and 1 credit = ₹1 on the subtotal, never on the ₹590.
-  // Computing any of it here would put a second copy of the tax rule in the
-  // browser, which is the thing that made the old "Add credits" button lie.
+  // The quote comes from the server because it IS the server's: ₹2,000 + CGST ₹180
+  // + SGST ₹180 = ₹2,360 for 3,500 credits, and 1 credit = ₹1 on the subtotal, never
+  // on the ₹2,360. Computing any of it here would put a second copy of the tax rule
+  // in the browser, which is the thing that made the old "Add credits" button lie.
   let quoteToken = 0;
   const showQuote = async () => {
-    const value = Number(amount.value);
+    const selected = packages.find((pkg) => pkg.packageId === chooser.value) || null;
     const token = quoteToken + 1;
     quoteToken = token;
-    if (!Number.isFinite(value) || value <= 0) {
+    chosen = selected;
+    payBtn.disabled = !chosen;
+    if (!chosen) {
       clear(quoteBox);
-      quoteBox.append(el('span', {}, 'Enter an amount to see the GST breakdown.'));
+      quoteBox.append(el('span', {}, 'Pick a package to see the GST breakdown.'));
       return;
     }
     try {
-      const data = await api.billing.rechargeQuote(value);
+      const data = await api.billing.rechargeQuote(chosen.packageId);
       if (token !== quoteToken) return;
       const q = data.quote;
       clear(quoteBox);
       quoteBox.append(
         el('div', {}, `Recharge ${inr(q.subtotalInr)}`),
         ...q.components.map((c) => el('div', { class: 'muted' }, `${c.name} ${c.rateBps / 100}% · ${inr(c.inr)}`)),
-        el('strong', {}, `Total payable ${inr(q.totalInr)}`),
-        el('div', {}, `${q.credits} credits added · 1 credit = ₹1, so the ${inr(q.gstInr)} GST is collected and never spendable`),
-        q.bonusTokenCredits ? el('div', { class: 'muted' }, `Coupon bonus ${inr(q.bonusInr)} (${q.bonusTokenCredits / 100} credits), credited separately`) : null,
+        el('strong', {}, `Pay ${inr(q.totalInr)} incl. GST ${inr(q.gstInr)}`),
+        el('div', {}, `${formatNumber(q.prepaidCredits)} credits added · 1 credit = ₹1, so the ${inr(q.gstInr)} GST is collected and never spendable`),
+        q.bonusTokenCredits ? el('div', { class: 'muted' }, `${formatNumber(Number(q.bonusCredits))} bonus credits, credited separately and expiring ${chosen.bonusValidDays} days after payment`) : null,
         q.placeOfSupply && q.placeOfSupply.assumed
           ? el('small', { class: 'muted' }, `Place of supply assumed as state ${q.placeOfSupply.stateCode}. Add your GSTIN in Organization → Billing for the exact split.`)
           : null,
@@ -359,20 +373,19 @@ function adminPanel(view, summary) {
       );
     } catch (err) {
       if (token !== quoteToken) return;
-      clear(quoteBox).append(el('span', { class: 'muted' }, (err && err.message) || 'That amount cannot be quoted.'));
+      // The server owns the money rules; this is its refusal, in its words.
+      clear(quoteBox).append(el('span', { class: 'muted' }, (err && err.message) || 'That package cannot be quoted.'));
     }
   };
-  amount.addEventListener('input', showQuote);
+  if (packages.length) chooser.addEventListener('change', showQuote);
 
-  const payBtn = el('button', { type: 'button', class: 'btn primary' }, 'Pay and add credits');
   payBtn.addEventListener('click', async () => {
-    const value = Number(amount.value);
-    if (!Number.isFinite(value) || value <= 0) return toast('Enter a positive amount', 'warn');
+    if (!chosen) return toast('Choose a credit package', 'warn');
     payBtn.disabled = true;
     const pi = summary.paymentInfo || {};
     try {
       const settlement = await payRecharge({
-        amountInr: value,
+        packageId: chosen.packageId,
         provider: payRazorpay.checked ? 'razorpay' : 'cashfree',
         customer: {
           customerName: pi.billingName || 'Admin',
@@ -384,7 +397,12 @@ function adminPanel(view, summary) {
       });
       if (isSettled(settlement)) {
         const bonus = settlement.bonusCredits ? ` + ${settlement.bonusCredits} bonus` : '';
-        toast(`₹${settlement.totalInr} paid · ${settlement.creditsAdded} credits added${bonus}`, 'ok');
+        // A bonus that lapsed between paying and settling is skipped, not silently
+        // missing: the customer paid ₹2,360 and needs to know they got 2,000 credits.
+        const skipped = settlement.bonusSkipped === 'expired'
+          ? ' · the bonus window had closed, so no bonus credits were added'
+          : '';
+        toast(`${inr(settlement.payableInr)} paid · ${settlement.totalCredits} credits added${bonus}${skipped}`, 'ok');
       } else {
         toast(`The gateway answered, but nothing was credited (${settlement && settlement.status || 'no settlement'}).`, 'warn');
       }
@@ -505,7 +523,7 @@ function adminPanel(view, summary) {
       ]),
     ]),
     el('div', { class: 'form-grid' }, [
-      el('div', { class: 'row' }, [amount, payBtn]),
+      el('div', { class: 'row' }, [chooser, payBtn]),
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Payment gateway'),
         el('div', { class: 'row' }, [

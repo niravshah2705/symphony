@@ -47,7 +47,10 @@
 /* An author `display` rule beats the UA `[hidden]{display:none}`, so the collapsed
    form would stay visible and the toggle would appear to do nothing. */
 .usage-purchase-form[hidden] { display: none; }
-.usage-purchase-form input { width: 150px; }
+/* A package label is the price, the credits and the bonus in one line, so it needs
+   to grow; `width` would clip it and `select` ignores `max-width` when the text is
+   longer than the box. */
+.usage-purchase-form select { min-width: 260px; }
 .usage-quote { flex: 1 1 260px; min-width: 0; display: grid; gap: 3px; color: var(--muted); font-size: 10px; }
 .usage-quote strong { color: var(--text); }
 

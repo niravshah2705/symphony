@@ -6,10 +6,11 @@
 // The unit suites can only prove the REFUSAL half of `settle()` — `CONFIG` is a
 // require-time frozen snapshot, so a test that wants FlexPrice enabled must
 // inject fakes. This script is the other half: the real client, the real wallet,
-// the real credit rows. It answers the plan's Phase 2 exit question — does a ₹500
-// recharge collect ₹590 and credit exactly 500 spendable credits, with the ₹90 of
-// GST nowhere near the balance — with numbers read back out of FlexPrice rather
-// than asserted about a mocked response.
+// the real credit rows. It answers the plan's Phase 2 exit question — does the
+// ₹2,000 package collect ₹2,360 and credit exactly 3,500 spendable credits (2,000
+// prepaid + 1,500 expiring bonus), with the ₹360 of GST nowhere near the balance —
+// with numbers read back out of FlexPrice rather than asserted about a mocked
+// response.
 //
 // Every step goes through the real Express app (`services/billing/src/app.js`) on
 // an ephemeral loopback port, with the context headers the gateway would stamp —
@@ -40,6 +41,25 @@ const ENV_FILE = path.join(ROOT, 'deploy', 'flexprice', '.env');
 // because the catalog this recharge reads was created in it.
 const SEED_ENVIRONMENT_ID = '00000000-0000-0000-0000-000000000001';
 const SUPPLIER_STATE = '24';
+
+/**
+ * The card's two offers, with every number this run must see on the wire.
+ *
+ * They are spelled out instead of derived from `credit-rates.js`: a live verify that
+ * recomputes its expectation from the same loader it is checking would pass while the
+ * published YAML and the server disagreed. These are the published text, and the
+ * server has to match it.
+ */
+const PKG = {
+  id: 'credits-3500', priceInr: 2000, subtotalPaise: 200000, couponBps: 7500,
+  bonusTokenCredits: 150000, gstPaise: 36000, totalPaise: 236000, totalInr: '2360.00',
+  prepaid: 2000, bonus: 1500, credits: 3500, validDays: 30,
+};
+const PKG_10K = {
+  id: 'credits-10000', priceInr: 4000, subtotalPaise: 400000, couponBps: 15000,
+  bonusTokenCredits: 600000, gstPaise: 72000, totalPaise: 472000, totalInr: '4720.00',
+  prepaid: 4000, bonus: 6000, credits: 10000, validDays: 45,
+};
 
 function parseEnvFile(file) {
   const out = {};
@@ -137,6 +157,7 @@ async function main() {
 
   const { createApp } = require(path.join(ROOT, 'services/billing/src/app.js'));
   const store = require('@software-factory/shared-core/store');
+  const { decimalFromPaise } = require('@software-factory/shared-core/billing/money-wire');
   const flexpriceConfig = require('@software-factory/shared-core/billing/flexprice-config');
   const { createFlexpriceClient } = require('@software-factory/shared-core/billing/flexprice-client');
   const { FLEXPRICE } = flexpriceConfig;
@@ -173,38 +194,59 @@ async function main() {
     const balance = await client.walletRealTimeBalance(walletId);
     return Number(balance.realTimeCreditBalance);
   };
+  /** ₹ as the wire renders an integer paise figure, for the checks that name a rupee. */
+  const money = (paise) => decimalFromPaise(paise);
   const readCreditRows = async (walletId) => {
     const search = await client.walletTransactionsSearch({ id: walletId, type: 'credit', limit: 50 });
     return search.items || [];
   };
 
   try {
-    // 1. The quote is pure server-side arithmetic and moves no money.
-    section('1. quote ₹500 (POST /recharge — quote only)');
-    const quoteRes = await call('/recharge', { amountInr: 500 });
+    // 1. The quote is pure server-side arithmetic on a card package and moves no money.
+    section(`1. quote ${PKG.id} (POST /recharge — quote only)`);
+    const quoteRes = await call('/recharge', { packageId: PKG.id });
     check('quote returns 200', quoteRes.status === 200, `status=${quoteRes.status} ${quoteRes.text.slice(0, 160)}`);
     const q = quoteRes.body?.quote || {};
     check('settled:false — a quote credits nothing', quoteRes.body?.settled === false, `settled=${quoteRes.body?.settled}`);
-    check('subtotal 50000p + gst 9000p = total 59000p',
-      q.subtotalPaise === 50000 && q.gstPaise === 9000 && q.totalPaise === 59000,
+    check('the response names the package the card offered',
+      quoteRes.body?.package?.packageId === PKG.id && quoteRes.body?.package?.bonusValidDays === PKG.validDays,
+      JSON.stringify(quoteRes.body?.package));
+    check(`subtotal ${PKG.subtotalPaise}p + gst ${PKG.gstPaise}p = total ${PKG.totalPaise}p`,
+      q.subtotalPaise === PKG.subtotalPaise && q.gstPaise === PKG.gstPaise && q.totalPaise === PKG.totalPaise,
       `${q.subtotalPaise} + ${q.gstPaise} = ${q.totalPaise}`);
-    check('total rendered as the decimal string "590.00"', q.totalInr === '590.00', `totalInr=${q.totalInr}`);
+    check(`total rendered as the decimal string "${PKG.totalInr}"`, q.totalInr === PKG.totalInr, `totalInr=${q.totalInr}`);
     const heads = (q.components || []).map((c) => c.name).sort().join(',');
     const parts = (q.components || []).map((c) => `${c.name} ${c.paise}`).join(' + ');
-    check('CGST 9% 4500p + SGST 9% 4500p', heads === 'CGST,SGST'
-      && (q.components || []).every((c) => c.paise === 4500), parts);
-    check('credits = 500 = subtotal/100, never total/100', q.credits === 500,
-      `credits=${q.credits} (total/100 would be ${Math.floor(q.totalPaise / 100)})`);
+    check(`CGST 9% ${PKG.gstPaise / 2}p + SGST 9% ${PKG.gstPaise / 2}p`, heads === 'CGST,SGST'
+      && (q.components || []).every((c) => c.paise === PKG.gstPaise / 2), parts);
+    check(`credits priced off the subtotal, never the gross: ${PKG.prepaid} + ${PKG.bonus} bonus`,
+      q.prepaidCredits === PKG.prepaid && q.bonusTokenCredits === PKG.bonusTokenCredits
+      && Number(q.bonusCredits) === PKG.bonus,
+      `prepaid=${q.prepaidCredits} bonus=${q.bonusTokenCredits} (gross/100 would be ${Math.floor(q.totalPaise / 100)})`);
     check('place of supply assumed from the supplier state (no GSTIN saved)',
       q.placeOfSupply?.assumed === true, `state=${q.placeOfSupply?.stateCode} assumed=${q.placeOfSupply?.assumed}`);
     check('no wallet exists yet for this org', store.getBillingAccount(orgId) === null
       || !store.getBillingAccount(orgId).flexprice,
       'the wallet is created by settle(), not by a quote');
 
+    // 1b. A typed amount is refused on the way in, not ignored — the card is the only
+    //     author of a price, and a stale bundle must fail loudly.
+    const typed = await call('/recharge', { amountInr: 500 });
+    check('a client-composed amount is a 400, not a quote',
+      typed.status === 400 && typed.body?.code === 'amount_not_accepted',
+      `status=${typed.status} code=${typed.body?.code}`);
+    const unknown = await call('/recharge', { packageId: 'credits-does-not-exist' });
+    check('an unknown packageId is refused by name',
+      unknown.status === 400 && unknown.body?.code === 'unknown_package',
+      `status=${unknown.status} code=${unknown.body?.code}`);
+    const summaryRes = await get('/summary', { orgId });
+    const offered = (summaryRes.body?.rechargePackages || []).map((p) => p.packageId).join(',');
+    check('GET /summary lists the card offers and nothing else',
+      offered === `${PKG.id},${PKG_10K.id}`, `rechargePackages=${offered || '(none)'}`);
+
     // 2. A saved GSTIN decides the split — same state CGST+SGST, other state IGST —
     //    and never the total, which is what makes the tax visible rather than priced in.
-    section('2. place of supply from the saved GSTIN (24=Gujarat supplier)');
-    const saveGstin = async (taxId, state) => request(port, 'PUT', '/config', {
+    section('2. place of supply from the saved GSTIN (24=Gujarat supplier)');    const saveGstin = async (taxId, state) => request(port, 'PUT', '/config', {
       orgId,
       body: {
         paymentInfo: {
@@ -218,91 +260,110 @@ async function main() {
     });
     const cfgHome = await saveGstin('24AAACR1296F1Z5', 'Gujarat');
     check('PUT /config accepts a GSTIN', cfgHome.status === 200, `status=${cfgHome.status} ${cfgHome.text.slice(0, 160)}`);
-    const qHome = (await call('/recharge', { amountInr: 500 })).body.quote;
-    check('intra-state GSTIN 24 → CGST+SGST, assumed:false, total still 59000p',
-      qHome.placeOfSupply?.assumed === false && qHome.totalPaise === 59000
+    const qHome = (await call('/recharge', { packageId: PKG.id })).body.quote;
+    check(`intra-state GSTIN 24 → CGST+SGST, assumed:false, total still ${PKG.totalPaise}p`,
+      qHome.placeOfSupply?.assumed === false && qHome.totalPaise === PKG.totalPaise
       && qHome.components.map((c) => c.name).join(',') === 'CGST,SGST',
       `${qHome.components.map((c) => `${c.name} ${c.paise}`).join(' + ')} pos=${qHome.placeOfSupply.stateCode}`);
     const cfgAway = await saveGstin('27AAACR1296F1Z5', 'Maharashtra');
     check('PUT /config accepts an out-of-state GSTIN', cfgAway.status === 200, `status=${cfgAway.status}`);
-    const qAway = (await call('/recharge', { amountInr: 500 })).body.quote;
-    check('inter-state GSTIN 27 → one IGST 9000p, total unchanged at 59000p',
+    const qAway = (await call('/recharge', { packageId: PKG.id })).body.quote;
+    check(`inter-state GSTIN 27 → one IGST ${PKG.gstPaise}p, total unchanged at ${PKG.totalPaise}p`,
       qAway.components.length === 1 && qAway.components[0].name === 'IGST'
-      && qAway.components[0].paise === 9000 && qAway.totalPaise === 59000 && qAway.credits === 500,
-      `IGST ${qAway.components[0]?.paise} of ${qAway.totalPaise}, credits=${qAway.credits}`);
+      && qAway.components[0].paise === PKG.gstPaise && qAway.totalPaise === PKG.totalPaise
+      && qAway.prepaidCredits === PKG.prepaid,
+      `IGST ${qAway.components[0]?.paise} of ${qAway.totalPaise}, prepaid=${qAway.prepaidCredits}`);
     const cfgBad = await saveGstin('NOT_A_GSTIN', 'Gujarat');
     check('a malformed GSTIN is refused at the write, not stored',
       cfgBad.status === 400 && cfgBad.body?.code === 'invalid_gstin',
       `status=${cfgBad.status} code=${cfgBad.body?.code}`);
-    const qAfterBad = (await call('/recharge', { amountInr: 500 })).body;
+    const qAfterBad = (await call('/recharge', { packageId: PKG.id })).body;
     check('a rejected GSTIN changes nothing — the previously saved 27 still prices the quote',
-      qAfterBad.quote.placeOfSupply.stateCode === '27' && qAfterBad.quote.gstPaise === 9000
+      qAfterBad.quote.placeOfSupply.stateCode === '27' && qAfterBad.quote.gstPaise === PKG.gstPaise
       && !(qAfterBad.warnings || []).length,
       `pos=${qAfterBad.quote.placeOfSupply.stateCode} gst=${qAfterBad.quote.gstPaise} warnings=${JSON.stringify(qAfterBad.warnings)}`);
-    // Settle the spine below on the intra-state case, which is the headline ₹45+₹45.
+    // Settle the spine below on the intra-state case, which is the headline ₹180+₹180.
     await saveGstin('24AAACR1296F1Z5', 'Gujarat');
 
     // 3. Cashfree path: create-order persists the intent; verify-order settles it.
     section('3. Cashfree — create-order persists, verify-order settles');
-    const order = await call('/recharge/create-order', { amountInr: 500, couponBps: 0 });
+    const order = await call('/recharge/create-order', { packageId: PKG.id });
     check('create-order returns the mock checkout for an unconfigured gateway',
       order.status === 200 && order.body?.checkout?.mode === 'mock',
       `status=${order.status} ${order.text.slice(0, 200)}`);
     check('provider recorded as cashfree (org default) with environment named',
       order.body?.provider === 'cashfree' && typeof order.body?.environment === 'string',
       `provider=${order.body?.provider} env=${order.body?.environment}`);
-    check('create-order echoes the gross as "590.00", never a provider number',
-      order.body?.amountInr === '590.00', `amountInr=${order.body?.amountInr}`);
+    check(`create-order echoes the gross as "${PKG.totalInr}", never a provider number`,
+      order.body?.payableInr === PKG.totalInr && order.body?.package?.packageId === PKG.id,
+      `payableInr=${order.body?.payableInr} package=${JSON.stringify(order.body?.package)}`);
     const orderId = order.body?.orderId || '';
     check('order id is derived from the caller org, not the client',
       orderId.startsWith(`order_${orgId.replace(/[^a-zA-Z0-9_-]/g, '_')}`), orderId);
 
     const intent = store.getRechargeIntent(orderId);
-    check('intent persisted with the full quote + provenance', Boolean(intent)
+    check('intent persisted with the package identity, the quote and the provenance', Boolean(intent)
       && intent.orgId === orgId && intent.provider === 'cashfree' && intent.status === 'QUOTED'
-      && intent.subtotalPaise === 50000 && intent.gstPaise === 9000 && intent.totalPaise === 59000
-      && intent.creditCount === 500 && intent.supplierStateCode === SUPPLIER_STATE
+      && intent.packageId === PKG.id && intent.bonusValidDays === PKG.validDays
+      && intent.subtotalPaise === PKG.subtotalPaise && intent.couponBps === PKG.couponBps
+      && intent.bonusTokenCredits === PKG.bonusTokenCredits
+      && intent.gstPaise === PKG.gstPaise && intent.totalPaise === PKG.totalPaise
+      && intent.creditCount === PKG.prepaid && intent.supplierStateCode === SUPPLIER_STATE
       && intent.customerGstin === '24AAACR1296F1Z5' && intent.placeOfSupply?.assumed === false,
-      intent ? `${intent.orgId} ${intent.provider} ${intent.status} ${intent.subtotalPaise}/${intent.gstPaise}/${intent.totalPaise}/${intent.creditCount} gstin=${intent.customerGstin}` : 'no intent');
+      intent ? `${intent.orgId} ${intent.provider} ${intent.status} ${intent.packageId} ${intent.subtotalPaise}/${intent.couponBps}/${intent.gstPaise}/${intent.totalPaise}/${intent.creditCount} gstin=${intent.customerGstin}` : 'no intent');
+    check('the offer carries its own expiry: promoExpiresAt = createdAt + bonusValidDays',
+      Math.abs((Date.parse(intent.promoExpiresAt) - Date.parse(intent.createdAt)) - PKG.validDays * 86400000) < 5000,
+      `created=${intent.createdAt} expires=${intent.promoExpiresAt}`);
 
     const settleRes = await call('/cashfree/verify-order', { orderId });
     const settled = settleRes.body || {};
     check('verify-order settles', settleRes.status === 200 && settled.status === 'settled',
       `status=${settleRes.status} ${settleRes.text.slice(0, 200)}`);
-    check('settlement reports 500 credits added, ₹590.00 collected',
-      settled.creditsAdded === 500 && settled.totalInr === '590.00' && settled.gstInr === '90.00'
-      && settled.mock === true,
-      `credits=${settled.creditsAdded} total=${settled.totalInr} gst=${settled.gstInr} mock=${settled.mock}`);
+    check(`settlement reports ${PKG.prepaid} paid + ${PKG.bonus} bonus = ${PKG.credits} credits, ${PKG.totalInr} collected`,
+      settled.packageId === PKG.id && settled.creditsAdded === PKG.prepaid
+      && settled.bonusCredits === PKG.bonus && settled.totalCredits === PKG.credits
+      && settled.payableInr === PKG.totalInr && settled.gstInr === money(PKG.gstPaise)
+      && settled.taxableInr === money(PKG.subtotalPaise) && settled.mock === true,
+      `credits=${settled.creditsAdded}+${settled.bonusCredits} payable=${settled.payableInr} gst=${settled.gstInr} mock=${settled.mock}`);
 
     const settledIntent = store.getRechargeIntent(orderId);
     const walletId = settledIntent.flexprice_settlement?.walletId || '';
     check('intent moved to SETTLED with the FlexPrice wallet recorded',
       settledIntent.status === 'SETTLED' && Boolean(walletId)
-      && settledIntent.flexprice_settlement.prepaidCredits === 500
-      && settledIntent.verification.collectedPaise === 59000,
-      `${settledIntent.status} wallet=${walletId} prepaid=${settledIntent.flexprice_settlement?.prepaidCredits} collected=${settledIntent.verification?.collectedPaise}`);
-    check('collected == gst + prepaid×100 + promo×100',
-      settledIntent.verification.collectedPaise
-        === settledIntent.gstPaise + settledIntent.flexprice_settlement.prepaidCredits * 100
-        + settledIntent.flexprice_settlement.promoCredits * 100,
-      `${settledIntent.verification.collectedPaise} = ${settledIntent.gstPaise} + ${settledIntent.flexprice_settlement.prepaidCredits}×100 + ${settledIntent.flexprice_settlement.promoCredits}×100`);
+      && settledIntent.flexprice_settlement.prepaidCredits === PKG.prepaid
+      && settledIntent.flexprice_settlement.promoCredits === PKG.bonus
+      && settledIntent.verification.collectedPaise === PKG.totalPaise,
+      `${settledIntent.status} wallet=${walletId} prepaid=${settledIntent.flexprice_settlement?.prepaidCredits} promo=${settledIntent.flexprice_settlement?.promoCredits} collected=${settledIntent.verification?.collectedPaise}`);
+    // The identity the plan pins: GST is collected on the subtotal only, so what the
+    // card charges minus what the tax takes is exactly the spendable prepaid credit.
+    // The bonus sits OUTSIDE it — it is given away, not collected.
+    check(`collected − gst == prepaid×100 (${PKG.totalPaise} − ${PKG.gstPaise} == ${PKG.prepaid * 100})`,
+      settledIntent.totalPaise - settledIntent.gstPaise === settledIntent.flexprice_settlement.prepaidCredits * 100,
+      `${settledIntent.totalPaise} − ${settledIntent.gstPaise} = ${settledIntent.totalPaise - settledIntent.gstPaise}, prepaid×100 = ${settledIntent.flexprice_settlement.prepaidCredits * 100}`);
+    check('the bonus is the offer, not a second collection',
+      settledIntent.flexprice_settlement.promoCredits * 100 === settledIntent.bonusTokenCredits,
+      `promo=${settledIntent.flexprice_settlement.promoCredits} bonusTokenCredits=${settledIntent.bonusTokenCredits}`);
 
     const balance = await readBalance(walletId);
-    check('wallet real_time_credit_balance is EXACTLY 500', balance === 500,
+    check(`wallet real_time_credit_balance is EXACTLY ${PKG.credits}`, balance === PKG.credits,
       `real_time_credit_balance=${balance}`);
 
     // 4. Replay must not double-credit — asserted against the real wallet.
     section('4. replay the same order');
     const replay = await call('/cashfree/verify-order', { orderId });
     check('replay is accepted as already-processed, not re-charged',
-      replay.status === 200 && replay.body?.alreadyProcessed === true && replay.body?.creditsAdded === 500,
+      replay.status === 200 && replay.body?.alreadyProcessed === true
+      && replay.body?.creditsAdded === PKG.prepaid && replay.body?.totalCredits === PKG.credits,
       `status=${replay.status} ${replay.text.slice(0, 200)}`);
-    check('balance still EXACTLY 500 after the replay', await readBalance(walletId) === 500,
+    check(`balance still EXACTLY ${PKG.credits} after the replay`, await readBalance(walletId) === PKG.credits,
       `real_time_credit_balance=${await readBalance(walletId)}`);
     const rows = await readCreditRows(walletId);
-    check('exactly one credit row for the settled order',
-      rows.filter((r) => String(r.description || '').includes(orderId)).length === 1,
-      `rows=${rows.length}`);
+    check('one purchase row and one promo row for the settled order',
+      rows.filter((r) => r.transactionReason === 'PURCHASED_CREDIT_DIRECT'
+        && String(r.description || '').includes(orderId)).length === 1
+      && rows.filter((r) => r.transactionReason === 'FREE_CREDIT_GRANT'
+        && String(r.description || '').includes(orderId)).length === 1,
+      `rows=${rows.map((r) => `${r.transactionReason}:${r.creditsAvailable}`).join(' ')}`);
 
     // 5. Identity assertions, live.
     section('5. ownership and provenance refusals');
@@ -325,37 +386,43 @@ async function main() {
     check('a caller context with no admin role cannot mutate billing',
       nonAdmin.status === 403 && nonAdmin.body?.code === 'access_denied',
       `status=${nonAdmin.status} code=${nonAdmin.body?.code}`);
-    check('none of the refusals moved the balance', await readBalance(walletId) === 500,
+    check('none of the refusals moved the balance', await readBalance(walletId) === PKG.credits,
       `real_time_credit_balance=${await readBalance(walletId)}`);
 
-    // 6. Coupon bonus: the promo row is a separate credit, the collected total is unchanged.
-    section('6. 10% coupon bonus on a ₹500 recharge');
-    const couponOrder = await call('/recharge/create-order', { amountInr: 500, couponBps: 1000 });
-    const couponId = couponOrder.body?.orderId || '';
-    const couponSettle = await call('/recharge/settle', { orderId: couponId });
-    check('coupon settle reports 500 paid + 50 bonus credits',
-      couponSettle.status === 200 && couponSettle.body?.creditsAdded === 500
-      && couponSettle.body?.bonusCredits === 50,
-      `${couponSettle.status} credits=${couponSettle.body?.creditsAdded} bonus=${couponSettle.body?.bonusCredits} total=${couponSettle.body?.totalInr}`);
-    check('charged unchanged at ₹590.00 (the bonus is not a discount)',
-      couponSettle.body?.totalInr === '590.00', `totalInr=${couponSettle.body?.totalInr}`);
-    check('balance is now 1,050 (500 + 500 + 50)', await readBalance(walletId) === 1050,
+    // 6. The 150% bonus: the ₹4,000 offer is what Stage 3's MAX_BONUS_BPS unlocked —
+    //    the pre-package GST cap refused anything over 100%. The promo row is a separate
+    //    credit and the collected total is the card's, not a discounted one.
+    section(`6. ${PKG_10K.id}: ₹${PKG_10K.priceInr} collects ${PKG_10K.totalInr} and credits ${PKG_10K.credits}`);
+    const bigOrder = await call('/recharge/create-order', { packageId: PKG_10K.id });
+    const bigId = bigOrder.body?.orderId || '';
+    const bigSettle = await call('/recharge/settle', { orderId: bigId });
+    check(`settle reports ${PKG_10K.prepaid} paid + ${PKG_10K.bonus} bonus credits`,
+      bigSettle.status === 200 && bigSettle.body?.creditsAdded === PKG_10K.prepaid
+      && bigSettle.body?.bonusCredits === PKG_10K.bonus && bigSettle.body?.totalCredits === PKG_10K.credits,
+      `${bigSettle.status} credits=${bigSettle.body?.creditsAdded} bonus=${bigSettle.body?.bonusCredits} payable=${bigSettle.body?.payableInr}`);
+    check(`charged the card's ${PKG_10K.totalInr} (the bonus is not a discount)`,
+      bigSettle.body?.payableInr === PKG_10K.totalInr, `payableInr=${bigSettle.body?.payableInr}`);
+    check(`balance is now ${PKG.credits + PKG_10K.credits} (${PKG.credits} + ${PKG_10K.credits})`,
+      await readBalance(walletId) === PKG.credits + PKG_10K.credits,
       `real_time_credit_balance=${await readBalance(walletId)}`);
-    const couponIntent = store.getRechargeIntent(couponId);
+    const bigIntent = store.getRechargeIntent(bigId);
     check('the bonus is a FREE_CREDIT_GRANT row, not a bonus field on the purchase',
       (await readCreditRows(walletId)).some((r) => r.transactionReason === 'FREE_CREDIT_GRANT'
-        && Number(r.creditsAvailable) === 50
+        && Number(r.creditsAvailable) === PKG_10K.bonus
         && String(r.idempotencyKey || '').endsWith(':promo')),
-      `bonusTokenCredits=${couponIntent.bonusTokenCredits} rows=${(await readCreditRows(walletId)).map((r) => `${r.transactionReason}:${r.creditsAvailable}`).join(' ')}`);
+      `bonusTokenCredits=${bigIntent.bonusTokenCredits} rows=${(await readCreditRows(walletId)).map((r) => `${r.transactionReason}:${r.creditsAvailable}`).join(' ')}`);
+    check('the ₹4,000 offer carries its own 45-day window',
+      bigIntent.couponBps === PKG_10K.couponBps && bigIntent.bonusValidDays === PKG_10K.validDays,
+      `couponBps=${bigIntent.couponBps} validDays=${bigIntent.bonusValidDays} expires=${bigIntent.promoExpiresAt}`);
 
-    // 7. Razorpay: second gateway, same settle(). ₹1,000 → 18% GST → ₹1,180 → 1,000 credits.
+    // 7. Razorpay: second gateway, same settle(), same package.
     section('7. Razorpay — second gateway, same settle()');
-    const rQuote = await call('/recharge', { amountInr: 1000 });
-    check('quote ₹1,000 → 18,000p GST → 118,000p total',
-      rQuote.body?.quote?.subtotalPaise === 100000 && rQuote.body?.quote?.gstPaise === 18000
-      && rQuote.body?.quote?.totalPaise === 118000,
+    const rQuote = await call('/recharge', { packageId: PKG.id });
+    check(`quote ${PKG.id} → ${PKG.subtotalPaise}p subtotal → ${PKG.gstPaise}p GST → ${PKG.totalPaise}p total`,
+      rQuote.body?.quote?.subtotalPaise === PKG.subtotalPaise && rQuote.body?.quote?.gstPaise === PKG.gstPaise
+      && rQuote.body?.quote?.totalPaise === PKG.totalPaise,
       `${rQuote.body?.quote?.subtotalPaise}/${rQuote.body?.quote?.gstPaise}/${rQuote.body?.quote?.totalPaise}`);
-    const rOrder = await call('/razorpay/create-order', { amountInr: 1000 });
+    const rOrder = await call('/razorpay/create-order', { packageId: PKG.id });
     check('razorpay create-order returns the mock checkout',
       rOrder.status === 200 && rOrder.body?.provider === 'razorpay'
       && rOrder.body?.checkout?.mode === 'mock',
@@ -377,16 +444,19 @@ async function main() {
     check('razorpay verify-order settles with no signature fields',
       rSettle.status === 200 && rSettle.body?.status === 'settled' && rSettle.body?.provider === 'razorpay',
       `status=${rSettle.status} ${rSettle.text.slice(0, 200)}`);
-    check('wallet balance is now 2,050 credits (1,050 + 1,000)',
-      await readBalance(walletId) === 2050, `real_time_credit_balance=${await readBalance(walletId)}`);
+    check(`wallet balance is now ${PKG.credits + PKG_10K.credits + PKG.credits} credits`,
+      await readBalance(walletId) === PKG.credits + PKG_10K.credits + PKG.credits,
+      `real_time_credit_balance=${await readBalance(walletId)}`);
 
     // 8. The credit rows themselves: GST never appears as a credit.
     section('8. credit-row proof');
     const allRows = await readCreditRows(walletId);
     const purchaseRows = allRows.filter((r) => r.transactionReason === 'PURCHASED_CREDIT_DIRECT');
     const granted = purchaseRows.reduce((sum, r) => sum + Number(r.creditAmount || 0), 0);
-    check('three purchase rows totalling 2,000 credits — never 2,270 (₹590+₹590+₹1,180)',
-      purchaseRows.length === 3 && granted === 2000,
+    const prepaidSum = PKG.prepaid + PKG_10K.prepaid + PKG.prepaid;
+    const grossSum = PKG.totalPaise + PKG_10K.totalPaise + PKG.totalPaise;
+    check(`three purchase rows totalling ${prepaidSum} credits — never the gross collected (₹${money(grossSum)})`,
+      purchaseRows.length === 3 && granted === prepaidSum,
       `rows=${purchaseRows.length} sum=${granted} reasons=${[...new Set(allRows.map((r) => r.transactionReason))].join(',')}`);
     check('every purchase row carries priority 1 and the direct type',
       purchaseRows.every((r) => Number(r.priority) === 1 && r.transactionReason === 'PURCHASED_CREDIT_DIRECT' && r.type === 'credit'),
@@ -394,25 +464,26 @@ async function main() {
     check('each row’s idempotency key is the recharge order',
       purchaseRows.every((r) => String(r.idempotencyKey || '').startsWith('recharge:order_')),
       purchaseRows.map((r) => r.idempotencyKey).join(' | '));
-    check('GST metadata on the row is the ₹90, recorded but never credited',
-      purchaseRows.every((r) => String(r.metadata?.gst_paise || '') === '9000'
-        || String(r.metadata?.gst_paise || '') === '18000'),
+    check(`GST metadata on the row is the ${PKG.gstPaise}/${PKG_10K.gstPaise}, recorded but never credited`,
+      purchaseRows.every((r) => String(r.metadata?.gst_paise || '') === String(PKG.gstPaise)
+        || String(r.metadata?.gst_paise || '') === String(PKG_10K.gstPaise)),
       purchaseRows.map((r) => r.metadata?.gst_paise).join(','));
 
     // 9. With the mock flag off, the same create-order must be refused outright.
     section('9. the mock refusal (BILLING_ALLOW_MOCK_PAYMENTS=false)');
     const savedFlag = process.env.BILLING_ALLOW_MOCK_PAYMENTS;
     process.env.BILLING_ALLOW_MOCK_PAYMENTS = 'false';
-    const refused = await call('/recharge/create-order', { amountInr: 500 });
+    const refused = await call('/recharge/create-order', { packageId: PKG.id });
     process.env.BILLING_ALLOW_MOCK_PAYMENTS = savedFlag;
     check('create-order with no gateway and no mock flag is refused',
       refused.status === 400 && refused.body?.code === 'provider_not_configured',
       `status=${refused.status} code=${refused.body?.code}`);
     check('the refusal wrote no intent',
       store.listRechargeIntents({ orgId }).length
-        === [orderId, couponId, rOrderId].filter((id) => store.getRechargeIntent(id)).length,
+        === [orderId, bigId, rOrderId].filter((id) => store.getRechargeIntent(id)).length,
       `intents=${store.listRechargeIntents({ orgId }).length}`);
-    check('and left the balance at 2,050', await readBalance(walletId) === 2050,
+    check(`and left the balance at ${PKG.credits + PKG_10K.credits + PKG.credits}`,
+      await readBalance(walletId) === PKG.credits + PKG_10K.credits + PKG.credits,
       `real_time_credit_balance=${await readBalance(walletId)}`);
 
     section('summary');

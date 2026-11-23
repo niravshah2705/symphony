@@ -88,7 +88,7 @@ const RUPEE_SIDE = [
   ['services/billing/src/payment-providers.js', ['decimalFromPaise']],
   ['packages/shared-core/src/billing/money-wire.js', ['paiseFromDecimal', 'decimalFromPaise', 'wholePaise']],
   ['packages/shared-core/src/billing/pricing.js', ['paiseToInr']],
-  ['services/billing/src/billing-api.js', ['subtotalPaise', 'MAX_RECHARGE_PAISE']],
+  ['services/billing/src/billing-api.js', ['subtotalPaise', 'MAX_AUTO_RECHARGE_PAISE']],
   ['packages/shared-core/src/store.js', ['subtotalPaise', 'gstPaise', 'totalPaise']],
   ['services/billing/src/recharge-settle.js', ['subtotal_paise', 'gst_paise', 'collected_paise']],
   ['packages/shared-core/src/billing/ledger.js', ['amountPaise']],

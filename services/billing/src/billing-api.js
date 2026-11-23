@@ -11,6 +11,7 @@ const gate = require('@software-factory/shared-core/billing/gate');
 const { paiseToInr } = require('@software-factory/shared-core/billing/pricing');
 const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
 const cashfreeClient = require('@software-factory/shared-core/billing/cashfree-client');
+const creditRates = require('@software-factory/shared-core/billing/credit-rates');
 const gst = require('@software-factory/shared-core/billing/gst');
 const moneyWire = require('@software-factory/shared-core/billing/money-wire');
 const providers = require('./payment-providers');
@@ -46,7 +47,7 @@ const flexpriceReads = createFlexpriceReadsRouter({ resolveCallerOrg });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PERIOD_DAYS = Object.freeze({ day: 1, week: 7, month: 30 });
-const MAX_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a single top-up
+const MAX_AUTO_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a scheduled reload amount
 
 const { callerOf } = require('./trusted-caller');
 
@@ -67,36 +68,69 @@ function inrToPaise(inr) {
 }
 
 /**
- * A recharge subtotal. Stricter than `inrToPaise`: it must be a positive whole
- * number of *rupees*, because 1 credit = ₹1 (decision D6) and FlexPrice counts
- * credits, so ₹500.50 has no representation in the wallet it would be spent from.
+ * A recharge is one of the card's packages, and the client chooses nothing else.
+ *
+ * A typed amount made the price a request field: the server re-derived tax from it,
+ * but the offer itself came from the browser. `packageId` names a row of
+ * `deploy/billing/credit-rates.yaml`, so the card is the only author of a price, and
+ * the bonus (which is money we give away) stops being a `couponBps` anyone can send.
+ * `bonusExpiresAt` joins them: the package states its own validity window, so a
+ * client-extended promo expiry is as much a price input as a coupon.
+ *
+ * An old SPA bundle that keeps posting `amountInr` gets a 400 rather than a silent
+ * misread. A purchase is not a place to guess what someone meant.
  */
-function parseRechargeSubtotal(value) {
-  const text = String(value == null ? '' : value).trim();
-  if (!/^\d+(\.\d{1,2})?$/.test(text)) {
-    return { error: 'amountInr must be an amount of rupees, e.g. 500 or 500.00.' };
-  }
-  let paise;
-  try {
-    paise = moneyWire.paiseFromDecimal(text);
-  } catch (_) {
-    return { error: 'amountInr is not a valid amount.' };
-  }
-  if (!Number.isSafeInteger(paise) || paise <= 0) return { error: 'amountInr must be greater than zero.' };
-  if (paise > MAX_RECHARGE_PAISE) return { error: `amountInr must be at most ₹${MAX_RECHARGE_PAISE / 100}.` };
-  if (paise % moneyWire.TOKEN_CREDITS_PER_CREDIT !== 0) {
-    return { error: 'Recharge amounts must be whole rupees — 1 credit = ₹1, so paise cannot be credited.' };
-  }
-  return { paise };
+function rejectCustomAmount(body = {}) {
+  const sent = ['amountInr', 'couponBps', 'bonusExpiresAt']
+    .filter((field) => body[field] != null && String(body[field]).trim() !== '');
+  if (!sent.length) return {};
+  return {
+    status: 400,
+    code: 'amount_not_accepted',
+    error: `Recharges are fixed packages, so ${sent.join(', ')} ${sent.length > 1 ? 'are' : 'is'} not accepted. Send a packageId from GET /api/billing/summary.`,
+  };
 }
 
-function parseCouponBps(value) {
-  if (value == null || value === '') return { bps: 0 };
-  const bps = Number(value);
-  if (!Number.isInteger(bps) || bps < 0 || bps > 10000) {
-    return { error: 'couponBps must be an integer between 0 and 10000 (basis points of bonus credit).' };
+function parsePackageId(value) {
+  const id = String(value == null ? '' : value).trim();
+  if (!id) {
+    return { status: 400, code: 'missing_package_id', error: 'packageId is required: pick one of the offered credit packages.' };
   }
-  return { bps };
+  let pkg;
+  try {
+    pkg = creditRates.packageById(id);
+  } catch (err) {
+    // The card is baked into the image and gated at boot, so this is a broken
+    // deployment, not a bad request. Loud and typed, never a default package.
+    return { status: 503, code: err.code || 'rate_card_missing', error: `No credit package can be quoted: ${err.message}` };
+  }
+  if (!pkg) return { status: 400, code: 'unknown_package', error: `Unknown credit package "${id}".` };
+  // Retirement stops a NEW order; it never revives one that was already paid for,
+  // which is why settle() looks the package up by its frozen numbers and not here.
+  if (!pkg.enabled) return { status: 400, code: 'package_retired', error: `Credit package "${id}" is no longer offered.` };
+  return { pkg };
+}
+
+/** What the purchase panel renders: the credit offer, plus the rupee price beside it. */
+function packageView(pkg) {
+  return {
+    packageId: pkg.id,
+    priceInr: pkg.priceInr,
+    credits: pkg.credits,
+    prepaidCredits: pkg.prepaidCredits,
+    bonusCredits: pkg.bonusCredits,
+    bonusValidDays: pkg.bonusValidDays,
+  };
+}
+
+/** The card's offers, or none: a card this image cannot read must not blank the cost page. */
+function offeredPackages() {
+  try {
+    return creditRates.listPackages().map(packageView);
+  } catch (err) {
+    log.warn(`billing_packages_unavailable: ${err.message}`);
+    return [];
+  }
 }
 
 /**
@@ -138,9 +172,11 @@ function quoteRecharge({ subtotalPaise, couponBps = 0, paymentInfo = {} }) {
   return { quote, supplierStateCode: state, customerGstin: gstin, gstinIgnored: invalid };
 }
 
-/** What the browser is shown: every number as paise AND as a decimal string. */
+/** What the browser is shown: the ₹ it will pay, and the credits that arrive for it. */
 function quoteView(quote) {
+  const bonusTokenCredits = quote.bonusTokenCredits || 0;
   return {
+    // Rupee-side: what a card is charged and what a GST invoice states.
     subtotalPaise: quote.subtotalPaise,
     subtotalInr: moneyWire.decimalFromPaise(quote.subtotalPaise),
     components: quote.components.map((c) => ({
@@ -153,9 +189,11 @@ function quoteView(quote) {
     gstInr: moneyWire.decimalFromPaise(quote.gstPaise),
     totalPaise: quote.totalPaise,
     totalInr: moneyWire.decimalFromPaise(quote.totalPaise),
-    bonusTokenCredits: quote.bonusTokenCredits || 0,
-    bonusInr: moneyWire.decimalFromPaise(quote.bonusTokenCredits || 0),
-    credits: moneyWire.tokenCreditsToCredits(quote.subtotalPaise),
+    // Credit-side: what the wallet gains. Never the taxed total — that is the whole
+    // point of splitting these two columns on one screen.
+    prepaidCredits: moneyWire.tokenCreditsToCredits(quote.subtotalPaise),
+    bonusTokenCredits,
+    bonusCredits: moneyWire.creditsFromTokenCredits(bonusTokenCredits),
     placeOfSupply: quote.placeOfSupply,
   };
 }
@@ -299,6 +337,13 @@ router.get('/summary', asyncHandler(async (req, res) => {
       month: bySourceWindow(records, PERIOD_DAYS.month, now),
     },
     alertThresholdsInr: (account && account.alertThresholdsTokenCredits ? account.alertThresholdsTokenCredits : []).map(paiseToInr),
+    // What may be bought, straight from the rate card. The browser composes no
+    // amount and picks no coupon: this list is the only way it learns a price exists.
+    // `rechargePackages`, not `packages`: the Usage page also renders
+    // `overview.packages`, which are credit balances FlexPrice already holds an expiry
+    // for. One word for "what you can buy" and "what you own" on one screen is how a
+    // panel ends up offering a wallet row as a checkout.
+    rechargePackages: offeredPackages(),
     paymentInfo: (account && account.paymentInfo) || {
       billingName: '',
       billingEmail: '',
@@ -420,30 +465,32 @@ router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
   res.json({ orgId: caller.orgId, taskId, records });
 }));
 
-// POST /api/billing/recharge { amountInr, couponBps? } — the GST quote ONLY.
+// POST /api/billing/recharge { packageId } — the GST quote for one package ONLY.
 //
 // It credits nothing. Before this route's predecessor, POST /recharge moved money
 // straight into the org's balance with no payment behind it at all; the credit now
 // lives in `recharge-settle.js` and can only be reached by an order the provider
 // confirms. What remains here is the breakdown the customer must see before paying:
-// ₹500 + CGST ₹45 + SGST ₹45 = ₹590, for 500 credits.
+// ₹2,000 + CGST ₹180 + SGST ₹180 = ₹2,360, for 3,500 credits.
 router.post('/recharge', asyncHandler(async (req, res) => {
   const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
-  const subtotal = parseRechargeSubtotal(req.body && req.body.amountInr);
-  if (subtotal.error) return res.status(400).json({ error: subtotal.error, code: 'invalid_amount' });
-  const coupon = parseCouponBps(req.body && req.body.couponBps);
-  if (coupon.error) return res.status(400).json({ error: coupon.error, code: 'invalid_coupon' });
+  const rejected = rejectCustomAmount(req.body || {});
+  if (rejected.error) return res.status(rejected.status).json({ error: rejected.error, code: rejected.code });
+  const chosen = parsePackageId(req.body && req.body.packageId);
+  if (chosen.error) return res.status(chosen.status).json({ error: chosen.error, code: chosen.code });
+  const pkg = chosen.pkg;
 
   const account = store.getBillingAccount(caller.orgId);
   const { quote, gstinIgnored } = quoteRecharge({
-    subtotalPaise: subtotal.paise,
-    couponBps: coupon.bps,
+    subtotalPaise: pkg.subtotalPaise,
+    couponBps: pkg.couponBps,
     paymentInfo: (account && account.paymentInfo) || {},
   });
   res.json({
     orgId: caller.orgId,
+    package: packageView(pkg),
     quote: quoteView(quote),
     // The quote is not an order: nothing is reserved, and the amount must be
     // re-quoted by create-order in case the org's GST details changed meanwhile.
@@ -478,13 +525,29 @@ router.put('/config', asyncHandler(async (req, res) => {
     const amountPaise = inrToPaise(ar.amountInr);
     const thresholdPercent = Number.isFinite(Number(ar.thresholdPercent)) ? Math.max(1, Math.min(100, Number(ar.thresholdPercent))) : 20;
 
+    // The reload choice is a package like every other recharge, so an id is validated
+    // against the card here instead of being filed for later. It is deliberately NOT
+    // read by `auto-recharge-job.js`, which settles nothing today: storing an offer the
+    // job cannot honor is honest only as long as nothing claims it is honored.
+    let packageId = String(existingAr.packageId || '');
+    if (ar.packageId !== undefined) {
+      const wanted = String(ar.packageId || '').trim();
+      if (!wanted) packageId = '';
+      else {
+        const chosen = parsePackageId(wanted);
+        if (chosen.error) return res.status(chosen.status).json({ error: chosen.error, code: chosen.code });
+        packageId = chosen.pkg.id;
+      }
+    }
+
     patch.autoRecharge = {
       ...existingAr,
       enabled: Boolean(ar.enabled),
       mode,
       thresholdTokenCredits: Number.isFinite(thresholdTokenCredits) ? thresholdTokenCredits : 0,
       thresholdPercent,
-      amountPaise: Number.isFinite(amountPaise) && amountPaise > 0 ? Math.min(amountPaise, MAX_RECHARGE_PAISE) : 0,
+      amountPaise: Number.isFinite(amountPaise) && amountPaise > 0 ? Math.min(amountPaise, MAX_AUTO_RECHARGE_PAISE) : 0,
+      packageId,
     };
   }
   if (body.paymentInfo && typeof body.paymentInfo === 'object') {
@@ -553,6 +616,7 @@ router.put('/config', asyncHandler(async (req, res) => {
       thresholdInr: paiseToInr(account.autoRecharge && account.autoRecharge.thresholdTokenCredits),
       thresholdPercent: account.autoRecharge && account.autoRecharge.thresholdPercent || 20,
       amountInr: paiseToInr(account.autoRecharge && account.autoRecharge.amountPaise),
+      packageId: (account.autoRecharge && account.autoRecharge.packageId) || null,
       cashfreeSubscriptionId: account.autoRecharge && account.autoRecharge.cashfreeSubscriptionId || null,
       paymentMethodType: account.autoRecharge && account.autoRecharge.paymentMethodType || null,
     },
@@ -617,35 +681,35 @@ function resolveProvider(req, paymentInfo) {
   return providers.normalizeProvider(paymentInfo && paymentInfo.provider) || 'cashfree';
 }
 
-function bonusExpiryFrom(value) {
-  if (value == null || value === '') return {};
-  const at = new Date(String(value));
-  if (Number.isNaN(at.getTime())) {
-    const err = new Error('bonusExpiresAt must be an ISO date/time.');
-    err.status = 400;
-    err.code = 'invalid_bonus_expiry';
-    throw err;
-  }
-  return { promoExpiresAt: at.toISOString() };
+/**
+ * The bonus wallet's deadline, counted from the order that earned it: the package
+ * states its own validity window, so this is card data on an intent, never a value
+ * the browser sent. Each package gets its own because a bonus granted for a
+ * ₹2,000 package and one granted for ₹4,000 expire on different clocks.
+ */
+function bonusExpiryFrom(pkg, from = Date.now()) {
+  return { promoExpiresAt: new Date(from + pkg.bonusValidDays * DAY_MS).toISOString() };
 }
 
 async function createRechargeOrder(req, res, { provider: providerOverride } = {}) {
   const caller = resolveCallerOrg(req);
   if (!requireAdmin(caller, res)) return;
 
-  const subtotal = parseRechargeSubtotal(req.body && req.body.amountInr);
-  if (subtotal.error) return res.status(400).json({ error: subtotal.error, code: 'invalid_amount' });
-  const coupon = parseCouponBps(req.body && req.body.couponBps);
-  if (coupon.error) return res.status(400).json({ error: coupon.error, code: 'invalid_coupon' });
+  const rejected = rejectCustomAmount(req.body || {});
+  if (rejected.error) return res.status(rejected.status).json({ error: rejected.error, code: rejected.code });
+  // A quote is not a reservation: create-order resolves the id against the card
+  // itself, so a package retired between the two calls is refused here.
+  const chosen = parsePackageId(req.body && req.body.packageId);
+  if (chosen.error) return res.status(chosen.status).json({ error: chosen.error, code: chosen.code });
+  const pkg = chosen.pkg;
 
   const account = store.getBillingAccount(caller.orgId) || {};
   const paymentInfo = account.paymentInfo || {};
   const { quote, supplierStateCode: state, customerGstin, gstinIgnored } = quoteRecharge({
-    subtotalPaise: subtotal.paise,
-    couponBps: coupon.bps,
+    subtotalPaise: pkg.subtotalPaise,
+    couponBps: pkg.couponBps,
     paymentInfo,
   });
-  const expiry = bonusExpiryFrom(req.body && req.body.bonusExpiresAt);
   const provider = providerOverride || resolveProvider(req, paymentInfo);
   const adapter = providers.providerFor(provider, { env: process.env });
 
@@ -665,20 +729,33 @@ async function createRechargeOrder(req, res, { provider: providerOverride } = {}
   // The intent is written BEFORE the provider is called: an order that exists at
   // the gateway with no record here could be paid and then never credited, which
   // is a refund; the reverse (a record with no payment) settles into nothing.
+  //
+  // It carries the whole offer, not a reference to the card: `settle()` re-derives
+  // the tax from these fields and never reads `credit-rates.yaml`, so editing or
+  // retiring the package between paying and settling cannot reprice an order that
+  // was already collected. `store.updateRechargeIntent` freezes every one of them.
   store.addRechargeIntent({
     orderId,
     orgId: caller.orgId,
     provider: adapter.name,
     status: 'QUOTED',
+    packageId: pkg.id,
+    bonusValidDays: pkg.bonusValidDays,
     subtotalPaise: quote.subtotalPaise,
-    couponBps: coupon.bps,
+    couponBps: pkg.couponBps,
     bonusTokenCredits: quote.bonusTokenCredits || 0,
     gstPaise: quote.gstPaise,
     totalPaise: quote.totalPaise,
     creditCount: moneyWire.tokenCreditsToCredits(quote.subtotalPaise),
     supplierStateCode: state,
     ...(customerGstin ? { customerGstin } : {}),
-    ...expiry,
+    // The customer state that decided CGST/SGST versus IGST, but only when it was a
+    // fact rather than the supplier-state default. `requote` feeds this back into
+    // `gst.quote`, and freezing it closes a hole `quote_drift` cannot see: an
+    // interstate swap leaves `totalPaise` byte-identical while rewriting the split on
+    // money that has already been collected and filed.
+    ...(!quote.placeOfSupply.assumed ? { customerStateCode: quote.placeOfSupply.stateCode } : {}),
+    ...bonusExpiryFrom(pkg),
     // Recorded for the audit trail; deliberately NOT an input to the re-quote,
     // because `assumed` is what tells a human the split was guessed.
     placeOfSupply: quote.placeOfSupply,
@@ -721,8 +798,12 @@ async function createRechargeOrder(req, res, { provider: providerOverride } = {}
     environment: adapter.environment(),
     // The gross the gateway will charge, as the string the wire expects. The UI
     // must render `quote.totalInr`, never a number FlexPrice or the provider
-    // echoes back — ₹590 is ours.
-    amountInr: quoteView(quote).totalInr,
+    // echoes back — ₹2,360 is ours. Named `payable` and not `amountInr` because
+    // `amountInr` is now a request field this endpoint refuses, and one word that
+    // means "the org's price" on the way in and "our price" on the way out is how a
+    // stale bundle buys the wrong thing.
+    payableInr: quoteView(quote).totalInr,
+    package: packageView(pkg),
     quote: quoteView(quote),
     checkout: order.checkout,
     paymentSessionId: order.checkout.paymentSessionId || null,
@@ -731,7 +812,13 @@ async function createRechargeOrder(req, res, { provider: providerOverride } = {}
   });
 }
 
+/**
+ * The settlement receipt. Credits are the money the org has; the ₹ fields are
+ * labelled for what they are — a payment and a tax — because a number on this
+ * screen that reads like a balance is a number someone will spend twice.
+ */
 function settlementView(result) {
+  const bonusCredits = result.promoCredits || 0;
   return {
     success: true,
     orderId: result.orderId,
@@ -740,12 +827,18 @@ function settlementView(result) {
     status: result.status,
     alreadyProcessed: result.status === 'already_processed',
     orderStatus: 'PAID',
+    packageId: result.packageId || null,
     creditsAdded: result.creditCount,
-    bonusCredits: result.promoCredits || 0,
+    bonusCredits,
+    // 'expired' when the bonus window closed between paying and settling: the prepaid
+    // credit landed, the offer did not, and the screen has to say which.
+    bonusSkipped: result.bonusSkipped || null,
+    bonusExpiresAt: result.promoExpiresAt || null,
+    totalCredits: (result.creditCount || 0) + bonusCredits,
     balanceCredits: result.balanceCredits,
-    subtotalInr: result.subtotalPaise == null ? null : moneyWire.decimalFromPaise(result.subtotalPaise),
+    taxableInr: result.subtotalPaise == null ? null : moneyWire.decimalFromPaise(result.subtotalPaise),
     gstInr: result.gstPaise == null ? null : moneyWire.decimalFromPaise(result.gstPaise),
-    totalInr: result.totalPaise == null ? null : moneyWire.decimalFromPaise(result.totalPaise),
+    payableInr: result.totalPaise == null ? null : moneyWire.decimalFromPaise(result.totalPaise),
     mock: Boolean(result.mock),
     settledAt: result.settledAt || null,
   };
