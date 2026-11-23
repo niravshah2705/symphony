@@ -408,7 +408,7 @@ Platform charge ₹3000/month as **two ordered calls**: `POST /v1/invoices {invo
 
 `credit-expiry-job.js` becomes an **assertion**, not a scheduler: their read-time filter plus Temporal `WalletCreditExpiryWorkflow` do the work. FlexPrice rejects a grant whose expiry is already past, so the live fixture grants a near-future promo, waits past expiry, and proves it is no longer drawable. Materialization has a measured two-hour settlement grace plus the 15-minute schedule; ours warns only after a three-hour observation grace.
 
-`reconcile-gateway-spend.js` extends from printing one JSON line per org (today, read-only, unscheduled) to a FlexPrice-vs-recorded comparison reusing `MATCH_TOLERANCE_PAISE`, wired to the tick so it is the standing drift alarm. Credit reads use `POST /v1/wallets/transactions/search` (response keyed `items`, not `data`); `credits_available_breakdown` stays banned.
+`reconcile-gateway-spend.js` extends from printing one JSON line per org (read-only) to a FlexPrice-vs-recorded comparison with a per-leg band — the platform leg at basis points of the share its rows never stamped, the FlexPrice leg at zero — wired to the tick so it is the standing drift alarm. Credit reads use `POST /v1/wallets/transactions/search` (response keyed `items`, not `data`); `credits_available_breakdown` stays banned.
 
 Verification: run the charge job twice → exactly one debit; the Zoho fixture shows ₹590 with CGST+SGST disclosed and `invoice.tax == 0`; a promo observed after its expiry → the next debit draws prepaid; a deliberately dropped event → the reconciler reports divergence.
 Docs: `BILLING_FLEXPRICE.md` §12 runbook (charge, Zoho setup, upgrade, two-key rotation).

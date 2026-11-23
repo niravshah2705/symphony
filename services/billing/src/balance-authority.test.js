@@ -74,6 +74,8 @@ test('the scan actually covers the money code', () => {
     'services/billing/src/billing-api.js',
     'services/billing/src/auto-recharge-job.js',
     'services/billing/src/recharge-settle.js',
+    // It holds the one production exemption below, so the scan has to prove it is in scope.
+    'services/billing/src/reconcile-gateway-spend.js',
     'public/js/views/cost.js',
     'e2e/persistent-footer.spec.js',
     'e2e-live/scripts/audit.js',
@@ -171,18 +173,24 @@ test('nothing claims the deleted ledger route still exists', () => {
 // the boundary (a number the runtime reported). So the name may appear only where the
 // tuple is authored, persisted or checked — never where a figure is read back.
 test('event provenance is written and audited, never read as money', () => {
-  const WRITERS = [
+  const ALLOWED = [
     'packages/shared-core/src/billing/pricing.js', // computes it from the card + the SDK result
     'packages/shared-core/src/billing/usage.js', // puts it on the usage record
     'packages/shared-core/src/store.js', // re-asserts it on an already-queued outbox row
     'packages/shared-core/src/billing/billing-outbox.js', // stamps it onto the event
     'scripts/flexprice-usage-verify.js', // asserts the stamped payload equals the record
+    // The one production READER, and it reads exactly one of the four: the rate a row was
+    // priced at, so a past window is compared at the rate it carried instead of today's
+    // (a rate move between the run and the report would otherwise invent a delta the size of
+    // the move). It never turns the tuple into a number a customer sees: the debit stays
+    // `token_credits`, and `inr_cost`/`provider_cost`/`provider_currency` stay unread here.
+    'services/billing/src/reconcile-gateway-spend.js',
   ];
   const names = ['providerCost', 'providerCurrency', 'fxRateToInr', 'inrCost',
     'provider_cost', 'provider_currency', 'fx_rate_to_inr', 'inr_cost'];
   const violations = matchesPerFile((source, file) => {
     const rel = path.relative(REPO_ROOT, file);
-    if (WRITERS.includes(rel)) return null;
+    if (ALLOWED.includes(rel)) return null;
     const hit = source.match(new RegExp(`\\b(?:${names.join('|')})\\b`));
     return hit ? hit[0] : null;
   });

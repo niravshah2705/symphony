@@ -33,12 +33,23 @@
  * So `we_recorded.comparableTokenCredits` = managed cost + customer notional, and a
  * nonzero delta is expected noise unless it trends in one direction.
  *
- * Currency: the gateway reports USD, the ledger is integer token credits, converted with
- * the rate row in deploy/billing/credit-rates.yaml — the same row that stamps the rate
- * beside each event. A rate applied to money the
- * platform never spent is a comparison, not a charge — which is why the notional
- * series is presented in USD in the product: a rupee symbol on money nobody paid
- * invites a dispute the number cannot settle.
+ * Currency: the gateway reports USD and the ledger is integer token credits, and the two
+ * are joined at the rate EACH EVENT CARRIED (`fxRateToInr`, Stage 4) — not at today's card
+ * row. Converting a past window at a present rate invents a discrepancy the size of the
+ * rate move, so the rate states our side in the gateway's unit and never sets a charge.
+ * A rate applied to money the platform never spent is a comparison, not a charge — which
+ * is why the notional series is presented in USD in the product: a rupee symbol on money
+ * nobody paid invites a dispute the number cannot settle.
+ *
+ * THREE ALARMS, deliberately not one, each catching what the others cannot:
+ *   - the outbox read-back catches DELIVERY LOSS — an event that never arrived;
+ *   - this job's FlexPrice leg carries a ZERO band: meter SUM over `token_credits` against
+ *     summed `costTokenCredits` is our number against our number, so any delta is a defect;
+ *   - this job's platform leg catches PRICING ERROR — a missing model row priced from
+ *     `defaults`, transposed input/output, a stale price. Remediation is to edit
+ *     `deploy/billing/credit-rates.yaml` and redeploy, never to rotate FX;
+ *   - and `fx_stale` catches OPERATOR DRIFT: the rate row is past `stale_after_days`, so
+ *     "who is ahead" has no honest answer and the report says so instead of guessing.
  *
  * Keys come from the org's own vault entry (the per-org LiteLLM virtual key),
  * NEVER the gateway master key: a per-org report assembled from master-key
@@ -54,13 +65,21 @@ const log = require('@software-factory/shared-core/logger');
 const store = require('@software-factory/shared-core/store');
 const creditRates = require('@software-factory/shared-core/billing/credit-rates');
 const { METERS } = require('@software-factory/shared-core/billing/billing-outbox');
+const { decimalToScaled, formatScaled, roundDiv } = require('@software-factory/shared-core/billing/money-wire');
 const { fetchS2sSecrets } = require('@software-factory/shared-core/secrets/s2s-resolver');
 const { createFlexpriceClient, rowsOf } = require('@software-factory/shared-core/billing/flexprice-client');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_WINDOW_DAYS = 1;
-// A |delta| under one tokenCredits is a rounding difference, not a discrepancy.
-const MATCH_TOLERANCE_TOKEN_CREDITS = 1;
+// The floor under any band: a |delta| of one token credit is a rounding difference, not a
+// discrepancy. It is a FLOOR and not a tolerance — the FlexPrice leg opts out of it.
+const FLOOR_TOKEN_CREDITS = 1;
+// The gateway answers USD as a float and the card states FX to 4 dp, so a window is held
+// at 8 dp of USD and 4 dp of rate, in scaled BigInts, rounded once at each division.
+// Float division here would put the report's own verdict within a few credits of a
+// rounding accident on a large window (money-wire.js is the argument).
+const USD_DP = 8;
+const FX_DP = 4;
 
 function isoWindow(days, now = new Date()) {
   const until = now.toISOString();
@@ -79,12 +98,39 @@ function windowRecords(storeApi, { orgId, since, until }) {
 }
 
 /**
+ * The rate an event was priced at, if it carries one. A row written before Stage 4
+ * stamped nothing, and a row whose stamp is not a positive decimal is treated as though
+ * it stamped nothing too — guessing at a corrupt rate would widen or narrow the band for
+ * that row by accident, which is the opposite of what the band is for.
+ */
+function stampedRate(value) {
+  const text = String(value ?? '').trim();
+  return /^\d+(\.\d{1,8})?$/.test(text) && Number(text) > 0 ? text : null;
+}
+
+/** Token credits to USD at `rate`, as a scaled integer: `tc / (100 x rate)`. */
+function usdScaled(tokenCredits, rate) {
+  const fx = decimalToScaled(rate, FX_DP);
+  if (fx <= 0n) throw new TypeError(`reconcile: not a positive USD->INR rate: ${JSON.stringify(rate)}`);
+  return roundDiv(BigInt(tokenCredits) * 10n ** BigInt(USD_DP + FX_DP), 100n * fx);
+}
+
+/**
  * What we recorded, split so the gateway's definition can be matched to it.
  * `gatewayModes` is the reason a delta needs a third dimension: a `litellm` run
  * has a gateway-side number, a `direct` run can never have one, and summing both
  * against one gateway total guarantees a false alarm.
+ *
+ * `expectedUsd` is the same money in the gateway's unit, converted at the rate each row
+ * carries (`fxUsdToInr` is used only for the rows that carry none, and
+ * `coverage.tokenCreditsWithout` says how much of the window that was). So a rate change
+ * between the run and this report moves both sides together and stops fabricating a
+ * delta — which is the whole point of stamping the rate in the first place. Rows are pooled
+ * per rate before the division: one rounding per rate rather than one per row, so a window
+ * of ten thousand small runs cannot accumulate a rounding drift in the figure the verdict
+ * rests on.
  */
-function recordedTotals(records) {
+function recordedTotals(records, fxUsdToInr) {
   const out = {
     records: records.length,
     managedTokenCredits: 0,
@@ -92,18 +138,38 @@ function recordedTotals(records) {
     costTokenCredits: 0,
     notionalCostTokenCredits: 0,
     gatewayModes: {},
+    comparableTokenCredits: 0,
+    expectedUsd: formatScaled(0n, USD_DP),
+    coverage: { withRate: 0, without: 0, tokenCreditsWithout: 0 },
   };
+  const byRate = new Map();
   for (const record of records) {
     const cost = Number(record.costTokenCredits) || 0;
     const notional = Number(record.notionalCostTokenCredits) || 0;
+    const isCustomer = (record.billingSource || 'managed') === 'customer';
     out.costTokenCredits += cost;
     out.notionalCostTokenCredits += notional;
-    if ((record.billingSource || 'managed') === 'customer') out.customerNotionalTokenCredits += notional;
+    if (isCustomer) out.customerNotionalTokenCredits += notional;
     else out.managedTokenCredits += cost;
+    // Comparable = what the gateway could also have seen: the managed charge, or what a
+    // BYOK run really cost the customer's key.
+    const comparable = isCustomer ? notional : cost;
+    out.comparableTokenCredits += comparable;
     const mode = String(record.gatewayMode || 'direct');
     out.gatewayModes[mode] = (out.gatewayModes[mode] || 0) + 1;
+
+    const rate = stampedRate(record.fxRateToInr);
+    if (rate) out.coverage.withRate += 1;
+    else {
+      out.coverage.without += 1;
+      out.coverage.tokenCreditsWithout += comparable;
+    }
+    const key = rate || fxUsdToInr;
+    byRate.set(key, (byRate.get(key) || 0) + comparable);
   }
-  out.comparableTokenCredits = out.managedTokenCredits + out.customerNotionalTokenCredits;
+  let expectedScaled = 0n;
+  for (const [rate, tokenCredits] of byRate) expectedScaled += usdScaled(tokenCredits, rate);
+  out.expectedUsd = formatScaled(expectedScaled, USD_DP);
   return out;
 }
 
@@ -127,24 +193,77 @@ function summarizeSpendLogs(payload) {
     spendUsd += spend;
     requests += 1;
   }
-  // The gateway answers in USD and our ledger is integer token credits, so this one
-  // conversion needs the card's FX row. It is a comparison, never a charge: a debit comes
-  // from tokens × the model's ₹ row and does not read this number. Stage 6 replaces it
-  // with the rate each event was stamped with, so a rate change between the run and this
-  // report stops inventing a delta.
-  return {
-    available: true,
-    requests,
-    spendUsd,
-    spendTokenCredits: creditRates.tokenCreditsFromUsd(spendUsd, creditRates.fxRate().usdToInr),
-  };
+  // Stated in USD and left there. Turning it into credits needs a rate, and the only
+  // honest rate for a past window is the mix its own events carried — which is a property
+  // of the records, not of this response, so `platformTokenCredits` does it once per org.
+  return { available: true, requests, spendUsd };
 }
 
-function comparison(actualTokenCredits, expectedTokenCredits, unavailableVerdict) {
-  if (!Number.isFinite(actualTokenCredits)) return { tokenCredits: null, verdict: unavailableVerdict };
-  const tokenCredits = Math.round(actualTokenCredits - expectedTokenCredits);
-  if (Math.abs(tokenCredits) <= MATCH_TOLERANCE_TOKEN_CREDITS) return { tokenCredits, verdict: 'match' };
-  return { tokenCredits, verdict: tokenCredits > 0 ? 'platform_ahead' : 'we_are_ahead' };
+/**
+ * The gateway's USD total expressed in token credits, at the rate mix this window's own
+ * events carried: `spendUsd / expectedUsd x comparableTokenCredits`. A rate move therefore
+ * cancels out of the ratio instead of becoming a delta nobody caused.
+ *
+ * A window with no comparable money has no mix to divide by. It falls back to the card row
+ * — which is the answer that makes the finding this job exists for legible: the gateway
+ * served spend for an org this platform recorded as nothing.
+ */
+function platformTokenCredits({ spendUsd, recorded, fxUsdToInr }) {
+  const usd = Number(spendUsd);
+  if (!Number.isFinite(usd)) return NaN;
+  const actual = decimalToScaled(usd.toFixed(USD_DP), USD_DP);
+  const expected = decimalToScaled(recorded.expectedUsd, USD_DP);
+  if (expected <= 0n) return creditRates.tokenCreditsFromUsd(usd, fxUsdToInr);
+  return Number(roundDiv(actual * BigInt(recorded.comparableTokenCredits), expected));
+}
+
+/**
+ * `base + age x drift`, capped: how far the UNSTAMPED share of the window may sit from the
+ * platform total before the difference is worth an operator's time. Rows that carry their
+ * own rate need no band at all, which is why the caller passes `bandBase` as that share and
+ * not the window.
+ */
+function toleranceBpsFor(reconcile, fx) {
+  const base = Number(reconcile && reconcile.baseToleranceBps);
+  const max = Number(reconcile && reconcile.maxToleranceBps);
+  const drift = Number(fx.driftBpsPerDay);
+  if (![base, max, drift].every(Number.isFinite)) return 0;
+  return Math.min(max, base + Math.max(0, Number(fx.ageDays) || 0) * drift);
+}
+
+/** The card's FX row, plus the band the card itself authorises for rows it never stamped. */
+function fxRow() {
+  const fx = creditRates.fxRate();
+  return { ...fx, toleranceBps: toleranceBpsFor(creditRates.rateCard().reconcile, fx) };
+}
+
+/**
+ * The verdict for one leg, in token credits.
+ *
+ * `toleranceBps` is applied to `bandBase` (default: the figure being checked) and
+ * `floorTokenCredits` is the least any band may be, so a zero window still forgives a
+ * rounding step. Pass `{ toleranceBps: 0, floorTokenCredits: 0 }` for a leg where any delta
+ * is a defect. Past `stale_after_days` a non-match becomes `fx_stale` rather than naming a
+ * side: with a rate nobody has confirmed, "the platform is ahead" would be an accusation
+ * this job has no standing to make.
+ */
+function compare(actual, expected, {
+  toleranceBps = 0,
+  bandBase = expected,
+  floorTokenCredits = FLOOR_TOKEN_CREDITS,
+  stale = false,
+  unavailable = 'unavailable',
+} = {}) {
+  if (!Number.isFinite(actual)) return { tokenCredits: null, verdict: unavailable };
+  const tokenCredits = Math.round(actual - expected);
+  const bandTokenCredits = Math.max(floorTokenCredits, Math.ceil((bandBase * toleranceBps) / 10000));
+  if (Math.abs(tokenCredits) <= bandTokenCredits) return { tokenCredits, bandTokenCredits, verdict: 'match' };
+  if (stale) return { tokenCredits, bandTokenCredits, verdict: 'fx_stale' };
+  return {
+    tokenCredits,
+    bandTokenCredits,
+    verdict: tokenCredits > 0 ? 'platform_ahead' : 'we_are_ahead',
+  };
 }
 
 async function resolveLlmCostMeter(client) {
@@ -220,26 +339,47 @@ async function fetchGatewaySpend({ orgId, since, until, baseUrl, key, fetchImpl,
 
 /**
  * The one line an operator reads. Named for the two sides so a reviewer cannot
- * mistake `deltaPaise` for an amount owed.
+ * mistake `delta.tokenCredits` for an amount owed.
  */
-function buildReport({ orgId, window, platform, flexprice, recorded }) {
+function buildReport({ orgId, window, platform, flexprice, recorded, fx }) {
   const report = {
     orgId,
     window,
+    // The row the verdict was reached with and how old it is: without these, a `match` on
+    // a rate nobody has confirmed in months reads like a clean window.
+    fx: {
+      usdToInr: fx.usdToInr,
+      asOf: fx.asOf,
+      ageDays: fx.ageDays,
+      stale: fx.stale,
+      toleranceBps: fx.toleranceBps,
+    },
+    // How much of the window the band was even allowed to excuse.
+    coverage: recorded.coverage,
     platform_says: platform,
     we_recorded: recorded,
-    delta: comparison(
-      platform.available ? platform.spendTokenCredits : NaN,
+    delta: compare(
+      platform.available
+        ? platformTokenCredits({ spendUsd: platform.spendUsd, recorded, fxUsdToInr: fx.usdToInr })
+        : NaN,
       recorded.comparableTokenCredits,
-      'platform_unavailable',
+      {
+        toleranceBps: fx.toleranceBps,
+        // Only the rows that carry no rate of their own may be excused by age.
+        bandBase: recorded.coverage.tokenCreditsWithout,
+        stale: fx.stale,
+        unavailable: 'platform_unavailable',
+      },
     ),
   };
   if (flexprice) {
     report.flexprice_says = flexprice;
-    report.flexprice_delta = comparison(
+    // The meter sums the same integers this list holds, so any delta is a dropped or
+    // duplicated event: no band, no floor, no age excuse.
+    report.flexprice_delta = compare(
       flexprice.available ? flexprice.spendTokenCredits : NaN,
       recorded.costTokenCredits,
-      'flexprice_unavailable',
+      { toleranceBps: 0, floorTokenCredits: 0, unavailable: 'flexprice_unavailable' },
     );
   }
   return report;
@@ -263,7 +403,10 @@ function selectOrgs(storeApi, env) {
 
 async function reconcileOrg(orgId, options) {
   const { deps, window } = options;
-  const recorded = recordedTotals(windowRecords(deps.storeApi, { orgId, ...window }));
+  const recorded = recordedTotals(
+    windowRecords(deps.storeApi, { orgId, ...window }),
+    deps.fx.usdToInr,
+  );
   const gatewayPromise = (async () => {
     if (!deps.baseUrl) return deps.fetchGatewaySpend({ orgId, ...window, baseUrl: '' });
     try {
@@ -288,7 +431,7 @@ async function reconcileOrg(orgId, options) {
     ...window,
   });
   const [platform, flexprice] = await Promise.all([gatewayPromise, flexpricePromise]);
-  return buildReport({ orgId, window, platform, flexprice, recorded });
+  return buildReport({ orgId, window, platform, flexprice, recorded, fx: deps.fx });
 }
 
 async function main({
@@ -309,6 +452,9 @@ async function main({
     fetchS2sSecrets: deps.fetchS2sSecrets || fetchS2sSecrets,
     fetchGatewaySpend: deps.fetchGatewaySpend || fetchGatewaySpend,
     fetchFlexpriceSpend: deps.fetchFlexpriceSpend || fetchFlexpriceSpend,
+    // One rate row for the whole sweep. Re-reading the card per org would let a single run
+    // answer two different questions, and every verdict has to be reachable from one figure.
+    fx: deps.fx || fxRow(),
     flexpriceClient,
     fetchImpl: deps.fetchImpl,
     baseUrl: deps.baseUrl ?? (CONFIG.LITELLM.url || String(env.LITELLM_URL || '').trim()),
@@ -346,7 +492,22 @@ async function main({
     }
   }
 
-  return { orgs: orgs.length, unavailable, flexpriceUnavailable, window, days };
+  return {
+    orgs: orgs.length,
+    unavailable,
+    flexpriceUnavailable,
+    window,
+    days,
+    // The row the whole sweep answered with, on the summary line too: a scheduled job that
+    // prints only counts is unreadable once `fx_stale` is one of them.
+    fx: {
+      usdToInr: resolved.fx.usdToInr,
+      asOf: resolved.fx.asOf,
+      ageDays: resolved.fx.ageDays,
+      stale: resolved.fx.stale,
+      toleranceBps: resolved.fx.toleranceBps,
+    },
+  };
 }
 
 if (require.main === module) {
@@ -365,12 +526,17 @@ module.exports = {
   windowRecords,
   recordedTotals,
   summarizeSpendLogs,
-  comparison,
+  stampedRate,
+  usdScaled,
+  platformTokenCredits,
+  toleranceBpsFor,
+  fxRow,
+  compare,
   resolveLlmCostMeter,
   fetchFlexpriceSpend,
   fetchGatewaySpend,
   buildReport,
   isoWindow,
-  MATCH_TOLERANCE_TOKEN_CREDITS,
+  FLOOR_TOKEN_CREDITS,
   DEFAULT_WINDOW_DAYS,
 };
