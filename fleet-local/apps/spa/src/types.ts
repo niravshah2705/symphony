@@ -26,6 +26,19 @@ export interface ModelOption {
   default: boolean;
 }
 
+// Mirrors Outcome in apps/control-plane/src/a2a/contract.ts and the sessions
+// table's outcome column. The BFF guards any value it does not recognise, so a
+// drift here degrades to "unknown outcome" rather than a bad render.
+export type SessionOutcome =
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'rejected'
+  | 'upstream_error'
+  | 'client_abort'
+  | 'no_events'
+  | 'awaiting_input';
+
 export interface Session {
   id: string;
   org_id: string;
@@ -42,6 +55,18 @@ export interface Session {
   ended_at: string | null;
   duration_seconds: number | null;
   metered_at: string | null;
+  // What the turn was, and why: 'closed' alone cannot tell a completed answer
+  // from a run the platform broke, which is how "(no output)" happened.
+  outcome: SessionOutcome | null;
+  close_reason: string | null;
+  // meter_seconds is the conversation's measured agent time; billed_seconds is
+  // how much of it has been invoiced. duration_seconds stays the wall clock.
+  meter_seconds: number | null;
+  billed_seconds: number | null;
+  awaiting_since: string | null;
+  turn: number;
+  metered_seconds: number | null;
+  metered_outcome: SessionOutcome | null;
 }
 
 export type OnboardingStepId =

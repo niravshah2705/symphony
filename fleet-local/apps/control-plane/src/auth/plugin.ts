@@ -50,7 +50,12 @@ async function resolveIdentity(request: FastifyRequest, reply: FastifyReply): Pr
 export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   await resolveIdentity(request, reply);
   if (!request.fleetUser) {
-    reply.code(401).send({ error: 'unauthenticated' });
+    // Thrown, not sent: a scope can then decide the SHAPE of the 401. The A2A
+    // routes must answer with an A2AError body or the client loses the reason;
+    // every other route keeps the {error:"..."} body it always had.
+    const err = new Error('unauthenticated') as Error & { statusCode?: number };
+    err.statusCode = 401;
+    throw err;
   }
 }
 
