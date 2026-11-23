@@ -371,17 +371,20 @@ the same four app processes and four stores, plus the `seed` one-shot, and
   `topup_conversion_rate`, `price_unit`, `alert_settings`, `auto_topup`,
   `initial_credits_to_load` + `initial_credits_expiry_date_utc`, and a
   `WalletConfig`. Consequences:
-  - "1 credit = 1 paise" is a **per-wallet** `conversion_rate`, so it can change
-    for a new recharge cohort without re-denominating existing credits — which is
-    exactly what the locked decision wanted ("never a re-denominated credit
-    unit"). The ratio lives on the wallet, not in a config map.
+  - "1 credit = ₹1 = 100 token credits" is a **per-wallet** `conversion_rate`, so it
+    can change for a new recharge cohort without re-denominating existing credits —
+    which is exactly what the locked decision wanted ("never a re-denominated credit
+    unit"). The ratio lives on the wallet, not in a config map. (Stated as
+    "1 credit = 1 paise" until the credit subunit was renamed 2026-11-22; the number
+    and the wallet field are unchanged, which is what "renaming, not rescaling" meant.)
   - `initial_credits_to_load` + expiry is a second, simpler answer to item 20
     (the ₹500 signup grant) than `POST /v1/creditgrants`: it needs no plan
     entitlement and no timezone logic, at the cost of the grant/campaign
     bookkeeping `creditgrant.go` provides. Both are available; pick at B-implementation.
   - `alert_settings` at creation resolves the "where does the low-balance
     threshold live" question in §6 favourably — **per wallet, set by us** — so
-    `DEFAULT_ALERT_THRESHOLDS_PAISE` can retire into FlexPrice wallet state rather
+    `DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS` (spelled `…_PAISE` until the 2026-11-22
+    rename) can retire into FlexPrice wallet state rather
     than staying local truth.
 
 ## 2. When consumption actually debits (item 12 — the one that gates `gate.js`)

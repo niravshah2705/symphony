@@ -25,8 +25,9 @@ credentials ("never a fifth place for a key").
 
 | Fact | Owner | Never held by |
 |---|---|---|
-| An org's spendable balance | **FlexPrice wallet** (`real_time_credit_balance`) | our `billingAccounts.balancePaise`, the gate, the UI |
-| Price of a token or a model | `pricing.js` → FlexPrice price object | Prometheus (no `substrate_hourly_rate` series) |
+| An org's spendable balance | **FlexPrice wallet** (`real_time_credit_balance`) | a stored billing account, the gate, the UI |
+| Price of a token or a model | **`deploy/billing/credit-rates.yaml`**, in INR per 1M tokens | a FlexPrice price object, `PRICE_PER_MTOK_USD`, a config map |
+| The debit for a run | the same card × the token counts, in **token credits**, applied by `usage.js` | FlexPrice prices (both LLM meters are at ₹0.00 — they aggregate, they do not charge) |
 | Price of an actor-hour | FlexPrice per-tier price | Prometheus, Node, a config map |
 | GST rate and split | **Node** (`gst.js`) | FlexPrice's tax engine — which we do not use at all (§4) |
 | Actor session duration (integer seconds) | `substrate-runner.js` `finally` block → `usage.js` → outbox | PromQL (it supplies the *live* view only) |
@@ -39,13 +40,20 @@ admission decision) and FlexPrice is the **bank** (balances, draws, meters,
 invoices, coupons, expiry). Nothing crosses from the bank back into the
 collector's hands as a spendable number.
 
+A rate change is therefore **a redeploy**, not a settings edit: the card is baked into
+`Dockerfile.billing`, `Dockerfile.orchestrator` and `Dockerfile.substrate-actor`
+(the last two because `recordUsage` runs in the orchestrator and inside the actor), and
+the loader memoises it once per process with no hot reload. That is deliberate — a debit
+must be computable from the same bytes that produced it, so a run's cost does not change
+under a queue that is still draining.
+
 ## 2. The three billable streams
 
 | Stream | Metered quantity | Meter type | Priced by |
 |---|---|---|---|
-| LiteLLM token usage | paise, already computed by `pricing.js` | SUM | per-model price |
+| LiteLLM token usage | **token credits** (integer, 1/100 credit), computed from the rate card in `usage.js` | SUM on `token_credits` | the YAML card — not a FlexPrice price |
 | Actor compute | **integer duration seconds** per `(org, project, user, tier)` | SUM | per-tier hourly rate |
-| Platform charge | none — fixed | — | scheduled `MANUAL_BALANCE_DEBIT` of 300000 paise |
+| Platform charge | none — fixed | — | scheduled `MANUAL_BALANCE_DEBIT` |
 
 Actor compute is duration-based, not cpu/mem-based. Consequences we accepted:
 OpenCost and cAdvisor are therefore not needed for billing
@@ -54,41 +62,47 @@ OpenCost and cAdvisor are therefore not needed for billing
 1073741824B, the values hardcoded at `substrate.js:545/551` today) rather than a
 field actors vary on.
 
-The quantity FlexPrice receives is **seconds**, and the paise conversion happens
-once, inside their pricing, half-up. No 4-decimal rupees, and no third copy of a
-price.
+The quantity FlexPrice receives for actor compute is **seconds**. For token usage it
+receives the debit we already computed, so the meter is an aggregation and not a price:
+both LLM prices are ₹0.00 per unit, and a live non-zero there would charge the same
+usage twice (§10). No 4-decimal rupees, and no third copy of a price.
 
 ## 3. Money semantics, stated once
 
-**Recharge.** ₹500 subtotal → CGST ₹45 + SGST ₹45 → **₹590 charged**,
-**₹500 credited**. The ₹90 is tax collected; it is never spendable. Rounding is
-per-component half-up with the total derived by addition, so the Cashfree charge
-cannot differ from the invoice by a paise.
+**Recharge.** A package, never a typed amount: ₹2000 of value → CGST ₹180 + SGST ₹180 →
+**₹2,360 charged**, **3,500 credits** (2,000 prepaid + 1,500 bonus). The ₹360 is tax
+collected; it is never spendable. Rounding is per-component half-up with the total
+derived by addition, so the Cashfree charge cannot differ from the invoice by a paise.
 
-`1 credit = 1 paise` of prepaid value. A coupon bonus is *not* a re-denomination:
-it lands as a separate promotional credit row with an expiry. Draw order is our
-policy, recorded per line item so the Usage page can show which source paid —
-**promotional first (earliest expiry), then prepaid**.
+`1 credit = ₹1 = 100 token credits`. The token credit is the integer ledger unit — it is
+what a meter aggregates and what a usage record stores; a customer is shown whole credits
+with up to two decimals. A package bonus is *not* a re-denomination: it lands as a
+separate promotional credit row with an expiry. Draw order is our policy, recorded per
+line item so the Usage page can show which source paid — **promotional first (earliest
+expiry), then prepaid**.
 
-**The invariant, and its guard.** Every rupee credited is either prepaid
-value paid for with tax on top, or promotional value granted for free:
+**The invariant, and its guard.** Every credit is either prepaid value paid for with tax
+on top, or promotional value granted for free — and the tax is *not* credit, so the
+identity is across the two currencies, not inside one:
 
 ```
-collectedPaise == gstPaise + prepaidPaise + promoPaise
+collectedPaise == prepaidTokenCredits + gstPaise      (promo sits outside it)
 ```
 
 `money-flow.test.js` asserts that identity, and `credits.js`'s
-`assertNoTaxCredited({ amountPaise, quote })` guards the specific way it breaks: it
+`assertNoTaxCredited({ amountTokenCredits, quote })` guards the specific way it breaks: it
 throws when the amount credited equals a quote's **tax-inclusive** total while tax
-was charged. The failure is quiet — a ₹500 recharge that credits ₹590 is not an
+was charged. The failure is quiet — a ₹2,000 recharge that credits ₹2,360 is not an
 error anywhere, the balance simply looks right, and 18% of every tax rupee has
 become spendable. `topUpCrediting()` returns `instructions[]`: one `prepaid` row
 and, only when a bonus exists, one `promotional` row carrying the expiry.
 
-The suite also pins ₹500/₹90/₹590, a 10% coupon
-case (prepaid 50000 + promo 5000, charged still 59000 — a coupon never reduces
-what the customer paid, it adds spendable value), and an IGST case with an
-identical total.
+The suite also pins ₹500/₹90/₹590, a 10% coupon case (prepaid 50000 + promo 5000,
+charged still 59000 — a coupon never reduces what the customer paid, it adds spendable
+value), and an IGST case with an identical total. The two packages the card sells are
+pinned in `recharge-settle.test.js`, including ₹4000 → 10,000 credits (4,000 prepaid +
+6,000 bonus at `couponBps 15000`, charged ₹4,720), which is the case that needs
+`gst.MAX_BONUS_BPS`.
 
 Two verified facts that make the shape safe rather than merely plausible:
 
@@ -414,12 +428,16 @@ keys are `createdAt, updatedAt, flexprice, id, orgId`. `ledgerEntries` is now wh
 the paragraph above says it must be: write-only.
 
 The enforcement is `services/billing/src/balance-authority.test.js`, which scans the
-tree and fails on any of: reading `account.balancePaise` (or any of its aliases),
-calling `postEntry`/`refreshBalance`/`balanceFromLedger`/`currentBalancePaise`/
+tree and fails on any of: reading `account.balanceTokenCredits` (or any of its aliases),
+calling `postEntry`/`refreshBalance`/`balanceFromLedger`/`currentBalanceTokenCredits`/
 `maybeAutoRecharge`, calling `listLedgerEntries(` outside `store.js`, moving credits
-outside the five files allowed to (`flexprice-client.js`, `recharge-settle.js`, and
-the three provisioning/spike scripts), a `balancePaise` anywhere under `public/`, or
-a reference to the deleted `/api/billing/ledger` route. It covers `packages`,
+outside the files allowed to (`flexprice-client.js`, `recharge-settle.js`,
+`platform-charge-job.js`, and the four provisioning/spike scripts), a
+`balancePaise`/`balanceTokenCredits` anywhere under `public/`, naming an event's
+provenance tuple (`provider_cost`, `fx_rate_to_inr`, `inr_cost`) outside the files that
+author or audit it, a credit surface declaring a second currency formatter or wrapping a
+credit figure in `inr()`, or a reference to the deleted
+`/api/billing/ledger` route. It covers `packages`,
 `services`, `public`, `scripts`, `e2e` and `e2e-live` — the last two because a test
 fixture that still claims the old money model teaches it to the next reader.
 
@@ -458,6 +476,10 @@ npm run billing:flexprice:bootstrap  # A1 — checkout → secrets → build →
 npm run billing:flexprice:spike      # A3 — 14 probes (pipeline-health first), prints + writes results.json
 npm run billing:flexprice:inspect    # read back a wallet / balance / transactions / meter
 npm run billing:flexprice:provision  # keys, meters, prices, GST prices, per-org customer+wallet
+#   add the flags by hand: `--dry-run` projects without writing, `--org <id>` provisions a
+#   tenant, and `--retire-rate-rows` parks the pre-2026-11 rate prices (§10) on a stack that
+#   still carries them. It reads both plane keys from deploy/flexprice/.env — `npm start`
+#   does not load that file, so `set -a; . deploy/flexprice/.env; set +a` first.
 npm run billing:recharge:verify      # §11 — the recharge spine end to end, 53 checks
 npm run billing:flexprice:down       # compose down -v (the -v matters: see §0.6)
 npm run billing:metrics:check   # bash scripts/kind-metrics-install.sh
@@ -585,33 +607,50 @@ provisioner or `billing:flexprice:inspect` rather than copying them into code.
 is not committed. What the split is proven to do (probe D) and what it is not
 proven to do are different sentences — see §6 before describing it as a boundary.
 
-**Meters** — three, all `SUM`, all `reset_usage: DAILY`:
+**Meters** — all `SUM`, all `reset_usage: DAILY`, and **two of them share one event
+name** because a deployed meter's aggregation cannot be repointed:
 
 | Meter | event_name | aggregation field | Emitted by |
 |---|---|---|---|
-| `llm-cost` | `fleet.llm_cost` | `cost_paise` | Phase 3 outbox |
+| `llm-token-credits` | `fleet.llm_cost` | `token_credits` | the outbox today (`billing-outbox.js`) |
+| `llm-cost` | `fleet.llm_cost` | `cost_paise` | **nothing** — retired, kept published so the history it holds stays readable |
 | `actor-compute` | `fleet.actor_compute` | `duration_seconds` | Phase 4 runner STOP |
 | `deployment-minutes` | `fleet.deployment_minutes` | `minutes` | **nothing** (D8 — meter defined, no emitter; the UI renders it inert, not zero) |
 
-**Prices** — 16, all attached to the `fleet-catalog` plan, all INR:
+The rename of the subunit (`paise` → token credits) therefore needed a NEW meter rather
+than an edit, and a window that straddles it must be read from both: `llm-token-credits`
+for post-cutover days, `llm-cost` for the ones before. The integers are identical —
+nothing was rescaled — so a before/after comparison still means something. On a fresh
+stack `llm-cost` is never created (there is no history to preserve), and the provisioner
+says `retired / not created` rather than inventing an empty meter.
 
-- `recharge-principal` — the ₹500 taxable line.
+**Prices** — attached to the `fleet-catalog` plan, all INR:
+
+- `recharge-principal` — the package's taxable line (₹2,000 or ₹4,000 of value).
 - `gst-cgst-9` / `gst-sgst-9` / `gst-igst-18` — rate-card metadata only. Probe C
   settled that the invoice total comes from the header, not from these
   (`§4`), so nothing may treat their presence as the reason a GST line was
   charged; and nothing may read `invoice.total_tax` as the GST amount, because it
   is always `0` on our invoices.
-- `meter-llm-cost` / `meter-actor-compute` / `meter-deployment-minutes` — usage
-  prices, `USAGE`/`ARREAR`. `actor-compute` is priced **0** per D4.
-- `rate-<provider>-input` / `rate-<provider>-output` × 7 providers (claude, codex,
-  antigravity, ollama, lmstudio, omlx, huggingface) — generated from
-  `pricing.js` × `USD_TO_INR`, with the FX date recorded in metadata. **Read this
-  twice:** the catalog snapshot is decoration next to the live one. D9 moved
-  `USD_TO_INR` out of the *display* path and into the *ingest* path —
-  `usage.js` calls `pricing.usdToPaise()` with it to produce the `cost_paise` the
-  outbox delivers, so the rate reprices every future run and is a versioned
-  catalog input, not a page setting. Changing it should go with a re-provision, so
-  the two copies (the prices here and `CONFIG.BILLING.usdToInr`) do not drift.
+- `meter-llm-token-credits` / `meter-llm-cost` / `meter-actor-compute` /
+  `meter-deployment-minutes` — usage prices, `USAGE`/`ARREAR`, **all at ₹0.00**.
+  `actor-compute` is 0 per D4; the two LLM lines are 0 because the debit for a run is
+  made from the usage record, priced by the YAML card (§1), so a non-zero per-unit price
+  on either would bill the same usage a second time to any tenant attached to a
+  subscription. `ensurePrice` converges the amount rather than reporting `existing`, which
+  is what takes a stack that was minted at ₹0.01 down to ₹0.00; its metadata is merged,
+  not replaced, so `fleet_meter` survives the PUT.
+- `rate-<provider>-input` / `rate-<provider>-output` × 7 providers — **no longer
+  created.** They were a copy of `pricing.js` × `USD_TO_INR` that nothing read, and their
+  own comment said they were a record rather than the money path. The card at
+  `deploy/billing/credit-rates.yaml` IS the money path now, so publishing a second copy of
+  it into the one place an auditor looks is worse than publishing none. A stack
+  provisioned before that move still carries them: `--retire-rate-rows` sets
+  `metadata.fleet_retired=true`, drops the stale `fx_usd_inr`/`fx_captured_on` pair and
+  **keeps the row** — the façade exposes no price delete, no probe established what one
+  does to a price a subscription may still point at, and retiring is reversible when
+  assuming is not. `scripts/flexprice-provision.test.js` runs a whole provisioning against
+  a stub stack to hold that: the PUT bodies converge, and no request is a DELETE.
 
 **Per-org** — `POST /v1/customers` with **flat** `address_*` fields (nested
 `address` is accepted and dropped) then a `PRE_PAID` INR wallet with
@@ -790,9 +829,42 @@ invoice that quietly over-funds someone.
 
 Recorded as deviations in `docs/BILLING_IMPLEMENTATION_PLAN.md` §Phase 2 outcome —
 the unknown-location GST rule (supplier-state default + `assumed`, not IGST), the
-`ledger.js` opening ₹500 seed left in place one phase longer (the gate still reads
-`balancePaise`; the FlexPrice-side `FREE_CREDIT_GRANT` already exists), and the
-Razorpay checkout-signature check being conditional on the browser presenting one.
+`ledger.js` opening ₹500 seed left in place one phase longer (it is gone now: Phase 3
+deleted the stored balance and the FlexPrice wallet is the only readable figure, and the
+`FREE_CREDIT_GRANT` side of it was always there), and the Razorpay checkout-signature
+check being conditional on the browser presenting one.
+
+### Refunds: no code path, and a package makes the arithmetic wrong
+
+There is no refund anywhere in this repo — the only mention is a comment at
+`billing-api.js`, and Cashfree's own refund API is never called. That was a gap in
+₹-denominated thinking; with fixed packages it is a gap with a specific wrong number in
+it, so it is recorded here rather than left for the first support ticket to discover.
+
+`credits-3500` charges ₹2,360 (₹2,000 of value + ₹360 GST) and lands 3,500 credits as two
+rows: 2,000 prepaid, which is the taxable value, and 1,500 promotional with a 30-day
+expiry. A refund of the gross ₹2,360 that removes only the prepaid row — the intuitive
+reading, since that is "what they paid for" — leaves **1,500 free credits spendable on a
+cancelled payment**. Removing all 3,500 is the other wrong answer: the customer paid
+₹2,000 of value, so taking back the bonus they were granted on money they are being
+refunded in full charges them for a gift. Neither is a decision to make under pressure.
+
+What a refund has to be settled before it is written, in this order:
+
+1. **Who decides.** Customer support operates refunds today (an out-of-band action
+   against the Cashfree dashboard), so nothing here is wrong *yet* — but nothing here is
+   audited either, and the credit removal is not currently anyone's step.
+2. **Tax.** The ₹360 was collected and filed against the recharge's GSTIN. Refunding the
+   gross without a credit note leaves the return stating tax on a supply that was undone
+   (`§4`, and the Zoho invoice shape).
+3. **Which rows.** Prepaid and promotional are separate credit rows with separate expiry;
+   FlexPrice's own debit (`MANUAL_BALANCE_DEBIT`) draws by our policy order, not by row
+   provenance, so a partial clawback cannot be expressed as one wallet call.
+4. **Spend already made.** Credits are consumable, and 3,500 credits are frequently fewer
+   than 3,500 by refund time. A negative balance is representable here — `debitWallet` is
+   the one route that can push below zero, and the gate's `negative` state exists for
+   exactly that — so a clawback larger than the remainder is possible and would pause the
+   org's runners rather than fail.
 
 ## 12. The usage pipeline — as built (Phase 3)
 
