@@ -92,7 +92,8 @@ billing blind spot). Four PRs, one seam:
   as an ordinary `TASK_STATE_FAILED` with the provider's text, so
   `isPlatformFault` re-labels it `upstream_error` (never billed) while any
   failure it cannot name stays billable; and a task can complete with **no
-  artifact at all** (the mock worker does), which is now recorded as
+  artifact at all** (the offline mock stub did until it learned to stream), which
+  is now recorded as
   `the agent completed the turn without producing any output` instead of an
   unexplained empty bubble. Rotating the key then exposed a THIRD member of the
   same class, and it was being billed: a **retired model id** (`404 … is no
@@ -145,9 +146,10 @@ billing blind spot). Four PRs, one seam:
   actually generates, and the gate's own assertion passes for each of the three
   healthy catalog entries — `nemotron`, `nemotron-claude` and `nemotron-codex`
   (the claude harness delivers its text in `artifactUpdate` frames, the other two
-  in the task's status message; all three reach the client). `mock` still
-  completes with no text at all, which is the silent-completion case the notice
-  exists for.
+  in the task's status message; all three reach the client). `mock` streams two
+  SSE deltas through LiteLLM now, so it reaches the client as artifact text too;
+  the silent-completion case the notice exists for is left to a model that
+  settles a turn without parts, which unit tests cover rather than the stub.
 - **PR 3 — delete the bespoke relay:** `/chat`, `Chat.tsx`, `api.chat`, the
   private `event: session` frame, `verify-e2e.sh` §4 wording.
 - **PR 4 — make the unreachable features real:** `mcp_require_approval` in the

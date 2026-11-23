@@ -902,16 +902,20 @@ comes out of the LLM error envelope counts as the platform's. The two extra
 classes were found by rotating the key: the retired slug had been billing 49-82
 seconds of harness retry per attempt for a turn that could never reach a model.
 
-**A completion can also be legitimately empty.** The `mock` worker settles a turn
-with no artifacts and no `status.message` at all (proved live: the completed task
-has only the echoed user message), which is the second way to get an empty
+**A completion can also be legitimately empty.** A task can settle with no
+artifact / message / status part at all, which is the second way to get an empty
 bubble. `inspectFrame` therefore tracks whether any artifact / message / status
 part arrived, and a silent completion records
 `the agent completed the turn without producing any output` in `close_reason` —
 still outcome `completed`, still billable compute, but explainable to the user.
-Only `mock` does this: with a working credential the OpenRouter-backed models
-answer with real artifact frames, so an empty bubble from `nemotron*` is a
-regression, not the harness's nature.
+The offline `mock` stub used to be the standing example of this: it answered a
+`stream: true` request with a single JSON body, so the harness read one empty
+delta and completed the turn with nothing. It now emits real SSE deltas
+(`deploy/litellm/llm-mock-server.py`: `mock ` + `reply`, split across two chunks
+on purpose so a client that reads only the first one fails loudly), and the
+silent-completion path is left to a model that genuinely produces no parts —
+which unit tests cover, because a healthy catalog entry is the case that must
+NOT hit it.
 
 **Guard:** `scripts/fixes/t31-a2a-facade-check.sh` proves the card rewrite, the
 401-is-JSON routing, a relayed `message:stream` turn, the ownership refusals, and
@@ -922,13 +926,15 @@ one that cannot be done with curl: it runs the SPA's real client
 accepts the rewrite, every frame arrives as a *typed* A2A event, the turn settles,
 and `message.metadata['fleet.dev/model']` lands on the session row.
 **STATUS: IMPLEMENTED + unit-tested + verified in-cluster (2026-11-23).**
-`t31-a2a-facade-check.sh` passes all 29 gates against `kind-flexprice-local`.
+`t31-a2a-facade-check.sh` passes all 30 gates against `kind-flexprice-local`.
 PR 2 has landed: the chat tab is now the A2A client talking to this facade, so
 `(no output)` is gone — the bubble shows the `close_reason` recorded here, with
 Retry. The legacy `/chat` relay still exists (PR 3 deletes it) and shares
 `pumpTurn` with the facade, so the two paths cannot disagree about a turn.
 Observed live: a `message:stream` turn relays 4 controller frames verbatim and
-binds `contextId`; the mock worker's silent completion records
+binds `contextId`; a streaming `mock` turn now delivers `mock reply` as an
+`artifactUpdate` frame and settles `completed` with no `close_reason`, while a
+turn that produces no parts at all records
 `the agent completed the turn without producing any output`; a nemotron turn
 behind the dead OpenRouter key lands as
 `upstream_error | "…OpenAI API error: 401 Unauthorized" | meter_seconds=3.069 |

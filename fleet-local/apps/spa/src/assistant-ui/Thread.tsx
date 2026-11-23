@@ -11,6 +11,7 @@ import { useA2ATask } from '@assistant-ui/react-a2a';
 import { api } from '../api';
 import type { ModelOption, Org, Project, Session, SessionOutcome } from '../types';
 import { useFleetA2A } from '../a2a/useFleetA2A';
+import { artifactText, messageArtifacts, REASONING_ARTIFACT_ID } from '../a2a/artifacts';
 import { FailureNotice } from './FailureNotice';
 import { TaskStatusBar } from './TaskStatusBar';
 import { ThoughtPanel } from './ThoughtPanel';
@@ -174,6 +175,10 @@ function UserBubble() {
 function AssistantBubble({ closeReason, transportError }: { closeReason?: string | null; transportError?: string }) {
   const status = useAuiState((s) => s.message.status);
   const hasText = useAuiState((s) => s.message.content.some((part) => part.type === 'text' && part.text !== ''));
+  const metadata = useAuiState((s) => s.message.metadata);
+  // The channel kagent actually answers on. Content wins when the task also put
+  // the text in a status message, so the reply is never printed twice.
+  const answer = artifactText(messageArtifacts(metadata), [REASONING_ARTIFACT_ID]);
   return (
     <MessagePrimitive.Root className="bubble agent">
       <MessagePrimitive.Parts>
@@ -183,7 +188,13 @@ function AssistantBubble({ closeReason, transportError }: { closeReason?: string
           return null;
         }}
       </MessagePrimitive.Parts>
-      <FailureNotice status={status} hasText={hasText} closeReason={closeReason} transportError={transportError} />
+      {hasText ? null : answer ? <pre>{answer}</pre> : null}
+      <FailureNotice
+        status={status}
+        hasText={hasText || answer !== ''}
+        closeReason={closeReason}
+        transportError={transportError}
+      />
     </MessagePrimitive.Root>
   );
 }
