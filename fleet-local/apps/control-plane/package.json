@@ -13,6 +13,8 @@
     "test": "node --test --import ./test/setup.ts test/"
   },
   "dependencies": {
+    "@ag-ui/core": "^1.0.5",
+    "@ag-ui/encoder": "^1.0.5",
     "@fastify/cookie": "^11.1.5",
     "@fastify/static": "^8.3.0",
     "@fleet-local/shared": "0.1.0",
