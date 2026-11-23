@@ -52,19 +52,44 @@ const MAX_AUTO_RECHARGE_PAISE = 100000000; // ₹1,000,000 sanity cap on a sched
 const { callerOf } = require('./trusted-caller');
 
 /**
- * Rupees in, integer paise out — on the digits, via `money-wire`. The previous
- * `Math.round(Number(x) * 100)` was exact for the values a UI form sends and
- * wrong for the ones a script sends (₹1.005 → 101p in some orders, 100p in
- * others). Anything unparseable is NaN, which every caller already rejects.
+ * Credits in, integer token credits out — on the digits, via `money-wire`. The
+ * previous `Math.round(Number(x) * 100)` was exact for the values a UI form sends and
+ * wrong for the ones a script sends (1.005 → 101 in some orders, 100 in others).
+ * Anything unparseable is NaN, which every caller already rejects.
+ *
+ * Named for credits and not rupees because that is what a form field now says: this
+ * server stopped offering a ₹-labelled balance input when the display went
+ * credits-only. `1 credit = ₹1 = 100 token credits` (D6), so the arithmetic is the
+ * old one and only the unit word moved.
  */
-function inrToPaise(inr) {
-  const text = String(inr == null ? '' : inr).trim();
+function creditsToTokenCredits(value) {
+  const text = String(value == null ? '' : value).trim();
   if (!/^-?\d+(\.\d{1,2})?$/.test(text)) return NaN;
   try {
-    return moneyWire.paiseFromDecimal(text);
+    return moneyWire.tokenCreditsFromCredits(text);
   } catch (_) {
     return NaN;
   }
+}
+
+/** Token credits → the decimal string of whole credits a customer reads. Unknown stays `null`. */
+function creditsOf(tokenCredits) {
+  const raw = Number(tokenCredits);
+  if (tokenCredits === null || tokenCredits === undefined || !Number.isFinite(raw)) return null;
+  return moneyWire.creditsFromTokenCredits(Math.round(raw));
+}
+
+/**
+ * The admin-only ₹ column, added to a spend row only when the caller is an admin.
+ *
+ * Rupees stay on the usage routes for one reader: an admin reconciling a run against a
+ * provider bill or a GST invoice needs the ₹ the card paid, and a customer needs none
+ * of it. The presence of the key IS the gate — a view never has to decide whether it is
+ * allowed to print money it was not sent, because it was not sent.
+ */
+function rupeeFields(isAdmin, costTokenCredits, notionalTokenCredits) {
+  if (!isAdmin) return {};
+  return { costInr: paiseToInr(costTokenCredits), notionalInr: paiseToInr(notionalTokenCredits) };
 }
 
 /**
@@ -239,8 +264,10 @@ function sumWindow(records, days, now) {
   return {
     runs: scoped.length,
     tokens,
-    costInr: paiseToInr(costTokenCredits),
-    notionalInr: paiseToInr(notionalTokenCredits),
+    costTokenCredits,
+    notionalTokenCredits,
+    costCredits: creditsOf(costTokenCredits),
+    notionalCredits: creditsOf(notionalTokenCredits),
   };
 }
 
@@ -277,8 +304,8 @@ function bySourceWindow(records, days, now) {
     historyTruncated: store.usageRecordCount() >= store.USAGE_RECORD_CAP,
     sources: Object.fromEntries(Object.entries(sources).map(([key, acc]) => [key, {
       ...acc,
-      costInr: paiseToInr(acc.costTokenCredits),
-      notionalInr: paiseToInr(acc.notionalTokenCredits),
+      costCredits: creditsOf(acc.costTokenCredits),
+      notionalCredits: creditsOf(acc.notionalTokenCredits),
     }])),
   };
 }
@@ -308,8 +335,12 @@ router.get('/summary', asyncHandler(async (req, res) => {
   res.json({
     orgId: caller.orgId,
     isAdmin: caller.isAdmin,
-    currency: 'INR',
-    balanceInr: balanceTokenCredits === null ? null : paiseToInr(balanceTokenCredits),
+    // Every money-shaped number below is in credits. `unit` rather than `currency`
+    // because there is no currency here: a wallet balance is not a rupee amount, and
+    // the rupee figures a customer does see (the checkout total, the GST invoice) ride
+    // on the quote and settlement payloads, spelled `…Inr`.
+    unit: 'credits',
+    balanceCredits: creditsOf(balanceTokenCredits),
     balanceTokenCredits,
     fundsAvailable: fund.fundsAvailable,
     fundStatus: fund.fundStatus,
@@ -318,10 +349,10 @@ router.get('/summary', asyncHandler(async (req, res) => {
     balanceStale: Boolean(fund.stale),
     sandboxCreationDisabled: fund.sandboxCreationDisabled,
     scheduledCallsDisabled: fund.scheduledCallsDisabled,
-    // The rupee value of the free-tier opening grant, i.e. what the provisioner
+    // The credit value of the free-tier opening grant, i.e. what the provisioner
     // minted as FREE_CREDIT_GRANT. Configuration, not a balance — the balance
     // above is the only spendable number on this page.
-    initialCreditInr: paiseToInr((account && account.initialCreditTokenCredits)
+    initialCreditCredits: creditsOf((account && account.initialCreditTokenCredits)
       || CONFIG.BILLING.initialCreditTokenCredits),
     spend: {
       day: sumWindow(records, PERIOD_DAYS.day, now),
@@ -336,7 +367,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
       week: bySourceWindow(records, PERIOD_DAYS.week, now),
       month: bySourceWindow(records, PERIOD_DAYS.month, now),
     },
-    alertThresholdsInr: (account && account.alertThresholdsTokenCredits ? account.alertThresholdsTokenCredits : []).map(paiseToInr),
+    alertThresholdsCredits: (account && account.alertThresholdsTokenCredits ? account.alertThresholdsTokenCredits : []).map(creditsOf),
     // What may be bought, straight from the rate card. The browser composes no
     // amount and picks no coupon: this list is the only way it learns a price exists.
     // `rechargePackages`, not `packages`: the Usage page also renders
@@ -356,9 +387,12 @@ router.get('/summary', asyncHandler(async (req, res) => {
       ? {
           enabled: Boolean(account.autoRecharge.enabled),
           mode: account.autoRecharge.mode || 'amount',
-          thresholdInr: paiseToInr(account.autoRecharge.thresholdTokenCredits),
+          thresholdCredits: creditsOf(account.autoRecharge.thresholdTokenCredits),
           thresholdPercent: account.autoRecharge.thresholdPercent || 20,
-          amountInr: paiseToInr(account.autoRecharge.amountPaise),
+          // Stored as `amountPaise` because it is the charge a mandate settles, not a
+          // balance; reported as credits because 1 credit = ₹1 (D6) and this page speaks
+          // credits. The integer is the same number either way.
+          amountCredits: creditsOf(account.autoRecharge.amountPaise),
           cashfreeSubscriptionId: account.autoRecharge.cashfreeSubscriptionId || null,
           paymentMethodType: account.autoRecharge.paymentMethodType || null,
           cashfreeConfigured: cashfreeClient.isConfigured(),
@@ -366,9 +400,9 @@ router.get('/summary', asyncHandler(async (req, res) => {
       : {
           enabled: false,
           mode: 'amount',
-          thresholdInr: 0,
+          thresholdCredits: null,
           thresholdPercent: 20,
-          amountInr: 0,
+          amountCredits: null,
           cashfreeSubscriptionId: null,
           paymentMethodType: null,
           cashfreeConfigured: cashfreeClient.isConfigured(),
@@ -423,19 +457,24 @@ router.get('/usage', asyncHandler(async (req, res) => {
       label: g.label,
       runs: g.runs,
       tokens: g.tokens,
-      costInr: paiseToInr(g.costTokenCredits),
-      notionalInr: paiseToInr(g.notionalTokenCredits),
+      costCredits: creditsOf(g.costTokenCredits),
+      notionalCredits: creditsOf(g.notionalTokenCredits),
+      ...rupeeFields(caller.isAdmin, g.costTokenCredits, g.notionalTokenCredits),
     }));
+  const totalsTokenCredits = records.reduce((s, r) => s + (Number(r.costTokenCredits) || 0), 0);
+  const totalsNotionalTokenCredits = records.reduce((s, r) => s + (Number(r.notionalCostTokenCredits) || 0), 0);
   res.json({
     orgId: caller.orgId,
     groupBy,
     period,
+    unit: 'credits',
     rows,
     totals: {
       runs: rows.reduce((s, r) => s + r.runs, 0),
       tokens: rows.reduce((s, r) => s + r.tokens, 0),
-      costInr: paiseToInr(records.reduce((s, r) => s + (Number(r.costTokenCredits) || 0), 0)),
-      notionalInr: paiseToInr(records.reduce((s, r) => s + (Number(r.notionalCostTokenCredits) || 0), 0)),
+      costCredits: creditsOf(totalsTokenCredits),
+      notionalCredits: creditsOf(totalsNotionalTokenCredits),
+      ...rupeeFields(caller.isAdmin, totalsTokenCredits, totalsNotionalTokenCredits),
     },
   });
 }));
@@ -455,14 +494,15 @@ router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
       model: r.model,
       source: r.source,
       tokens: (r.usage && Number(r.usage.totalTokens)) || 0,
-      costInr: paiseToInr(r.costTokenCredits),
+      costCredits: creditsOf(r.costTokenCredits),
+      notionalCredits: creditsOf(r.notionalCostTokenCredits),
+      ...rupeeFields(caller.isAdmin, r.costTokenCredits, r.notionalCostTokenCredits),
       // Each row explains its own zero, so a per-run dispute needs no join.
       billingSource: r.billingSource || 'managed',
-      notionalInr: paiseToInr(r.notionalCostTokenCredits),
       traceId: r.traceId || null,
       runId: r.runId || null,
     }));
-  res.json({ orgId: caller.orgId, taskId, records });
+  res.json({ orgId: caller.orgId, taskId, unit: 'credits', records });
 }));
 
 // POST /api/billing/recharge { packageId } — the GST quote for one package ONLY.
@@ -507,9 +547,28 @@ router.put('/config', asyncHandler(async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const patch = {};
 
-  if (Array.isArray(body.alertThresholdsInr)) {
-    const thresholds = body.alertThresholdsInr
-      .map(inrToPaise)
+  // A balance threshold is a credit figure now. An old bundle that still posts `…Inr`
+  // would not be ignored here: `autoRecharge` is rewritten wholesale, so a threshold
+  // that arrives under the old name is a threshold that arrives as 0 — the alert and the
+  // auto-reload silently off. A purchase is not the only place this server refuses to
+  // guess what a request meant.
+  const staleUnit = [];
+  if (body.alertThresholdsInr != null) staleUnit.push('alertThresholdsInr');
+  if (body.autoRecharge && typeof body.autoRecharge === 'object') {
+    for (const field of ['thresholdInr', 'amountInr']) {
+      if (body.autoRecharge[field] != null) staleUnit.push(`autoRecharge.${field}`);
+    }
+  }
+  if (staleUnit.length) {
+    return res.status(400).json({
+      error: `Billing thresholds are configured in credits, not rupees: send alertThresholdsCredits / autoRecharge.thresholdCredits / autoRecharge.amountCredits. Received ${staleUnit.join(', ')}.`,
+      code: 'unit_not_accepted',
+    });
+  }
+
+  if (Array.isArray(body.alertThresholdsCredits)) {
+    const thresholds = body.alertThresholdsCredits
+      .map(creditsToTokenCredits)
       .filter((n) => Number.isFinite(n))
       .sort((a, b) => b - a);
     patch.alertThresholdsTokenCredits = thresholds;
@@ -521,8 +580,8 @@ router.put('/config', asyncHandler(async (req, res) => {
     const existingAr = (existingAccount && existingAccount.autoRecharge) || {};
 
     const mode = ['amount', 'percentage'].includes(ar.mode) ? ar.mode : 'amount';
-    const thresholdTokenCredits = inrToPaise(ar.thresholdInr);
-    const amountPaise = inrToPaise(ar.amountInr);
+    const thresholdTokenCredits = creditsToTokenCredits(ar.thresholdCredits);
+    const amountPaise = creditsToTokenCredits(ar.amountCredits);
     const thresholdPercent = Number.isFinite(Number(ar.thresholdPercent)) ? Math.max(1, Math.min(100, Number(ar.thresholdPercent))) : 20;
 
     // The reload choice is a package like every other recharge, so an id is validated
@@ -608,14 +667,15 @@ router.put('/config', asyncHandler(async (req, res) => {
   const account = store.upsertBillingAccount(caller.orgId, patch);
   res.json({
     orgId: caller.orgId,
-    alertThresholdsInr: (account.alertThresholdsTokenCredits || []).map(paiseToInr),
+    unit: 'credits',
+    alertThresholdsCredits: (account.alertThresholdsTokenCredits || []).map(creditsOf),
     paymentInfo: account.paymentInfo || null,
     autoRecharge: {
       enabled: Boolean(account.autoRecharge && account.autoRecharge.enabled),
       mode: account.autoRecharge && account.autoRecharge.mode || 'amount',
-      thresholdInr: paiseToInr(account.autoRecharge && account.autoRecharge.thresholdTokenCredits),
+      thresholdCredits: creditsOf(account.autoRecharge && account.autoRecharge.thresholdTokenCredits),
       thresholdPercent: account.autoRecharge && account.autoRecharge.thresholdPercent || 20,
-      amountInr: paiseToInr(account.autoRecharge && account.autoRecharge.amountPaise),
+      amountCredits: creditsOf(account.autoRecharge && account.autoRecharge.amountPaise),
       packageId: (account.autoRecharge && account.autoRecharge.packageId) || null,
       cashfreeSubscriptionId: account.autoRecharge && account.autoRecharge.cashfreeSubscriptionId || null,
       paymentMethodType: account.autoRecharge && account.autoRecharge.paymentMethodType || null,

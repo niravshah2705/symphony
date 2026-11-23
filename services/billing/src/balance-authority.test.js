@@ -196,3 +196,39 @@ test('event provenance is written and audited, never read as money', () => {
   });
   assert.deepEqual(violations, []);
 });
+
+// The credit surfaces render credits. ₹ belongs to the two places money is actually
+// denominated: the Cashfree payable and the GST line of the quote/invoice, plus the admin
+// run column the server gates. A view that formats a balance through the rupee formatter is
+// the second balance this gate exists to make impossible, and it is a lie by construction —
+// ₹2,360 bought 3,500 credits, so the ₹ figure beside a credit count is a different
+// quantity that happens to share a name.
+const RUPEE_VIEWS = [
+  'public/js/views/usage.js',
+  'public/js/views/cost.js',
+  'public/js/views/organization.js',
+  'services/billing/src/ui.js',
+];
+// The formatter's own parameter, i.e. the declaration rather than a use of it.
+const FORMATTER_PARAM = /^(?:value|val|amount|tokenCredits|n)$/;
+
+test('a rupee formatter is declared once per credit surface and only ever wraps a rupee-named field', () => {
+  for (const rel of RUPEE_VIEWS) {
+    const file = path.join(REPO_ROOT, rel);
+    assert.ok(FILES.includes(file), `${rel} is not being scanned`);
+    const source = fs.readFileSync(file, 'utf8');
+
+    const formatters = source.match(/style:\s*['"]currency['"]/g) || [];
+    assert.ok(formatters.length <= 1,
+      `${rel} declares ${formatters.length} currency formatters — one ` + "`inr()`" + ' for the payable/GST lines is all a credits page may have');
+
+    for (const [, arg] of source.matchAll(/\binr\(\s*([^()]*)\)/g)) {
+      const trimmed = arg.trim();
+      if (!trimmed || FORMATTER_PARAM.test(trimmed)) continue; // the declaration, not a call
+      // The last name in the expression is the field being formatted: `q.totalInr` and
+      // `c.inr` (a GST component) are rupee money, `summary.balanceCredits` is not.
+      assert.ok(/[A-Za-z0-9_]*(?:inr|paise)$/i.test(trimmed) && !/credits?\b|balance/i.test(trimmed),
+        `${rel}: inr(${trimmed}) formats a credit figure as rupees`);
+    }
+  }
+});

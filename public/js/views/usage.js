@@ -68,10 +68,11 @@ const creditText = (field) => {
   return formatNumber(Number(field.credits));
 };
 
-const inrText = (field) => {
-  if (!field || field.inr === null || field.inr === undefined) return t('usageUnknown', 'Unavailable');
-  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(field.inr));
-};
+// There is no rupee rendering of a balance on this page, and there must not be one
+// again: the server stopped sending it (`creditView()` in flexprice-reads.js has no
+// `inr`), because ₹2,360 is what a card paid and 3,500 credits is what the wallet holds
+// — after a run, neither number is the balance. `inr()` below survives for the two
+// figures that ARE rupees: what the package costs and the GST on it.
 
 const dateText = (value) => (value ? formatDate(value, { dateStyle: 'medium' }) : '—');
 
@@ -153,7 +154,7 @@ function balanceStrip(summary, overview) {
         ? t('usageGateNegative', 'A platform debit exceeded the wallet')
         : t('usageGateUnknown', 'The wallet could not be read, so nothing is enforced');
   return el('section', { class: 'metric-grid', 'aria-label': t('usageCreditsAria', 'Credits') }, [
-    metric(t('usageBalance', 'Available balance'), creditText(balance), `${overview.currency || 'INR'} · ${inrText(balance)}`),
+    metric(t('usageBalance', 'Available balance'), creditText(balance), t('usageCreditsUnit', 'credits')),
     metric(t('fundStatus', 'Fund status'), stateLabel(state), stateNote),
     metric(t('usagePlanCredits', 'Plan Credits'), overview.planCredits ? `${creditText(overview.planCredits.remaining)} / ${creditText(overview.planCredits.total)}` : t('usageUnknown', 'Unavailable'),
       overview.planCredits?.resetsOn ? t('usageResetsOn', 'Resets {date}', { date: dateText(overview.planCredits.resetsOn) }) : null),
@@ -292,7 +293,7 @@ function drawTrend(host, trend, breakdown) {
     ...values.map((entry) => el('option', {
       value: entry.value,
       selected: entry.value === dimensionValue ? 'selected' : null,
-      disabled: entry.total && entry.total.tokenCredits === null ? 'disabled' : null,
+      disabled: entry.total && entry.total.credits === null ? 'disabled' : null,
     }, `${entry.value} — ${entry.unreadable ? t('usageUnknown', 'Unavailable') : `${creditText(entry.total)} ${t('usageCredits', 'credits')}`}`)),
   ]);
 

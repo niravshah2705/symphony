@@ -41,11 +41,21 @@ function inr(value) {
   return new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(amount);
 }
 
-/** The wallet's money, which the server is allowed to report as `null`. inr()
- * would render a null balance as ₹0.00 — "you are out of credit" — so the balance
- * and the spend figures, which mean different things when missing, stay separate. */
-function money(value) {
-  return value === null || value === undefined ? '—' : inr(value);
+/**
+ * Credits, for the figures that are money the org holds.
+ *
+ * The server sends a decimal string of whole credits (or `null` when the gate could not
+ * read the wallet). `null` must not reach `inr()`-style formatting: ₹0.00 on this page
+ * means "you are out of credit", which is a different fact from "we do not know".
+ */
+function creditText(value) {
+  return value === null || value === undefined ? '—' : formatNumber(Number(value));
+}
+
+/** The same figure with its unit spelled, for a value that stands alone in a cell. */
+function creditAmount(value) {
+  const text = creditText(value);
+  return text === '—' ? text : `${text} credits`;
 }
 
 function metric(label, value, note) {
@@ -66,17 +76,21 @@ function sourceSeries(summary, source) {
     return {
       runs: Number(series.runs) || 0,
       tokens: Number(series.tokens) || 0,
-      costInr: Number(series.costInr) || 0,
-      notionalInr: Number(series.notionalInr) || 0,
+      costTokenCredits: Number(series.costTokenCredits) || 0,
+      costCredits: series.costCredits ?? null,
+      notionalTokenCredits: Number(series.notionalTokenCredits) || 0,
+      notionalCredits: series.notionalCredits ?? null,
     };
   }
   return source === 'customer'
-    ? { runs: 0, tokens: 0, costInr: 0, notionalInr: 0 }
+    ? { runs: 0, tokens: 0, costTokenCredits: 0, costCredits: '0.00', notionalTokenCredits: 0, notionalCredits: '0.00' }
     : {
         runs: (week && Number(week.runs)) || 0,
         tokens: (week && Number(week.tokens)) || 0,
-        costInr: (week && Number(week.costInr)) || 0,
-        notionalInr: 0,
+        costTokenCredits: (week && Number(week.costTokenCredits)) || 0,
+        costCredits: (week && week.costCredits) ?? '0.00',
+        notionalTokenCredits: 0,
+        notionalCredits: '0.00',
       };
 }
 
@@ -103,7 +117,7 @@ export async function renderCost(view) {
     el('div', { class: 'page-head operational-head' }, [
       el('div', {}, [
         el('h1', {}, 'Cost'),
-        el('p', { class: 'muted' }, 'Per-organization, project, user and task usage — metered from LLM runs. INR figures are estimates.'),
+        el('p', { class: 'muted' }, 'Per-organization, project, user and task usage — metered from LLM runs and priced from the deployed rate card.'),
       ]),
       refresh,
     ]),
@@ -131,28 +145,30 @@ export async function renderCost(view) {
       : 'the credit is spent';
     content.push(el('div', { class: 'notice operational-notice operational-notice-warn' }, [
       el('strong', {}, 'Funds Unavailable — Runners & Scheduled Calls Disabled'),
-      el('span', {}, ` Organization balance is ${money(summary.balanceInr)} because ${why}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable runner jobs and scheduled ticks.`),
+      el('span', {}, ` Organization balance is ${creditAmount(summary.balanceCredits)} because ${why}. Add credits or configure auto-reload${summary.isAdmin ? ' below' : ''} to re-enable runner jobs and scheduled ticks.`),
     ]));
   }
 
   content.push(
     el('section', { class: 'metric-grid', 'aria-label': 'Billing summary' }, [
-      metric('Wallet balance', money(summary.balanceInr),
-        `${summary.currency} · opening credit ${inr(summary.initialCreditInr)}${summary.balanceStale ? ' · cached read' : ''}`),
+      metric('Wallet balance', creditText(summary.balanceCredits),
+        `credits · opening credit ${creditText(summary.initialCreditCredits)}${summary.balanceStale ? ' · cached read' : ''}`),
       metric('Fund status', FUND_STATE_LABEL[summary.fundState] || 'Unknown',
         summary.fundsAvailable
           ? (summary.gatePolicy === 'off' ? 'Gate off — nothing enforced' : 'Active & ready')
           : (summary.fundState === 'negative' ? 'Platform debit exceeded the wallet' : 'Runners & scheduler paused')),
       // Two series, deliberately: the second one is the number the platform never
       // spent, and its zero is what an organization on its own key is buying.
-      metric('Managed spend (7 days)', inr(sourceSeries(summary, 'managed').costInr),
+      metric('Managed spend (7 days)', creditAmount(sourceSeries(summary, 'managed').costCredits),
         `${formatNumber(sourceSeries(summary, 'managed').runs)} runs · ${formatNumber(sourceSeries(summary, 'managed').tokens)} tokens`),
-      metric('Your key (not charged)', inr(sourceSeries(summary, 'customer').notionalInr),
-        `${formatNumber(sourceSeries(summary, 'customer').runs)} runs at list price — debited ₹0`),
+      metric('Your key (not charged)', creditAmount(sourceSeries(summary, 'customer').notionalCredits),
+        `${formatNumber(sourceSeries(summary, 'customer').runs)} runs at list price — debited 0 credits`),
       metric('Auto-recharge', summary.autoRecharge.enabled ? 'On' : 'Off',
         // No rate is quoted here any more, and that is the point: a debit comes from the
-        // INR rate card, so no currency movement changes what this page says was spent.
-        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : 'Not scheduled — top up from Recharge'),
+        // rate card, so no currency movement changes what this page says was spent.
+        summary.autoRecharge.enabled
+          ? `+${creditText(summary.autoRecharge.amountCredits)} credits below ${creditText(summary.autoRecharge.thresholdCredits)} credits`
+          : 'Not scheduled — top up from Recharge'),
     ]),
   );
 
@@ -225,28 +241,39 @@ function usageTable(rows, totals) {
         el('td', {}, el('strong', {}, 'Total')),
         el('td', {}, formatNumber(totals.runs)),
         el('td', {}, formatNumber(totals.tokens)),
-        el('td', { class: 'cost-cell' }, el('strong', {}, inr(totals.costInr))),
+        el('td', { class: 'cost-cell' }, el('strong', {}, creditAmount(totals.costCredits))),
       ])])
     : null;
   return el('div', { class: 'table-scroll' }, [
     el('table', { class: 'operational-table' }, [
-      el('thead', {}, [el('tr', {}, [groupBy === 'task' ? 'Task' : groupBy === 'user' ? 'User' : groupBy === 'day' ? 'Day' : groupBy === 'billingSource' ? 'Who paid' : 'Project', 'Runs', 'Tokens', 'Cost'].map((h) => el('th', {}, h)))]),
+      el('thead', {}, [el('tr', {}, [groupBy === 'task' ? 'Task' : groupBy === 'user' ? 'User' : groupBy === 'day' ? 'Day' : groupBy === 'billingSource' ? 'Who paid' : 'Project', 'Runs', 'Tokens', 'Credits'].map((h) => el('th', {}, h)))]),
       body,
       foot,
     ].filter(Boolean)),
   ]);
 }
 
-/** The charge, plus — when the organization paid the provider itself — the value it
- * did NOT pay us. Both in one cell, because a bare ₹0 next to real token volume
- * reads as missing data rather than as the whole point of bring-your-own-key. */
-function costCell(value, notionalInr) {
-  const notional = Number(notionalInr) || 0;
-  if (!notional) return el('td', { class: 'cost-cell' }, inr(value));
+/**
+ * The charge in credits, plus — when the organization paid the provider itself — the
+ * value it did NOT pay us. Both in one cell, because a bare 0 next to real token volume
+ * reads as missing data rather than as the whole point of bring-your-own-key.
+ *
+ * The ₹ line appears only when the server sent one, which it does only for an admin
+ * (`rupeeFields()` in billing-api.js): an operator reconciling a run against a provider
+ * bill needs the rupee figure the rate card produced, and a customer needs none of it.
+ */
+function costCell(row) {
+  const charged = creditText(row.costCredits);
+  const notional = Number(row.notionalCredits) || 0;
+  const rupees = row.costInr === null || row.costInr === undefined
+    ? null
+    : `≈ ${inr(row.costInr)}${row.notionalInr ? ` / ${inr(row.notionalInr)} list` : ''}`;
+  if (!notional && !rupees) return el('td', { class: 'cost-cell' }, charged);
   return el('td', { class: 'cost-cell' }, [
-    el('strong', {}, inr(value)),
-    el('small', { class: 'table-sub' }, `${inr(notional)} at list price · not charged`),
-  ]);
+    el('strong', {}, charged),
+    notional ? el('small', { class: 'table-sub' }, `${creditText(row.notionalCredits)} at list price · not charged`) : null,
+    rupees ? el('small', { class: 'table-sub' }, rupees) : null,
+  ].filter(Boolean));
 }
 
 function usageRow(row) {
@@ -258,7 +285,7 @@ function usageRow(row) {
     labelCell,
     el('td', {}, formatNumber(row.runs)),
     el('td', {}, formatNumber(row.tokens)),
-    costCell(row.costInr, row.notionalInr),
+    costCell(row),
   ]);
   if (!expandable) return tr;
 
@@ -292,13 +319,13 @@ function taskDetail(records) {
   if (!records.length) return el('span', { class: 'muted' }, 'No individual runs recorded.');
   return el('div', { class: 'table-scroll' }, [
     el('table', { class: 'operational-table subtable' }, [
-      el('thead', {}, [el('tr', {}, ['When', 'Project', 'Runtime / model', 'Tokens', 'Cost'].map((h) => el('th', {}, h)))]),
+      el('thead', {}, [el('tr', {}, ['When', 'Project', 'Runtime / model', 'Tokens', 'Credits'].map((h) => el('th', {}, h)))]),
       el('tbody', {}, records.map((r) => el('tr', {}, [
         el('td', {}, r.createdAt ? formatDate(r.createdAt, { dateStyle: 'medium', timeStyle: 'short' }) : '—'),
         el('td', {}, r.projectName || '—'),
         el('td', {}, [el('span', {}, r.source || 'agent'), el('small', { class: 'table-sub' }, `${r.provider || '—'} / ${r.model || '—'}`)]),
         el('td', {}, formatNumber(r.tokens)),
-        costCell(r.costInr, r.notionalInr),
+        costCell(r),
       ]))),
     ]),
   ]);
@@ -413,18 +440,18 @@ function adminPanel(view, summary) {
     }
   });
 
-  const thresholds = el('input', { type: 'text', value: (summary.alertThresholdsInr || []).join(', '), placeholder: 'e.g. 100, 0' });
+  const thresholds = el('input', { type: 'text', value: (summary.alertThresholdsCredits || []).join(', '), placeholder: 'e.g. 100, 0' });
   const arEnabled = el('input', { type: 'checkbox', ...(ar.enabled ? { checked: 'checked' } : {}) });
 
   // Mode selection: Specific Amount vs Percentage
   const modeAmountRadio = el('input', { type: 'radio', name: 'arMode', value: 'amount', ...(currentMode === 'amount' ? { checked: 'checked' } : {}) });
   const modePercentRadio = el('input', { type: 'radio', name: 'arMode', value: 'percentage', ...(currentMode === 'percentage' ? { checked: 'checked' } : {}) });
 
-  const arThresholdInr = el('input', { type: 'number', step: '1', value: String(ar.thresholdInr ?? 0), placeholder: 'Threshold (INR)' });
+  const arThresholdCredits = el('input', { type: 'number', step: '1', value: String(ar.thresholdCredits ?? 0), placeholder: 'Threshold (credits)' });
   const arThresholdPercent = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20), placeholder: 'Threshold (%)' });
-  const arAmount = el('input', { type: 'number', step: '1', value: String(ar.amountInr ?? 0), placeholder: 'Reload Amount (INR)' });
+  const arAmount = el('input', { type: 'number', step: '1', value: String(ar.amountCredits ?? 0), placeholder: 'Reload Amount (credits)' });
 
-  const amountGroup = el('label', { class: 'field', id: 'ar-amount-field' }, [el('span', {}, 'When balance falls below (INR)'), arThresholdInr]);
+  const amountGroup = el('label', { class: 'field', id: 'ar-amount-field' }, [el('span', {}, 'When balance falls below (credits)'), arThresholdCredits]);
   const percentGroup = el('label', { class: 'field', id: 'ar-percent-field' }, [el('span', {}, 'When balance falls below (% of credit)'), arThresholdPercent]);
 
   const updateModeVisibility = () => {
@@ -449,13 +476,13 @@ function adminPanel(view, summary) {
   saveBtn.addEventListener('click', async () => {
     const selectedMode = modePercentRadio.checked ? 'percentage' : 'amount';
     const payload = {
-      alertThresholdsInr: thresholds.value.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n)),
+      alertThresholdsCredits: thresholds.value.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n)),
       autoRecharge: {
         enabled: arEnabled.checked,
         mode: selectedMode,
-        thresholdInr: Number(arThresholdInr.value) || 0,
+        thresholdCredits: Number(arThresholdCredits.value) || 0,
         thresholdPercent: Number(arThresholdPercent.value) || 20,
-        amountInr: Number(arAmount.value) || 0,
+        amountCredits: Number(arAmount.value) || 0,
       },
       notifyChannels: { browser: chBrowser.checked, email: chEmail.checked, slack: chSlack.checked },
       gateEnabled: gateEnabled.checked,
@@ -532,11 +559,11 @@ function adminPanel(view, summary) {
         ]),
       ]),
       quoteBox,
-      field('Alert thresholds (INR, comma-separated)', thresholds),
+      field('Alert thresholds (credits, comma-separated)', thresholds),
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Auto-Reload Threshold Method (OpenAI style)'),
         el('div', { class: 'row' }, [
-          el('label', { class: 'radio-label' }, [modeAmountRadio, el('span', {}, 'Specific Amount (INR)')]),
+          el('label', { class: 'radio-label' }, [modeAmountRadio, el('span', {}, 'Specific Amount (credits)')]),
           el('label', { class: 'radio-label' }, [modePercentRadio, el('span', {}, 'Percentage (%) of Credit')]),
         ]),
       ]),
@@ -544,7 +571,7 @@ function adminPanel(view, summary) {
         field('Enable Auto-Reload', arEnabled),
         amountGroup,
         percentGroup,
-        field('Reload Amount (INR)', arAmount),
+        field('Reload Amount (credits)', arAmount),
       ]),
       el('div', { class: 'field-group' }, [
         el('strong', {}, 'Cashfree Payments Mandate (UPI AutoPay, Cards SI, eNACH)'),

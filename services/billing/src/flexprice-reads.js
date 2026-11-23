@@ -296,11 +296,26 @@ function topValuesFor(orgId, field, limit, sinceMs, nowMs) {
     .map((entry) => entry.value);
 }
 
-function creditOf(tokenCredits) {
-  if (tokenCredits === null || tokenCredits === undefined) return { tokenCredits: null, credits: null, inr: null };
+/**
+ * The only money shape this file hands the browser: an integer `tokenCredits` (the
+ * ledger unit, and what the chart bins sort on) plus `credits` as a decimal string
+ * for a human.
+ *
+ * There is deliberately no rupee field. A wallet balance is not a sum of money the
+ * customer paid — ₹2,360 bought 3,500 credits and 40 of them are gone — so the only
+ * honest unit for what is left is credits, and a `currency: 'INR'` on the same
+ * envelope invited every view to print a ₹ figure the org never had. Rupees exist on
+ * the two pages where money actually moves: the Cashfree checkout total and the GST
+ * invoice, both built from the recharge intent's `…Paise` fields, never from here.
+ *
+ * `null` is not zero (see the header): an unreadable number must not read as an empty
+ * wallet.
+ */
+function creditView(tokenCredits) {
+  if (tokenCredits === null || tokenCredits === undefined) return { tokenCredits: null, credits: null };
   const value = Number(tokenCredits);
-  if (!Number.isInteger(value)) return { tokenCredits: null, credits: null, inr: null };
-  return { tokenCredits: value, credits: moneyWire.creditsFromTokenCredits(value), inr: moneyWire.decimalFromPaise(value) };
+  if (!Number.isInteger(value)) return { tokenCredits: null, credits: null };
+  return { tokenCredits: value, credits: moneyWire.creditsFromTokenCredits(value) };
 }
 
 /**
@@ -446,8 +461,8 @@ function bucketCreditRows(rows) {
       packs.push({
         id: row.id || null,
         reason: reason || null,
-        ...creditOf(remaining),
-        total: creditOf(total),
+        ...creditView(remaining),
+        total: creditView(total),
         expiresAt: rowExpiry(row),
         orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotencyKey || null,
       });
@@ -460,8 +475,8 @@ function bucketCreditRows(rows) {
         id: row.id || null,
         name: (row.metadata && row.metadata.description) || row.description || reasonLabel(reason),
         reason: reason || null,
-        remaining: creditOf(remaining),
-        total: creditOf(total),
+        remaining: creditView(remaining),
+        total: creditView(total),
         expiresAt,
       });
     }
@@ -470,9 +485,9 @@ function bucketCreditRows(rows) {
   const view = (b) => {
     const usedTokenCredits = Math.max(0, b.totalTokenCredits - b.remainingTokenCredits);
     return {
-      total: creditOf(b.totalTokenCredits),
-      used: creditOf(usedTokenCredits),
-      remaining: creditOf(b.remainingTokenCredits),
+      total: creditView(b.totalTokenCredits),
+      used: creditView(usedTokenCredits),
+      remaining: creditView(b.remainingTokenCredits),
       pctUsed: b.totalTokenCredits > 0 ? Math.round((usedTokenCredits / b.totalTokenCredits) * 1000) / 10 : null,
       rowCount: b.rowCount,
       unreadableRows: b.unreadableRows,
@@ -709,8 +724,10 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
     const fund = await gate.ensureFundStatus(orgId, deps);
     const walletId = await walletIdFor(orgId);
     const base = {
-      currency: 'INR',
-      balance: creditOf(fund.balanceTokenCredits),
+      // `unit`, not `currency`: the number beside it is credits, and a key named for a
+      // currency invites the view to format it as money.
+      unit: 'credits',
+      balance: creditView(fund.balanceTokenCredits),
       fundState: fund.state,
       gatePolicy: fund.gatePolicy,
       balanceStale: Boolean(fund.stale),
@@ -755,8 +772,8 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
     };
   }, {
     // A read that never succeeded still answers with the buckets it has none of.
-    currency: 'INR',
-    balance: creditOf(null),
+    unit: 'credits',
+    balance: creditView(null),
     fundState: null,
     walletResolved: false,
     planCredits: null,
@@ -793,7 +810,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         reason: 'read_failed',
         note: 'FlexPrice answered this window without day buckets, so daily consumption cannot be attributed to days.',
         weeks,
-        total: creditOf(series.totalTokenCredits),
+        total: creditView(series.totalTokenCredits),
         days: [],
       };
     }
@@ -801,7 +818,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
     const days = dayKeys.map((date) => ({
       date,
       // A day with no rows has no events, which measures as 0 (findings §14).
-      ...creditOf(series.byDay.get(date) || 0),
+      ...creditView(series.byDay.get(date) || 0),
       unreadable: false,
     }));
     const unreadableBuckets = series.unreadableRows || 0;
@@ -813,12 +830,12 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       endUtc: days.length ? days[days.length - 1].date : null,
       // The window total comes from the same response as the cells, so the header
       // and the grid can never disagree.
-      total: creditOf(series.totalTokenCredits),
+      total: creditView(series.totalTokenCredits),
       partial: unreadableBuckets > 0,
       unreadableBuckets,
       days,
     };
-  }, { weeks: MAX_WEEKS, total: creditOf(null), days: [] }));
+  }, { weeks: MAX_WEEKS, total: creditView(null), days: [] }));
 
   // GET /api/billing/flexprice/trend?range=7d|1d|30d|mtd|last-month&from&to&project&user&agent&tier
   router.get('/trend', read('trend', async ({ req, orgId }) => {
@@ -844,7 +861,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
     });
 
     const points = series.bucketed
-      ? dayKeys.map((date) => ({ date, ...creditOf(series.byDay.get(date) || 0) }))
+      ? dayKeys.map((date) => ({ date, ...creditView(series.byDay.get(date) || 0) }))
       : [];
     const unreadableBuckets = series.unreadableRows || 0;
     return {
@@ -856,7 +873,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       // an empty series and a refused filter are different answers.
       ignoredFilters: rejected,
       filterableDimensions: Object.keys(DIMENSIONS),
-      total: creditOf(series.totalTokenCredits),
+      total: creditView(series.totalTokenCredits),
       points,
       // No buckets means the filter cannot be honoured either, and that is reported
       // rather than drawn as a flat zero line.
@@ -867,7 +884,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         null,
       ),
     };
-  }, { total: creditOf(null), points: [], bucketed: false, filters: {} }));
+  }, { total: creditView(null), points: [], bucketed: false, filters: {} }));
 
   // GET /api/billing/flexprice/usage-breakdown?dimension=project|user|agent&limit=
   // The filter picker for /trend: which projects/users/agents used credit, and how
@@ -906,14 +923,14 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         endIso,
         filters: { [property]: [value] },
       });
-      return { value, total: creditOf(series.totalTokenCredits), bucketed: series.bucketed };
+      return { value, total: creditView(series.totalTokenCredits), bucketed: series.bucketed };
     });
 
     const rows = perValue
       .map((row, index) => (row === null
         // A failed dimension read is null, not 0: "this project used nothing" and
         // "we could not tell" are different answers about money.
-        ? { value: values[index], total: creditOf(null), unreadable: true }
+        ? { value: values[index], total: creditView(null), unreadable: true }
         : { ...row, unreadable: row.total.tokenCredits === null }))
       .sort((a, b) => (b.total.tokenCredits ?? -1) - (a.total.tokenCredits ?? -1));
     return {
@@ -926,6 +943,9 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       // The candidate list is ours, so a value FlexPrice has never seen is a
       // missing row rather than a FlexPrice bug — hence `source`.
       source: 'fleet_usage_records',
+      // Provenance for the figure, so a reader knows what unit `total.tokenCredits`
+      // is a SUM of: this is the metered property name, not a currency.
+      sourceUnit: LLM.field,
       note: 'Values are the projects/users/agents this organization has records for; the credits beside each is a FlexPrice usage read filtered to that value.',
     };
   }, { dimension: 'project', values: [] }));
@@ -978,12 +998,12 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
           // reduce the balance without any agent having used anything, and a log
           // that lists them as usage invents cost the org never paid.
           kind: NOT_USAGE_REASONS.has(String(row.transactionReason || '').toUpperCase()) ? 'adjustment' : 'movement',
-          amount: creditOf(amount),
-          remaining: creditOf(rowAmountTokenCredits(row, 'creditsAvailable')),
+          amount: creditView(amount),
+          remaining: creditView(rowAmountTokenCredits(row, 'creditsAvailable')),
           // What the wallet held after this row landed. `creditBalanceAfter` is a
           // real field on the transaction (`internal/domain/wallet/transaction.go`),
           // so the log's running-balance column needs no arithmetic of our own.
-          balanceAfter: creditOf(rowAmountTokenCredits(row, 'creditBalanceAfter')),
+          balanceAfter: creditView(rowAmountTokenCredits(row, 'creditBalanceAfter')),
           expiresAt: rowExpiry(row),
           orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotencyKey || null,
           provider: (row.metadata && row.metadata.provider) || null,

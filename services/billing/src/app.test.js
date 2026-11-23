@@ -306,7 +306,7 @@ test('config update with percentage mode keeps Cashfree mandate fields', async (
     const res = await fetch(`${server.url}/api/billing/config`, {
       method: 'PUT',
       headers: { ...ADMIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 25, amountInr: 1500 } }),
+      body: JSON.stringify({ autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 25, amountCredits: 1500 } }),
     });
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -327,8 +327,14 @@ test('auto-recharge stores a package preference and refuses one that does not ex
   });
   const server = await listen(createApp());
   try {
-    const saved = await (await putConfig({ autoRecharge: { enabled: true, thresholdInr: 40, amountInr: 500, packageId: 'credits-10000' } })).json();
+    const saved = await (await putConfig({ autoRecharge: { enabled: true, thresholdCredits: 40, amountCredits: 500, packageId: 'credits-10000' } })).json();
     assert.equal(saved.autoRecharge.packageId, 'credits-10000');
+    assert.equal(saved.unit, 'credits');
+    assert.equal(saved.autoRecharge.thresholdCredits, '40.00', 'the wire speaks credits');
+    assert.equal(store.getBillingAccount(AR_ORG).autoRecharge.thresholdTokenCredits, 4000,
+      'the store keeps the integer subunit, which is the same number two decimals to the right');
+    assert.equal(store.getBillingAccount(AR_ORG).autoRecharge.amountPaise, 50000,
+      'and the reload amount keeps its rupee name, because it is what the card is charged');
     assert.equal(store.getBillingAccount(AR_ORG).autoRecharge.packageId, 'credits-10000',
       'the reload offer the org picked is stored; nothing settles it yet');
 
@@ -345,6 +351,41 @@ test('auto-recharge stores a package preference and refuses one that does not ex
 
     const cleared = await (await putConfig({ autoRecharge: { packageId: '' } })).json();
     assert.equal(cleared.autoRecharge.packageId, null, 'clearing is allowed; an invented id is not');
+  } finally {
+    await server.close();
+  }
+});
+
+// `autoRecharge` is rewritten wholesale from the request, so a threshold that arrives under
+// the old rupee name is a threshold that arrives as 0. On the order path a wrong field is a
+// wrong price; here it is an alert that never fires and an auto-reload that never runs, on a
+// balance that is falling. So the stale name is refused by name, and nothing is written.
+test('a config posted in rupees is refused, not filed as zero', async () => {
+  const RUPEE_ORG = 'org-config-rupees';
+  const arAdmin = { 'x-ai-fleet-billing-org-id': RUPEE_ORG, 'x-ai-fleet-billing-org-role': 'ORG_ADMIN' };
+  const server = await listen(createApp());
+  try {
+    const put = (body) => fetch(`${server.url}/api/billing/config`, {
+      method: 'PUT', headers: { ...arAdmin, 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const good = await (await put({ autoRecharge: { enabled: true, thresholdCredits: 80, amountCredits: 500 } })).json();
+    assert.equal(good.autoRecharge.thresholdCredits, '80.00');
+
+    for (const [sent, named] of [
+      [{ autoRecharge: { enabled: true, thresholdInr: 40 } }, 'autoRecharge.thresholdInr'],
+      [{ autoRecharge: { enabled: true, amountInr: 500 } }, 'autoRecharge.amountInr'],
+      [{ alertThresholdsInr: [100, 0] }, 'alertThresholdsInr'],
+    ]) {
+      const res = await put(sent);
+      assert.equal(res.status, 400, JSON.stringify(sent));
+      const body = await res.json();
+      assert.equal(body.code, 'unit_not_accepted');
+      assert.ok(body.error.includes(named), `${named} is named in the refusal: ${body.error}`);
+    }
+
+    const after = store.getBillingAccount(RUPEE_ORG).autoRecharge;
+    assert.equal(after.thresholdTokenCredits, 8000, 'the refused write left the stored threshold alone');
+    assert.equal(after.amountPaise, 50000);
   } finally {
     await server.close();
   }
