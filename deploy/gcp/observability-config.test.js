@@ -111,10 +111,13 @@ test('each metric filter names a field the emitting code actually writes', () =>
   assert.equal(cost.length, 1, 'expected exactly one priceMatch metric filter');
   assert.match(usageSrc, /log\.warn\(`cost estimate priced an unmodeled provider/, 'the fallback-rate warning moved');
   // The filter counts ONLY guessed prices: a modeled provider must not resolve to
-  // the value being alerted on, or the metric counts every run in the fleet.
-  assert.equal(pricing.priceMatchOf('not-a-provider', 0), cost[0].value);
-  assert.notEqual(pricing.priceMatchOf('claude', 0), cost[0].value);
-  assert.notEqual(pricing.priceMatchOf('ollama', 0), cost[0].value);
+  // the value being alerted on, or the metric counts every run in the fleet. Called
+  // with the run's attribution object — a positional call here would destructure to
+  // undefined and answer 'Default' for every provider, which is how this alert would
+  // go permanently, silently on.
+  assert.equal(pricing.priceMatchOf({ provider: 'not-a-provider' }), cost[0].value);
+  assert.notEqual(pricing.priceMatchOf({ model: 'claude-sonnet-5', provider: 'claude' }), cost[0].value);
+  assert.notEqual(pricing.priceMatchOf({ provider: 'ollama' }), cost[0].value, 'modeled at zero is still modeled');
 });
 
 test('observability is dark by default, and every resource is gated', () => {

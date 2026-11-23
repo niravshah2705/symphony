@@ -28,8 +28,16 @@ const { SHARED_ORG_ID } = require('./org-context');
 // property name the meter aggregates on: a quantity posted under any other name
 // is stored, acknowledged with 202, and contributes nothing — silently. So the
 // name lives here and nowhere else.
+//
+// `llm-token-credits` replaced `llm-cost` rather than editing it, because a deployed
+// meter cannot be repointed: the provisioner matches a meter by NAME and returns
+// early, and the pinned engine binds aggregation to the event name plus the property
+// name it was created with. The old meter therefore stays in the catalog as
+// retired-but-readable history: it sums the quantity property the pre-rename events
+// carried, under its old unit spelling. The integers are identical, so a before/after
+// window comparison still means something.
 const METERS = Object.freeze({
-  llmCost: { meter: 'llm-cost', eventName: 'fleet.llm_cost', field: 'token_credits', unit: 'tokenCredits' },
+  llmTokenCredits: { meter: 'llm-token-credits', eventName: 'fleet.llm_cost', field: 'token_credits', unit: 'tokenCredits' },
   actorCompute: {
     meter: 'actor-compute',
     eventName: 'fleet.actor_compute',
@@ -45,6 +53,33 @@ const METERS = Object.freeze({
 });
 
 const QUANTITY_FIELD = { tokenCredits: 'quantityTokenCredits', seconds: 'quantitySeconds', minutes: 'quantityMinutes' };
+
+/**
+ * The audit payload of an LLM event: `[row field, event property]`.
+ *
+ * `token_credits` above is the ONLY field a meter aggregates. Everything here is
+ * recorded so a dispute can be settled from the event alone — what the provider said
+ * it billed and in which currency, the rate the card was stamped at, the rupee value
+ * of the debit as a decimal STRING (never a number, so it cannot be mistaken for the
+ * metered integer), and the token counts behind it. None of it may be read back to
+ * compute money: `services/billing/src/balance-authority.test.js` fails any source file
+ * outside the five that author, persist, stamp or verify them, which is what keeps a
+ * future "sum the inr_cost" convenience from appearing quietly in a read path.
+ *
+ * A property is omitted, not zeroed, when the runtime did not report it: absent means
+ * "no provider figure exists", zero would mean "the provider says it was free", and
+ * the reconciler counts the difference.
+ */
+const EVENT_PROPERTIES = Object.freeze([
+  ['inputTokens', 'input_tokens'],
+  ['outputTokens', 'output_tokens'],
+  ['cacheReadTokens', 'cache_read_tokens'],
+  ['cacheWriteTokens', 'cache_write_tokens'],
+  ['providerCost', 'provider_cost'],
+  ['providerCurrency', 'provider_currency'],
+  ['fxRateToInr', 'fx_rate_to_inr'],
+  ['inrCost', 'inr_cost'],
+]);
 
 // A row that keeps failing stays retryable for this many passes. Twelve drains
 // is roughly an hour at the billing tick's cadence; past that the row is
@@ -131,6 +166,13 @@ function enqueue(input = {}, deps = {}) {
       meter: spec.meter,
       eventName: spec.eventName,
       [QUANTITY_FIELD[spec.unit]]: quantity,
+      // Provenance travels with the ROW, not with the drain: these are the numbers the
+      // run was priced at, and re-deriving them when the batch is delivered an hour
+      // later — possibly after a redeploy that changed the card — would describe a
+      // different run than the one the meter summed.
+      ...Object.fromEntries(EVENT_PROPERTIES
+        .map(([field]) => [field, input[field]])
+        .filter(([, value]) => value !== null && value !== undefined)),
       idempotencyKey,
       // The event's own clock. A backlog drained an hour late must still meter
       // into the hour it happened, or the drain's read-back over the window
@@ -158,19 +200,32 @@ function enqueue(input = {}, deps = {}) {
 
 /**
  * The one call site that exists today: an LLM run's platform cost, in whole token
- * credits, as computed by pricing.js. `costTokenCredits` is 0 for a run on the org's
- * own key and that is not a billable quantity, so it queues nothing.
+ * credits, as priced from the rate card by pricing.js. `costTokenCredits` is 0 for a
+ * run on the org's own key and that is not a billable quantity, so it queues nothing.
+ *
+ * The record's provenance travels with the quantity: the event is the only place a
+ * later reader can see what the debit was computed FROM, once the card itself has
+ * moved on.
  */
 function enqueueLlmCost(usageRecord, deps = {}) {
   if (!usageRecord) return null;
+  const usage = usageRecord.usage || {};
   return enqueue({
-    kind: 'llmCost',
+    kind: 'llmTokenCredits',
     orgId: usageRecord.orgId,
     projectId: usageRecord.projectId,
     userId: usageRecord.userId,
     runId: usageRecord.runId,
     recordId: usageRecord.id,
     quantity: Number(usageRecord.costTokenCredits) || 0,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    providerCost: usageRecord.providerCost,
+    providerCurrency: usageRecord.providerCurrency,
+    fxRateToInr: usageRecord.fxRateToInr,
+    inrCost: usageRecord.inrCost,
     occurredAt: usageRecord.createdAt,
   }, deps);
 }
@@ -193,6 +248,9 @@ function sent(limit = 1000) {
  * The event body for one row, in the shape `POST /v1/events/bulk` wants.
  * `external_customer_id` is the org id — the same value the customer was
  * provisioned with — so a row can never be delivered to another tenant.
+ *
+ * Property keys stay snake_case on purpose: the meter binds on the exact name, so a
+ * camelCased one is stored, acknowledged, and aggregated by nothing.
  */
 function toEvent(row) {
   const spec = Object.values(METERS).find((m) => m.meter === row.meter);
@@ -205,6 +263,9 @@ function toEvent(row) {
     timestamp: row.occurredAt || row.createdAt,
     properties: {
       [spec.field]: quantity,
+      ...Object.fromEntries(EVENT_PROPERTIES
+        .filter(([field]) => row[field] !== null && row[field] !== undefined)
+        .map(([field, property]) => [property, row[field]])),
       org_id: row.orgId,
       ...(row.projectId ? { project_id: row.projectId } : {}),
       ...(row.userId ? { user_id: row.userId } : {}),
@@ -284,6 +345,7 @@ function prune(beforeIso) {
 
 module.exports = {
   METERS,
+  EVENT_PROPERTIES,
   FAILED_AFTER_ATTEMPTS,
   isEnabled,
   eventKey,

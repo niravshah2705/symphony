@@ -68,6 +68,9 @@ test('the scan actually covers the money code', () => {
     // operations and the transport that will or will not carry them.
     'packages/shared-core/src/billing/flexprice-client.js',
     'packages/shared-core/src/billing/flexprice-sdk.js',
+    // The metered-event writer: it is the only reader-visible namer of an event's
+    // provenance fields, so the gate below needs it to actually be in the scan.
+    'packages/shared-core/src/billing/billing-outbox.js',
     'services/billing/src/billing-api.js',
     'services/billing/src/auto-recharge-job.js',
     'services/billing/src/recharge-settle.js',
@@ -155,6 +158,32 @@ test('nothing claims the deleted ledger route still exists', () => {
   // has, which is worse than a failure: it looks like coverage of a money path.
   const violations = matchesPerFile((source) => {
     const hit = source.match(/['"]\/api\/billing\/ledger|billing\.getLedger\b/);
+    return hit ? hit[0] : null;
+  });
+  assert.deepEqual(violations, []);
+});
+
+// An event's provenance tuple — what the runtime said it billed, the currency it said it
+// in, the FX the card stamped, and the rupee value of THIS debit — exists so a human can
+// audit a charge after the fact. None of it is a money source: the debit is
+// `token_credits`, computed once from the rate card. Sum any of these and you have
+// rebuilt the FX multiplication this stage removed, out of the least trustworthy side of
+// the boundary (a number the runtime reported). So the name may appear only where the
+// tuple is authored, persisted or checked — never where a figure is read back.
+test('event provenance is written and audited, never read as money', () => {
+  const WRITERS = [
+    'packages/shared-core/src/billing/pricing.js', // computes it from the card + the SDK result
+    'packages/shared-core/src/billing/usage.js', // puts it on the usage record
+    'packages/shared-core/src/store.js', // re-asserts it on an already-queued outbox row
+    'packages/shared-core/src/billing/billing-outbox.js', // stamps it onto the event
+    'scripts/flexprice-usage-verify.js', // asserts the stamped payload equals the record
+  ];
+  const names = ['providerCost', 'providerCurrency', 'fxRateToInr', 'inrCost',
+    'provider_cost', 'provider_currency', 'fx_rate_to_inr', 'inr_cost'];
+  const violations = matchesPerFile((source, file) => {
+    const rel = path.relative(REPO_ROOT, file);
+    if (WRITERS.includes(rel)) return null;
+    const hit = source.match(new RegExp(`\\b(?:${names.join('|')})\\b`));
     return hit ? hit[0] : null;
   });
   assert.deepEqual(violations, []);

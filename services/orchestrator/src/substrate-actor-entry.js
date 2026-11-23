@@ -17,6 +17,8 @@
 
 const express = require('express');
 const log = require('@software-factory/shared-core/logger');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const creditRates = require('@software-factory/shared-core/billing/credit-rates');
 const {
   createSubstrateActorRouter,
   actorModeFault,
@@ -30,6 +32,11 @@ if (fault) {
   log.error(`substrate actor mode: ${fault}; refusing to start this process`);
   throw new Error(`substrate actor mode misconfigured: ${fault}`);
 }
+
+// Same reasoning for the rate card: a harness run metered inside this container prices
+// itself from the baked-in YAML, and a container built without it would report every
+// run as free. That is a boot failure, not a per-run log line.
+creditRates.ensureLoaded({ enabled: CONFIG.FLEXPRICE.enabled });
 
 const app = express();
 app.get('/healthz', (req, res) => res.json({ status: 'ok' }));

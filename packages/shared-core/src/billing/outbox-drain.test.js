@@ -16,7 +16,7 @@ const outbox = require('./billing-outbox');
 const drain = require('./outbox-drain');
 
 const ON = { enabled: true };
-const METERS = [{ id: 'met_llm', name: 'llm-cost', event_name: 'fleet.llm_cost', field: 'token_credits' }];
+const METERS = [{ id: 'met_llm', name: 'llm-token-credits', event_name: 'fleet.llm_cost', field: 'token_credits' }];
 
 /**
  * A stand-in for the ingest plane that reproduces the three measured behaviours
@@ -76,7 +76,7 @@ test.beforeEach(resetOutbox);
 
 function enqueueOne(orgId, runId, quantity, over = {}) {
   return outbox.enqueue({
-    kind: 'llmCost',
+    kind: 'llmTokenCredits',
     orgId,
     runId,
     quantity,

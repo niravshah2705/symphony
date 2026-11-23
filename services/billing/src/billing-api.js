@@ -285,7 +285,6 @@ router.get('/summary', asyncHandler(async (req, res) => {
     // above is the only spendable number on this page.
     initialCreditInr: paiseToInr((account && account.initialCreditTokenCredits)
       || CONFIG.BILLING.initialCreditTokenCredits),
-    fxUsdToInr: CONFIG.BILLING.usdToInr,
     spend: {
       day: sumWindow(records, PERIOD_DAYS.day, now),
       week: sumWindow(records, PERIOD_DAYS.week, now),

@@ -57,7 +57,8 @@ test('recorded totals keep BYOK notional cost out of charged money', () => {
 test('a gateway response is summed whatever its shape, and never guessed at', () => {
   assert.deepEqual(
     { ...job.summarizeSpendLogs([{ spend: 0.01 }, { spend: 0.02 }, { note: 'no spend field' }]), available: true },
-    { available: true, requests: 2, spendUsd: 0.03, spendTokenCredits: job.summarizeSpendLogs([{ spend: 0.03 }]).spendTokenCredits },
+    { available: true, requests: 2, spendUsd: 0.03, spendTokenCredits: 261 },
+    'the gateway total converts at the rate card row it names: $0.03 × ₹87 = ₹2.61 = 261 token credits',
   );
   assert.equal(job.summarizeSpendLogs({ results: [{ spend: 1 }] }).requests, 1);
   assert.equal(job.summarizeSpendLogs({ results: [{ spend: 1 }] }).spendUsd, 1);
@@ -143,7 +144,7 @@ test('a reconcile run writes one report per org and touches no money API', async
       fetchS2sSecrets: async () => ({ litellmApiKey: 'virtual-key' }),
       fetchGatewaySpend: async () => ({ available: true, requests: 2, spendUsd: 0.1, spendTokenCredits: 1000 }),
       flexpriceClient: {
-        listMeters: async () => ({ items: [{ id: 'meter_llm', name: 'llm-cost' }] }),
+        listMeters: async () => ({ items: [{ id: 'meter_llm', name: 'llm-token-credits' }] }),
         eventsUsageMeter: async (query) => {
           meterCalls.push(query);
           return { value: 4250 };
@@ -175,7 +176,11 @@ test('a reconcile run writes one report per org and touches no money API', async
     .readFileSync(require('node:path').join(__dirname, 'reconcile-gateway-spend.js'), 'utf8')
     // Prose may name the money APIs it refuses to call; code may not.
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  assert.doesNotMatch(source, /addUsageRecord|updateUsageRecord|recordLedgerEntry|postLedger|debit|credit|balanceTokenCredits\s*=/);
+  // The wallet ops are named, not substringed: this job reads the RATE card, and a bare
+  // /credit/ would ban the module it is allowed to import while a future `.credit(` call
+  // spelled differently would slip through. Same list services/billing/src/
+  // balance-authority.test.js holds for the repo-wide scan.
+  assert.doesNotMatch(source, /addUsageRecord|updateUsageRecord|recordLedgerEntry|postLedger|topUpWallet|grantPromo|debitWallet|balanceTokenCredits\s*=/);
 });
 
 test('a dropped FlexPrice event diverges independently while LiteLLM remains intact', async () => {
@@ -195,7 +200,7 @@ test('a dropped FlexPrice event diverges independently while LiteLLM remains int
       flexpriceClient: {
         listMeters: async () => {
           meterLists += 1;
-          return { items: [{ id: 'meter_llm', name: 'llm-cost' }] };
+          return { items: [{ id: 'meter_llm', name: 'llm-token-credits' }] };
         },
         eventsUsageMeter: async () => ({ value: 4000 }),
       },

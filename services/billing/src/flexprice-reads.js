@@ -62,12 +62,14 @@ const { ORG_ID_RE } = require('./trusted-caller');
 // silently report zero usage.
 const { METERS } = require('@software-factory/shared-core/billing/billing-outbox');
 
-const LLM = METERS.llmCost;
+const LLM = METERS.llmTokenCredits;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// `llm-cost` is the only meter that can produce a credit number: `actor-compute`
-// and `deployment-minutes` are deliberately priced at ₹0 (decision D8), so
-// reading them would add calls without adding consumption.
+// `llm-token-credits` is the only meter that can produce a credit number:
+// `actor-compute` and `deployment-minutes` are deliberately priced at ₹0 (decision D8),
+// so reading them would add calls without adding consumption. It is also the only meter
+// the outbox still writes: its predecessor `llm-cost` binds to the property name the
+// events carried before the rename, so reading it now would answer an honest zero.
 const CREDIT_METER = LLM.meter;
 
 /** The filterable event properties, keyed by the query name the page uses. */
@@ -302,7 +304,7 @@ function creditOf(tokenCredits) {
 }
 
 /**
- * A meter/event SUM is in the unit it aggregates: `llm-cost` sums `token_credits`, so
+ * A meter/event SUM is in the unit it aggregates: `llm-token-credits` sums `token_credits`, so
  * the number is tokenCredits. An unparseable value is `null` (unreadable), which is NOT
  * the same as `0`: `value` is `omitempty` in the response DTO, so an empty window
  * genuinely answers with no key at all (findings §14, verbatim read-back `{}`).

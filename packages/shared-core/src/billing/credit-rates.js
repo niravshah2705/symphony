@@ -405,7 +405,7 @@ function ensureLoaded({ env = process.env, enabled = false } = {}) {
     return card;
   } catch (err) {
     if (err.code === 'rate_card_missing' && !enabled) {
-      log.warn('billing_credit_rates_not_loaded', { file, code: err.code, effect: 'cost pricing falls back to the runtime-reported amount only' });
+      log.warn('billing_credit_rates_not_loaded', { file, code: err.code, effect: 'nothing can be priced: recordUsage fails open, so every run goes unmetered' });
       return null;
     }
     throw err;

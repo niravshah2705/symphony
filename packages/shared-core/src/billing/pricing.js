@@ -1,119 +1,140 @@
 'use strict';
 
-const { CONFIG } = require('../config');
-const { decimalToScaled, roundDiv } = require('./money-wire');
+const creditRates = require('./credit-rates');
+const { creditsFromTokenCredits } = require('./money-wire');
 
-// The precision this module is willing to multiply: 8 dp of USD (a provider
-// reporting below that is reporting nothing) and 4 dp of FX (an operator who
-// sets USD_TO_INR=87.5321 gets exactly that).
-const USD_DP = 8;
-const FX_DP = 4;
+// A runtime may report a cost to the nanoruupee; below 8 dp it is reporting nothing.
+// The bound exists so a float never reaches the wire in exponent notation.
+const REPORTED_USD_DP = 8;
 
 /**
- * SDK-free cost + currency helpers for billing. Money is handled in INTEGER paise
- * everywhere (never floating INR) to avoid rounding drift.
+ * SDK-free cost helpers for billing, priced from the rate card.
  *
- * Third-party LLM cost is billed in USD, but only some runtimes report a billed
- * `costUsd` (Claude Agent SDK does; Codex / Gemini / local do not). When a run
- * reports tokens but no USD, we ESTIMATE cost from a conservative per-provider
- * price table so no spend goes unmetered. Rates are indicative list prices
- * (they drift) — this produces a billing estimate, not an invoice.
+ * The card (`deploy/billing/credit-rates.yaml`) is the AUTHORITATIVE source for a
+ * debit: `token_credits = tokens x INR-per-1M-tokens`. A runtime's self-reported
+ * `costUsd` used to win over every estimate, which made the platform's charge depend
+ * on a number the model's own SDK chose, at an FX rate nobody in `deploy/` ever set.
+ * That number is now recorded as PROVENANCE on the event (`provider_cost`,
+ * `provider_currency`) so a discrepancy is auditable, and it computes nothing — which
+ * is also why no FX multiplication is on the money path any more.
+ *
+ * Two consequences worth stating plainly: a rate change is a card edit plus a
+ * redeploy (the card is memoised per process, deliberately), and an unknown model
+ * falls back to the provider row, then to `defaults`, and is LABELLED so the alert
+ * counts it. An estimate beats an unmetered run; a silent estimate beats neither.
  */
 
-// Conservative blended default (USD per 1M tokens) for an unknown provider.
-const PER_MTOK_USD_DEFAULT = Object.freeze({ input: 3, output: 15 });
-
-// provider -> { input, output } USD per 1M tokens. Local providers are
-// self-hosted, so they cost nothing to call but are still recorded (token
-// volume shows on the cost page even at zero spend).
-const PRICE_PER_MTOK_USD = Object.freeze({
-  claude: { input: 3, output: 15 },
-  codex: { input: 2.5, output: 10 },
-  antigravity: { input: 1.25, output: 5 },
-  ollama: { input: 0, output: 0 },
-  lmstudio: { input: 0, output: 0 },
-  omlx: { input: 0, output: 0 },
-  huggingface: { input: 0, output: 0 },
-});
-
-/** The per-1M-token USD rate for a provider (falls back to a conservative default). */
-function rateFor(provider) {
-  return PRICE_PER_MTOK_USD[String(provider || '').toLowerCase()] || PER_MTOK_USD_DEFAULT;
+function whole(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
 }
 
 /**
- * How the cost number was obtained, so an estimate built from the fallback rate
- * is countable rather than silent. `Reported` means the runtime billed it and no
- * table was consulted; `Exact` means this catalog models the provider (ollama at
- * 0/0 is modeled, not missing); `Default` means it does not, and the run was
- * priced by guess. A `Default` row is the money version of an unmodeled gateway
- * key: the number is plausible, wrong, and currently invisible.
+ * The four token dimensions the card prices, from whatever the runtime called them.
+ *
+ * `cachedInputTokens` / `cacheCreationInputTokens` are the harness-normalised names
+ * (contract.js normalizeUsage, straight from the SDKs); the `cacheRead`/`cacheWrite`
+ * spellings are what this module persists and what the event property is called. A
+ * run that reports no cache usage prices at 0 for those dimensions, which is the
+ * correct answer rather than a missing one.
  */
-function priceMatchOf(provider, reportedUsd) {
-  if (Number(reportedUsd) > 0) return 'Reported';
-  return PRICE_PER_MTOK_USD[String(provider || '').toLowerCase()] ? 'Exact' : 'Default';
-}
-
-/** Estimate USD from a normalized usage object using the per-provider table. */
-function estimateCostUsd(usage, provider) {
+function tokenCountsOf(usage) {
   const u = usage && typeof usage === 'object' ? usage : {};
-  const input = Number(u.inputTokens) || 0;
-  const output = Number(u.outputTokens) || 0;
-  const rate = rateFor(provider);
-  return (input / 1e6) * rate.input + (output / 1e6) * rate.output;
+  return {
+    inputTokens: whole(u.inputTokens),
+    outputTokens: whole(u.outputTokens),
+    cacheReadTokens: whole(u.cacheReadTokens ?? u.cachedInputTokens ?? u.cache_read_input_tokens),
+    cacheWriteTokens: whole(u.cacheWriteTokens ?? u.cacheCreationInputTokens ?? u.cache_creation_input_tokens),
+  };
+}
+
+/** Bounded-precision decimal TEXT: no float artefacts, no exponent notation. */
+function decimalText(value, dp) {
+  const fixed = Number(value).toFixed(dp);
+  if (!fixed.includes('.')) return fixed;
+  return fixed.replace(/\.?0+$/, '') || '0';
 }
 
 /**
- * Resolve the USD cost of a run: prefer the runtime-reported `costUsd` (Claude
- * and any SDK that bills), else estimate from tokens. Always returns a finite
- * number >= 0.
+ * What the provider says it billed, in the currency it billed it in.
+ *
+ * Provenance only — this never becomes a money source. `null` means the runtime
+ * reported nothing (Codex, Gemini and every local provider), which is the normal
+ * case and is exactly why the card prices the run instead.
  */
-function costUsdFromResult(result, llm) {
-  const reported = result && Number.isFinite(Number(result.costUsd)) ? Number(result.costUsd) : null;
-  if (reported !== null && reported > 0) return reported;
-  const provider = (llm && llm.provider) || (result && result.provider) || '';
-  const estimated = estimateCostUsd(result && result.usage, provider);
-  if (Number.isFinite(estimated) && estimated > 0) return estimated;
-  return reported !== null && reported >= 0 ? reported : 0;
+function reportedCost(result) {
+  const r = result && typeof result === 'object' ? result : {};
+  const amount = Number(r.costUsd);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { providerCost: null, providerCurrency: null };
+  }
+  return {
+    providerCost: decimalText(amount, REPORTED_USD_DP),
+    providerCurrency: String(r.costCurrency || 'USD').toUpperCase(),
+  };
 }
 
 /**
- * Convert USD to integer paise using the configured FX rate.
+ * Price one run from the card: its money, how the price was found, and its provenance.
  *
- * This is a money-path multiplication, not a display one: since Phase 3 the
- * result is the `token_credits` the outbox delivers and the wallet is debited
- * against. So it is BigInt on digit strings (see money-wire.js) rather than
- * `Math.round(usd * rate * 100)` — binary float puts some exact halves just
- * below themselves, which would short every such run by a paise in a direction
- * that never varies and never fails a check.
- *
- * `toFixed` bounds the precision we claim: a cost reported to the nanoruupee is
- * still a whole-paise charge, and anything below half a paise is zero rather
- * than an exponent-notation string the decimal parser would refuse.
+ * `priceMatch` is the label Cloud Logging alerts on and has exactly two values now
+ * that the card decides the debit: `Exact` (the card models this model or its
+ * provider) or `Default` (priced from the last-resort row, i.e. a guess). The third
+ * value it used to carry, `Reported`, described a run whose SDK number WAS the charge;
+ * that is no longer true of any run, so keeping the label would have been a claim the
+ * code does not honour. `rateMatch` keeps the card's finer answer — `Card`,
+ * `Provider` or `Default` — for the drill-down that wants to know whether the model
+ * itself is priced or only its provider.
  */
-function usdToPaise(usd, rate = CONFIG.BILLING.usdToInr) {
-  const amount = Number(usd);
-  const fx = Number(rate);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  if (!Number.isFinite(fx) || fx <= 0) return 0;
-  const scaled = decimalToScaled(amount.toFixed(USD_DP), USD_DP)
-    * decimalToScaled(fx.toFixed(FX_DP), FX_DP)
-    * 100n;
-  return Number(roundDiv(scaled, 10n ** BigInt(USD_DP + FX_DP)));
+function priceRun({ usage, llm, result } = {}) {
+  const counts = tokenCountsOf(usage ?? (result && result.usage));
+  const prices = creditRates.priceFor({ model: llm && llm.model, provider: llm && llm.provider });
+  const tokenCredits = creditRates.tokenCreditsFromTokens(counts, prices);
+  return {
+    counts,
+    tokenCredits,
+    priceMatch: prices.match === 'Default' ? 'Default' : 'Exact',
+    rateMatch: prices.match,
+    // The row the money came from, so a caller can tell "priced at zero" (a local
+    // run: a real answer) from "priced into nothing" (a rounding: a finding).
+    prices,
+    // D6 makes this the same string twice over: 1 credit is ₹1, so the credit
+    // rendering of a token-credit integer IS its rupee rendering. It is emitted as a
+    // decimal STRING so a reader cannot mistake the audit figure for the metered int.
+    inrCost: creditsFromTokenCredits(tokenCredits),
+    fxRateToInr: creditRates.fxRate().usdToInr,
+    ...reportedCost(result),
+  };
 }
 
-/** Convert integer paise to a rupee number (for display only). */
+/** The integer token credits one run costs, priced from the card. */
+function costTokenCreditsFromResult(result, llm) {
+  return priceRun({ usage: result && result.usage, llm, result }).tokenCredits;
+}
+
+/**
+ * Whether the card models this run's model/provider — the alert-contract half of
+ * `priceRun`, exposed for a caller that wants the label without repricing.
+ */
+function priceMatchOf({ model, provider } = {}) {
+  return creditRates.priceFor({ model, provider }).match === 'Default' ? 'Default' : 'Exact';
+}
+
+/**
+ * A subunit integer → a rupee number, for the admin ₹ column and the ₹ in a
+ * notification line. Every caller hands it token credits (a balance, a run's cost) and
+ * D6 makes 100 of them worth ₹1 either way; a figure that is a payment or a tax is
+ * still paise, and both divide by the same 100.
+ */
 function paiseToInr(paise) {
   return (Number(paise) || 0) / 100;
 }
 
 module.exports = {
-  PER_MTOK_USD_DEFAULT,
-  PRICE_PER_MTOK_USD,
-  rateFor,
+  priceRun,
+  costTokenCreditsFromResult,
   priceMatchOf,
-  estimateCostUsd,
-  costUsdFromResult,
-  usdToPaise,
+  tokenCountsOf,
+  reportedCost,
   paiseToInr,
 };

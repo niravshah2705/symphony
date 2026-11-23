@@ -19,7 +19,8 @@ const express = require('express');
 const store = require('@software-factory/shared-core/store');
 const gate = require('@software-factory/shared-core/billing/gate');
 const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
-const { createFlexpriceReadsRouter, bucketCreditRows, CREDIT_METER } = require('./flexprice-reads');
+const { EVENT_PROPERTIES } = require('@software-factory/shared-core/billing/billing-outbox');
+const { createFlexpriceReadsRouter, bucketCreditRows, CREDIT_METER, DIMENSIONS } = require('./flexprice-reads');
 
 const WALLET = 'wallet_test_1';
 // A fixed clock keeps "settled day" and the calendar-month presets deterministic.
@@ -624,4 +625,19 @@ test('invalidate drops the cached reads for that org and only that org', async (
     assert.equal(lookups(), 2, 'after a settle the wallet is resolved again');
     assert.deepEqual(router.invalidate(''), { cleared: null });
   });
+});
+
+// FlexPrice binds a meter to an event name and one aggregation property, but any property
+// on that event is addressable by a group-by, and eight of them are now per-run audit
+// payload — four with a distinct value on nearly every run. A breakdown by `inr_cost`
+// would answer, slowly, with a chart whose buckets are rupee strings. So the allow-list is
+// the four id-shaped dimensions and this test holds it there: the event schema may grow,
+// the query surface may not.
+test('an event provenance property is never a group-by dimension', () => {
+  const provenance = EVENT_PROPERTIES.map(([, property]) => property);
+  assert.deepEqual(provenance, ['input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_write_tokens',
+    'provider_cost', 'provider_currency', 'fx_rate_to_inr', 'inr_cost']);
+  assert.deepEqual(Object.values(DIMENSIONS), ['project_id', 'user_id', 'agent_id', 'tier'],
+    'the filterable set is the id-shaped four it has always been');
+  assert.deepEqual(Object.values(DIMENSIONS).filter((p) => provenance.includes(p)), []);
 });

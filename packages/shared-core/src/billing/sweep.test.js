@@ -10,7 +10,6 @@ const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'core-billing-sweep-'));
 process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.BILLING_SWEEP_ENABLED = 'true';
 process.env.INITIAL_CREDIT_INR = '500';
-process.env.USD_TO_INR = '100';
 process.env.FLEET_ORG_ID = 'org-core-sweep';
 
 const store = require('../store');

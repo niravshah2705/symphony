@@ -13,7 +13,7 @@ const path = require('node:path');
 
 const YAML = require('yaml');
 
-const rates = require('@ai-fleet/shared-core/billing/credit-rates');
+const rates = require('@software-factory/shared-core/billing/credit-rates');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CARD_PATH = path.join(ROOT, 'deploy', 'billing', 'credit-rates.yaml');
@@ -80,9 +80,46 @@ test('the offered packages are the offers, with the credit split the invoice wil
     '1M input tokens cost exactly the card row, in token credits');
 });
 
+// Every image that can meter a run has to ship the card, and no Dockerfile in this repo
+// copies anything else from deploy/. A missing COPY is the worst shape of failure here:
+// the unit suites all pass because they read the card from the repo, and Cloud Run
+// crash-loops the orchestrator on boot — or, if the boot gate were relaxed, prices every
+// run from `defaults`. So the three paths that must agree are asserted to agree.
+test('each image that meters a run bakes the card in, at the path its own ENV names', () => {
+  const consumers = ['Dockerfile.billing', 'Dockerfile.orchestrator', 'Dockerfile.substrate-actor'];
+  for (const name of consumers) {
+    const dockerfile = fs.readFileSync(path.join(ROOT, 'deploy', 'gcp', name), 'utf8');
+    const copy = /^COPY\s+deploy\/billing\/credit-rates\.yaml\s+(\S+)$/m.exec(dockerfile);
+    assert.ok(copy, `${name} must COPY deploy/billing/credit-rates.yaml to a single target`);
+    const inApp = path.relative(ROOT, CARD_PATH).split(path.sep).join('/');
+    assert.equal(copy[1], `./${inApp}`, `${name}: COPY is relative to WORKDIR /app, like every other COPY here`);
+    const declared = /^ENV\s+NODE_ENV=production[\s\S]*?CREDIT_RATES_FILE=(\S+)$/m.exec(dockerfile);
+    assert.ok(declared, `${name}: the runtime ENV block must pin CREDIT_RATES_FILE, not rely on the default`);
+    assert.equal(declared[1], `/app/${inApp}`,
+      `${name}: that is the file the COPY just put there — and rates.DEFAULT_CARD_PATH under WORKDIR /app`);
+    assert.equal(declared[1], path.resolve('/app', path.relative(ROOT, rates.DEFAULT_CARD_PATH)),
+      `${name}: unset, the loader would look at this exact path`);
+  }
+});
+
 test('the card says where its prices came from, or an editor cannot audit them', () => {
   const source = fs.readFileSync(CARD_PATH, 'utf8');
   assert.match(source, /FX is NOT on the cost path/);
   assert.match(source, /MONEY IS A STRING/);
   assert.match(source, /never reads this file/);
+});
+
+// Shipping the file is half of it: an image that never loads it discovers the absence as
+// a run that priced to nothing, which reads as a cheap month rather than a broken deploy.
+// `recordUsage` is deliberately fail-open, so the refusal has to happen at boot instead.
+test('each metering process gates its own boot on the card', () => {
+  for (const rel of [
+    'services/billing/src/index.js',
+    'services/orchestrator/src/index.js',
+    'services/orchestrator/src/substrate-actor-entry.js',
+  ]) {
+    const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    assert.match(source, /creditRates\.ensureLoaded\(\{ enabled: CONFIG\.FLEXPRICE\.enabled \}\)/,
+      `${rel} must load the card before it serves, fatally when billing is on`);
+  }
 });

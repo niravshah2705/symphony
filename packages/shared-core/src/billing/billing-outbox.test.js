@@ -48,12 +48,12 @@ test('a recorded cost becomes one pending row, keyed by org + run + meter', () =
   const before = outbox.counts().total;
   const row = outbox.enqueueLlmCost(record({ runId: 'run-key-1' }), ON);
   assert.equal(row.orgId, 'org-a');
-  assert.equal(row.meter, 'llm-cost');
+  assert.equal(row.meter, 'llm-token-credits');
   assert.equal(row.eventName, 'fleet.llm_cost');
   assert.equal(row.quantityTokenCredits, 12345);
   assert.equal(row.status, 'pending');
   assert.equal(row.attempts, 0);
-  assert.equal(row.idempotencyKey, 'ev:org-a:run-key-1:llm-cost');
+  assert.equal(row.idempotencyKey, 'ev:org-a:run-key-1:llm-token-credits');
   assert.equal(outbox.counts().total, before + 1);
 });
 
@@ -96,7 +96,7 @@ test('runs with no runId key on their own record, or they would collapse into on
   const one = outbox.enqueueLlmCost(record({ runId: null, id: 'use_a', costTokenCredits: 700 }), ON);
   const two = outbox.enqueueLlmCost(record({ runId: null, id: 'use_b', costTokenCredits: 800 }), ON);
   assert.notEqual(one.id, two.id);
-  assert.equal(one.idempotencyKey, 'ev:org-a:use_a:llm-cost');
+  assert.equal(one.idempotencyKey, 'ev:org-a:use_a:llm-token-credits');
   assert.equal(outbox.pending(1000).filter((r) => r.orgId === 'org-a' && !r.runId).length, 2);
 });
 
@@ -111,7 +111,7 @@ test('each meter writes its own quantity field, because a wrong name is a silent
   // FlexPrice matches a meter by event_name and aggregates the property named at
   // create time. An event whose property is misspelled is STORED and contributes
   // nothing — no error, no drift signal. So the mapping is asserted, not assumed.
-  const llm = outbox.enqueue({ kind: 'llmCost', orgId: 'org-map', runId: 'r1', quantity: 1200 }, ON);
+  const llm = outbox.enqueue({ kind: 'llmTokenCredits', orgId: 'org-map', runId: 'r1', quantity: 1200 }, ON);
   const actor = outbox.enqueue({ kind: 'actorCompute', orgId: 'org-map', runId: 'r2', quantity: 90 }, ON);
   const deploy = outbox.enqueue({ kind: 'deploymentMinutes', orgId: 'org-map', runId: 'r3', quantity: 5 }, ON);
   assert.deepEqual(outbox.toEvent(llm).properties, { token_credits: 1200, org_id: 'org-map' });
@@ -119,6 +119,52 @@ test('each meter writes its own quantity field, because a wrong name is a silent
   assert.deepEqual(outbox.toEvent(deploy).properties, { minutes: 5, org_id: 'org-map' });
   assert.equal(outbox.toEvent(llm).event_name, 'fleet.llm_cost');
   assert.equal(outbox.toEvent(actor).event_name, 'fleet.actor_compute');
+});
+
+// The event is the only surviving statement of what a debit was computed FROM: the
+// card can be edited and redeployed, the usage record can age out of the retention
+// window, and none of it may have to be re-derived. So the property set is asserted
+// exactly — a field that goes missing is an audit gap nobody notices, and a field
+// that becomes a second aggregated number would become a second money source.
+test('an llm event carries its provenance beside the one aggregated field', () => {
+  const row = outbox.enqueueLlmCost(record({
+    runId: 'run-prov',
+    costTokenCredits: 236000,
+    usage: { inputTokens: 100000, outputTokens: 20000, cacheReadTokens: 5, cacheWriteTokens: 0 },
+    providerCost: '0.6',
+    providerCurrency: 'USD',
+    fxRateToInr: '87.00',
+    inrCost: '2360.00',
+  }), ON);
+  const ev = outbox.toEvent(row);
+  assert.deepEqual(ev.properties, {
+    token_credits: 236000,
+    input_tokens: 100000,
+    output_tokens: 20000,
+    cache_read_tokens: 5,
+    cache_write_tokens: 0,
+    provider_cost: '0.6',
+    provider_currency: 'USD',
+    fx_rate_to_inr: '87.00',
+    inr_cost: '2360.00',
+    org_id: 'org-a',
+    project_id: 'proj-1',
+    user_id: 'user-1',
+  }, 'a zero token count is reported as zero: it is a measured answer, not a missing one');
+  assert.equal(typeof ev.properties.token_credits, 'number', 'the metered field is the integer');
+  assert.equal(typeof ev.properties.inr_cost, 'string', 'a rupee figure is a decimal STRING so it cannot be mistaken for the metered int');
+  assert.deepEqual(Object.keys(ev.properties).filter((k) => /[a-z][A-Z]/.test(k)), [],
+    'property keys are never camelCased — the meter binds on the exact snake_case name');
+});
+
+test('an unattributed provenance field is omitted, never zeroed', () => {
+  // Zero says "the provider reports this run was free"; absent says "no provider
+  // figure exists" (Codex, Gemini, every local run). The reconciler counts the
+  // difference, so collapsing them would silently invent a billed amount of nil.
+  const ev = outbox.toEvent(outbox.enqueueLlmCost(record({ runId: 'run-bare', costTokenCredits: 50 }), ON));
+  assert.equal('provider_cost' in ev.properties, false);
+  assert.equal('inr_cost' in ev.properties, false);
+  assert.equal('token_credits' in ev.properties, true);
 });
 
 test('an event carries the org id as its customer, and the time it happened', () => {
@@ -131,7 +177,7 @@ test('an event carries the org id as its customer, and the time it happened', ()
 
 test('a backlog drained late still meters into the hour it happened', () => {
   const row = outbox.enqueue({
-    kind: 'llmCost',
+    kind: 'llmTokenCredits',
     orgId: 'org-a',
     runId: 'run-late',
     quantity: 400,
@@ -149,20 +195,24 @@ test('an unknown meter kind is refused, never invented', () => {
 });
 
 test('the quantity and the key of a row are immutable, even to the drain', () => {
-  const row = outbox.enqueueLlmCost(record({ runId: 'run-frozen', costTokenCredits: 111 }), ON);
+  const row = outbox.enqueueLlmCost(record({
+    runId: 'run-frozen', costTokenCredits: 111, inrCost: '111.00', providerCost: '0.1',
+  }), ON);
   const sent = outbox.markSent(row);
   assert.equal(sent.status, 'sent');
   assert.equal(sent.attempts, 1);
   const tampered = store.updateBillingOutboxRow(row.id, {
     quantityTokenCredits: 999999,
-    idempotencyKey: 'ev:org-a:hacked:llm-cost',
+    idempotencyKey: 'ev:org-a:hacked:llm-token-credits',
     orgId: 'org-victim',
     meter: 'actor-compute',
+    inrCost: '9999.00',
   });
   assert.equal(tampered.quantityTokenCredits, 111);
-  assert.equal(tampered.idempotencyKey, 'ev:org-a:run-frozen:llm-cost');
+  assert.equal(tampered.idempotencyKey, 'ev:org-a:run-frozen:llm-token-credits');
   assert.equal(tampered.orgId, 'org-a');
-  assert.equal(tampered.meter, 'llm-cost');
+  assert.equal(tampered.meter, 'llm-token-credits');
+  assert.equal(tampered.inrCost, '111.00', 'the audit payload is frozen with the quantity it describes');
 });
 
 test('a failing row stays retryable, and only gives up after the ceiling', () => {
@@ -224,15 +274,15 @@ test('pruning clears terminal rows and never touches an undelivered one', () => 
 });
 
 test('rows come back oldest first, so a backlog drains in arrival order', () => {
-  const a = outbox.enqueue({ kind: 'llmCost', orgId: 'org-order', runId: 'o1', quantity: 10 }, ON);
-  const b = outbox.enqueue({ kind: 'llmCost', orgId: 'org-order', runId: 'o2', quantity: 10 }, ON);
+  const a = outbox.enqueue({ kind: 'llmTokenCredits', orgId: 'org-order', runId: 'o1', quantity: 10 }, ON);
+  const b = outbox.enqueue({ kind: 'llmTokenCredits', orgId: 'org-order', runId: 'o2', quantity: 10 }, ON);
   const pending = outbox.pending(1000).filter((r) => r.orgId === 'org-order');
   assert.ok(pending.findIndex((r) => r.id === a.id) < pending.findIndex((r) => r.id === b.id));
 });
 
 test('the drain asks for a bounded batch, and the ceiling is honoured', () => {
   for (let i = 0; i < 5; i += 1) {
-    outbox.enqueue({ kind: 'llmCost', orgId: 'org-batch', runId: `b${i}`, quantity: 10 }, ON);
+    outbox.enqueue({ kind: 'llmTokenCredits', orgId: 'org-batch', runId: `b${i}`, quantity: 10 }, ON);
   }
   assert.equal(outbox.pending(3).length, 3);
   assert.equal(outbox.pending(1000).filter((r) => r.orgId === 'org-batch').length, 5);

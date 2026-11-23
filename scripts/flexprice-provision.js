@@ -28,8 +28,7 @@ const path = require('node:path');
 
 const { createFlexpriceClient } = require('../packages/shared-core/src/billing/flexprice-client');
 const { DEFAULT_BASE_URL } = require('../packages/shared-core/src/billing/flexprice-config');
-const { PRICE_PER_MTOK_USD } = require('../packages/shared-core/src/billing/pricing');
-const { decimalFromPaise, paiseFromDecimal, roundDiv } = require('../packages/shared-core/src/billing/money-wire');
+const { decimalFromPaise, paiseFromDecimal } = require('../packages/shared-core/src/billing/money-wire');
 const CONFIG = require('../packages/shared-core/src/config').CONFIG;
 // Reused rather than re-implemented: this is the org service's internal
 // billing-context read, with its token and IAM-bearer handling already settled,
@@ -58,7 +57,13 @@ const CATALOG_FLAT_PRICES = [
 ];
 
 const METERS = [
-  { name: 'llm-cost', event_name: 'fleet.llm_cost', field: 'token_credits' },
+  // The live meter: it sums `token_credits`, the property the outbox posts today.
+  { name: 'llm-token-credits', event_name: 'fleet.llm_cost', field: 'token_credits' },
+  // Retired, kept readable for the history it already holds. It binds to the property
+  // name the pre-rename events carried — which the stack reports, so this row does not
+  // restate it — and that binding is why the rename needed a NEW meter rather than an
+  // edit: a deployed meter's aggregation cannot be repointed.
+  { name: 'llm-cost', event_name: 'fleet.llm_cost', retired: true },
   { name: 'actor-compute', event_name: 'fleet.actor_compute', field: 'duration_seconds' },
   // Created and deliberately never emitted (decision D8): there is no
   // deployment-duration source yet, and inventing a quantity is worse than
@@ -211,8 +216,11 @@ async function ensureKeys(admin) {
  *
  * DELETE /v1/meters/:id is an archive: the row keeps `status:"archived"`, still
  * comes back in GET /v1/meters, and still resolves by id. An idempotency check
- * that matches on event_name alone would call that meter present, ingest against
- * it, and get the measured silent-zero — 202 accepted, nothing aggregated.
+ * that counts archived meters as present would call a retired one live, ingest
+ * against it, and get the measured silent-zero — 202 accepted, nothing
+ * aggregated. Matching is by NAME rather than event name for the same reason: two
+ * published meters legitimately share `fleet.llm_cost` (the rename's old and new
+ * aggregation property), so an event-name match would resolve the wrong one.
  */
 async function liveMeters(client) {
   const res = await client.request({ plane: 'money', method: 'GET', route: '/v1/meters' });
@@ -221,13 +229,23 @@ async function liveMeters(client) {
 
 async function ensureMeters(client) {
   const existing = await liveMeters(client);
-  const byEvent = new Map(existing.map((m) => [m.event_name, m]));
+  const byName = new Map(existing.map((m) => [m.name, m]));
   const out = {};
   for (const meter of METERS) {
-    const hit = byEvent.get(meter.event_name);
+    const hit = byName.get(meter.name);
     if (hit) {
       out[meter.name] = hit.id;
-      report('meter', `${meter.name} (${meter.event_name})`, 'existing', hit.id);
+      // For a retired meter, print what the stack actually aggregates rather than what
+      // this file remembers it used to: the two differ exactly when the rename happened,
+      // and this line is how an operator finds that out.
+      const aggregates = meter.retired ? `SUM ${hit.aggregation && hit.aggregation.field}` : hit.id;
+      report('meter', `${meter.name} (${meter.event_name})`, meter.retired ? 'existing (retired)' : 'existing', aggregates);
+      continue;
+    }
+    // A retired meter is read-only history: it exists on a stack that ran the old
+    // events, and on a fresh one there is nothing to preserve, so it is not created.
+    if (meter.retired) {
+      report('meter', `${meter.name} (${meter.event_name})`, 'retired', 'not created');
       continue;
     }
     if (DRY) {
@@ -340,12 +358,19 @@ async function ensurePrices(client, planId, meterIds) {
   // FLAT_FEE charges once per window regardless of quantity, and PER_UNIT is not
   // in the allowed list for a SUM aggregation (measured 400).
   const meterPrice = {
-    'llm-cost': { unit_paise: 1, note: 'quantity is token_credits, so 1 paise per unit is exact' },
+    // Zero on purpose. A per-unit price on a SUM meter is what an invoice line is
+    // computed from, and the debit for a run already comes from the rate card through
+    // the usage record — so a live price here would charge the same usage twice for
+    // any tenant ever attached to a subscription. The meter exists to be aggregated.
+    'llm-token-credits': { unit_paise: 0, note: 'the rate card prices the run; this meter only aggregates it' },
     'actor-compute': { unit_paise: 0, note: 'D4: actor compute is metered and priced at zero for now' },
     'deployment-minutes': { unit_paise: 0, note: 'D8: no emitter; price exists so the meter is not orphaned' },
   };
   for (const meter of METERS) {
     const spec = meterPrice[meter.name];
+    // The retired meter keeps whatever price it already had; a fresh stack has nothing
+    // to bill through it, so there is nothing to write.
+    if (!spec) continue;
     ids[`meter:${meter.name}`] = await ensurePrice(client, planId, {
       lookupKey: `meter-${meter.name}`,
       displayName: `Software Factory ${meter.name}`,
@@ -360,41 +385,13 @@ async function ensurePrices(client, planId, meterIds) {
     });
   }
 
-  // Rate card. This is a RECORD, not the money path: Node's pricing.js converts
-  // tokens to paise and the wallet is debited from that (D9), because grouping
-  // and property filters on a SUM meter are measured to be ignored, so a
-  // per-model price could not be evaluated by FlexPrice even if it existed.
-  const fx = CONFIG.BILLING.usdToInr;
-  for (const [provider, rates] of Object.entries(PRICE_PER_MTOK_USD)) {
-    for (const direction of ['input', 'output']) {
-      const usd = rates[direction];
-      // Exact, and it has to be: this is the one multiplication USD_TO_INR still
-      // performs now that it has left the runtime path (D9), and 1.25 * 87 * 100
-      // is 10875.000000000002 in binary floats. The rate is scaled to 2 decimals
-      // as an integer, then the paise product is divided back on the digits.
-      const fxHundredths = BigInt(Math.round(fx * 100));
-      const inrPaise = Number(roundDiv(BigInt(paiseFromDecimal(String(usd))) * fxHundredths, 100n));
-      ids[`rate:${provider}:${direction}`] = await ensurePrice(client, planId, {
-        lookupKey: `rate-${provider}-${direction}`,
-        displayName: `${provider} ${direction} (per 1M tokens)`,
-        type: 'FIXED',
-        priceUnitType: 'FIAT',
-        billingModel: 'FLAT_FEE',
-        billingPeriod: 'ONETIME',
-        amount: decimalFromPaise(inrPaise),
-        metadata: {
-          fleet_rate_card: 'true',
-          provider,
-          direction,
-          usd_per_mtok: String(usd),
-          fx_usd_inr: String(fx),
-          // Dated because the number stops being true the day the rate moves, and
-          // an undated FX figure in a billing catalog is an audit question later.
-          fx_captured_on: new Date().toISOString().slice(0, 10),
-        },
-      });
-    }
-  }
+  // There used to be a second rate card here: 14 `rate-{provider}-{direction}` prices
+  // generated from `pricing.js` × `USD_TO_INR`. Nothing ever read them, and their own
+  // comment said they were a record rather than the money path. The card at
+  // deploy/billing/credit-rates.yaml IS the money path now, so publishing a stale copy
+  // of it into the one place an auditor looks would be worse than publishing none.
+  // (Any rows a live stack still carries are retired by name in Stage 8's
+  // `--retire-rate-rows`, not silently left behind.)
   return ids;
 }
 

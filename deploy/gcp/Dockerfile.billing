@@ -28,12 +28,19 @@ RUN npm ci --omit=dev \
 
 COPY packages/shared-core/ ./packages/shared-core/
 COPY services/billing/ ./services/billing/
+# The rate card is the author of every debit (see packages/shared-core/src/billing/
+# credit-rates.js), and it is loaded once at boot and memoised per process — so shipping
+# it is not optional and a rate change is a REDEPLOY, not an edit that takes effect
+# mid-traffic. The COPY target, the ENV below and credit-rates.js's default path are one
+# contract, held by deploy/billing/credit-rates.test.js.
+COPY deploy/billing/credit-rates.yaml ./deploy/billing/credit-rates.yaml
 
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    SOFTWARE_FACTORY_DATA_DIR=/tmp
+    SOFTWARE_FACTORY_DATA_DIR=/tmp \
+    CREDIT_RATES_FILE=/app/deploy/billing/credit-rates.yaml
 
 COPY --from=builder --chown=node:node /app /app
 

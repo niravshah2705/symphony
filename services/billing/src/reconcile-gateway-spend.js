@@ -33,8 +33,9 @@
  * So `we_recorded.comparableTokenCredits` = managed cost + customer notional, and a
  * nonzero delta is expected noise unless it trends in one direction.
  *
- * Currency: the gateway reports USD, the ledger is integer tokenCredits, converted with
- * the single global `CONFIG.BILLING.usdToInr`. A rate applied to money the
+ * Currency: the gateway reports USD, the ledger is integer token credits, converted with
+ * the rate row in deploy/billing/credit-rates.yaml — the same row that stamps the rate
+ * beside each event. A rate applied to money the
  * platform never spent is a comparison, not a charge — which is why the notional
  * series is presented in USD in the product: a rupee symbol on money nobody paid
  * invites a dispute the number cannot settle.
@@ -51,7 +52,8 @@
 const { CONFIG } = require('@software-factory/shared-core/config');
 const log = require('@software-factory/shared-core/logger');
 const store = require('@software-factory/shared-core/store');
-const pricing = require('@software-factory/shared-core/billing/pricing');
+const creditRates = require('@software-factory/shared-core/billing/credit-rates');
+const { METERS } = require('@software-factory/shared-core/billing/billing-outbox');
 const { fetchS2sSecrets } = require('@software-factory/shared-core/secrets/s2s-resolver');
 const { createFlexpriceClient, rowsOf } = require('@software-factory/shared-core/billing/flexprice-client');
 
@@ -125,7 +127,17 @@ function summarizeSpendLogs(payload) {
     spendUsd += spend;
     requests += 1;
   }
-  return { available: true, requests, spendUsd, spendTokenCredits: pricing.usdToPaise(spendUsd) };
+  // The gateway answers in USD and our ledger is integer token credits, so this one
+  // conversion needs the card's FX row. It is a comparison, never a charge: a debit comes
+  // from tokens × the model's ₹ row and does not read this number. Stage 6 replaces it
+  // with the rate each event was stamped with, so a rate change between the run and this
+  // report stops inventing a delta.
+  return {
+    available: true,
+    requests,
+    spendUsd,
+    spendTokenCredits: creditRates.tokenCreditsFromUsd(spendUsd, creditRates.fxRate().usdToInr),
+  };
 }
 
 function comparison(actualTokenCredits, expectedTokenCredits, unavailableVerdict) {
@@ -138,8 +150,11 @@ function comparison(actualTokenCredits, expectedTokenCredits, unavailableVerdict
 async function resolveLlmCostMeter(client) {
   if (!client) return { available: false, reason: 'flexprice_unconfigured' };
   try {
+    // The outbox's own table, not a literal: a FlexPrice meter binds to one aggregation
+    // property at creation, so the pre-rename `llm-cost` meter answers a real zero for
+    // every post-cutover window — which this job would then report as `we_are_ahead`.
     const matches = rowsOf(await client.listMeters())
-      .filter((meter) => meter && meter.name === 'llm-cost');
+      .filter((meter) => meter && meter.name === METERS.llmTokenCredits.meter);
     if (matches.length !== 1 || !matches[0].id) {
       return { available: false, reason: matches.length ? 'flexprice_meter_ambiguous' : 'flexprice_meter_unavailable' };
     }

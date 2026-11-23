@@ -1497,6 +1497,17 @@ function updateBillingOutboxRow(id, patch = {}) {
       quantityTokenCredits: r.quantityTokenCredits,
       quantitySeconds: r.quantitySeconds,
       quantityMinutes: r.quantityMinutes,
+      // The provenance is as much the row's identity as its quantity: it states what
+      // the quantity was priced FROM, so a retry that rewrote one of them would leave
+      // a verified row whose audit payload describes an event the meter never summed.
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      cacheReadTokens: r.cacheReadTokens,
+      cacheWriteTokens: r.cacheWriteTokens,
+      providerCost: r.providerCost,
+      providerCurrency: r.providerCurrency,
+      fxRateToInr: r.fxRateToInr,
+      inrCost: r.inrCost,
     };
   });
   if (touched) writeLegacyStore({ ...current, billingOutbox });

@@ -21,6 +21,7 @@ const credits = require('./credits.js');
 const compute = require('./compute-pricing.js');
 const moneyWire = require('./money-wire.js');
 const pricing = require('./pricing.js');
+const rates = require('./credit-rates.js');
 
 const RECHARGE_PAISE = 50000; // ₹500 of prepaid value
 const GST_PAISE = 9000; // ₹45 CGST + ₹45 SGST
@@ -219,31 +220,42 @@ test('the savings panel reads as a counterfactual and is not wired to any debit'
   );
 });
 
-// D9 left one FX multiplication inside the money path, and Phase 3 is what made it
-// load-bearing: `token_credits` is no longer a page decoration, it is the quantity the
-// outbox delivers and the meter sums. So the two figures below are computed with
-// pencil arithmetic — 100k in + 20k out at claude's ₹3/₹15 per MTok, at ₹87/USD.
+// `token_credits` is not a page decoration: it is the quantity the outbox delivers and
+// the meter sums. So the figures below are pencil arithmetic against
+// deploy/billing/credit-rates.yaml — 100k in + 20k out at claude's ₹261/₹1,305 per MTok —
+// with no FX anywhere in the derivation, which is the D9 finding closed.
 test('a run’s tokens become the token credits the meter will sum, exactly', () => {
-  const usd = pricing.estimateCostUsd({ inputTokens: 100_000, outputTokens: 20_000 }, 'claude');
-  // The float wobble is visible right here — 0.6000000000000001 rather than 0.6 —
-  // and it is exactly why the conversion below is not float arithmetic.
-  assert.ok(Math.abs(usd - 0.6) < 1e-12, `(100000/1e6)×3 + (20000/1e6)×15 = 0.60, got ${usd}`);
-
-  const tokenCredits = pricing.usdToPaise(usd, 87);
-  assert.equal(tokenCredits, 5220, '0.6 USD × ₹87 × 100 = ₹52.20 = 5220 token credits');
-  moneyWire.assertTokenCredits(tokenCredits, 'outbox token_credits');
-  // 1 token credit is 1 paise by D6, so the rupee rendering of the same integer is
-  // what the page showed before the rename and still shows for a ₹ figure.
-  assert.equal(moneyWire.decimalFromPaise(tokenCredits), '52.20', 'the same number the page shows');
+  const priced = pricing.priceRun({
+    usage: { inputTokens: 100_000, outputTokens: 20_000 },
+    llm: { provider: 'claude', model: 'claude-sonnet-5' },
+  });
+  assert.equal(priced.tokenCredits, 5220, '(100k/1M)×₹261 + (20k/1M)×₹1,305 = ₹26.10 + ₹26.10 = ₹52.20');
+  moneyWire.assertTokenCredits(priced.tokenCredits, 'outbox token_credits');
+  // 100 token credits is 1 credit is ₹1 by D6, so the credit rendering and the rupee
+  // rendering of the same integer are the same string.
+  assert.equal(moneyWire.creditsFromTokenCredits(priced.tokenCredits), '52.20');
+  assert.equal(priced.inrCost, '52.20', 'what the event stamps, from the same computation');
 
   // Usage money is a decimal amount of credits, never a whole count, so the credit
   // mover refuses it. If someone routes a metered run through `tokenCreditsToCredits` the
   // bill silently rounds away ₹0.20 per run — which is the direction that adds up.
-  assert.throws(() => moneyWire.tokenCreditsToCredits(tokenCredits), /whole number of credits/);
+  assert.throws(() => moneyWire.tokenCreditsToCredits(priced.tokenCredits), /whole number of credits/);
 
-  // The reason this is BigInt arithmetic: ₹1.005 is an exact half-paise, and binary
-  // float puts it just BELOW the half, so the naive round is short by one on every
-  // such run and both sides of a reconciliation agree that they undercharged.
-  assert.equal(Math.round(1.005 * 1 * 100), 100, 'the defect, stated so it is not re-introduced');
-  assert.equal(pricing.usdToPaise(1.005, 1), 101, 'half away from zero, once, at the boundary');
+  // The reason this is BigInt arithmetic: 1,000 output tokens at ₹1,305/MTok is
+  // ₹1.305 = 130.5 token credits, an exact half, and the rule is that it rounds away
+  // from zero rather than toward an even number nobody chose.
+  assert.equal(pricing.priceRun({
+    usage: { outputTokens: 1_000 }, llm: { provider: 'claude' },
+  }).tokenCredits, 131, 'half away from zero, once, at the boundary');
+
+  // …and why it cannot be `Math.round(inr × 100)`: binary floating point puts SOME exact
+  // halves just below themselves — ₹1.005 is one of them — so the naive round is short by
+  // one in a direction that never varies, and both sides of a reconciliation agree that
+  // they undercharged. The rate row is a fixture rather than a card entry: no card row
+  // lands on a half at a round token count, which is exactly how a defect like this stays
+  // invisible in production.
+  assert.equal(Math.round(1.005 * 100), 100, 'the defect, stated so it is not re-introduced');
+  assert.equal(rates.tokenCreditsFromTokens(
+    { inputTokens: 1_000 }, { input: '1005', output: '0', cacheRead: '0', cacheWrite: '0' },
+  ), 101, 'the digit math says what the decimal says');
 });

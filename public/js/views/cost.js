@@ -150,10 +150,9 @@ export async function renderCost(view) {
       metric('Your key (not charged)', inr(sourceSeries(summary, 'customer').notionalInr),
         `${formatNumber(sourceSeries(summary, 'customer').runs)} runs at list price — debited ₹0`),
       metric('Auto-recharge', summary.autoRecharge.enabled ? 'On' : 'Off',
-        // The FX rate is not a display garnish here: `usdToPaise` in the billing
-        // service applied it to produce the tokenCredits that was delivered to the wallet,
-        // so every rupee on this page inherits it. Say "estimate rate", not "FX".
-        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : `Estimate rate ₹${summary.fxUsdToInr}/USD`),
+        // No rate is quoted here any more, and that is the point: a debit comes from the
+        // INR rate card, so no currency movement changes what this page says was spent.
+        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : 'Not scheduled — top up from Recharge'),
     ]),
   );
 

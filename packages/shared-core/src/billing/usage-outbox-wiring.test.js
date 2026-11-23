@@ -13,7 +13,6 @@ const assert = require('node:assert/strict');
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-outbox-'));
 process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.STORE_BACKEND = 'file';
-process.env.USD_TO_INR = '100';
 process.env.FLEET_ORG_ID = 'org-wire';
 process.env.FLEXPRICE_ENABLED = 'true';
 process.env.FLEXPRICE_API_KEY_INGEST = 'fp_ingest_wiring';
@@ -36,15 +35,24 @@ test('recordUsage is the moment a cost becomes a delivery obligation', () => {
     { usage: { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 }, costUsd: 0.03 },
     { provider: 'claude', model: 'c-1' },
   );
-  assert.equal(rec.costTokenCredits, 300);
+  assert.equal(rec.costTokenCredits, 157, '1k in + 1k out at the card claude rows (261/1305 INR per 1M) = 1.566 INR = 157 token credits');
 
   const [row] = rows('run-wire-1');
   assert.ok(row, 'the run that was metered must also be queued');
   assert.equal(row.orgId, 'org-wire');
   assert.equal(row.quantityTokenCredits, rec.costTokenCredits);
-  assert.equal(row.meter, 'llm-cost');
+  assert.equal(row.meter, 'llm-token-credits');
   assert.equal(row.status, 'pending');
-  assert.equal(row.idempotencyKey, 'ev:org-wire:run-wire-1:llm-cost');
+  assert.equal(row.idempotencyKey, 'ev:org-wire:run-wire-1:llm-token-credits');
+  // The provenance rides on the same row: what the SDK said it billed, the rate the
+  // card stamped, and the rupee value of THIS debit. Re-deriving them at drain time
+  // would describe a different run than the one the meter summed.
+  assert.equal(row.providerCost, '0.03');
+  assert.equal(row.providerCurrency, 'USD');
+  assert.equal(row.fxRateToInr, '87.00');
+  assert.equal(row.inrCost, '1.57');
+  assert.equal(row.inputTokens, 1000);
+  assert.equal(row.outputTokens, 1000);
 });
 
 test('the queued quantity is the number the record carries, not a re-derivation', () => {
@@ -53,9 +61,10 @@ test('the queued quantity is the number the record carries, not a re-derivation'
   // reconciler can explain.
   const rec = recordUsage(
     { runId: 'run-wire-2' },
-    { usage: { inputTokens: 2, outputTokens: 2, totalTokens: 4 }, costUsd: 0.0175 },
+    { usage: { inputTokens: 4000, outputTokens: 1000, totalTokens: 5000 }, costUsd: 0.0175 },
     { provider: 'claude', model: 'c-1' },
   );
+  assert.equal(rec.costTokenCredits, 235, '2.349 INR rounds once, at the credit boundary, not once per component');
   const [row] = rows('run-wire-2');
   assert.equal(row.quantityTokenCredits, rec.costTokenCredits);
   assert.ok(Number.isInteger(row.quantityTokenCredits));
@@ -68,7 +77,7 @@ test('a run on the org’s own key consumed value but billed none, so it queues 
     { provider: 'claude', model: 'c-1' },
   );
   assert.equal(rec.costTokenCredits, 0);
-  assert.equal(rec.notionalCostTokenCredits, 300);
+  assert.equal(rec.notionalCostTokenCredits, 157);
   assert.equal(rows('run-wire-3').length, 0);
 });
 
