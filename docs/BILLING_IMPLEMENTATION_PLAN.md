@@ -147,7 +147,7 @@ Modified: `billing-api.js` — `/recharge` (`:307`) becomes quote-only (returns 
 
 Deleted in this phase: the `type:'recharge'` ledger path (`billing-api.js:513-525`) and `ledger.js:50-62`'s local ₹500 seed (→ `FREE_CREDIT_GRANT`).
 
-Verification: `BILLING_ALLOW_MOCK_PAYMENTS=true FLEXPRICE_ENABLED=true npm start`, scripted recharge on **both** providers → intent `totalPaise 59000`, `gstPaise 9000`, wallet `real_time_credit_balance` **exactly 500**, credit-row `credits_available` delta 500, `collectedPaise == gstPaise + prepaidCredits×100 + promoCredits×100`; replay the same order → one credit; a cross-org order id → refused; Razorpay bad signature → refused.
+Verification: `BILLING_ALLOW_MOCK_PAYMENTS=true FLEXPRICE_ENABLED=true npm start`, scripted recharge on **both** providers → intent `totalPaise 59000`, `gstPaise 9000`, wallet `real_time_credit_balance` **exactly 500**, credit-row `credits_available` delta 500, `collectedPaise == gstPaise + prepaidCredits×100` (identity corrected 2026-11-23 — the promo term was wrong: it balances only at a zero bonus, and a bonus is granted on top of the money charged rather than collected within it); replay the same order → one credit; a cross-org order id → refused; Razorpay bad signature → refused.
 Docs: `BILLING_FLEXPRICE.md` §11 recharge runbook with a payload transcript for both gateways.
 
 ### Phase 2 outcome (recorded here, decisions above left as written)

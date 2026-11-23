@@ -18,6 +18,14 @@ const { decimalFromPaise } = require('./money-wire');
 
 const BPS = 10000;
 
+// The ceiling on a promotional bonus. The POLICY is the rate card
+// (deploy/billing/credit-rates.yaml → limits.max_bonus_bps), which the loader checks
+// per package; this constant is the arithmetic backstop for every other caller of
+// quote(), and it must stay at least as generous as the card or a valid package would
+// refuse to settle. 100000 bps is a 1000% bonus, which covers ₹4000 → 10,000 credits
+// (15000 bps) with room for a launch offer.
+const MAX_BONUS_BPS = 100000;
+
 const GST_RATE_BPS = 1800; // 18%
 const CGST_RATE_BPS = 900;
 const SGST_RATE_BPS = 900;
@@ -129,8 +137,8 @@ function quote(params = {}) {
   if (!Number.isInteger(subtotalPaise) || subtotalPaise < 0) {
     throw new TypeError(`gst.quote: subtotalPaise must be a non-negative integer of paise, got ${JSON.stringify(subtotalPaise)}`);
   }
-  if (!Number.isInteger(couponBps) || couponBps < 0 || couponBps > 10000) {
-    throw new TypeError(`gst.quote: couponBps must be an integer 0..10000, got ${JSON.stringify(couponBps)}`);
+  if (!Number.isInteger(couponBps) || couponBps < 0 || couponBps > MAX_BONUS_BPS) {
+    throw new TypeError(`gst.quote: couponBps must be an integer 0..${MAX_BONUS_BPS}, got ${JSON.stringify(couponBps)}`);
   }
   if (mode !== 'advance' && mode !== 'supply') {
     throw new TypeError(`gst.quote: unknown mode ${JSON.stringify(mode)}`);
@@ -198,6 +206,7 @@ function toCashfreeOrderAmount(totalPaise) {
 
 module.exports = {
   BPS,
+  MAX_BONUS_BPS,
   CURRENCY,
   GST_RATE_BPS,
   CGST_RATE_BPS,

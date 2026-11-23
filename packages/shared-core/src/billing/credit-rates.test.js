@@ -119,7 +119,7 @@ test('a package whose bonus is not an exact basis-point ratio is refused', () =>
 });
 
 test('a package over the bonus cap is refused, and under it is not', () => {
-  // 100000 bps = a 10000% bonus is the cap the ₹4000 → 10,000 offer needed room for.
+  // 100000 bps = a 1000% bonus: the cap the ₹4000 → 10,000-credit offer needed room for.
   assert.throws(
     () => load(mutate('price_inr: "4000", credits: 10000', 'price_inr: "4000", credits: 404000')),
     /of bonus exceeds limits\.max_bonus_bps 100000/,

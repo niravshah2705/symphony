@@ -65,10 +65,16 @@ test('the ₹90 GST is never spendable, which is the identity that keeps tax out
   const q = gst.quote({ subtotalPaise: RECHARGE_PAISE, supplierStateCode: GUJARAT, customerStateCode: GUJARAT });
   const c = credits.topUpCrediting({ quote: q });
 
+  // `prepaid + gst == collected`. This test asserted
+  // `collected − gst == prepaid + promo` instead, which balances ONLY because the
+  // recharge here has no bonus — and docs/BILLING_IMPLEMENTATION_PLAN.md stated the
+  // same wrong form. A bonus is a grant on top of the money charged, so it must not
+  // appear on the tax side of an identity: at ₹4000 → 10,000 credits the wrong form
+  // reads as though the extra 6,000 were collected and taxable.
   assert.equal(
-    c.collectedPaise - c.gstPaise,
-    c.prepaidTokenCredits + c.promoTokenCredits,
-    'everything charged, minus the tax, is exactly everything credited',
+    c.prepaidTokenCredits + c.gstPaise,
+    c.collectedPaise,
+    'everything credited as prepaid, plus the tax, is exactly everything charged',
   );
 
   // The failure this guards is silent: crediting the gross would make ₹90 of
@@ -98,6 +104,10 @@ test('a 10% coupon adds a promotional wallet without touching the ₹590 charged
   assert.equal(c.prepaidCredits, 500, 'D6: 1 credit = ₹1, so the ₹500 subtotal is 500 credits — the number Phase 2 sends as credits_to_add');
   assert.equal(c.prepaidCredits, moneyWire.tokenCreditsToCredits(RECHARGE_PAISE), 'the credit count comes from the same boundary as the wire value');
   assert.equal(moneyWire.decimalFromPaise(c.collectedPaise), '590.00', 'the gross that reaches the gateway equals the gross on the invoice');
+  assert.equal(c.prepaidTokenCredits + c.gstPaise, c.collectedPaise,
+    'a bonus does not move the identity: the tax base is still only what was charged');
+  assert.equal((c.prepaidTokenCredits + c.promoTokenCredits) - (c.collectedPaise - c.gstPaise), c.promoTokenCredits,
+    'the promo is the WHOLE difference between what was credited and what was charged — outside the tax base, never inside it');
 });
 
 test('interstate supply charges IGST and, critically, the same total', () => {

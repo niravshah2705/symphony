@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  MAX_BONUS_BPS,
   roundHalfUpPaise,
   parseGstin,
   resolvePlaceOfSupply,
@@ -83,11 +84,26 @@ test('quote: a coupon bonus does not reduce the taxable value', () => {
   assert.equal(withCoupon.totalPaise, 59000);
 });
 
+// A package is ₹2000 → 3,500 credits (7500 bps) or ₹4000 → 10,000 (15000 bps), and
+// the second only quotes at all above the old 10000 ceiling. Both must leave the tax
+// exactly where a plain recharge put it: a bonus grants credit, it does not grow the
+// amount collected, so it cannot grow the amount taxed either.
+test('quote: a 150% bonus is credit on top, with the GST of an unbilled subtotal', () => {
+  const bonus = quote({ subtotalPaise: 400000, couponBps: 15000, supplierStateCode: '27', customerStateCode: '27' });
+  const plain = quote({ subtotalPaise: 400000, supplierStateCode: '27', customerStateCode: '27' });
+  assert.equal(bonus.bonusTokenCredits, 600000, '1.5 x the ₹4000 subtotal, in token credits');
+  assert.equal(bonus.taxablePaise, plain.taxablePaise);
+  assert.equal(bonus.gstPaise, plain.gstPaise);
+  assert.equal(bonus.totalPaise, plain.totalPaise, '₹4,720 collected for ₹4,000 of credit plus 18% GST');
+  assert.equal(quote({ subtotalPaise: 400000, couponBps: MAX_BONUS_BPS, supplierStateCode: '27' }).bonusTokenCredits, 4000000);
+});
+
 test('quote: rejects input that could not be a paise amount', () => {
   assert.throws(() => quote({ subtotalPaise: 50000.5, supplierStateCode: '27' }), TypeError);
   assert.throws(() => quote({ subtotalPaise: -100, supplierStateCode: '27' }), TypeError);
   assert.throws(() => quote({ subtotalPaise: '50000', supplierStateCode: '27' }), TypeError);
-  assert.throws(() => quote({ subtotalPaise: 50000, couponBps: 99999, supplierStateCode: '27' }), TypeError);
+  assert.throws(() => quote({ subtotalPaise: 50000, couponBps: MAX_BONUS_BPS + 1, supplierStateCode: '27' }), TypeError,
+    'the ceiling is the exported one, so the card and this check cannot drift apart silently');
   assert.throws(() => quote({ subtotalPaise: 50000, supplierStateCode: '27', mode: 'nonsense' }), TypeError);
   assert.throws(
     () => quote({ subtotalPaise: 50000, supplierStateCode: '27', customerGstin: 'NOTAGSTIN' }),
