@@ -81,7 +81,7 @@ function costUsdFromResult(result, llm) {
  * Convert USD to integer paise using the configured FX rate.
  *
  * This is a money-path multiplication, not a display one: since Phase 3 the
- * result is the `cost_paise` the outbox delivers and the wallet is debited
+ * result is the `token_credits` the outbox delivers and the wallet is debited
  * against. So it is BigInt on digit strings (see money-wire.js) rather than
  * `Math.round(usd * rate * 100)` — binary float puts some exact halves just
  * below themselves, which would short every such run by a paise in a direction

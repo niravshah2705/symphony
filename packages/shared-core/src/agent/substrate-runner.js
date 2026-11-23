@@ -385,7 +385,7 @@ async function runPlanningOnSubstrate({
       sessionMonitor = actorSessionMonitor({
         agentId: actorName, atespace, orgId: organizationId || require('../billing/org-context').resolveOrgId(),
         projectId, userId, userEmail, runId: traceContext.runId,
-        tier: tierFor(TIERS[DEFAULT_TIER]), hourlyRatePaise: 0, startedAt,
+        tier: tierFor(TIERS[DEFAULT_TIER]), hourlyRateTokenCredits: 0, startedAt,
       }, { now, metrics: actorMetrics || createActorMetrics() });
     } catch {
       log.error('actor_session_start_failed', { actorName });

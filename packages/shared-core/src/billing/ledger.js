@@ -7,7 +7,7 @@ const { CONFIG } = require('../config');
  * Billing account preferences, plus the developer journal.
  *
  * There is no balance here any more. `ledgerEntries` used to be summed into
- * `billingAccounts.balancePaise`, and that number was the one the runner gate,
+ * `billingAccounts.balanceTokenCredits`, and that number was the one the runner gate,
  * the auto-recharge job and the UI all acted on — a third figure beside FlexPrice's
  * stored balance and its `real_time_credit_balance`, agreeing with neither. The
  * gate reads the wallet (`billing/gate.js`) and so does everything that used to
@@ -22,13 +22,13 @@ const { CONFIG } = require('../config');
 // alerting policy, not a balance. Compared against the wallet number by
 // `notify.checkThresholdsAndNotify`, and exported as the input to the alerting
 // Terraform (`scripts/gen-observability-inputs.js` reads this declaration).
-const DEFAULT_ALERT_THRESHOLDS_PAISE = Object.freeze([10000, 0]);
+const DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS = Object.freeze([10000, 0]);
 const DEFAULT_AUTO_RECHARGE = Object.freeze({
   enabled: false,
   mode: 'amount', // 'amount' | 'percentage'
-  thresholdPaise: 0, // recharge when the wallet balance drops below this (in paise)
+  thresholdTokenCredits: 0, // recharge when the wallet balance drops below this (token credits)
   thresholdPercent: 20, // recharge when it drops below this % of the opening credit
-  amountPaise: 50000, // top up 500 INR (50000 paise)
+  amountPaise: 50000, // top up 500 INR (50000 paise) — the MONEY charged, so it keeps the rupee name
   cashfreeSubscriptionId: null,
   paymentMethodType: null,
 });
@@ -57,9 +57,9 @@ function ensureAccount(orgId) {
     // The rupee value of the free-tier opening grant — the BASIS percentage-mode
     // auto-recharge multiplies, and the number the provisioner minted as credits.
     // It is configuration, not a balance.
-    initialCreditPaise: CONFIG.BILLING.initialCreditPaise,
-    alertThresholdsPaise: [...DEFAULT_ALERT_THRESHOLDS_PAISE],
-    lastAlertedThresholdPaise: null,
+    initialCreditTokenCredits: CONFIG.BILLING.initialCreditTokenCredits,
+    alertThresholdsTokenCredits: [...DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS],
+    lastAlertedThresholdTokenCredits: null,
     notifyChannels: { browser: true, email: false, slack: false },
     notifyEmails: [],
     autoRecharge: { ...DEFAULT_AUTO_RECHARGE },
@@ -69,7 +69,7 @@ function ensureAccount(orgId) {
 }
 
 module.exports = {
-  DEFAULT_ALERT_THRESHOLDS_PAISE,
+  DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS,
   DEFAULT_AUTO_RECHARGE,
   DEFAULT_PAYMENT_INFO,
   ensureAccount,

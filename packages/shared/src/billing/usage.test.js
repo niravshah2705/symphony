@@ -27,7 +27,7 @@ test('recordUsage persists one record tagged with the deployment org + attributi
   assert.equal(rec.projectName, 'Proj');
   assert.equal(rec.taskIdentifier, 'ENG-1');
   assert.equal(rec.provider, 'claude');
-  assert.equal(rec.costPaise, 300); // 0.03 × 100 × 100
+  assert.equal(rec.costTokenCredits, 300); // 0.03 × 100 × 100
   assert.equal(store.listUsageRecords({ orgId: 'org-usage' }).length, 1);
 });
 
@@ -45,7 +45,7 @@ test('recordUsage is fail-open: a bad result never throws', () => {
 
 // Bring-your-own-key: the run is metered in full but the platform never paid for
 // it, so the chargeable field is zero and the same money is kept as notional. The
-// visible zero is the product — if it were folded into costPaise the org could not
+// visible zero is the product — if it were folded into costTokenCredits the org could not
 // tell a free run from one it had already paid Anthropic for.
 test('a customer-key run is recorded at zero charge with its value kept as notional', () => {
   const rec = recordUsage(
@@ -54,8 +54,8 @@ test('a customer-key run is recorded at zero charge with its value kept as notio
     { provider: 'claude', model: 'c-1' },
   );
   assert.equal(rec.billingSource, 'customer');
-  assert.equal(rec.costPaise, 0, 'nothing to debit: the org paid the provider directly');
-  assert.equal(rec.notionalCostPaise, 300);
+  assert.equal(rec.costTokenCredits, 0, 'nothing to debit: the org paid the provider directly');
+  assert.equal(rec.notionalCostTokenCredits, 300);
   assert.equal(rec.costUsd, 0.03, 'the measurement survives; only the charge is zero');
 });
 
@@ -66,8 +66,8 @@ test('a platform-key run charges in full and carries no notional figure', () => 
     { provider: 'claude', model: 'c-1' },
   );
   assert.equal(rec.billingSource, 'managed');
-  assert.equal(rec.costPaise, 300);
-  assert.equal(rec.notionalCostPaise, 0);
+  assert.equal(rec.costTokenCredits, 300);
+  assert.equal(rec.notionalCostTokenCredits, 0);
 });
 
 // A run that never carried the decision could only have used a platform key on the
@@ -83,7 +83,7 @@ test('an unlabelled run meters as managed, never as free', () => {
     { provider: 'claude' },
   );
   assert.equal(rec.billingSource, 'managed');
-  assert.equal(rec.costPaise, 200);
+  assert.equal(rec.costTokenCredits, 200);
 });
 
 test('usage records filter by billing source, and legacy rows read as managed', () => {
@@ -93,7 +93,7 @@ test('usage records filter by billing source, and legacy rows read as managed', 
   recordUsage({ orgId },
     { usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 }, costUsd: 0.01 }, { provider: 'claude' });
   const unlabeled = store.addUsageRecord({
-    orgId, provider: 'claude', usage: { totalTokens: 10 }, costPaise: 100, createdAt: new Date().toISOString(),
+    orgId, provider: 'claude', usage: { totalTokens: 10 }, costTokenCredits: 100, createdAt: new Date().toISOString(),
   });
   assert.equal(unlabeled.billingSource, undefined, 'a pre-BYOK row really has no label');
 
@@ -135,7 +135,7 @@ test('the price match is recorded, and an unmodeled provider says so out loud', 
       { provider: 'brand-new-runtime', model: 'm-1' },
     );
     assert.equal(guessed.priceMatch, 'Default', 'priced by fallback: plausible, wrong, and now labeled');
-    assert.equal(guessed.costPaise, 180, 'the fallback blend (3/15 USD per MTok) on 1k+1k tokens at USD_TO_INR=100');
+    assert.equal(guessed.costTokenCredits, 180, 'the fallback blend (3/15 USD per MTok) on 1k+1k tokens at USD_TO_INR=100');
     assert.equal(warnings.length, 1, 'one loud line per guessed record, which is what the alert counts');
     assert.equal(warnings[0].meta.priceMatch, 'Default');
     assert.match(warnings[0].message, /unmodeled provider/);
@@ -151,5 +151,5 @@ test('a zero-cost local run is modeled, not missing', () => {
     { provider: 'ollama', model: 'qwen' },
   );
   assert.equal(rec.priceMatch, 'Exact', 'ollama is in the table at 0/0 — modeled on purpose');
-  assert.equal(rec.costPaise, 0);
+  assert.equal(rec.costTokenCredits, 0);
 });

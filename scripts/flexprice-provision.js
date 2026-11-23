@@ -58,7 +58,7 @@ const CATALOG_FLAT_PRICES = [
 ];
 
 const METERS = [
-  { name: 'llm-cost', event_name: 'fleet.llm_cost', field: 'cost_paise' },
+  { name: 'llm-cost', event_name: 'fleet.llm_cost', field: 'token_credits' },
   { name: 'actor-compute', event_name: 'fleet.actor_compute', field: 'duration_seconds' },
   // Created and deliberately never emitted (decision D8): there is no
   // deployment-duration source yet, and inventing a quantity is worse than
@@ -340,7 +340,7 @@ async function ensurePrices(client, planId, meterIds) {
   // FLAT_FEE charges once per window regardless of quantity, and PER_UNIT is not
   // in the allowed list for a SUM aggregation (measured 400).
   const meterPrice = {
-    'llm-cost': { unit_paise: 1, note: 'quantity is cost_paise, so 1 paise per unit is exact' },
+    'llm-cost': { unit_paise: 1, note: 'quantity is token_credits, so 1 paise per unit is exact' },
     'actor-compute': { unit_paise: 0, note: 'D4: actor compute is metered and priced at zero for now' },
     'deployment-minutes': { unit_paise: 0, note: 'D8: no emitter; price exists so the meter is not orphaned' },
   };
@@ -498,7 +498,7 @@ async function ensureOrg(client, orgId, opts) {
       description: `${name} wallet`,
       // Measured, from TopUpWalletRequest: amount = credits_to_add *
       // conversion_rate. At 1, one credit is one rupee (decision D6), which is
-      // what money-wire's PAISE_PER_CREDIT assumes.
+      // what money-wire's TOKEN_CREDITS_PER_CREDIT assumes.
       conversionRate: '1',
       alertSettings: {
         alertEnabled: true,
@@ -585,7 +585,7 @@ async function main() {
         stateName: val('state-name', 'Karnataka'),
         postal: val('postal', '560001'),
         state: val('state', CONFIG.FLEXPRICE.supplierStateCode || '29'),
-        initialCredits: Number(val('initial-credits', CONFIG.BILLING.initialCreditPaise / 100)),
+        initialCredits: Number(val('initial-credits', CONFIG.BILLING.initialCreditTokenCredits / 100)),
       }));
     }
   } else {

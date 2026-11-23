@@ -133,7 +133,7 @@ function admission(overrides = {}) {
       getBillingStatus: overrides.getBillingStatus || ((context) => ({
         blocked: false,
         orgId: context.orgId,
-        balancePaise: 50000,
+        balanceTokenCredits: 50000,
       })),
       addConversation: overrides.addConversation || (() => ({ id: 'conversation-1' })),
       idFactory: overrides.idFactory || (() => 'run-1'),
@@ -266,7 +266,7 @@ test('the SDK-free billing gate uses authoritative tenant scope and blocks befor
   const blocked = admission({
     getBillingStatus: (context) => {
       seen.push(context);
-      return { blocked: true, orgId: context.orgId, balancePaise: -1, reason: 'Credits exhausted.' };
+      return { blocked: true, orgId: context.orgId, balanceTokenCredits: -1, reason: 'Credits exhausted.' };
     },
   });
   await assert.rejects(
@@ -307,7 +307,7 @@ test('admission forwards user auth and authoritative scope, then dispatches only
         },
       };
     },
-    getBillingStatus: (scope) => ({ blocked: false, orgId: scope.orgId, balancePaise: 1 }),
+    getBillingStatus: (scope) => ({ blocked: false, orgId: scope.orgId, balanceTokenCredits: 1 }),
     addConversation: () => ({ id: 'conversation-tenant' }),
     idFactory: () => 'run-tenant',
     clock: () => CLOCK,

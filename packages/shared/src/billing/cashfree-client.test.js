@@ -4,25 +4,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const cashfreeClient = require('./cashfree-client');
-const { getEffectiveThresholdPaise } = require('./recharge');
+const { getEffectiveThresholdTokenCredits } = require('./recharge');
 
-test('getEffectiveThresholdPaise calculates percentage threshold correctly', () => {
-  const account = { initialCreditPaise: 100000 };
+test('getEffectiveThresholdTokenCredits calculates percentage threshold correctly', () => {
+  const account = { initialCreditTokenCredits: 100000 };
 
   const amountCfg = {
     mode: 'amount',
-    thresholdPaise: 5000,
+    thresholdTokenCredits: 5000,
     thresholdPercent: 20
   };
-  assert.equal(getEffectiveThresholdPaise(account, amountCfg), 5000);
+  assert.equal(getEffectiveThresholdTokenCredits(account, amountCfg), 5000);
 
   const percentCfg = {
     mode: 'percentage',
-    thresholdPaise: 5000,
+    thresholdTokenCredits: 5000,
     thresholdPercent: 20
   };
   // 20% of 100,000 paise = 20,000 paise
-  assert.equal(getEffectiveThresholdPaise(account, percentCfg), 20000);
+  assert.equal(getEffectiveThresholdTokenCredits(account, percentCfg), 20000);
 });
 
 test('cashfreeClient verifies webhook signatures', () => {

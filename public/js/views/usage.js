@@ -292,7 +292,7 @@ function drawTrend(host, trend, breakdown) {
     ...values.map((entry) => el('option', {
       value: entry.value,
       selected: entry.value === dimensionValue ? 'selected' : null,
-      disabled: entry.total && entry.total.paise === null ? 'disabled' : null,
+      disabled: entry.total && entry.total.tokenCredits === null ? 'disabled' : null,
     }, `${entry.value} — ${entry.unreadable ? t('usageUnknown', 'Unavailable') : `${creditText(entry.total)} ${t('usageCredits', 'credits')}`}`)),
   ]);
 
@@ -450,7 +450,7 @@ function purchasePanel(view, summary, overview) {
         ...(q.components || []).map((c) => el('div', {}, `${c.name} ${(c.rateBps / 100)}% · ${inr(c.inr)}`)),
         el('strong', {}, `Total payable ${inr(q.totalInr)}`),
         el('div', {}, t('usageQuoteCredits', '{credits} credits added · 1 credit = ₹1, so the {gst} GST is collected and never spendable', { credits: formatNumber(q.credits), gst: inr(q.gstInr) })),
-        q.bonusPaise ? el('div', {}, t('usageQuoteBonus', 'Coupon bonus {bonus}, credited separately', { bonus: inr(q.bonusInr) })) : null,
+        q.bonusTokenCredits ? el('div', {}, t('usageQuoteBonus', 'Coupon bonus {bonus}, credited separately', { bonus: inr(q.bonusInr) })) : null,
         ...(data.warnings || []).map((warning) => el('small', {}, warning === 'saved_tax_id_invalid'
           ? t('usageGstinInvalid', 'Your saved GSTIN is not valid, so it was ignored for this quote.')
           : warning)),
@@ -503,7 +503,7 @@ function purchasePanel(view, summary, overview) {
   ]);
 }
 
-/** Rupees, from the server's paise-derived decimal strings. */
+/** Rupees, from the server's tokenCredits-derived decimal strings. */
 function inr(value) {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '—';

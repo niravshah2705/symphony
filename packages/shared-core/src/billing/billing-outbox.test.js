@@ -38,7 +38,7 @@ function record(over = {}) {
     projectId: 'proj-1',
     userId: 'user-1',
     runId: 'run-1',
-    costPaise: 12345,
+    costTokenCredits: 12345,
     createdAt: '2026-11-12T10:00:00.000Z',
     ...over,
   };
@@ -50,7 +50,7 @@ test('a recorded cost becomes one pending row, keyed by org + run + meter', () =
   assert.equal(row.orgId, 'org-a');
   assert.equal(row.meter, 'llm-cost');
   assert.equal(row.eventName, 'fleet.llm_cost');
-  assert.equal(row.quantityPaise, 12345);
+  assert.equal(row.quantityTokenCredits, 12345);
   assert.equal(row.status, 'pending');
   assert.equal(row.attempts, 0);
   assert.equal(row.idempotencyKey, 'ev:org-a:run-key-1:llm-cost');
@@ -65,14 +65,14 @@ test('with FlexPrice off nothing is queued, because an undeliverable row is a li
 
 test('a BYOK run costs the platform nothing and therefore queues nothing', () => {
   const before = outbox.counts().total;
-  assert.equal(outbox.enqueueLlmCost(record({ runId: 'run-byok', costPaise: 0 }), ON), null);
+  assert.equal(outbox.enqueueLlmCost(record({ runId: 'run-byok', costTokenCredits: 0 }), ON), null);
   assert.equal(outbox.counts().total, before);
 });
 
-test('a fractional-paise quantity is refused loudly rather than rounded onto the wire', () => {
+test('a fractional token-credit quantity is refused loudly rather than rounded onto the wire', () => {
   const before = outbox.counts().total;
   withQuietLog(() => {
-    assert.equal(outbox.enqueueLlmCost(record({ runId: 'run-fraction', costPaise: 100.5 }), ON), null);
+    assert.equal(outbox.enqueueLlmCost(record({ runId: 'run-fraction', costTokenCredits: 100.5 }), ON), null);
   });
   assert.equal(outbox.counts().total, before);
   assert.ok(logged.some((l) => l.msg.includes('outbox')), JSON.stringify(logged));
@@ -83,8 +83,8 @@ test('the shared org is never billed, so it never gets a row', () => {
 });
 
 test('metering the same run twice does not bill it twice', () => {
-  const a = outbox.enqueueLlmCost(record({ runId: 'run-dup', costPaise: 500 }), ON);
-  const b = outbox.enqueueLlmCost(record({ runId: 'run-dup', costPaise: 500, id: 'use_other' }), ON);
+  const a = outbox.enqueueLlmCost(record({ runId: 'run-dup', costTokenCredits: 500 }), ON);
+  const b = outbox.enqueueLlmCost(record({ runId: 'run-dup', costTokenCredits: 500, id: 'use_other' }), ON);
   assert.equal(a.id, b.id);
   assert.equal(outbox.pending(1000).filter((r) => r.runId === 'run-dup').length, 1);
 });
@@ -93,8 +93,8 @@ test('runs with no runId key on their own record, or they would collapse into on
   // This is the failure the fallback exists for: `runId` is best-effort at every
   // call site, and a constant key would let the FIRST unattributed run of an org
   // stand for all of them — the balance would stop moving and nothing would error.
-  const one = outbox.enqueueLlmCost(record({ runId: null, id: 'use_a', costPaise: 700 }), ON);
-  const two = outbox.enqueueLlmCost(record({ runId: null, id: 'use_b', costPaise: 800 }), ON);
+  const one = outbox.enqueueLlmCost(record({ runId: null, id: 'use_a', costTokenCredits: 700 }), ON);
+  const two = outbox.enqueueLlmCost(record({ runId: null, id: 'use_b', costTokenCredits: 800 }), ON);
   assert.notEqual(one.id, two.id);
   assert.equal(one.idempotencyKey, 'ev:org-a:use_a:llm-cost');
   assert.equal(outbox.pending(1000).filter((r) => r.orgId === 'org-a' && !r.runId).length, 2);
@@ -102,7 +102,7 @@ test('runs with no runId key on their own record, or they would collapse into on
 
 test('with neither a run nor a record handle it says so instead of guessing', () => {
   withQuietLog(() => {
-    assert.equal(outbox.enqueueLlmCost(record({ runId: null, id: null, costPaise: 900 }), ON), null);
+    assert.equal(outbox.enqueueLlmCost(record({ runId: null, id: null, costTokenCredits: 900 }), ON), null);
   });
   assert.ok(logged.some((l) => l.msg === 'billing_outbox_unattributable'), JSON.stringify(logged));
 });
@@ -114,7 +114,7 @@ test('each meter writes its own quantity field, because a wrong name is a silent
   const llm = outbox.enqueue({ kind: 'llmCost', orgId: 'org-map', runId: 'r1', quantity: 1200 }, ON);
   const actor = outbox.enqueue({ kind: 'actorCompute', orgId: 'org-map', runId: 'r2', quantity: 90 }, ON);
   const deploy = outbox.enqueue({ kind: 'deploymentMinutes', orgId: 'org-map', runId: 'r3', quantity: 5 }, ON);
-  assert.deepEqual(outbox.toEvent(llm).properties, { cost_paise: 1200, org_id: 'org-map' });
+  assert.deepEqual(outbox.toEvent(llm).properties, { token_credits: 1200, org_id: 'org-map' });
   assert.deepEqual(outbox.toEvent(actor).properties, { duration_seconds: 90, org_id: 'org-map' });
   assert.deepEqual(outbox.toEvent(deploy).properties, { minutes: 5, org_id: 'org-map' });
   assert.equal(outbox.toEvent(llm).event_name, 'fleet.llm_cost');
@@ -149,24 +149,24 @@ test('an unknown meter kind is refused, never invented', () => {
 });
 
 test('the quantity and the key of a row are immutable, even to the drain', () => {
-  const row = outbox.enqueueLlmCost(record({ runId: 'run-frozen', costPaise: 111 }), ON);
+  const row = outbox.enqueueLlmCost(record({ runId: 'run-frozen', costTokenCredits: 111 }), ON);
   const sent = outbox.markSent(row);
   assert.equal(sent.status, 'sent');
   assert.equal(sent.attempts, 1);
   const tampered = store.updateBillingOutboxRow(row.id, {
-    quantityPaise: 999999,
+    quantityTokenCredits: 999999,
     idempotencyKey: 'ev:org-a:hacked:llm-cost',
     orgId: 'org-victim',
     meter: 'actor-compute',
   });
-  assert.equal(tampered.quantityPaise, 111);
+  assert.equal(tampered.quantityTokenCredits, 111);
   assert.equal(tampered.idempotencyKey, 'ev:org-a:run-frozen:llm-cost');
   assert.equal(tampered.orgId, 'org-a');
   assert.equal(tampered.meter, 'llm-cost');
 });
 
 test('a failing row stays retryable, and only gives up after the ceiling', () => {
-  const row = outbox.enqueueLlmCost(record({ runId: 'run-fail', costPaise: 222 }), ON);
+  const row = outbox.enqueueLlmCost(record({ runId: 'run-fail', costTokenCredits: 222 }), ON);
   let current = row;
   for (let i = 1; i < outbox.FAILED_AFTER_ATTEMPTS; i += 1) {
     current = outbox.markFailed(current, 'flexprice 503');
@@ -209,9 +209,9 @@ test('an outbox full of undelivered rows alarms instead of dropping a quantity',
 });
 
 test('pruning clears terminal rows and never touches an undelivered one', () => {
-  const kept = outbox.enqueueLlmCost(record({ runId: 'run-keep', costPaise: 333 }), ON);
-  const done = outbox.enqueueLlmCost(record({ runId: 'run-done', costPaise: 444 }), ON);
-  const sent = outbox.enqueueLlmCost(record({ runId: 'run-sent', costPaise: 555 }), ON);
+  const kept = outbox.enqueueLlmCost(record({ runId: 'run-keep', costTokenCredits: 333 }), ON);
+  const done = outbox.enqueueLlmCost(record({ runId: 'run-done', costTokenCredits: 444 }), ON);
+  const sent = outbox.enqueueLlmCost(record({ runId: 'run-sent', costTokenCredits: 555 }), ON);
   outbox.markVerified(outbox.markSent(done));
   outbox.markSent(sent);
   // A cutoff past every row: what goes is decided by status, not by age alone.

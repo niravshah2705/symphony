@@ -17,7 +17,7 @@ function session(overrides = {}) {
   return openSession({
     agentId: 'actor-1', orgId: 'org-1', tier: 'standard-1v1g',
     projectId: 'project-1', userId: 'user-1', startedAt: BASE,
-    hourlyRatePaise: 463, ...overrides,
+    hourlyRateTokenCredits: 463, ...overrides,
   });
 }
 

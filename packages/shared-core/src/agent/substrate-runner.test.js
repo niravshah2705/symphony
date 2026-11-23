@@ -88,7 +88,7 @@ test('START follows actor creation and STOP precedes teardown, even when dispatc
     assert.equal(started.userId, BASE.userId);
     assert.equal(started.userEmail, BASE.userEmail);
     assert.equal(started.tier, 'standard-1v1g');
-    assert.equal(started.hourlyRatePaise, 0);
+    assert.equal(started.hourlyRateTokenCredits, 0);
     assert.equal(stopped, true);
     assert.equal(record.suspended, true);
     assert.equal(record.deleted, true);

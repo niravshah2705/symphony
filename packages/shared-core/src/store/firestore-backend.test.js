@@ -55,8 +55,8 @@ test('a reserved org id is written under an acceptable document key', () => {
   store.write({
     billingState: { lastAggregatedAt: 'now' },
     billingAccounts: [
-      { id: '__shared__', orgId: '__shared__', balancePaise: 10 },
-      { id: 'org-tenant-a', orgId: 'org-tenant-a', balancePaise: 20 },
+      { id: '__shared__', orgId: '__shared__', balanceTokenCredits: 10 },
+      { id: 'org-tenant-a', orgId: 'org-tenant-a', balanceTokenCredits: 20 },
     ],
   });
 
@@ -68,7 +68,7 @@ test('a reserved org id is written under an acceptable document key', () => {
 test('removing an account deletes the rewritten key, not the raw one', () => {
   const ops = [];
   const store = backend(ops);
-  const accounts = [{ id: '__shared__', orgId: '__shared__', balancePaise: 10 }];
+  const accounts = [{ id: '__shared__', orgId: '__shared__', balanceTokenCredits: 10 }];
   store.write({ billingState: {}, billingAccounts: accounts });
   ops.length = 0;
   store.write({ billingState: {}, billingAccounts: [] });

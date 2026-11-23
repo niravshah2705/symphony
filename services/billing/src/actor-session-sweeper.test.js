@@ -7,7 +7,7 @@ const { sweepActorSessions } = require('./actor-session-sweeper');
 function fixture(overrides = {}) {
   let row = {
     id: 'session-1', agentId: 'actor-1', orgId: 'org-1', tier: 'standard-1v1g',
-    startedAt: 1794000000, lastSeenAt: 1794000090, hourlyRatePaise: 0,
+    startedAt: 1794000000, lastSeenAt: 1794000090, hourlyRateTokenCredits: 0,
     status: 'RUNNING', metered: false, ...overrides,
   };
   const recorded = [];

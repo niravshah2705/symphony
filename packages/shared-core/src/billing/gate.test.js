@@ -59,14 +59,14 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 test.beforeEach(() => gate.invalidate(null));
 
-test('positive credit balance admits, and the paise figure is the wallet’s, not the ledger’s', async () => {
+test('positive credit balance admits, and the token-credit figure is the wallet’s, not the ledger’s', async () => {
   const flex = makeFlex({ credits: '500' });
   // A first-party account that disagrees by a mile, to prove nothing reads it.
-  store.upsertBillingAccount('org-gate-1', { balancePaise: -4_000_000 });
+  store.upsertBillingAccount('org-gate-1', { balanceTokenCredits: -4_000_000 });
   await gate.ensureFundStatus('org-gate-1', { ...ON, client: flex.client });
   const status = gate.getOrgFundStatus('org-gate-1', { ...ON, client: flex.client });
 
-  assert.equal(status.balancePaise, 50000, '500 credits at 100 paise each');
+  assert.equal(status.balanceTokenCredits, 50000, '500 credits at 100 token credits each');
   assert.equal(status.fundsAvailable, true);
   assert.equal(status.state, 'available');
   assert.equal(flex.calls.balance[0], 'wal_of_cust_of_org-gate-1');
@@ -75,7 +75,7 @@ test('positive credit balance admits, and the paise figure is the wallet’s, no
   // including one a manual debit drove to −2900 — because it is invoice-cycle
   // anchored. A "usage" number here would therefore be read as accrued consumption
   // and always read as none; the meter sum is the usage authority, not this view.
-  assert.ok(!('currentPeriodUsagePaise' in status), 'the gate reports money, not usage');
+  assert.ok(!('currentPeriodUsageTokenCredits' in status), 'the gate reports money, not usage');
 });
 
 test('zero is exhausted and negative is its own state, because only a manual debit makes one', async () => {
@@ -98,7 +98,7 @@ test('zero is exhausted and negative is its own state, because only a manual deb
   // value; 'negative' is the extra fact they do not have to know about.
   assert.equal(blockedNeg.fundStatus, 'negative');
   assert.match(blockedNeg.reason, /negative/i);
-  assert.equal(blockedNeg.balancePaise, -290000);
+  assert.equal(blockedNeg.balanceTokenCredits, -290000);
 });
 
 test('off admits without asking FlexPrice anything at all', async () => {
@@ -139,13 +139,13 @@ test('N admissions are ONE read, and a stale entry re-reads in the background wi
   assert.ok(results.every((r) => r.state === 'unknown'), 'none of them waited for the network');
   await new Promise((resolve) => setTimeout(resolve, 60));
 
-  assert.equal(gate.getOrgFundStatus('org-gate-burst', { ...ON, client: flex.client }).balancePaise, 1000);
+  assert.equal(gate.getOrgFundStatus('org-gate-burst', { ...ON, client: flex.client }).balanceTokenCredits, 1000);
   assert.equal(flex.calls.customer.length, 1, 'the fresh entry is served from cache');
 
   // Expire it: the call still returns synchronously, with the last real number.
   const stale = gate.getOrgFundStatus('org-gate-burst', { ...ON, client: flex.client, ttlMs: -1 });
   assert.equal(flex.calls.customer.length, 2);
-  assert.equal(stale.balancePaise, 1000, 'stale-while-revalidate serves the old value, not a guess');
+  assert.equal(stale.balanceTokenCredits, 1000, 'stale-while-revalidate serves the old value, not a guess');
   await tick();
 });
 
@@ -160,7 +160,7 @@ test('a read that fails keeps the last known balance and marks it stale', async 
   const after = gate.getOrgFundStatus('org-gate-fail', { ...ON, client: broken.client });
 
   assert.equal(after.fundsAvailable, true);
-  assert.equal(after.balancePaise, 70000, 'an outage is not evidence of an empty wallet');
+  assert.equal(after.balanceTokenCredits, 70000, 'an outage is not evidence of an empty wallet');
   assert.equal(after.stale, true);
   assert.equal(after.state, 'available');
 });
@@ -175,7 +175,7 @@ test('a recharge invalidates what this process believed about the org', async ()
   await gate.ensureFundStatus('org-gate-recharge', { ...ON, client: richer.client });
   const after = gate.getOrgFundStatus('org-gate-recharge', { ...ON, client: richer.client });
   assert.equal(after.fundsAvailable, true);
-  assert.equal(after.balancePaise, 25000);
+  assert.equal(after.balanceTokenCredits, 25000);
 });
 
 test('gateEnabled:false opts out, and costs no read', () => {
@@ -208,7 +208,7 @@ test('a cached wallet id the org does not own reads no balance and reports unkno
   store.upsertBillingAccount(orgId, { flexprice: { walletId: 'wal_of_cust_of_org-elsewhere' } });
   const status = await gate.ensureFundStatus(orgId, { ...ON, client: flex.client });
   assert.deepEqual(flex.calls.balance, [], 'a wallet that is not the org’s is never read');
-  assert.equal(status.balancePaise, null);
+  assert.equal(status.balanceTokenCredits, null);
   assert.equal(status.state, 'unknown', 'unknown, not zero: an unreadable record is not a spent wallet');
   assert.equal(status.fundsAvailable, true, 'the gate’s unknown-state policy still admits runs');
 });
@@ -234,16 +234,16 @@ test('a balance the code cannot read admits, and says which one it could not rea
   const status = await gate.ensureFundStatus('org-gate-junk', { ...ON, client: flex });
   assert.equal(status.fundsAvailable, true);
   assert.equal(status.state, 'unknown');
-  assert.equal(status.balancePaise, null);
+  assert.equal(status.balanceTokenCredits, null);
 });
 
-test('a sub-paise credit balance becomes whole paise without a float', async () => {
+test('a fractional credit balance becomes whole token credits without a float', async () => {
   const flex = makeFlex({ credits: '1000.505' });
   await gate.ensureFundStatus('org-gate-frac', { ...ON, client: flex.client });
   const status = gate.getOrgFundStatus('org-gate-frac', { ...ON, client: flex.client });
-  // 1000.505 credits * 100 = 100050.5 paise, half-up to 100051. Never 100050: a
+  // 1000.505 credits * 100 = 100050.5 token credits, half-up to 100051. Never 100050: a
   // gate that rounds a balance down rounds a customer’s money away.
-  assert.equal(status.balancePaise, 100051);
+  assert.equal(status.balanceTokenCredits, 100051);
 });
 
 test('the policy default follows the money source, and only an explicit value names itself', () => {

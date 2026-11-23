@@ -56,10 +56,10 @@ async function readSavingsPanel({ orgId, now = Date.now() / 1000, window = '30d'
   if (typeof now !== 'number' || !Number.isFinite(now) || now < 0 || now > Number.MAX_SAFE_INTEGER) {
     throw new TypeError('savingsPanel: now must be finite epoch seconds');
   }
-  const hourlyRatePaise = Object.hasOwn(deps, 'hourlyRatePaise') ? deps.hourlyRatePaise : 0;
-  if (typeof hourlyRatePaise !== 'number' || !Number.isFinite(hourlyRatePaise)
-      || hourlyRatePaise < 0 || hourlyRatePaise > Number.MAX_SAFE_INTEGER) {
-    throw new TypeError('savingsPanel: hourlyRatePaise must be an explicit finite nonnegative number');
+  const hourlyRateTokenCredits = Object.hasOwn(deps, 'hourlyRateTokenCredits') ? deps.hourlyRateTokenCredits : 0;
+  if (typeof hourlyRateTokenCredits !== 'number' || !Number.isFinite(hourlyRateTokenCredits)
+      || hourlyRateTokenCredits < 0 || hourlyRateTokenCredits > Number.MAX_SAFE_INTEGER) {
+    throw new TypeError('savingsPanel: hourlyRateTokenCredits must be an explicit finite nonnegative number');
   }
   const baseUrl = deps.baseUrl ?? process.env.SUBSTRATE_PROMETHEUS_URL;
   if (!baseUrl) return unavailable('Prometheus is not configured');
@@ -95,10 +95,10 @@ async function readSavingsPanel({ orgId, now = Date.now() / 1000, window = '30d'
       if (!actual || first.value > now || actual.value > Math.floor(now - first.value)) {
         throw new Error('inconsistent actor data');
       }
-      const price = priceActorUsage({ durationSeconds: actual.value, tier: first.tier, hourlyRatePaise });
+      const price = priceActorUsage({ durationSeconds: actual.value, tier: first.tier, hourlyRateTokenCredits });
       const savings = savingsEstimate({
         firstSeenAt: first.value, now, billedSeconds: price.meterValue,
-        billedPaise: price.expectedPaise, hourlyRatePaise,
+        billedTokenCredits: price.expectedTokenCredits, hourlyRateTokenCredits,
       });
       if (!savings.available) throw new Error('unusable savings inputs');
       actors.push({
@@ -108,7 +108,7 @@ async function readSavingsPanel({ orgId, now = Date.now() / 1000, window = '30d'
       });
     }
     actors.sort((a, b) => a.agentId.localeCompare(b.agentId) || a.tier.localeCompare(b.tier));
-    return { available: true, orgId, now, window, hourlyRatePaise, actors };
+    return { available: true, orgId, now, window, hourlyRateTokenCredits, actors };
   } catch {
     // Do not leak upstream details or replace an unavailable read with zeros.
     return unavailable('Prometheus actor data unavailable');

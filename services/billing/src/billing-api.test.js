@@ -17,10 +17,10 @@ const billingApi = require('./billing-api');
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
 test.before(() => {
-  store.addUsageRecord({ orgId: 'org-A', userId: 'uA', projectId: 'pA', usage: { totalTokens: 10 }, costPaise: 100 });
-  store.addUsageRecord({ orgId: 'org-B', userId: 'uB', projectId: 'pB', usage: { totalTokens: 20 }, costPaise: 200 });
-  store.addUsageRecord({ orgId: SHARED_ORG_ID, userId: 'personal-1', projectId: 'x', usage: { totalTokens: 5 }, costPaise: 50 });
-  store.addUsageRecord({ orgId: SHARED_ORG_ID, userId: 'personal-2', projectId: 'y', usage: { totalTokens: 7 }, costPaise: 70 });
+  store.addUsageRecord({ orgId: 'org-A', userId: 'uA', projectId: 'pA', usage: { totalTokens: 10 }, costTokenCredits: 100 });
+  store.addUsageRecord({ orgId: 'org-B', userId: 'uB', projectId: 'pB', usage: { totalTokens: 20 }, costTokenCredits: 200 });
+  store.addUsageRecord({ orgId: SHARED_ORG_ID, userId: 'personal-1', projectId: 'x', usage: { totalTokens: 5 }, costTokenCredits: 50 });
+  store.addUsageRecord({ orgId: SHARED_ORG_ID, userId: 'personal-2', projectId: 'y', usage: { totalTokens: 7 }, costTokenCredits: 70 });
 });
 
 test('scopedUsageRecords returns only the caller org’s records (cross-tenant isolation)', () => {
@@ -48,9 +48,9 @@ test('the spend split reports charged and notional as two separate series', () =
   const orgId = 'org-split';
   const now = Date.now();
   const createdAt = new Date(now).toISOString();
-  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 100 }, costPaise: 900, notionalCostPaise: 0, billingSource: 'managed' });
-  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 50 }, costPaise: 0, notionalCostPaise: 400, billingSource: 'customer' });
-  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 10 }, costPaise: 60, notionalCostPaise: 0 });
+  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 100 }, costTokenCredits: 900, notionalCostTokenCredits: 0, billingSource: 'managed' });
+  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 50 }, costTokenCredits: 0, notionalCostTokenCredits: 400, billingSource: 'customer' });
+  store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 10 }, costTokenCredits: 60, notionalCostTokenCredits: 0 });
 
   const window = billingApi.bySourceWindow(store.listUsageRecords({ orgId }), 30, now);
   assert.equal(window.sources.managed.costInr, 9.6, 'the unlabelled legacy run counts as managed spend');
@@ -75,7 +75,7 @@ test('autoRecharge configuration preserves cashfree fields and calculates thresh
       enabled: true,
       mode: 'percentage',
       thresholdPercent: 25,
-      thresholdPaise: 0,
+      thresholdTokenCredits: 0,
       amountPaise: 50000,
       cashfreeSubscriptionId: 'sub_test_123',
       paymentMethodType: 'upi_autopay',

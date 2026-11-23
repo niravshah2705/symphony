@@ -84,7 +84,7 @@ function parseRechargeSubtotal(value) {
   }
   if (!Number.isSafeInteger(paise) || paise <= 0) return { error: 'amountInr must be greater than zero.' };
   if (paise > MAX_RECHARGE_PAISE) return { error: `amountInr must be at most ₹${MAX_RECHARGE_PAISE / 100}.` };
-  if (paise % moneyWire.PAISE_PER_CREDIT !== 0) {
+  if (paise % moneyWire.TOKEN_CREDITS_PER_CREDIT !== 0) {
     return { error: 'Recharge amounts must be whole rupees — 1 credit = ₹1, so paise cannot be credited.' };
   }
   return { paise };
@@ -153,9 +153,9 @@ function quoteView(quote) {
     gstInr: moneyWire.decimalFromPaise(quote.gstPaise),
     totalPaise: quote.totalPaise,
     totalInr: moneyWire.decimalFromPaise(quote.totalPaise),
-    bonusPaise: quote.bonusPaise || 0,
-    bonusInr: moneyWire.decimalFromPaise(quote.bonusPaise || 0),
-    credits: moneyWire.paiseToCredits(quote.subtotalPaise),
+    bonusTokenCredits: quote.bonusTokenCredits || 0,
+    bonusInr: moneyWire.decimalFromPaise(quote.bonusTokenCredits || 0),
+    credits: moneyWire.tokenCreditsToCredits(quote.subtotalPaise),
     placeOfSupply: quote.placeOfSupply,
   };
 }
@@ -192,17 +192,17 @@ function scopedUsageRecords(caller) {
 function sumWindow(records, days, now) {
   const cutoff = new Date(now - days * DAY_MS).toISOString();
   const scoped = records.filter((r) => String(r.createdAt || '') >= cutoff);
-  const costPaise = scoped.reduce((s, r) => s + (Number(r.costPaise) || 0), 0);
+  const costTokenCredits = scoped.reduce((s, r) => s + (Number(r.costTokenCredits) || 0), 0);
   const tokens = scoped.reduce((s, r) => s + ((r.usage && Number(r.usage.totalTokens)) || 0), 0);
   // Money the platform routed but never paid. Reported next to the charge, not
   // inside it: an org that brought its own key must see the value it consumed and
   // a zero that it can verify against its own provider invoice.
-  const notionalPaise = scoped.reduce((s, r) => s + (Number(r.notionalCostPaise) || 0), 0);
+  const notionalTokenCredits = scoped.reduce((s, r) => s + (Number(r.notionalCostTokenCredits) || 0), 0);
   return {
     runs: scoped.length,
     tokens,
-    costInr: paiseToInr(costPaise),
-    notionalInr: paiseToInr(notionalPaise),
+    costInr: paiseToInr(costTokenCredits),
+    notionalInr: paiseToInr(notionalTokenCredits),
   };
 }
 
@@ -213,7 +213,7 @@ function sumWindow(records, days, now) {
  */
 /** One empty spend bucket; both series start at zero rather than at absent. */
 function newSourceBucket() {
-  return { runs: 0, tokens: 0, costPaise: 0, notionalPaise: 0 };
+  return { runs: 0, tokens: 0, costTokenCredits: 0, notionalTokenCredits: 0 };
 }
 
 function bySourceWindow(records, days, now) {
@@ -224,11 +224,11 @@ function bySourceWindow(records, days, now) {
   const sources = { managed: newSourceBucket(), customer: newSourceBucket() };
   for (const r of scoped) {
     const source = r.billingSource || 'managed';
-    const acc = sources[source] || { runs: 0, tokens: 0, costPaise: 0, notionalPaise: 0 };
+    const acc = sources[source] || { runs: 0, tokens: 0, costTokenCredits: 0, notionalTokenCredits: 0 };
     acc.runs += 1;
     acc.tokens += (r.usage && Number(r.usage.totalTokens)) || 0;
-    acc.costPaise += Number(r.costPaise) || 0;
-    acc.notionalPaise += Number(r.notionalCostPaise) || 0;
+    acc.costTokenCredits += Number(r.costTokenCredits) || 0;
+    acc.notionalTokenCredits += Number(r.notionalCostTokenCredits) || 0;
     sources[source] = acc;
   }
   return {
@@ -239,8 +239,8 @@ function bySourceWindow(records, days, now) {
     historyTruncated: store.usageRecordCount() >= store.USAGE_RECORD_CAP,
     sources: Object.fromEntries(Object.entries(sources).map(([key, acc]) => [key, {
       ...acc,
-      costInr: paiseToInr(acc.costPaise),
-      notionalInr: paiseToInr(acc.notionalPaise),
+      costInr: paiseToInr(acc.costTokenCredits),
+      notionalInr: paiseToInr(acc.notionalTokenCredits),
     }])),
   };
 }
@@ -264,15 +264,15 @@ router.get('/summary', asyncHandler(async (req, res) => {
   const caller = resolveCallerOrg(req);
   const account = store.getBillingAccount(caller.orgId);
   const fund = await gate.ensureFundStatus(caller.orgId);
-  const balancePaise = fund.balancePaise;
+  const balanceTokenCredits = fund.balanceTokenCredits;
   const records = scopedUsageRecords(caller);
   const now = Date.now();
   res.json({
     orgId: caller.orgId,
     isAdmin: caller.isAdmin,
     currency: 'INR',
-    balanceInr: balancePaise === null ? null : paiseToInr(balancePaise),
-    balancePaise,
+    balanceInr: balanceTokenCredits === null ? null : paiseToInr(balanceTokenCredits),
+    balanceTokenCredits,
     fundsAvailable: fund.fundsAvailable,
     fundStatus: fund.fundStatus,
     fundState: fund.state,
@@ -283,8 +283,8 @@ router.get('/summary', asyncHandler(async (req, res) => {
     // The rupee value of the free-tier opening grant, i.e. what the provisioner
     // minted as FREE_CREDIT_GRANT. Configuration, not a balance — the balance
     // above is the only spendable number on this page.
-    initialCreditInr: paiseToInr((account && account.initialCreditPaise)
-      || CONFIG.BILLING.initialCreditPaise),
+    initialCreditInr: paiseToInr((account && account.initialCreditTokenCredits)
+      || CONFIG.BILLING.initialCreditTokenCredits),
     fxUsdToInr: CONFIG.BILLING.usdToInr,
     spend: {
       day: sumWindow(records, PERIOD_DAYS.day, now),
@@ -299,7 +299,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
       week: bySourceWindow(records, PERIOD_DAYS.week, now),
       month: bySourceWindow(records, PERIOD_DAYS.month, now),
     },
-    alertThresholdsInr: (account && account.alertThresholdsPaise ? account.alertThresholdsPaise : []).map(paiseToInr),
+    alertThresholdsInr: (account && account.alertThresholdsTokenCredits ? account.alertThresholdsTokenCredits : []).map(paiseToInr),
     paymentInfo: (account && account.paymentInfo) || {
       billingName: '',
       billingEmail: '',
@@ -312,7 +312,7 @@ router.get('/summary', asyncHandler(async (req, res) => {
       ? {
           enabled: Boolean(account.autoRecharge.enabled),
           mode: account.autoRecharge.mode || 'amount',
-          thresholdInr: paiseToInr(account.autoRecharge.thresholdPaise),
+          thresholdInr: paiseToInr(account.autoRecharge.thresholdTokenCredits),
           thresholdPercent: account.autoRecharge.thresholdPercent || 20,
           amountInr: paiseToInr(account.autoRecharge.amountPaise),
           cashfreeSubscriptionId: account.autoRecharge.cashfreeSubscriptionId || null,
@@ -364,23 +364,23 @@ router.get('/usage', asyncHandler(async (req, res) => {
       label = key;
     }
     const g = groups.get(key) || {
-      key, label, runs: 0, tokens: 0, costPaise: 0, notionalPaise: 0,
+      key, label, runs: 0, tokens: 0, costTokenCredits: 0, notionalTokenCredits: 0,
     };
     g.runs += 1;
     g.tokens += (r.usage && Number(r.usage.totalTokens)) || 0;
-    g.costPaise += Number(r.costPaise) || 0;
-    g.notionalPaise += Number(r.notionalCostPaise) || 0;
+    g.costTokenCredits += Number(r.costTokenCredits) || 0;
+    g.notionalTokenCredits += Number(r.notionalCostTokenCredits) || 0;
     groups.set(key, g);
   }
   const rows = [...groups.values()]
-    .sort((a, b) => (b.costPaise + b.notionalPaise) - (a.costPaise + a.notionalPaise))
+    .sort((a, b) => (b.costTokenCredits + b.notionalTokenCredits) - (a.costTokenCredits + a.notionalTokenCredits))
     .map((g) => ({
       key: g.key,
       label: g.label,
       runs: g.runs,
       tokens: g.tokens,
-      costInr: paiseToInr(g.costPaise),
-      notionalInr: paiseToInr(g.notionalPaise),
+      costInr: paiseToInr(g.costTokenCredits),
+      notionalInr: paiseToInr(g.notionalTokenCredits),
     }));
   res.json({
     orgId: caller.orgId,
@@ -390,8 +390,8 @@ router.get('/usage', asyncHandler(async (req, res) => {
     totals: {
       runs: rows.reduce((s, r) => s + r.runs, 0),
       tokens: rows.reduce((s, r) => s + r.tokens, 0),
-      costInr: paiseToInr(records.reduce((s, r) => s + (Number(r.costPaise) || 0), 0)),
-      notionalInr: paiseToInr(records.reduce((s, r) => s + (Number(r.notionalCostPaise) || 0), 0)),
+      costInr: paiseToInr(records.reduce((s, r) => s + (Number(r.costTokenCredits) || 0), 0)),
+      notionalInr: paiseToInr(records.reduce((s, r) => s + (Number(r.notionalCostTokenCredits) || 0), 0)),
     },
   });
 }));
@@ -411,10 +411,10 @@ router.get('/usage/task/:taskId', asyncHandler(async (req, res) => {
       model: r.model,
       source: r.source,
       tokens: (r.usage && Number(r.usage.totalTokens)) || 0,
-      costInr: paiseToInr(r.costPaise),
+      costInr: paiseToInr(r.costTokenCredits),
       // Each row explains its own zero, so a per-run dispute needs no join.
       billingSource: r.billingSource || 'managed',
-      notionalInr: paiseToInr(r.notionalCostPaise),
+      notionalInr: paiseToInr(r.notionalCostTokenCredits),
       traceId: r.traceId || null,
       runId: r.runId || null,
     }));
@@ -466,8 +466,8 @@ router.put('/config', asyncHandler(async (req, res) => {
       .map(inrToPaise)
       .filter((n) => Number.isFinite(n))
       .sort((a, b) => b - a);
-    patch.alertThresholdsPaise = thresholds;
-    patch.lastAlertedThresholdPaise = null; // re-arm on a threshold change
+    patch.alertThresholdsTokenCredits = thresholds;
+    patch.lastAlertedThresholdTokenCredits = null; // re-arm on a threshold change
   }
   if (body.autoRecharge && typeof body.autoRecharge === 'object') {
     const ar = body.autoRecharge;
@@ -475,7 +475,7 @@ router.put('/config', asyncHandler(async (req, res) => {
     const existingAr = (existingAccount && existingAccount.autoRecharge) || {};
 
     const mode = ['amount', 'percentage'].includes(ar.mode) ? ar.mode : 'amount';
-    const thresholdPaise = inrToPaise(ar.thresholdInr);
+    const thresholdTokenCredits = inrToPaise(ar.thresholdInr);
     const amountPaise = inrToPaise(ar.amountInr);
     const thresholdPercent = Number.isFinite(Number(ar.thresholdPercent)) ? Math.max(1, Math.min(100, Number(ar.thresholdPercent))) : 20;
 
@@ -483,7 +483,7 @@ router.put('/config', asyncHandler(async (req, res) => {
       ...existingAr,
       enabled: Boolean(ar.enabled),
       mode,
-      thresholdPaise: Number.isFinite(thresholdPaise) ? thresholdPaise : 0,
+      thresholdTokenCredits: Number.isFinite(thresholdTokenCredits) ? thresholdTokenCredits : 0,
       thresholdPercent,
       amountPaise: Number.isFinite(amountPaise) && amountPaise > 0 ? Math.min(amountPaise, MAX_RECHARGE_PAISE) : 0,
     };
@@ -546,12 +546,12 @@ router.put('/config', asyncHandler(async (req, res) => {
   const account = store.upsertBillingAccount(caller.orgId, patch);
   res.json({
     orgId: caller.orgId,
-    alertThresholdsInr: (account.alertThresholdsPaise || []).map(paiseToInr),
+    alertThresholdsInr: (account.alertThresholdsTokenCredits || []).map(paiseToInr),
     paymentInfo: account.paymentInfo || null,
     autoRecharge: {
       enabled: Boolean(account.autoRecharge && account.autoRecharge.enabled),
       mode: account.autoRecharge && account.autoRecharge.mode || 'amount',
-      thresholdInr: paiseToInr(account.autoRecharge && account.autoRecharge.thresholdPaise),
+      thresholdInr: paiseToInr(account.autoRecharge && account.autoRecharge.thresholdTokenCredits),
       thresholdPercent: account.autoRecharge && account.autoRecharge.thresholdPercent || 20,
       amountInr: paiseToInr(account.autoRecharge && account.autoRecharge.amountPaise),
       cashfreeSubscriptionId: account.autoRecharge && account.autoRecharge.cashfreeSubscriptionId || null,
@@ -673,10 +673,10 @@ async function createRechargeOrder(req, res, { provider: providerOverride } = {}
     status: 'QUOTED',
     subtotalPaise: quote.subtotalPaise,
     couponBps: coupon.bps,
-    bonusPaise: quote.bonusPaise || 0,
+    bonusTokenCredits: quote.bonusTokenCredits || 0,
     gstPaise: quote.gstPaise,
     totalPaise: quote.totalPaise,
-    creditCount: moneyWire.paiseToCredits(quote.subtotalPaise),
+    creditCount: moneyWire.tokenCreditsToCredits(quote.subtotalPaise),
     supplierStateCode: state,
     ...(customerGstin ? { customerGstin } : {}),
     ...expiry,

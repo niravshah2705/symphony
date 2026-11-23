@@ -66,14 +66,14 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
     // Skip empty runs (no tokens) to avoid noise in the ledger/drill-down.
     if (!usage.totalTokens && !usage.inputTokens && !usage.outputTokens) return null;
     const costUsd = pricing.costUsdFromResult(result, llm);
-    const grossPaise = pricing.usdToPaise(costUsd);
+    const grossTokenCredits = pricing.usdToPaise(costUsd);
     const orgId = resolveOrgId(attribution);
     const billingSource = resolveBillingSource(attribution);
     const priceMatch = pricing.priceMatchOf(llm && llm.provider, result && result.costUsd);
     // Loud, because a silently-guessed rate is a billing error that reads as a
     // number. The record still posts — an estimate beats an unmetered run — but
     // the alert on this line is how a new provider gets added to the catalog.
-    if (priceMatch === 'Default' && grossPaise > 0) {
+    if (priceMatch === 'Default' && grossTokenCredits > 0) {
       log.warn(`cost estimate priced an unmodeled provider from the fallback rate: ${llm.provider}`, {
         priceMatch,
         provider: (llm && llm.provider) || 'unknown',
@@ -81,11 +81,11 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
         runId: attribution.runId || null,
       });
     }
-    // `costPaise` is the ONLY field the billing sweep turns into a debit, so a
+    // `costTokenCredits` is the ONLY field the billing sweep turns into a debit, so a
     // run on the org's own key posts zero: the platform never spent that money
-    // and cannot bill it. The same amount is kept as `notionalCostPaise` so the
+    // and cannot bill it. The same amount is kept as `notionalCostTokenCredits` so the
     // org still sees the value it consumed. Exactly one of the two is ever
-    // non-zero, and `costPaise + notionalCostPaise` is the gross.
+    // non-zero, and `costTokenCredits + notionalCostTokenCredits` is the gross.
     const isCustomerKey = billingSource === 'customer';
     const record = store.addUsageRecord({
       orgId,
@@ -111,8 +111,8 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
       costUsd,
       // 'Reported' | 'Exact' | 'Default' — how much to trust the two fields below.
       priceMatch,
-      costPaise: isCustomerKey ? 0 : grossPaise,
-      notionalCostPaise: isCustomerKey ? grossPaise : 0,
+      costTokenCredits: isCustomerKey ? 0 : grossTokenCredits,
+      notionalCostTokenCredits: isCustomerKey ? grossTokenCredits : 0,
     });
     // Hand the same number to FlexPrice, through the outbox rather than the
     // network: this is the one place a run's cost becomes a fact, so it is also
@@ -140,7 +140,7 @@ function recordActorUsage(session, deps = {}) {
     source: 'substrate-actor',
     meter: 'actor-compute',
     durationSeconds: priced.meterValue,
-    costPaise: priced.expectedPaise,
+    costTokenCredits: priced.expectedTokenCredits,
     createdAt: new Date(session.stoppedAt * 1000).toISOString(),
   });
   const row = billingOutbox.enqueue({

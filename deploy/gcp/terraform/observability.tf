@@ -23,7 +23,7 @@
 #                            wrong number that nobody was told about.
 #   balance_under_<paise>    an org's balance crossed an alert threshold. The
 #                            values come from alert_thresholds.json, GENERATED from
-#                            DEFAULT_ALERT_THRESHOLDS_PAISE in
+#                            DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS in
 #                            packages/shared-core/src/billing/ledger.js — the
 #                            thresholds are never restated in HCL (the CI test in
 #                            deploy/gcp/observability-config.test.js enforces both
@@ -73,9 +73,9 @@ locals {
   # list is a meaningful state — no balance metrics, no balance alerts — which is
   # exactly what a missing or stale generated file should produce, rather than
   # alerts firing on numbers the ledger no longer uses.
-  billing_alert_thresholds_paise = jsondecode(
+  billing_alert_thresholds_token_credits = jsondecode(
     file("${path.module}/alert_thresholds.json")
-  ).billing_alert_thresholds_paise
+  ).billing_alert_thresholds_token_credits
 
   # The Google-managed identity behind every project log sink.
   observability_log_writer = "serviceAccount:service-${local.project_number}@gcp-sa-logging.iam.gserviceaccount.com"
@@ -125,10 +125,10 @@ locals {
   # One metric per configured balance threshold, named after the paise value so
   # the alert's identity carries the number that produced it.
   observability_balance_metrics = local.observability_enabled ? {
-    for t in local.billing_alert_thresholds_paise : "fleet_balance_under_${t}" => {
-      # thresholdPaise is emitted as a STRING by billing/notify.js; matching a
+    for t in local.billing_alert_thresholds_token_credits : "fleet_balance_under_${t}" => {
+      # thresholdTokenCredits is emitted as a STRING by billing/notify.js; matching a
       # numeric field with a quoted filter is what keeps the two in agreement.
-      filter      = "jsonPayload.meta.event=\"balance_threshold_crossed\" AND jsonPayload.meta.thresholdPaise=\"${t}\""
+      filter      = "jsonPayload.meta.event=\"balance_threshold_crossed\" AND jsonPayload.meta.thresholdTokenCredits=\"${t}\""
       description = "Org balances that crossed the ${t} paise alert threshold."
     }
   } : {}
@@ -157,7 +157,7 @@ locals {
     }
     },
     {
-      for t in local.billing_alert_thresholds_paise : "balance under ${t} paise" => {
+      for t in local.billing_alert_thresholds_token_credits : "balance under ${t} paise" => {
         metric   = "fleet_balance_under_${t}"
         window_s = 3600
         above    = 0

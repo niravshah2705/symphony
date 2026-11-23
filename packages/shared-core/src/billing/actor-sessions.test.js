@@ -15,7 +15,7 @@ const { priceActorUsage } = require('./compute-pricing');
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const input = {
   agentId: 'actor-1', orgId: 'org-1', projectId: 'project-1', userId: 'user-1',
-  userEmail: 'user@test.invalid', tier: 'standard-1v1g', hourlyRatePaise: 0,
+  userEmail: 'user@test.invalid', tier: 'standard-1v1g', hourlyRateTokenCredits: 0,
   startedAt: 1794000000, runId: 'run-1', atespace: 'space-1',
 };
 
@@ -26,7 +26,7 @@ test('a 90 second zero-priced session persists attribution and seconds, and repl
   assert.equal(closed.metered, true);
   const usage = store.listUsageRecords().filter((r) => r.actorSessionId === session.id);
   assert.equal(usage.length, 1);
-  assert.equal(usage[0].costPaise, 0);
+  assert.equal(usage[0].costTokenCredits, 0);
   assert.equal(usage[0].userId, input.userId);
   assert.equal(usage[0].userEmail, input.userEmail);
   const rows = store.listBillingOutboxRows().filter((r) => r.actorSessionId === session.id);
@@ -64,10 +64,10 @@ test('a backwards clock bills nothing and emits no negative quantity', () => {
 
 test('missing or unknown rates/shapes are refused rather than guessed', () => {
   for (const rate of [undefined, null, '']) {
-    assert.throws(() => startActorSession({ ...input, hourlyRatePaise: rate }), /refusing to guess/);
+    assert.throws(() => startActorSession({ ...input, hourlyRateTokenCredits: rate }), /refusing to guess/);
   }
   assert.throws(() => startActorSession({ ...input, tier: 'unknown' }), /unknown actor tier/);
-  assert.equal(priceActorUsage({ durationSeconds: 90, hourlyRatePaise: 463 }).expectedPaise, 12);
+  assert.equal(priceActorUsage({ durationSeconds: 90, hourlyRateTokenCredits: 463 }).expectedTokenCredits, 12);
 });
 
 test('heartbeats never move last-seen backwards', () => {

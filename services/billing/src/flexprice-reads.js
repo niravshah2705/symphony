@@ -283,31 +283,31 @@ function topValuesFor(orgId, field, limit, sinceMs, nowMs) {
     if (!Number.isFinite(at) || at < sinceMs || at > nowMs) continue;
     const value = String(record[field] ?? '').trim();
     if (!value) continue;
-    const hit = counts.get(value) || { value, count: 0, paise: 0 };
+    const hit = counts.get(value) || { value, count: 0, tokenCredits: 0 };
     hit.count += 1;
-    hit.paise += Math.max(0, Math.round(Number(record.costPaise) || 0));
+    hit.tokenCredits += Math.max(0, Math.round(Number(record.costTokenCredits) || 0));
     counts.set(value, hit);
   }
   return [...counts.values()]
-    .sort((a, b) => b.paise - a.paise || b.count - a.count || String(a.value).localeCompare(String(b.value)))
+    .sort((a, b) => b.tokenCredits - a.tokenCredits || b.count - a.count || String(a.value).localeCompare(String(b.value)))
     .slice(0, limit)
     .map((entry) => entry.value);
 }
 
-function creditOf(paise) {
-  if (paise === null || paise === undefined) return { paise: null, credits: null, inr: null };
-  const value = Number(paise);
-  if (!Number.isInteger(value)) return { paise: null, credits: null, inr: null };
-  return { paise: value, credits: moneyWire.creditsFromPaise(value), inr: moneyWire.decimalFromPaise(value) };
+function creditOf(tokenCredits) {
+  if (tokenCredits === null || tokenCredits === undefined) return { tokenCredits: null, credits: null, inr: null };
+  const value = Number(tokenCredits);
+  if (!Number.isInteger(value)) return { tokenCredits: null, credits: null, inr: null };
+  return { tokenCredits: value, credits: moneyWire.creditsFromTokenCredits(value), inr: moneyWire.decimalFromPaise(value) };
 }
 
 /**
- * A meter/event SUM is in the unit it aggregates: `llm-cost` sums `cost_paise`, so
- * the number is paise. An unparseable value is `null` (unreadable), which is NOT
+ * A meter/event SUM is in the unit it aggregates: `llm-cost` sums `token_credits`, so
+ * the number is tokenCredits. An unparseable value is `null` (unreadable), which is NOT
  * the same as `0`: `value` is `omitempty` in the response DTO, so an empty window
  * genuinely answers with no key at all (findings §14, verbatim read-back `{}`).
  */
-function paiseFromMeter(out) {
+function tokenCreditsFromMeter(out) {
   if (!out || typeof out === 'string') return null;
   if (out.value === undefined || out.value === null || out.value === '') return 0;
   const n = Number(out.value);
@@ -315,7 +315,7 @@ function paiseFromMeter(out) {
 }
 
 /**
- * Parse a windowed SUM read into `{ byDay, totalPaise, bucketed }`.
+ * Parse a windowed SUM read into `{ byDay, totalTokenCredits, bucketed }`.
  *
  * `windowSize: "DAY"` on `POST /v1/events/usage` is answered per bucket
  * (`GetUsageResponse.results[].windowSize`), and for a windowed SUM the DTO's
@@ -328,7 +328,7 @@ function paiseFromMeter(out) {
  * unavailable, not as an empty chart.
  */
 function seriesFromUsage(out) {
-  if (!out || typeof out === 'string') return { byDay: new Map(), totalPaise: null, bucketed: false };
+  if (!out || typeof out === 'string') return { byDay: new Map(), totalTokenCredits: null, bucketed: false };
   const rows = Array.isArray(out.results) ? out.results : [];
   const byDay = new Map();
   let total = 0;
@@ -337,37 +337,37 @@ function seriesFromUsage(out) {
     const day = row && row.windowSize !== undefined && row.windowSize !== null
       ? isoDay(row.windowSize)
       : null;
-    const paise = paiseFromMeter(row);
-    if (!day || paise === null) {
+    const tokenCredits = tokenCreditsFromMeter(row);
+    if (!day || tokenCredits === null) {
       unreadable += 1;
       continue;
     }
-    byDay.set(day, (byDay.get(day) || 0) + paise);
-    total += paise;
+    byDay.set(day, (byDay.get(day) || 0) + tokenCredits);
+    total += tokenCredits;
   }
   if (rows.length === 0) {
-    const scalar = paiseFromMeter(out);
+    const scalar = tokenCreditsFromMeter(out);
     // No buckets and no (or zero) scalar: the window is empty, which is a true
     // answer for every day. A NON-zero scalar with no buckets means the server
     // ignored `window_size`, so the usage cannot be attributed to days at all.
-    return { byDay, totalPaise: scalar, bucketed: !(scalar > 0) };
+    return { byDay, totalTokenCredits: scalar, bucketed: !(scalar > 0) };
   }
-  return { byDay, totalPaise: unreadable ? null : total, bucketed: true, unreadableRows: unreadable };
+  return { byDay, totalTokenCredits: unreadable ? null : total, bucketed: true, unreadableRows: unreadable };
 }
 
-/** Decimal-as-string on the wire, number or Date on the model: paise or `null`. */
-function rowAmountPaise(row, field) {
+/** Decimal-as-string on the wire, number or Date on the model: tokenCredits or `null`. */
+function rowAmountTokenCredits(row, field) {
   const raw = row && row[field];
   if (raw === undefined || raw === null || raw === '') return null;
   try {
-    return moneyWire.paiseFromCredits(String(raw));
+    return moneyWire.tokenCreditsFromCredits(String(raw));
   } catch (_) {
     return null;
   }
 }
 
 /**
- * The magnitude of a wallet transaction row, in paise.
+ * The magnitude of a wallet transaction row, in tokenCredits.
  *
  * `creditAmount` is the credit-side field; a debit row leaves it out and carries its
  * magnitude in `amount` (measured against a live `MANUAL_BALANCE_DEBIT` row in
@@ -375,10 +375,10 @@ function rowAmountPaise(row, field) {
  * the earlier fallback here read a key FlexPrice never answers, so a debit would
  * have rendered as no amount at all.
  */
-function rowCreditPaise(row) {
-  const direct = rowAmountPaise(row, 'creditAmount');
+function rowCreditTokenCredits(row) {
+  const direct = rowAmountTokenCredits(row, 'creditAmount');
   if (direct !== null) return direct;
-  return rowAmountPaise(row, 'amount');
+  return rowAmountTokenCredits(row, 'amount');
 }
 
 /** `createdAt` is a `Date` on the model and an ISO string on a canned fixture. */
@@ -420,7 +420,7 @@ function logTabOf(req) {
  * usage is visible per bucket.
  */
 function bucketCreditRows(rows) {
-  const bucket = () => ({ totalPaise: 0, remainingPaise: 0, rowCount: 0, unreadableRows: 0 });
+  const bucket = () => ({ totalTokenCredits: 0, remainingTokenCredits: 0, rowCount: 0, unreadableRows: 0 });
   const plan = bucket();
   const addon = bucket();
   const other = bucket();
@@ -429,16 +429,16 @@ function bucketCreditRows(rows) {
 
   for (const row of rows) {
     const reason = String((row && row.transactionReason) || '').toUpperCase();
-    const total = rowCreditPaise(row);
-    const remaining = rowAmountPaise(row, 'creditsAvailable');
+    const total = rowCreditTokenCredits(row);
+    const remaining = rowAmountTokenCredits(row, 'creditsAvailable');
     const target = PLAN_REASONS.has(reason) ? plan : (ADDON_REASONS.has(reason) ? addon : other);
     target.rowCount += 1;
     if (total === null || remaining === null) {
       target.unreadableRows += 1;
       continue;
     }
-    target.totalPaise += total;
-    target.remainingPaise += Math.max(0, remaining);
+    target.totalTokenCredits += total;
+    target.remainingTokenCredits += Math.max(0, remaining);
 
     if (remaining > 0) {
       packs.push({
@@ -466,12 +466,12 @@ function bucketCreditRows(rows) {
   }
 
   const view = (b) => {
-    const usedPaise = Math.max(0, b.totalPaise - b.remainingPaise);
+    const usedTokenCredits = Math.max(0, b.totalTokenCredits - b.remainingTokenCredits);
     return {
-      total: creditOf(b.totalPaise),
-      used: creditOf(usedPaise),
-      remaining: creditOf(b.remainingPaise),
-      pctUsed: b.totalPaise > 0 ? Math.round((usedPaise / b.totalPaise) * 1000) / 10 : null,
+      total: creditOf(b.totalTokenCredits),
+      used: creditOf(usedTokenCredits),
+      remaining: creditOf(b.remainingTokenCredits),
+      pctUsed: b.totalTokenCredits > 0 ? Math.round((usedTokenCredits / b.totalTokenCredits) * 1000) / 10 : null,
       rowCount: b.rowCount,
       unreadableRows: b.unreadableRows,
     };
@@ -708,7 +708,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
     const walletId = await walletIdFor(orgId);
     const base = {
       currency: 'INR',
-      balance: creditOf(fund.balancePaise),
+      balance: creditOf(fund.balanceTokenCredits),
       fundState: fund.state,
       gatePolicy: fund.gatePolicy,
       balanceStale: Boolean(fund.stale),
@@ -791,7 +791,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         reason: 'read_failed',
         note: 'FlexPrice answered this window without day buckets, so daily consumption cannot be attributed to days.',
         weeks,
-        total: creditOf(series.totalPaise),
+        total: creditOf(series.totalTokenCredits),
         days: [],
       };
     }
@@ -811,7 +811,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       endUtc: days.length ? days[days.length - 1].date : null,
       // The window total comes from the same response as the cells, so the header
       // and the grid can never disagree.
-      total: creditOf(series.totalPaise),
+      total: creditOf(series.totalTokenCredits),
       partial: unreadableBuckets > 0,
       unreadableBuckets,
       days,
@@ -854,14 +854,14 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       // an empty series and a refused filter are different answers.
       ignoredFilters: rejected,
       filterableDimensions: Object.keys(DIMENSIONS),
-      total: creditOf(series.totalPaise),
+      total: creditOf(series.totalTokenCredits),
       points,
       // No buckets means the filter cannot be honoured either, and that is reported
       // rather than drawn as a flat zero line.
       bucketed: series.bucketed,
       unreadableBuckets,
       peak: points.reduce(
-        (best, p) => (p.paise !== null && (!best || p.paise > best.paise) ? p : best),
+        (best, p) => (p.tokenCredits !== null && (!best || p.tokenCredits > best.tokenCredits) ? p : best),
         null,
       ),
     };
@@ -904,7 +904,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         endIso,
         filters: { [property]: [value] },
       });
-      return { value, total: creditOf(series.totalPaise), bucketed: series.bucketed };
+      return { value, total: creditOf(series.totalTokenCredits), bucketed: series.bucketed };
     });
 
     const rows = perValue
@@ -912,8 +912,8 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         // A failed dimension read is null, not 0: "this project used nothing" and
         // "we could not tell" are different answers about money.
         ? { value: values[index], total: creditOf(null), unreadable: true }
-        : { ...row, unreadable: row.total.paise === null }))
-      .sort((a, b) => (b.total.paise ?? -1) - (a.total.paise ?? -1));
+        : { ...row, unreadable: row.total.tokenCredits === null }))
+      .sort((a, b) => (b.total.tokenCredits ?? -1) - (a.total.tokenCredits ?? -1));
     return {
       dimension: dimensionParam,
       property,
@@ -966,7 +966,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       offset,
       walletResolved: true,
       rows: items.slice(0, limit).map((row) => {
-        const amount = rowCreditPaise(row);
+        const amount = rowCreditTokenCredits(row);
         return {
           id: row.id || null,
           at: rowTime(row),
@@ -977,11 +977,11 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
           // that lists them as usage invents cost the org never paid.
           kind: NOT_USAGE_REASONS.has(String(row.transactionReason || '').toUpperCase()) ? 'adjustment' : 'movement',
           amount: creditOf(amount),
-          remaining: creditOf(rowAmountPaise(row, 'creditsAvailable')),
+          remaining: creditOf(rowAmountTokenCredits(row, 'creditsAvailable')),
           // What the wallet held after this row landed. `creditBalanceAfter` is a
           // real field on the transaction (`internal/domain/wallet/transaction.go`),
           // so the log's running-balance column needs no arithmetic of our own.
-          balanceAfter: creditOf(rowAmountPaise(row, 'creditBalanceAfter')),
+          balanceAfter: creditOf(rowAmountTokenCredits(row, 'creditBalanceAfter')),
           expiresAt: rowExpiry(row),
           orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotencyKey || null,
           provider: (row.metadata && row.metadata.provider) || null,
@@ -1007,7 +1007,7 @@ module.exports = {
   createFlexpriceReadsRouter,
   // Exported for the tests: these are the decisions that a fake client must match.
   bucketCreditRows,
-  paiseFromMeter,
+  tokenCreditsFromMeter,
   seriesFromUsage,
   dayWindow,
   windowFor,

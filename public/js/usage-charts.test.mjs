@@ -16,13 +16,13 @@ const days = (count, { start = '2026-08-22', every = 1 } = {}) => {
   const first = Date.parse(`${start}T00:00:00.000Z`);
   return Array.from({ length: count }, (_, index) => {
     const ms = first + index * every * 86400000;
-    return { date: new Date(ms).toISOString().slice(0, 10), paise: null, credits: null };
+    return { date: new Date(ms).toISOString().slice(0, 10), tokenCredits: null, credits: null };
   });
 };
 
 const withValues = (list, values) => list.map((day, index) => ({
   ...day,
-  paise: values[index] ?? null,
+  tokenCredits: values[index] ?? null,
   // The wire shape: the route sends credits as a fixed two-decimal string.
   credits: values[index] === null || values[index] === undefined ? null : (values[index] / 100).toFixed(2),
 }));
@@ -157,7 +157,7 @@ test('the trend puts the peak at the top and the labels on the axis', () => {
   const line = svg.children.find((child) => child.attrs?.class === 'usage-trend-line');
   assert.ok(line?.attrs?.d, 'a line is drawn when there is a series');
   const peak = svg.children.find((child) => child.attrs?.class === 'usage-trend-peak');
-  // Index 1 is the 900-paise day and the maximum, so it sits on the top padding
+  // Index 1 is the 900-tokenCredits day and the maximum, so it sits on the top padding
   // edge at its own x (44 left pad + 1/6 of the 664 plot width).
   assert.equal(peak.attrs.cx, 154.67);
   assert.equal(peak.attrs.cy, 14);

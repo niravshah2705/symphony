@@ -42,14 +42,14 @@ function assertUnavailable(result) {
   assert.equal(result.available, false);
   assert.equal(typeof result.reason, 'string');
   assert.equal(Object.hasOwn(result, 'actors'), false);
-  assert.equal(Object.hasOwn(result, 'hourlyRatePaise'), false);
+  assert.equal(Object.hasOwn(result, 'hourlyRateTokenCredits'), false);
 }
 
 test('90-second closed-session fixture: exact tenant lookback queries, seconds and explicit D4 price 0', async () => {
   const { calls, deps } = fixture();
   const result = await readSavingsPanel(input(), deps);
   assert.equal(result.available, true);
-  assert.equal(result.hourlyRatePaise, 0);
+  assert.equal(result.hourlyRateTokenCredits, 0);
   assert.equal(result.window, '30d');
   assert.deepEqual(calls.map(({ url }) => url.searchParams.get('query')), [
     'max by(agent_id,substrate_tier) (min_over_time(substrate_actor_first_seen_timestamp_seconds{fleet_org_id="org-a"}[30d]))',
@@ -69,9 +69,9 @@ test('90-second closed-session fixture: exact tenant lookback queries, seconds a
     agentId: 'actor-a', tier: TIER, firstSeenAt: FIRST,
     baselineSeconds: 3600, actualSeconds: 90, idleSeconds: 3510,
     price: { tier: TIER, meterName: 'actor-compute', meterUnit: 'seconds', meterValue: 90,
-      hourlyRatePaise: 0, expectedPaise: 0 },
-    savings: { available: true, baselineSeconds: 3600, baselinePaise: 0,
-      billedSeconds: 90, billedPaise: 0, netSavedPaise: 0, idleSeconds: 3510, idlePercent: 97.5 },
+      hourlyRateTokenCredits: 0, expectedTokenCredits: 0 },
+    savings: { available: true, baselineSeconds: 3600, baselineTokenCredits: 0,
+      billedSeconds: 90, billedTokenCredits: 0, netSavedTokenCredits: 0, idleSeconds: 3510, idlePercent: 97.5 },
   }]);
 });
 
@@ -114,10 +114,10 @@ test('an observed zero duration is available, unlike an empty vector', async () 
 
 test('90-second fixture uses supplied test rate without reading any rate metric', async () => {
   const { deps } = fixture();
-  const result = await readSavingsPanel(input(), { ...deps, hourlyRatePaise: 2000 });
-  assert.equal(result.actors[0].price.expectedPaise, 50);
-  assert.equal(result.actors[0].savings.baselinePaise, 2000);
-  assert.equal(result.actors[0].savings.netSavedPaise, 1950);
+  const result = await readSavingsPanel(input(), { ...deps, hourlyRateTokenCredits: 2000 });
+  assert.equal(result.actors[0].price.expectedTokenCredits, 50);
+  assert.equal(result.actors[0].savings.baselineTokenCredits, 2000);
+  assert.equal(result.actors[0].savings.netSavedTokenCredits, 1950);
 });
 
 test('quote, backslash and newline injection is escaped as a single exact org matcher', async () => {
@@ -162,11 +162,11 @@ test('org is required and shared attribution is refused without fetching', async
 
 test('only omission selects rate zero: explicit undefined/null and invalid custom rates reject', async () => {
   const { calls, deps } = fixture();
-  for (const hourlyRatePaise of [undefined, null, NaN, Infinity, -1, '0', '', false, Number.MAX_VALUE]) {
-    await assert.rejects(readSavingsPanel(input(), { ...deps, hourlyRatePaise }), /hourlyRatePaise/);
+  for (const hourlyRateTokenCredits of [undefined, null, NaN, Infinity, -1, '0', '', false, Number.MAX_VALUE]) {
+    await assert.rejects(readSavingsPanel(input(), { ...deps, hourlyRateTokenCredits }), /hourlyRateTokenCredits/);
   }
   assert.equal(calls.length, 0);
-  assert.equal((await readSavingsPanel(input(), { ...deps, hourlyRatePaise: 0 })).available, true);
+  assert.equal((await readSavingsPanel(input(), { ...deps, hourlyRateTokenCredits: 0 })).available, true);
 });
 
 test('window and epoch seconds are validated before network access', async () => {

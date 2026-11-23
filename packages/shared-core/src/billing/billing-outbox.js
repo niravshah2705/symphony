@@ -3,7 +3,7 @@
 const store = require('../store');
 const log = require('../logger');
 const { CONFIG } = require('../config');
-const { assertPaise } = require('./money-wire');
+const { assertTokenCredits } = require('./money-wire');
 const { SHARED_ORG_ID } = require('./org-context');
 
 /**
@@ -29,7 +29,7 @@ const { SHARED_ORG_ID } = require('./org-context');
 // is stored, acknowledged with 202, and contributes nothing — silently. So the
 // name lives here and nowhere else.
 const METERS = Object.freeze({
-  llmCost: { meter: 'llm-cost', eventName: 'fleet.llm_cost', field: 'cost_paise', unit: 'paise' },
+  llmCost: { meter: 'llm-cost', eventName: 'fleet.llm_cost', field: 'token_credits', unit: 'tokenCredits' },
   actorCompute: {
     meter: 'actor-compute',
     eventName: 'fleet.actor_compute',
@@ -44,7 +44,7 @@ const METERS = Object.freeze({
   },
 });
 
-const QUANTITY_FIELD = { paise: 'quantityPaise', seconds: 'quantitySeconds', minutes: 'quantityMinutes' };
+const QUANTITY_FIELD = { tokenCredits: 'quantityTokenCredits', seconds: 'quantitySeconds', minutes: 'quantityMinutes' };
 
 // A row that keeps failing stays retryable for this many passes. Twelve drains
 // is roughly an hour at the billing tick's cadence; past that the row is
@@ -103,7 +103,7 @@ function enqueue(input = {}, deps = {}) {
       }
       return null;
     }
-    if (spec.unit === 'paise') assertPaise(quantity, 'outbox cost_paise');
+    if (spec.unit === 'tokenCredits') assertTokenCredits(quantity, 'outbox token_credits');
     const idempotencyKey = eventKey({
       orgId,
       runId: input.actorSessionId || input.runId,
@@ -157,9 +157,9 @@ function enqueue(input = {}, deps = {}) {
 }
 
 /**
- * The one call site that exists today: an LLM run's platform cost, in whole
- * paise, as computed by pricing.js. `costPaise` is 0 for a run on the org's own
- * key and that is not a billable quantity, so it queues nothing.
+ * The one call site that exists today: an LLM run's platform cost, in whole token
+ * credits, as computed by pricing.js. `costTokenCredits` is 0 for a run on the org's
+ * own key and that is not a billable quantity, so it queues nothing.
  */
 function enqueueLlmCost(usageRecord, deps = {}) {
   if (!usageRecord) return null;
@@ -170,7 +170,7 @@ function enqueueLlmCost(usageRecord, deps = {}) {
     userId: usageRecord.userId,
     runId: usageRecord.runId,
     recordId: usageRecord.id,
-    quantity: Number(usageRecord.costPaise) || 0,
+    quantity: Number(usageRecord.costTokenCredits) || 0,
     occurredAt: usageRecord.createdAt,
   }, deps);
 }
@@ -245,7 +245,7 @@ function markFailed(row, reason) {
       orgId: row.orgId,
       meter: row.meter,
       attempts,
-      quantity: row.quantityPaise ?? row.quantitySeconds ?? row.quantityMinutes,
+      quantity: row.quantityTokenCredits ?? row.quantitySeconds ?? row.quantityMinutes,
       lastError: String(reason || 'unknown').slice(0, 200),
       note: 'usage happened and FlexPrice never accepted its quantity; this cost is unaccounted',
     });

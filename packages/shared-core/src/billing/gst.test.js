@@ -22,7 +22,7 @@ test('quote: ₹500 recharge collects 18% GST as CGST + SGST', () => {
   ]);
   assert.equal(q.gstPaise, 9000);
   assert.equal(q.totalPaise, 59000);
-  assert.equal(q.creditPaise, 50000, 'credit is the taxable value, never the collected total');
+  assert.equal(q.creditableTokenCredits, 50000, 'credit is the taxable value, never the collected total');
   assert.equal(q.placeOfSupply.type, 'intrastate');
   assert.equal(toCashfreeOrderAmount(q.totalPaise), '590.00');
 });
@@ -77,7 +77,7 @@ test('quote: zero subtotal is zero everything', () => {
 test('quote: a coupon bonus does not reduce the taxable value', () => {
   const withCoupon = quote({ subtotalPaise: 50000, couponBps: 1000, supplierStateCode: '27', customerStateCode: '27' });
   const without = quote({ subtotalPaise: 50000, supplierStateCode: '27', customerStateCode: '27' });
-  assert.equal(withCoupon.bonusPaise, 5000, 'bonus credit is paid on top, as promotional wallet');
+  assert.equal(withCoupon.bonusTokenCredits, 5000, 'bonus credit is paid on top, as promotional wallet');
   assert.equal(withCoupon.taxablePaise, without.taxablePaise, 'bonus is not a discount');
   assert.equal(withCoupon.gstPaise, without.gstPaise, 'GST still applies to the whole amount received');
   assert.equal(withCoupon.totalPaise, 59000);

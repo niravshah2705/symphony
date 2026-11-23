@@ -105,12 +105,12 @@ async function notify(account, payload) {
 
 /**
  * Compare the org's WALLET balance to its configured alert thresholds and notify
- * on a fresh DOWNWARD crossing. Dedupes via `lastAlertedThresholdPaise` so each
+ * on a fresh DOWNWARD crossing. Dedupes via `lastAlertedThresholdTokenCredits` so each
  * threshold fires once per crossing and escalation (low → exhausted) still
  * alerts; a recharge above the highest threshold re-arms it. Mutates the account
- * (dedupe marker). Returns the threshold alerted on (paise) or null.
+ * (dedupe marker). Returns the threshold alerted on (token credits) or null.
  *
- * `deps.balancePaise` is the caller's FlexPrice number, normally from
+ * `deps.balanceTokenCredits` is the caller's FlexPrice number, normally from
  * `gate.getOrgFundStatus` — this module does not read a balance of its own, and a
  * balance it cannot read (`null`, the gate's `unknown`) alerts on nothing rather
  * than being treated as zero. An alert that says "balance is ₹0.00" about a wallet
@@ -119,17 +119,17 @@ async function notify(account, payload) {
 async function checkThresholdsAndNotify(account, deps = {}) {
   if (!account) return null;
   const storeApi = deps.store || require('../store');
-  const balance = deps.balancePaise === undefined || deps.balancePaise === null
-    ? null : Number(deps.balancePaise);
+  const balance = deps.balanceTokenCredits === undefined || deps.balanceTokenCredits === null
+    ? null : Number(deps.balanceTokenCredits);
   if (!Number.isFinite(balance)) return null;
-  const thresholds = (account.alertThresholdsPaise || []).map(Number).filter(Number.isFinite);
+  const thresholds = (account.alertThresholdsTokenCredits || []).map(Number).filter(Number.isFinite);
   if (!thresholds.length) return null;
 
   // Re-arm: balance back above the highest threshold clears the dedupe marker.
   const highest = Math.max(...thresholds);
-  if (balance > highest && account.lastAlertedThresholdPaise !== null && account.lastAlertedThresholdPaise !== undefined) {
-    storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdPaise: null });
-    account.lastAlertedThresholdPaise = null;
+  if (balance > highest && account.lastAlertedThresholdTokenCredits !== null && account.lastAlertedThresholdTokenCredits !== undefined) {
+    storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdTokenCredits: null });
+    account.lastAlertedThresholdTokenCredits = null;
   }
 
   // The MOST SEVERE (lowest) threshold the balance has crossed.
@@ -137,7 +137,7 @@ async function checkThresholdsAndNotify(account, deps = {}) {
   if (!crossedList.length) return null;
   const crossed = Math.min(...crossedList);
 
-  const already = account.lastAlertedThresholdPaise;
+  const already = account.lastAlertedThresholdTokenCredits;
   // Alert only on a fresh crossing or an escalation to a lower threshold.
   if (already !== null && already !== undefined && crossed >= already) return null;
 
@@ -152,19 +152,19 @@ async function checkThresholdsAndNotify(account, deps = {}) {
       : `Balance is low: ₹${inr.toFixed(2)}.`,
   };
   const sent = await notify(account, payload);
-  storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdPaise: crossed });
-  account.lastAlertedThresholdPaise = crossed;
+  storeApi.upsertBillingAccount(account.id, { lastAlertedThresholdTokenCredits: crossed });
+  account.lastAlertedThresholdTokenCredits = crossed;
   // The crossing is a money event, so it is logged where the comparison actually
   // happened rather than in whichever caller remembered to. Cloud Logging turns
   // this line into the alerting metric (deploy/gcp/terraform/observability.tf) —
-  // which is why `thresholdPaise` is emitted as a STRING: a log filter's equality
+  // which is why `thresholdTokenCredits` is emitted as a STRING: a log filter's equality
   // is type-sensitive, and a numeric field silently matching nothing is the worst
   // kind of observability bug. No balances beyond this org's own, no channels.
   log[exhausted ? 'error' : 'warn']('billing balance crossed an alert threshold', {
     event: 'balance_threshold_crossed',
     orgId: account.id,
-    thresholdPaise: String(crossed),
-    balancePaise: String(balance),
+    thresholdTokenCredits: String(crossed),
+    balanceTokenCredits: String(balance),
     channels: String(sent.length),
   });
   return crossed;

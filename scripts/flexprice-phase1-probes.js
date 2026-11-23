@@ -11,7 +11,7 @@
 //
 // Why each one exists:
 //   A  conversion_rate direction. Decision D6 (1 credit = ₹1) and money-wire's
-//      PAISE_PER_CREDIT both rest on which side of `amount = credits * rate` the
+//      TOKEN_CREDITS_PER_CREDIT both rest on which side of `amount = credits * rate` the
 //      rupee sits.
 //   B  float64 inside event `properties`. Findings §12 left the storage width of
 //      a property value unprobed, and Phase 3 intends to put integer paise there.
@@ -166,8 +166,8 @@ const probes = [
         ok: oneCreditOneRupee,
         observed,
         decision: oneCreditOneRupee
-          ? 'confirmed: credits_to_add is denominated in credits and conversion_rate scales them to rupees, so conversion_rate "1" makes 1 credit = ₹1. money-wire PAISE_PER_CREDIT=100 stands, and Phase 2 tops up with credits_to_add = subtotal rupees (never `amount`, which would divide by the rate).'
-          : 'NOT as assumed: read the numbers above before Phase 2. The fix is confined to paiseFromCredits/creditsFromPaise in money-wire.js plus which field the top-up sends.',
+          ? 'confirmed: credits_to_add is denominated in credits and conversion_rate scales them to rupees, so conversion_rate "1" makes 1 credit = ₹1. money-wire TOKEN_CREDITS_PER_CREDIT=100 stands, and Phase 2 tops up with credits_to_add = subtotal rupees (never `amount`, which would divide by the rate).'
+          : 'NOT as assumed: read the numbers above before Phase 2. The fix is confined to tokenCreditsFromCredits/creditsFromTokenCredits in money-wire.js plus which field the top-up sends.',
       };
     },
   },
@@ -378,7 +378,7 @@ const probes = [
         ingest_key_debits_wallet: await outcome(() => ingestOnly.debitWallet(w.id, { credits: '1', idempotencyKey: `${RUN}.d.debit` })),
         ingest_key_ingests_event: await outcome(() => ingestOnly.ingestEvent({
           event_id: `${RUN}.d.event`, event_name: 'fleet.llm_cost', external_customer_id: c.external_id,
-          timestamp: new Date().toISOString(), properties: { cost_paise: 1 }, source: 'phase1-probe',
+          timestamp: new Date().toISOString(), properties: { token_credits: 1 }, source: 'phase1-probe',
         })),
       };
 

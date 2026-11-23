@@ -84,12 +84,12 @@ test('balance thresholds are mirrored from the ledger, never copied into HCL', (
     /jsondecode\(\s*file\("\$\{path\.module\}\/alert_thresholds\.json"\)\s*\)/,
     'observability.tf must read the generated file rather than restate it',
   );
-  assert.match(tf, /for t in local\.billing_alert_thresholds_paise/, 'balance metrics must iterate the mirrored list');
+  assert.match(tf, /for t in local\.billing_alert_thresholds_token_credits/, 'balance metrics must iterate the mirrored list');
   // One source only: no variable carrying a fallback copy of the numbers.
-  assert.doesNotMatch(varsTf, /variable "billing_alert_thresholds_paise"/, 'variables.tf holds a second copy');
+  assert.doesNotMatch(varsTf, /variable "billing_alert_thresholds_token_credits"/, 'variables.tf holds a second copy');
   // The point of the generated file: no threshold number appears in the HCL.
   assert.doesNotMatch(tf, /\[\s*10000\s*,\s*0\s*\]/, 'observability.tf restates the threshold list');
-  assert.doesNotMatch(tf, /threshold_value\s*=\s*1[023456789]\d{3}/, 'observability.tf hardcodes a paise amount');
+  assert.doesNotMatch(tf, /threshold_value\s*=\s*1[023456789]\d{3}/, 'observability.tf hardcodes a token-credit amount');
 });
 
 test('each metric filter names a field the emitting code actually writes', () => {
@@ -103,9 +103,9 @@ test('each metric filter names a field the emitting code actually writes', () =>
   );
 
   assert.match(notifySrc, /event:\s*'balance_threshold_crossed'/, 'notify.js must emit the crossing event');
-  assert.match(notifySrc, /thresholdPaise:\s*String\(/, 'the threshold must be emitted as a string for filter equality');
-  const balance = metaEqualities(tf).filter((entry) => entry.field === 'thresholdPaise');
-  assert.ok(balance.length, 'no balance alert references thresholdPaise');
+  assert.match(notifySrc, /thresholdTokenCredits:\s*String\(/, 'the threshold must be emitted as a string for filter equality');
+  const balance = metaEqualities(tf).filter((entry) => entry.field === 'thresholdTokenCredits');
+  assert.ok(balance.length, 'no balance alert references thresholdTokenCredits');
 
   const cost = metaEqualities(tf).filter((entry) => entry.field === 'priceMatch');
   assert.equal(cost.length, 1, 'expected exactly one priceMatch metric filter');

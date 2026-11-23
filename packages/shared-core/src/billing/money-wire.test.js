@@ -4,14 +4,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  PAISE_PER_CREDIT,
+  TOKEN_CREDITS_PER_CREDIT,
   decimalToScaled,
   formatScaled,
   roundDiv,
   paiseFromDecimal,
   decimalFromPaise,
-  paiseFromCredits,
-  creditsFromPaise,
+  tokenCreditsFromCredits,
+  creditsFromTokenCredits,
 } = require('./money-wire');
 
 // ---------------------------------------------------------------------------
@@ -22,13 +22,13 @@ test('the ₹500 recharge crosses the wire as ₹590 charged and 500 credits', (
   // Node computes 59000 paise; Cashfree is told "590.00"; the wallet gets 500.
   assert.equal(decimalFromPaise(59000), '590.00');
   assert.equal(decimalFromPaise(50000), '500.00');
-  assert.equal(creditsFromPaise(50000), '500.00');
+  assert.equal(creditsFromTokenCredits(50000), '500.00');
 });
 
-test('PAISE_PER_CREDIT is 100 — ₹1 = 1 credit, so ₹500 buys 500 credits', () => {
-  assert.equal(PAISE_PER_CREDIT, 100);
-  assert.equal(paiseFromCredits(500), 50000);
-  assert.equal(creditsFromPaise(50000), '500.00');
+test('TOKEN_CREDITS_PER_CREDIT is 100 — ₹1 = 1 credit, so ₹500 buys 500 credits', () => {
+  assert.equal(TOKEN_CREDITS_PER_CREDIT, 100);
+  assert.equal(tokenCreditsFromCredits(500), 50000);
+  assert.equal(creditsFromTokenCredits(50000), '500.00');
 });
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ test('decimalToScaled: plain integers and two decimals', () => {
   assert.equal(decimalToScaled('0.10', 2), 10n);
 });
 
-test('decimalToScaled: sub-paise rounds half away from zero', () => {
+test('decimalToScaled: a fractional sub-unit rounds half away from zero', () => {
   assert.equal(decimalToScaled('500.005', 2), 50001n);  // .005 rounds up
   assert.equal(decimalToScaled('500.004', 2), 50000n);  // .004 rounds down
   assert.equal(decimalToScaled('-500.005', 2), -50001n); // away from zero, not toward +∞
@@ -136,22 +136,22 @@ test('decimalFromPaise: refuses fractional paise', () => {
   assert.throws(() => decimalFromPaise(500.5), /WHOLE paise/);
 });
 
-test('paiseFromCredits / creditsFromPaise: ₹1 = 1 credit round-trips', () => {
-  assert.equal(paiseFromCredits('500'), 50000);
-  assert.equal(paiseFromCredits('500.5'), 50050);
-  assert.equal(creditsFromPaise(50000), '500.00');
-  assert.equal(creditsFromPaise(50050), '500.50');
+test('tokenCreditsFromCredits / creditsFromTokenCredits: ₹1 = 1 credit round-trips', () => {
+  assert.equal(tokenCreditsFromCredits('500'), 50000);
+  assert.equal(tokenCreditsFromCredits('500.5'), 50050);
+  assert.equal(creditsFromTokenCredits(50000), '500.00');
+  assert.equal(creditsFromTokenCredits(50050), '500.50');
 });
 
-test('paiseFromCredits: a fractional JS number is refused, not guessed at', () => {
+test('tokenCreditsFromCredits: a fractional JS number is refused, not guessed at', () => {
   // 0.1 is not exactly one tenth in binary floating point, so the amount that
   // arrives as a Number is only trustworthy when it is a whole one.
-  assert.throws(() => paiseFromCredits(500.5), /STRING/);
+  assert.throws(() => tokenCreditsFromCredits(500.5), /STRING/);
 });
 
-test('paiseFromCredits: sub-paise rounds, never truncates', () => {
+test('tokenCreditsFromCredits: sub-paise rounds, never truncates', () => {
   // 0.005 credits = 0.005 rupee = 0.5 paise, which half-up makes 1 paise.
-  assert.equal(paiseFromCredits('0.005'), 1);
+  assert.equal(tokenCreditsFromCredits('0.005'), 1);
 });
 
 test('decimalFromPaise handles negative refund amounts', () => {
@@ -159,6 +159,6 @@ test('decimalFromPaise handles negative refund amounts', () => {
   assert.equal(decimalFromPaise(-50001), '-500.01');
 });
 
-test('creditsFromPaise handles negative paise', () => {
-  assert.equal(creditsFromPaise(-100), '-1.00');
+test('creditsFromTokenCredits handles negative paise', () => {
+  assert.equal(creditsFromTokenCredits(-100), '-1.00');
 });

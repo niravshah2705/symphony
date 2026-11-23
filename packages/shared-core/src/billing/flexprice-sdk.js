@@ -21,7 +21,7 @@
 //   GET  /health                — outside `/v1`, and sent without credentials.
 //   POST /v1/events, POST /v1/events/bulk — the generated `IngestEventRequest`
 //                                 types `properties` as `record<string, string>`
-//                                 with a strict string, so `cost_paise: 4120` is
+//                                 with a strict string, so `token_credits: 4120` is
 //                                 either refused or quoted. FlexPrice stores
 //                                 properties in a `map[string]interface{}` and the
 //                                 meter aggregates the value as a float

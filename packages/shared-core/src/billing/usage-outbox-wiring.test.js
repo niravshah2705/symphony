@@ -36,12 +36,12 @@ test('recordUsage is the moment a cost becomes a delivery obligation', () => {
     { usage: { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 }, costUsd: 0.03 },
     { provider: 'claude', model: 'c-1' },
   );
-  assert.equal(rec.costPaise, 300);
+  assert.equal(rec.costTokenCredits, 300);
 
   const [row] = rows('run-wire-1');
   assert.ok(row, 'the run that was metered must also be queued');
   assert.equal(row.orgId, 'org-wire');
-  assert.equal(row.quantityPaise, rec.costPaise);
+  assert.equal(row.quantityTokenCredits, rec.costTokenCredits);
   assert.equal(row.meter, 'llm-cost');
   assert.equal(row.status, 'pending');
   assert.equal(row.idempotencyKey, 'ev:org-wire:run-wire-1:llm-cost');
@@ -57,8 +57,8 @@ test('the queued quantity is the number the record carries, not a re-derivation'
     { provider: 'claude', model: 'c-1' },
   );
   const [row] = rows('run-wire-2');
-  assert.equal(row.quantityPaise, rec.costPaise);
-  assert.ok(Number.isInteger(row.quantityPaise));
+  assert.equal(row.quantityTokenCredits, rec.costTokenCredits);
+  assert.ok(Number.isInteger(row.quantityTokenCredits));
 });
 
 test('a run on the org’s own key consumed value but billed none, so it queues none', () => {
@@ -67,8 +67,8 @@ test('a run on the org’s own key consumed value but billed none, so it queues 
     { usage: { inputTokens: 1000, outputTokens: 1000, totalTokens: 2000 }, costUsd: 0.03 },
     { provider: 'claude', model: 'c-1' },
   );
-  assert.equal(rec.costPaise, 0);
-  assert.equal(rec.notionalCostPaise, 300);
+  assert.equal(rec.costTokenCredits, 0);
+  assert.equal(rec.notionalCostTokenCredits, 300);
   assert.equal(rows('run-wire-3').length, 0);
 });
 

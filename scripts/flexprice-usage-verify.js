@@ -49,14 +49,14 @@ const SUPPLIER_STATE = '24';
 // 0.10 USD → 1000p, and 1000p of ₹1-per-credit usage is ₹10.
 const FX = 100;
 const RUNS = [
-  { label: 'planner triage', provider: 'claude', costUsd: 0.10, inputTokens: 100000, outputTokens: 20000, expectPaise: 1000 },
-  { label: 'coder build', provider: 'claude', costUsd: 0.25, inputTokens: 250000, outputTokens: 50000, expectPaise: 2500 },
-  { label: 'tiny run', provider: 'claude', costUsd: 0.005, inputTokens: 5000, outputTokens: 500, expectPaise: 50 },
+  { label: 'planner triage', provider: 'claude', costUsd: 0.10, inputTokens: 100000, outputTokens: 20000, expectTokenCredits: 1000 },
+  { label: 'coder build', provider: 'claude', costUsd: 0.25, inputTokens: 250000, outputTokens: 50000, expectTokenCredits: 2500 },
+  { label: 'tiny run', provider: 'claude', costUsd: 0.005, inputTokens: 5000, outputTokens: 500, expectTokenCredits: 50 },
   // A BYOK run: recorded, worth money to the org, and charged nothing (usage.js sets
-  // costPaise 0 and the outbox queues no zero).
-  { label: 'on the org’s own key', provider: 'claude', costUsd: 0.40, inputTokens: 400000, outputTokens: 80000, expectPaise: 0, providerSource: 'customer' },
+  // costTokenCredits 0 and the outbox queues no zero).
+  { label: 'on the org’s own key', provider: 'claude', costUsd: 0.40, inputTokens: 400000, outputTokens: 80000, expectTokenCredits: 0, providerSource: 'customer' },
 ];
-const EXPECTED_PAISE = RUNS.reduce((sum, r) => sum + r.expectPaise, 0); // 3550p = ₹35.50
+const EXPECTED_TOKEN_CREDITS = RUNS.reduce((sum, r) => sum + r.expectTokenCredits, 0); // 3550p = ₹35.50
 
 function parseEnvFile(file) {
   const out = {};
@@ -174,7 +174,7 @@ async function gateOffBootProbe() {
     const gate = require(path.join(ROOT, 'packages/shared-core/src/billing/gate'));
     const policy = gate.reportBoot();
     const fund = await gate.ensureFundStatus('org-gate-off-probe');
-    console.log(`PROBE policy=${policy} balancePaise=${String(fund.balancePaise)} `
+    console.log(`PROBE policy=${policy} balanceTokenCredits=${String(fund.balanceTokenCredits)} `
       + `fundsAvailable=${fund.fundsAvailable} state=${fund.state} gatePolicy=${fund.gatePolicy}`);
     return 0;
   } finally {
@@ -227,7 +227,7 @@ async function main() {
   console.log('Software Factory — Phase 3 usage→outbox→gate, verified against the live FlexPrice stack');
   console.log(`  flexprice ${flexpriceConfig.describe(FLEXPRICE)}`);
   console.log(`  org        ${orgId}`);
-  console.log(`  fixture    ${RUNS.length} runs, ${EXPECTED_PAISE}p hand-computed at ₹${FX}/USD`);
+  console.log(`  fixture    ${RUNS.length} runs, ${EXPECTED_TOKEN_CREDITS}p hand-computed at ₹${FX}/USD`);
   console.log(`  store dir  ${dataDir}`);
 
   const app = createApp();
@@ -281,21 +281,21 @@ async function main() {
     check('every run produced a usage record', records.every((r) => r && r.id),
       `${records.filter(Boolean).length}/${RUNS.length}`);
     const pairs = RUNS.map((run, i) => ({ run, record: records[i] }));
-    check('each run’s paise equals the hand figure',
-      pairs.every(({ run, record }) => record && record.costPaise === run.expectPaise),
-      pairs.map(({ run, record }) => `${run.costUsd}USD→${record && record.costPaise}p(want ${run.expectPaise})`).join(' '));
+    check('each run’s token credits equal the hand figure',
+      pairs.every(({ run, record }) => record && record.costTokenCredits === run.expectTokenCredits),
+      pairs.map(({ run, record }) => `${run.costUsd}USD→${record && record.costTokenCredits}tc(want ${run.expectTokenCredits})`).join(' '));
     check('the BYOK run charged nothing and kept its notional value',
-      records[3].costPaise === 0 && records[3].notionalCostPaise === 4000,
-      `costPaise=${records[3].costPaise} notional=${records[3].notionalCostPaise}`);
+      records[3].costTokenCredits === 0 && records[3].notionalCostTokenCredits === 4000,
+      `costTokenCredits=${records[3].costTokenCredits} notional=${records[3].notionalCostTokenCredits}`);
     const rows = store.listBillingOutboxRows({ orgId });
     check('three outbox rows, the BYOK run queued nothing', rows.length === 3,
       `rows=${rows.length} statuses=${[...new Set(rows.map((r) => r.status))].join(',')}`);
     check('every row is pending and keyed ev:{org}:{run}:{meter}',
       rows.every((r) => r.status === 'pending' && r.idempotencyKey === `ev:${orgId}:${r.runId}:llm-cost`),
       rows.map((r) => r.idempotencyKey).join(' | '));
-    const queuedPaise = rows.reduce((sum, r) => sum + r.quantityPaise, 0);
-    check('the queued quantity is the hand total, no more and no less', queuedPaise === EXPECTED_PAISE,
-      `${queuedPaise}p vs ${EXPECTED_PAISE}p`);
+    const queuedTokenCredits = rows.reduce((sum, r) => sum + r.quantityTokenCredits, 0);
+    check('the queued quantity is the hand total, no more and no less', queuedTokenCredits === EXPECTED_TOKEN_CREDITS,
+      `${queuedTokenCredits}p vs ${EXPECTED_TOKEN_CREDITS}p`);
     check('no event reached FlexPrice while the outbox filled',
       Number((await meterRead(client, meterIds, orgId, occurredAt)).value) === 0,
       'the meter is still empty — recording a run never calls the network');
@@ -340,8 +340,8 @@ async function main() {
       outbox.counts().verified === 3, `verified=${outbox.counts().verified} drift=${JSON.stringify(lastPass.drift)}`);
     check('nothing is left believed-but-unproved',
       outbox.counts().sent === 0 && outbox.counts().failed === 0, JSON.stringify(outbox.counts()));
-    const meter = await until(async () => (await meterRead(client, meterIds, orgId, occurredAt)).value, EXPECTED_PAISE);
-    check(`the meter holds exactly ${EXPECTED_PAISE}p`, Number(meter.value) === EXPECTED_PAISE,
+    const meter = await until(async () => (await meterRead(client, meterIds, orgId, occurredAt)).value, EXPECTED_TOKEN_CREDITS);
+    check(`the meter holds exactly ${EXPECTED_TOKEN_CREDITS}p`, Number(meter.value) === EXPECTED_TOKEN_CREDITS,
       `value=${meter.value} after ${meter.attempts} reads`);
 
     // 5. A blind retry of the same batch is the operation that would double-bill if
@@ -349,9 +349,9 @@ async function main() {
     section('5. a blind retry is safe');
     await client.eventsBulk(rows.map((row) => outbox.toEvent(row)));
     await client.eventsBulk(rows.map((row) => outbox.toEvent(row)));
-    const afterRetry = await until(async () => (await meterRead(client, meterIds, orgId, occurredAt)).value, EXPECTED_PAISE, { tries: 8 });
+    const afterRetry = await until(async () => (await meterRead(client, meterIds, orgId, occurredAt)).value, EXPECTED_TOKEN_CREDITS, { tries: 8 });
     check('two re-sends of the same event ids did not move the total',
-      Number(afterRetry.value) === EXPECTED_PAISE, `value=${afterRetry.value}`);
+      Number(afterRetry.value) === EXPECTED_TOKEN_CREDITS, `value=${afterRetry.value}`);
 
     // 6. What the gate sees. findings §2: usage does not debit at ingest, so the
     //    credit balance is expected NOT to have moved. The other half of that
@@ -365,23 +365,23 @@ async function main() {
     const projection = await client.walletRealTimeBalance(walletId);
     check('the wallet projection still reports no period usage',
       Number(projection.currentPeriodUsage || 0) === 0,
-      `current_period_usage=${projection.currentPeriodUsage} with ${EXPECTED_PAISE}p metered`);
+      `current_period_usage=${projection.currentPeriodUsage} with ${EXPECTED_TOKEN_CREDITS}p metered`);
     const afterUsage = Number((await client.walletRealTimeBalance(walletId)).realTimeCreditBalance);
     check('the credit balance has NOT moved (billing, not finalization)', afterUsage === 500,
       `real_time_credit_balance=${afterUsage}`);
     const fund = await gate.ensureFundStatus(orgId);
-    check('the gate reports the wallet in paise', fund.balancePaise === 50000 && fund.state === 'available',
-      `balancePaise=${fund.balancePaise} state=${fund.state} wallet=${fund.walletId}`);
+    check('the gate reports the wallet in token credits', fund.balanceTokenCredits === 50000 && fund.state === 'available',
+      `balanceTokenCredits=${fund.balanceTokenCredits} state=${fund.state} wallet=${fund.walletId}`);
     check('and reports money only — no usage figure a caller could read as accrued spend',
-      !('currentPeriodUsagePaise' in fund), `view keys=${Object.keys(fund).join(',')}`);
+      !('currentPeriodUsageTokenCredits' in fund), `view keys=${Object.keys(fund).join(',')}`);
     const sync = gate.getOrgFundStatus(orgId);
-    check('the synchronous accessor serves the cached view', Boolean(sync) && sync.balancePaise === 50000,
-      sync ? `balancePaise=${sync.balancePaise} gatePolicy=${sync.gatePolicy}` : 'null — nothing was ever read');
+    check('the synchronous accessor serves the cached view', Boolean(sync) && sync.balanceTokenCredits === 50000,
+      sync ? `balanceTokenCredits=${sync.balanceTokenCredits} gatePolicy=${sync.gatePolicy}` : 'null — nothing was ever read');
     check('nothing in the store holds a balance any more',
-      !Object.keys(store.getBillingAccount(orgId) || {}).includes('balancePaise'),
+      !Object.keys(store.getBillingAccount(orgId) || {}).includes('balanceTokenCredits'),
       `account keys=${Object.keys(store.getBillingAccount(orgId) || {}).join(',')}`);
     check('an unknown org is unknown, not zero',
-      (await gate.ensureFundStatus(`org-never-provisioned-${stamp}`)).balancePaise === null);
+      (await gate.ensureFundStatus(`org-never-provisioned-${stamp}`)).balanceTokenCredits === null);
 
     // 7. The silent-freeze case: an event_name that no meter aggregates. Delivered
     //    under a second org so its window stays alone, exactly as a bad build would
@@ -390,7 +390,7 @@ async function main() {
     const typoRow = outbox.enqueue({
       kind: 'llmCost', orgId: typoOrg, runId: `run-typo-${stamp}`, quantity: 700, occurredAt: new Date().toISOString(),
     });
-    check('a row for the typo org queued', Boolean(typoRow) && typoRow.quantityPaise === 700, typoRow && typoRow.idempotencyKey);
+    check('a row for the typo org queued', Boolean(typoRow) && typoRow.quantityTokenCredits === 700, typoRow && typoRow.idempotencyKey);
     const broken = { ...outbox.toEvent(typoRow), event_name: 'fleet.llm_cost_typo' };
     await client.eventsBulk([broken]);
     outbox.markSent(typoRow);
@@ -427,7 +427,7 @@ async function main() {
       && /flexprice_disabled|BILLING_GATE_POLICY=off/.test(off.out),
       (off.out.match(/billing_gate_policy.*/) || [''])[0].slice(0, 160));
     check('the unconfigured gate admits rather than blocking',
-      /balancePaise=null fundsAvailable=true/.test(offLine), offLine.trim());
+      /balanceTokenCredits=null fundsAvailable=true/.test(offLine), offLine.trim());
 
     section('summary');
     for (const r of results) if (!r.ok) console.log(`  FAIL ${r.name} — ${r.detail}`);

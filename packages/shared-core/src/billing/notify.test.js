@@ -19,8 +19,8 @@ test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); }
 function accountWith(orgId, thresholds = [10000, 0]) {
   ledger.ensureAccount(orgId);
   return store.upsertBillingAccount(orgId, {
-    alertThresholdsPaise: thresholds,
-    lastAlertedThresholdPaise: null,
+    alertThresholdsTokenCredits: thresholds,
+    lastAlertedThresholdTokenCredits: null,
     notifyChannels: { browser: true, email: false, slack: false },
   });
 }
@@ -31,35 +31,35 @@ function accountWith(orgId, thresholds = [10000, 0]) {
 // swallowed into a warning.
 test('a freshly seeded account alerts without throwing', async () => {
   const seeded = ledger.ensureAccount('org-n-seeded');
-  assert.deepEqual(seeded.alertThresholdsPaise, [10000, 0]);
-  assert.equal(await checkThresholdsAndNotify(seeded, { balancePaise: 5000 }), 10000);
+  assert.deepEqual(seeded.alertThresholdsTokenCredits, [10000, 0]);
+  assert.equal(await checkThresholdsAndNotify(seeded, { balanceTokenCredits: 5000 }), 10000);
 });
 
 test('alerts on the first downward crossing and dedupes repeats at the same level', async () => {
   const account = accountWith('org-n'); // below 10000, above 0
-  assert.equal(await checkThresholdsAndNotify(account, { balancePaise: 5000 }), 10000);
-  assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdPaise, 10000);
+  assert.equal(await checkThresholdsAndNotify(account, { balanceTokenCredits: 5000 }), 10000);
+  assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdTokenCredits, 10000);
   // Still below 10000 but not below 0 → no re-alert.
-  assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-n'), { balancePaise: 4000 }), null);
+  assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-n'), { balanceTokenCredits: 4000 }), null);
 });
 
 test('escalates to the more severe threshold as the balance drops further', async () => {
-  const crossed = await checkThresholdsAndNotify(store.getBillingAccount('org-n'), { balancePaise: -100 });
+  const crossed = await checkThresholdsAndNotify(store.getBillingAccount('org-n'), { balanceTokenCredits: -100 });
   assert.equal(crossed, 0); // exhausted
-  assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdPaise, 0);
+  assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdTokenCredits, 0);
 });
 
 test('re-arms after a recharge above the highest threshold', async () => {
   const account = store.getBillingAccount('org-n');
-  assert.equal(await checkThresholdsAndNotify(account, { balancePaise: 20000 }), null);
-  assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdPaise, null);
+  assert.equal(await checkThresholdsAndNotify(account, { balanceTokenCredits: 20000 }), null);
+  assert.equal(store.getBillingAccount('org-n').lastAlertedThresholdTokenCredits, null);
   // Dropping low again should alert afresh.
-  assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-n'), { balancePaise: 3000 }), 10000);
+  assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-n'), { balanceTokenCredits: 3000 }), 10000);
 });
 
 test('no thresholds configured → never alerts', async () => {
   const account = accountWith('org-n-bare', []);
-  assert.equal(await checkThresholdsAndNotify(account, { balancePaise: -9999 }), null);
+  assert.equal(await checkThresholdsAndNotify(account, { balanceTokenCredits: -9999 }), null);
 });
 
 // The balance is an argument, never a stored field: this module has no balance to
@@ -67,13 +67,13 @@ test('no thresholds configured → never alerts', async () => {
 test('no balance to compare means no alert, whatever the account says', async () => {
   const account = accountWith('org-n-unknown');
   for (const balance of [null, undefined, NaN, 'not a number']) {
-    assert.equal(await checkThresholdsAndNotify(account, { balancePaise: balance }), null,
+    assert.equal(await checkThresholdsAndNotify(account, { balanceTokenCredits: balance }), null,
       `balance ${String(balance)} must alert on nothing`);
   }
-  assert.equal(store.getBillingAccount('org-n-unknown').lastAlertedThresholdPaise, null,
+  assert.equal(store.getBillingAccount('org-n-unknown').lastAlertedThresholdTokenCredits, null,
     'a skipped comparison must not consume the dedupe marker');
   // The same account does alert once a number arrives.
-  assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-n-unknown'), { balancePaise: 100 }), 10000);
+  assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-n-unknown'), { balanceTokenCredits: 100 }), 10000);
 });
 
 test('billing email publishes only the allow-listed central email contract', async () => {
@@ -108,10 +108,10 @@ test('the crossing emits the one alertable line Cloud Logging turns into a metri
   logger.error = (message, meta) => lines.push({ severity: 'error', message, meta });
   try {
     const account = accountWith('org-line');
-    assert.equal(await checkThresholdsAndNotify(account, { balancePaise: 9000 }), 10000);
-    assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-line'), { balancePaise: -1 }), 0);
+    assert.equal(await checkThresholdsAndNotify(account, { balanceTokenCredits: 9000 }), 10000);
+    assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-line'), { balanceTokenCredits: -1 }), 0);
     // A repeat at the same level dedupes, so the metric must not count it twice.
-    assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-line'), { balancePaise: -2 }), null);
+    assert.equal(await checkThresholdsAndNotify(store.getBillingAccount('org-line'), { balanceTokenCredits: -2 }), null);
   } finally {
     logger.warn = origWarn;
     logger.error = origError;
@@ -125,12 +125,16 @@ test('the crossing emits the one alertable line Cloud Logging turns into a metri
     ['warn', 'error'],
     'exhaustion must be louder than lowness',
   );
-  assert.deepEqual([low.meta.thresholdPaise, exhausted.meta.thresholdPaise], ['10000', '0']);
+  assert.deepEqual([low.meta.thresholdTokenCredits, exhausted.meta.thresholdTokenCredits], ['10000', '0']);
   for (const entry of crossed) {
-    assert.equal(typeof entry.meta.thresholdPaise, 'string');
-    assert.equal(typeof entry.meta.balancePaise, 'string');
+    assert.equal(typeof entry.meta.thresholdTokenCredits, 'string');
+    assert.equal(typeof entry.meta.balanceTokenCredits, 'string');
     assert.equal(entry.meta.orgId, 'org-line');
-    assert.ok(Object.keys(entry.meta).every((key) => !/token|secret|key|password/i.test(key)),
+    // One contract with the scrubber that decides what reaches the sink: the
+    // guard here is logger.isSecretKey, not a second regex that can drift from it
+    // (and `balanceTokenCredits` is a unit word the loose substring match would
+    // otherwise mask).
+    assert.ok(Object.keys(entry.meta).every((key) => !logger.isSecretKey(key)),
       'a money event must not carry a credential-shaped field');
   }
 });

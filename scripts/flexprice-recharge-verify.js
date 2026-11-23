@@ -346,7 +346,7 @@ async function main() {
       (await readCreditRows(walletId)).some((r) => r.transactionReason === 'FREE_CREDIT_GRANT'
         && Number(r.creditsAvailable) === 50
         && String(r.idempotencyKey || '').endsWith(':promo')),
-      `bonusPaise=${couponIntent.bonusPaise} rows=${(await readCreditRows(walletId)).map((r) => `${r.transactionReason}:${r.creditsAvailable}`).join(' ')}`);
+      `bonusTokenCredits=${couponIntent.bonusTokenCredits} rows=${(await readCreditRows(walletId)).map((r) => `${r.transactionReason}:${r.creditsAvailable}`).join(' ')}`);
 
     // 7. Razorpay: second gateway, same settle(). ₹1,000 → 18% GST → ₹1,180 → 1,000 credits.
     section('7. Razorpay — second gateway, same settle()');

@@ -77,7 +77,7 @@ test('ingest calls use the ingest key and money calls use the money key', async 
     { status: 202, json: { message: 'accepted' } },
     { status: 200, json: { real_time_credit_balance: '500' } },
   ]);
-  await c.eventsBulk([{ event_id: 'e1', event_name: 'fleet.llm_cost', properties: { cost_paise: 1 } }]);
+  await c.eventsBulk([{ event_id: 'e1', event_name: 'fleet.llm_cost', properties: { token_credits: 1 } }]);
   await c.walletRealTimeBalance('wal_1');
   assert.equal(rec.calls[0].headers['x-api-key'], 'fp_ingest_secret');
   assert.equal(rec.calls[1].headers['x-api-key'], 'fp_money_secret');
@@ -163,7 +163,7 @@ test('the debit keeps the measured body and rides the raw seam', async () => {
 test('event ingest carries numeric properties verbatim', async () => {
   // The generated `IngestEventRequest` types `properties` as `record<string,string>`.
   // FlexPrice stores them in a `map[string]interface{}` and the meter aggregates the
-  // value as a float, so a quoted `cost_paise` is a 202-accepted event that bills
+  // value as a float, so a quoted `token_credits` is a 202-accepted event that bills
   // nothing — the silent-zero case this seam exists to avoid.
   const { c, rec } = client([{ status: 202, json: { message: 'accepted' } }, { status: 202, json: { message: 'accepted' } }]);
   await c.ingestEvent({
@@ -171,11 +171,11 @@ test('event ingest carries numeric properties verbatim', async () => {
     event_name: 'fleet.llm_cost',
     external_customer_id: 'org-a',
     timestamp: '2026-11-20T09:00:00.000Z',
-    properties: { cost_paise: 4120, project_id: 'p-1' },
+    properties: { token_credits: 4120, project_id: 'p-1' },
     source: 'ai-fleet-outbox',
   });
   assert.equal(pathOf(rec.calls[0]), '/v1/events');
-  assert.deepEqual(rec.calls[0].body.properties, { cost_paise: 4120, project_id: 'p-1' });
+  assert.deepEqual(rec.calls[0].body.properties, { token_credits: 4120, project_id: 'p-1' });
   assert.equal(rec.calls[0].body.event_id, 'outbox-row-1', 'the dedup key keeps its wire name');
 
   await c.eventsBulk([{ event_id: 'a' }, { event_id: 'b' }]);
@@ -425,12 +425,12 @@ test('the meter routes the SDK does not generate keep their measured bodies', as
   const { c, rec } = client([{ status: 200, json: { id: 'met_1' } }]);
   await c.createMeter({
     event_name: 'fleet.llm_cost',
-    aggregation: { type: 'SUM', field: 'cost_paise' },
+    aggregation: { type: 'SUM', field: 'token_credits' },
   });
   assert.equal(pathOf(rec.calls[0]), '/v1/meters');
   assert.deepEqual(rec.calls[0].body, {
     event_name: 'fleet.llm_cost',
-    aggregation: { type: 'SUM', field: 'cost_paise' },
+    aggregation: { type: 'SUM', field: 'token_credits' },
   });
 });
 

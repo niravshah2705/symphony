@@ -226,14 +226,14 @@ test('overview buckets live credit rows by transaction reason', async () => {
 test('an empty bucket is zero credit, not an unreadable one', () => {
   const buckets = bucketCreditRows([]);
   assert.equal(buckets.plan.rowCount, 0);
-  assert.equal(buckets.plan.total.paise, 0);
+  assert.equal(buckets.plan.total.tokenCredits, 0);
   assert.equal(buckets.plan.pctUsed, null, 'no percentage of nothing, but no error either');
   assert.equal(buckets.plan.resetsOn, null);
   assert.deepEqual(buckets.packages, []);
   // A row this code cannot read is reported, never guessed at.
   const unreadable = bucketCreditRows([{ id: 'r1', transactionReason: 'FREE_CREDIT_GRANT' }]);
   assert.equal(unreadable.plan.unreadableRows, 1);
-  assert.equal(unreadable.plan.total.paise, 0, 'and it contributes nothing to the totals');
+  assert.equal(unreadable.plan.total.tokenCredits, 0, 'and it contributes nothing to the totals');
 });
 
 test('overview reports a missing wallet as nulls, not as zero credit', async () => {
@@ -257,7 +257,7 @@ test('an unparseable balance is unknown, and unknown is not zero', async () => {
   store.upsertBillingAccount(orgId, { flexprice: { walletId: WALLET } });
   await withRoutes({ orgId, client: fakeFlexprice({ balance: { realTimeCreditBalance: 'not-a-number' } }) }, async ({ get }) => {
     const body = await get('/overview');
-    assert.equal(body.balance.paise, null);
+    assert.equal(body.balance.tokenCredits, null);
     assert.equal(body.fundState, 'unknown');
   });
 });
@@ -283,10 +283,10 @@ test('heatmap is ONE windowed read for 91 cells and clamps the window', async ()
     assert.equal(arg.endTime, '2026-11-21T00:00:00.000Z');
     assert.equal(arg.filters, undefined, 'an unfiltered grid sends no filter object');
     assert.equal(arg.eventName, 'fleet.llm_cost');
-    assert.equal(arg.propertyName, 'cost_paise');
+    assert.equal(arg.propertyName, 'token_credits');
     assert.equal(arg.aggregationType, 'SUM');
     // The header number and the grid are the same response, so they cannot differ.
-    assert.equal(body.total.paise, body.days.reduce((sum, d) => sum + d.paise, 0));
+    assert.equal(body.total.tokenCredits, body.days.reduce((sum, d) => sum + d.tokenCredits, 0));
     assert.equal(body.partial, false);
 
     const clamped = await get('/heatmap?weeks=999');
@@ -307,7 +307,7 @@ test('a window FlexPrice did not bucket is reported, never drawn as an empty gri
     assert.equal(body.degraded, true);
     assert.equal(body.reason, 'read_failed');
     assert.equal(body.days.length, 0);
-    assert.equal(body.total.paise, 5000, 'the money is still reported — it just has no days');
+    assert.equal(body.total.tokenCredits, 5000, 'the money is still reported — it just has no days');
   });
 
   // `results: []` is a real answer: nothing used in this window.
@@ -316,8 +316,8 @@ test('a window FlexPrice did not bucket is reported, never drawn as an empty gri
     const body = await get('/heatmap?weeks=1');
     assert.equal(body.degraded, false);
     assert.equal(body.days.length, 7);
-    assert.equal(body.days[0].paise, 0);
-    assert.equal(body.total.paise, 0);
+    assert.equal(body.days[0].tokenCredits, 0);
+    assert.equal(body.total.tokenCredits, 0);
   });
 
   // A bucket that will not parse is unreadable, so the sum is null: a partial
@@ -330,8 +330,8 @@ test('a window FlexPrice did not bucket is reported, never drawn as an empty gri
     const body = await get('/heatmap?weeks=1');
     assert.equal(body.partial, true);
     assert.equal(body.unreadableBuckets, 1);
-    assert.equal(body.total.paise, null, 'a sum missing a bucket is not the period total');
-    assert.equal(body.days.find((d) => d.date === '2026-11-19').paise, 0, 'no bucket landed on that day; the partial flag above is what says why');
+    assert.equal(body.total.tokenCredits, null, 'a sum missing a bucket is not the period total');
+    assert.equal(body.days.find((d) => d.date === '2026-11-19').tokenCredits, 0, 'no bucket landed on that day; the partial flag above is what says why');
   });
 });
 
@@ -364,7 +364,7 @@ test('trend filters by bare property names and never by a dotted path', async ()
     // A dotted filter matches nothing and `property_filters` silently answers the
     // tenant total (findings §7c): the exact keys are the whole correctness here.
     assert.deepEqual(usage[0].arg.filters, { project_id: ['p-1'], agent_id: ['a-2'] });
-    assert.equal(usage[0].arg.propertyName, 'cost_paise');
+    assert.equal(usage[0].arg.propertyName, 'token_credits');
     assert.equal(usage[0].arg.eventName, 'fleet.llm_cost');
     assert.equal(usage[0].arg.aggregationType, 'SUM');
     assert.equal(usage[0].arg.externalCustomerId, orgId);
@@ -410,9 +410,9 @@ test('the trend headline is the sum of the cells it draws', async () => {
     const body = await get('/trend?range=7d');
     assert.equal(body.points.length, 7);
     assert.equal(body.bucketed, true);
-    assert.equal(body.total.paise, body.points.reduce((sum, p) => sum + p.paise, 0),
+    assert.equal(body.total.tokenCredits, body.points.reduce((sum, p) => sum + p.tokenCredits, 0),
       'one response, so the headline cannot disagree with the chart');
-    assert.equal(body.peak.paise, Math.max(...body.points.map((p) => p.paise)));
+    assert.equal(body.peak.tokenCredits, Math.max(...body.points.map((p) => p.tokenCredits)));
     assert.equal(body.unreadableBuckets, 0);
   });
 
@@ -422,7 +422,7 @@ test('the trend headline is the sum of the cells it draws', async () => {
     const body = await get('/trend?range=7d');
     assert.equal(body.bucketed, false);
     assert.equal(body.points.length, 0);
-    assert.equal(body.total.paise, 900);
+    assert.equal(body.total.tokenCredits, 900);
   });
 });
 
@@ -432,11 +432,11 @@ test('usage-breakdown reads one window per value, bounded, and never calls an un
   // Our own records decide WHICH values are worth a read; FlexPrice never learns
   // the candidate list, so a model- or gateway-created id cannot appear here.
   const day = '2026-11-19T09:00:00.000Z';
-  store.addUsageRecord({ orgId, projectId: 'p-big', costPaise: 900, createdAt: day });
-  store.addUsageRecord({ orgId, projectId: 'p-big', costPaise: 100, createdAt: day });
-  store.addUsageRecord({ orgId, projectId: 'p-small', costPaise: 5, createdAt: day });
-  store.addUsageRecord({ orgId, projectId: 'p-old', costPaise: 9999, createdAt: '2025-01-01T00:00:00.000Z' });
-  store.addUsageRecord({ orgId: 'org-other', projectId: 'p-big', costPaise: 7, createdAt: day });
+  store.addUsageRecord({ orgId, projectId: 'p-big', costTokenCredits: 900, createdAt: day });
+  store.addUsageRecord({ orgId, projectId: 'p-big', costTokenCredits: 100, createdAt: day });
+  store.addUsageRecord({ orgId, projectId: 'p-small', costTokenCredits: 5, createdAt: day });
+  store.addUsageRecord({ orgId, projectId: 'p-old', costTokenCredits: 9999, createdAt: '2025-01-01T00:00:00.000Z' });
+  store.addUsageRecord({ orgId: 'org-other', projectId: 'p-big', costTokenCredits: 7, createdAt: day });
 
   const client = fakeFlexprice({
     usage: (query) => (query.filters.project_id[0] === 'p-small'
@@ -447,9 +447,9 @@ test('usage-breakdown reads one window per value, bounded, and never calls an un
     const body = await get('/usage-breakdown?dimension=project&range=7d');
     assert.equal(body.source, 'fleet_usage_records');
     assert.deepEqual(body.values.map((v) => v.value), ['p-big', 'p-small'], 'ordered by usage, stale id excluded');
-    assert.equal(body.values[0].total.paise, 1000);
+    assert.equal(body.values[0].total.tokenCredits, 1000);
     assert.equal(body.values[1].unreadable, true, 'an unparseable read is null, not 0');
-    assert.equal(body.values[1].total.paise, null);
+    assert.equal(body.values[1].total.tokenCredits, null);
     const args = client.calls.filter((c) => c.name === 'eventsUsage').map((c) => c.arg);
     assert.equal(args.length, 2, 'one read per value');
     assert.deepEqual(args.map((a) => a.filters).sort((a, b) => String(a.project_id).localeCompare(String(b.project_id))),
@@ -472,7 +472,7 @@ test('breakdown fans out at most eight values at a time', async () => {
   const orgId = 'org-breakdown-fan';
   store.upsertBillingAccount(orgId, { flexprice: { walletId: WALLET } });
   const day = '2026-11-19T09:00:00.000Z';
-  for (let i = 0; i < 20; i += 1) store.addUsageRecord({ orgId, userId: `u${i}`, costPaise: 100 + i, createdAt: day });
+  for (let i = 0; i < 20; i += 1) store.addUsageRecord({ orgId, userId: `u${i}`, costTokenCredits: 100 + i, createdAt: day });
   const client = fakeFlexprice();
   await withRoutes({ orgId, client }, async ({ get }) => {
     const body = await get('/usage-breakdown?dimension=user&range=7d&limit=20');
@@ -505,7 +505,7 @@ test('the log asks debit rows for the used tab and explains why they are sparse'
     assert.equal(used.rows[0].amount.credits, '150.00');
     assert.equal(used.rows[0].reasonLabel, 'Platform charge', 'the page never shows the raw enum');
     assert.equal(used.rows[0].kind, 'movement', 'a manual debit is spend-attributed');
-    assert.equal(used.rows[0].balanceAfter.paise, null, 'a row with no balance-after field is unknown, never 0');
+    assert.equal(used.rows[0].balanceAfter.tokenCredits, null, 'a row with no balance-after field is unknown, never 0');
     assert.equal(used.rows[1].kind, 'adjustment', 'credits expiring are not consumption');
     assert.equal(used.rows[1].reasonLabel, 'Expired credits');
     assert.equal(used.rows[1].balanceAfter.credits, '3610.00', 'the running balance comes from the row, not our arithmetic');
@@ -559,13 +559,13 @@ test('a read with no cache at all degrades to nulls rather than 500', async () =
     // The read failed outright, so there is no grid and no total — but there is
     // also no ₹0, which the page would read as "this org used nothing".
     assert.deepEqual(body.days, []);
-    assert.equal(body.total.paise, null);
+    assert.equal(body.total.tokenCredits, null);
     assert.equal(body.total.credits, null);
 
     const trend = await get('/trend?range=30d');
     assert.equal(trend.degraded, true);
     assert.equal(trend.points.length, 0);
-    assert.equal(trend.total.paise, null);
+    assert.equal(trend.total.tokenCredits, null);
     assert.deepEqual(trend.filters, {}, 'a cold answer still has the shape the page renders');
 
     const breakdown = await get('/usage-breakdown?dimension=agent');

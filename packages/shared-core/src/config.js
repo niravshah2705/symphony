@@ -920,7 +920,7 @@ const MEMORY = Object.freeze({
  *                          Phase 3 the only spendable balance is FlexPrice's wallet.
  *   USD_TO_INR             the FX rate applied to third-party LLM cost. It is NOT
  *                          display-only: `pricing.usdToPaise` turns a run's USD cost
- *                          into the `cost_paise` that the outbox delivers to the
+ *                          into the `token_credits` that the outbox delivers to the
  *                          wallet, so changing it reprices every future run. Treat it
  *                          as a versioned catalog input, and note that the same rate
  *                          is stamped into the per-model INR prices that
@@ -953,7 +953,7 @@ const BILLING = Object.freeze({
   gatePolicy: gatePolicyFromEnv(),
   gateTtlMs: toPositiveNumber(process.env.BILLING_GATE_TTL_MS, 15000),
   usdToInr: toPositiveNumber(process.env.USD_TO_INR, 87),
-  initialCreditPaise: Math.round(
+  initialCreditTokenCredits: Math.round(
     (Number.isFinite(Number(process.env.INITIAL_CREDIT_INR)) && Number(process.env.INITIAL_CREDIT_INR) >= 0
       ? Number(process.env.INITIAL_CREDIT_INR)
       : 500) * 100,

@@ -14,7 +14,7 @@
  *
  * READ-ONLY BY DESIGN. It writes no usage record, no ledger entry, and no
  * correction. An auto-inserted row would double-bill every record that landed
- * after a Pub/Sub retry — the sweep debits `costPaise` at write time, so a
+ * after a Pub/Sub retry — the sweep debits `costTokenCredits` at write time, so a
  * second row is a second debit. The report is evidence to investigate, never an
  * invoice to apply.
  *
@@ -28,12 +28,12 @@
  *   - the gateway counts every request it served, including retries and calls
  *     whose response never reached an agent;
  *   - the platform counts every run it metered, including `customer` (BYOK) rows
- *     whose `costPaise` is deliberately 0 and whose real gateway spend is
- *     reported as `notionalCostPaise`.
- * So `we_recorded.comparablePaise` = managed cost + customer notional, and a
+ *     whose `costTokenCredits` is deliberately 0 and whose real gateway spend is
+ *     reported as `notionalCostTokenCredits`.
+ * So `we_recorded.comparableTokenCredits` = managed cost + customer notional, and a
  * nonzero delta is expected noise unless it trends in one direction.
  *
- * Currency: the gateway reports USD, the ledger is integer paise, converted with
+ * Currency: the gateway reports USD, the ledger is integer tokenCredits, converted with
  * the single global `CONFIG.BILLING.usdToInr`. A rate applied to money the
  * platform never spent is a comparison, not a charge — which is why the notional
  * series is presented in USD in the product: a rupee symbol on money nobody paid
@@ -57,8 +57,8 @@ const { createFlexpriceClient, rowsOf } = require('@software-factory/shared-core
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_WINDOW_DAYS = 1;
-// A |delta| under one paise is a rounding difference, not a discrepancy.
-const MATCH_TOLERANCE_PAISE = 1;
+// A |delta| under one tokenCredits is a rounding difference, not a discrepancy.
+const MATCH_TOLERANCE_TOKEN_CREDITS = 1;
 
 function isoWindow(days, now = new Date()) {
   const until = now.toISOString();
@@ -85,23 +85,23 @@ function windowRecords(storeApi, { orgId, since, until }) {
 function recordedTotals(records) {
   const out = {
     records: records.length,
-    managedPaise: 0,
-    customerNotionalPaise: 0,
-    costPaise: 0,
-    notionalCostPaise: 0,
+    managedTokenCredits: 0,
+    customerNotionalTokenCredits: 0,
+    costTokenCredits: 0,
+    notionalCostTokenCredits: 0,
     gatewayModes: {},
   };
   for (const record of records) {
-    const cost = Number(record.costPaise) || 0;
-    const notional = Number(record.notionalCostPaise) || 0;
-    out.costPaise += cost;
-    out.notionalCostPaise += notional;
-    if ((record.billingSource || 'managed') === 'customer') out.customerNotionalPaise += notional;
-    else out.managedPaise += cost;
+    const cost = Number(record.costTokenCredits) || 0;
+    const notional = Number(record.notionalCostTokenCredits) || 0;
+    out.costTokenCredits += cost;
+    out.notionalCostTokenCredits += notional;
+    if ((record.billingSource || 'managed') === 'customer') out.customerNotionalTokenCredits += notional;
+    else out.managedTokenCredits += cost;
     const mode = String(record.gatewayMode || 'direct');
     out.gatewayModes[mode] = (out.gatewayModes[mode] || 0) + 1;
   }
-  out.comparablePaise = out.managedPaise + out.customerNotionalPaise;
+  out.comparableTokenCredits = out.managedTokenCredits + out.customerNotionalTokenCredits;
   return out;
 }
 
@@ -125,14 +125,14 @@ function summarizeSpendLogs(payload) {
     spendUsd += spend;
     requests += 1;
   }
-  return { available: true, requests, spendUsd, spendPaise: pricing.usdToPaise(spendUsd) };
+  return { available: true, requests, spendUsd, spendTokenCredits: pricing.usdToPaise(spendUsd) };
 }
 
-function comparison(actualPaise, expectedPaise, unavailableVerdict) {
-  if (!Number.isFinite(actualPaise)) return { paise: null, verdict: unavailableVerdict };
-  const paise = Math.round(actualPaise - expectedPaise);
-  if (Math.abs(paise) <= MATCH_TOLERANCE_PAISE) return { paise, verdict: 'match' };
-  return { paise, verdict: paise > 0 ? 'platform_ahead' : 'we_are_ahead' };
+function comparison(actualTokenCredits, expectedTokenCredits, unavailableVerdict) {
+  if (!Number.isFinite(actualTokenCredits)) return { tokenCredits: null, verdict: unavailableVerdict };
+  const tokenCredits = Math.round(actualTokenCredits - expectedTokenCredits);
+  if (Math.abs(tokenCredits) <= MATCH_TOLERANCE_TOKEN_CREDITS) return { tokenCredits, verdict: 'match' };
+  return { tokenCredits, verdict: tokenCredits > 0 ? 'platform_ahead' : 'we_are_ahead' };
 }
 
 async function resolveLlmCostMeter(client) {
@@ -162,7 +162,7 @@ async function fetchFlexpriceSpend({ client, meter, orgId, since, until }) {
     // `value` here is the model's number, not a decimal string.
     const value = Number(usage && usage.value);
     if (!Number.isFinite(value)) return { available: false, reason: 'flexprice_usage_unshapeled' };
-    return { available: true, meterId: meter.meterId, spendPaise: Math.round(value) };
+    return { available: true, meterId: meter.meterId, spendTokenCredits: Math.round(value) };
   } catch (err) {
     return { available: false, reason: `flexprice_usage_unreachable: ${err && err.message ? err.message : err}` };
   }
@@ -214,16 +214,16 @@ function buildReport({ orgId, window, platform, flexprice, recorded }) {
     platform_says: platform,
     we_recorded: recorded,
     delta: comparison(
-      platform.available ? platform.spendPaise : NaN,
-      recorded.comparablePaise,
+      platform.available ? platform.spendTokenCredits : NaN,
+      recorded.comparableTokenCredits,
       'platform_unavailable',
     ),
   };
   if (flexprice) {
     report.flexprice_says = flexprice;
     report.flexprice_delta = comparison(
-      flexprice.available ? flexprice.spendPaise : NaN,
-      recorded.costPaise,
+      flexprice.available ? flexprice.spendTokenCredits : NaN,
+      recorded.costTokenCredits,
       'flexprice_unavailable',
     );
   }
@@ -325,8 +325,8 @@ async function main({
         platform_says: { available: false, reason },
         flexprice_says: { available: false, reason },
         we_recorded: null,
-        delta: { paise: null, verdict: 'reconcile_failed' },
-        flexprice_delta: { paise: null, verdict: 'reconcile_failed' },
+        delta: { tokenCredits: null, verdict: 'reconcile_failed' },
+        flexprice_delta: { tokenCredits: null, verdict: 'reconcile_failed' },
       }));
     }
   }
@@ -356,6 +356,6 @@ module.exports = {
   fetchGatewaySpend,
   buildReport,
   isoWindow,
-  MATCH_TOLERANCE_PAISE,
+  MATCH_TOLERANCE_TOKEN_CREDITS,
   DEFAULT_WINDOW_DAYS,
 };

@@ -791,7 +791,7 @@ function createPipelineAdmission({
         billing.reason || 'Billing balance is exhausted.',
         402,
         'billing_blocked',
-        { orgId: billing.orgId || context.organizationId, balancePaise: billing.balancePaise ?? null },
+        { orgId: billing.orgId || context.organizationId, balanceTokenCredits: billing.balanceTokenCredits ?? null },
       );
     }
 

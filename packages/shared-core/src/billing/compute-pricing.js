@@ -7,8 +7,8 @@
 // The quantity metered is INTEGER SECONDS, not rupees and not fractional hours.
 // Two reasons, both learned the hard way elsewhere in this directory:
 //   - the reference design computed `round(hours * rate, 4)`, i.e. four decimal
-//     rupees. Everything else here is integer paise, and a money path with two
-//     units cannot be reconciled to the paise;
+//     rupees. Everything else here is integer token credits, and a money path with
+//     two units cannot be reconciled to the subunit;
 //   - dividing by 3600 before multiplying carries float error that only appears
 //     at the rounding boundary, so a session can bill differently than its own
 //     line items add up to.
@@ -53,12 +53,12 @@ function tierFor({ cpuMillicores, memoryBytes } = {}) {
  * One priced actor usage line.
  *
  * `meterValue` is what goes to the billing engine as the metered quantity
- * (seconds); `expectedPaise` is what this module believes that quantity costs,
+ * (seconds); `expectedTokenCredits` is what this module believes that quantity costs,
  * which the tests assert against hand-computed arithmetic and the spike asserts
  * against the engine's own invoice. Two independent derivations of the same
  * number is the point — if they disagree, the price catalog drifted.
  */
-function priceActorUsage({ durationSeconds, tier = DEFAULT_TIER, hourlyRatePaise }) {
+function priceActorUsage({ durationSeconds, tier = DEFAULT_TIER, hourlyRateTokenCredits }) {
   const seconds = Number(durationSeconds);
   if (!Number.isFinite(seconds) || seconds < 0) {
     throw new TypeError(`computePricing: durationSeconds must be a number >= 0, got ${JSON.stringify(durationSeconds)}`);
@@ -66,9 +66,9 @@ function priceActorUsage({ durationSeconds, tier = DEFAULT_TIER, hourlyRatePaise
   if (!TIERS[tier]) {
     throw new TypeError(`computePricing: unknown actor tier ${JSON.stringify(tier)} (known: ${Object.keys(TIERS).join(', ')})`);
   }
-  const rate = Number(hourlyRatePaise);
-  if (hourlyRatePaise == null || hourlyRatePaise === '' || !Number.isFinite(rate) || rate < 0) {
-    throw new TypeError(`computePricing: hourlyRatePaise is required for tier ${tier}; refusing to guess a price`);
+  const rate = Number(hourlyRateTokenCredits);
+  if (hourlyRateTokenCredits == null || hourlyRateTokenCredits === '' || !Number.isFinite(rate) || rate < 0) {
+    throw new TypeError(`computePricing: hourlyRateTokenCredits is required for tier ${tier}; refusing to guess a price`);
   }
 
   const wholeSeconds = Math.floor(seconds);
@@ -77,8 +77,8 @@ function priceActorUsage({ durationSeconds, tier = DEFAULT_TIER, hourlyRatePaise
     meterName: 'actor-compute',
     meterUnit: 'seconds',
     meterValue: wholeSeconds,
-    hourlyRatePaise: rate,
-    expectedPaise: roundHalfUpPaise((wholeSeconds * rate) / SECONDS_PER_HOUR),
+    hourlyRateTokenCredits: rate,
+    expectedTokenCredits: roundHalfUpPaise((wholeSeconds * rate) / SECONDS_PER_HOUR),
   };
 }
 
@@ -87,7 +87,7 @@ function priceActorUsage({ durationSeconds, tier = DEFAULT_TIER, hourlyRatePaise
  *
  * This is what the design we replaced produced: fractional hours times a rate,
  * rounded to four decimal rupees. `priceActorUsage` must agree with it to within
- * one paise for any session, and the test suite pins that.
+ * one token credit for any session, and the test suite pins that.
  */
 function referenceCostInr({ durationSeconds, hourlyRateInr }) {
   const hours = Number(durationSeconds) / SECONDS_PER_HOUR;
@@ -103,27 +103,27 @@ function referenceCostInr({ durationSeconds, hourlyRateInr }) {
  * time that did not happen. `baselineSeconds` runs from the actor's first seen
  * moment to now, which is why `firstSeenAt` is required rather than inferred.
  */
-function savingsEstimate({ firstSeenAt, now, billedSeconds, billedPaise, hourlyRatePaise }) {
+function savingsEstimate({ firstSeenAt, now, billedSeconds, billedTokenCredits, hourlyRateTokenCredits }) {
   const first = Number(firstSeenAt);
   const at = Number(now);
-  const rate = Number(hourlyRatePaise);
+  const rate = Number(hourlyRateTokenCredits);
   const billed = Math.max(0, Number(billedSeconds) || 0);
-  const spent = Math.max(0, Number(billedPaise) || 0);
+  const spent = Math.max(0, Number(billedTokenCredits) || 0);
   if (!Number.isFinite(first) || !Number.isFinite(at) || at < first || !Number.isFinite(rate)) {
     return { available: false, reason: 'missing first-seen timestamp or rate' };
   }
   const baselineSeconds = Math.floor(at - first);
-  const baselinePaise = roundHalfUpPaise((baselineSeconds * rate) / SECONDS_PER_HOUR);
+  const baselineTokenCredits = roundHalfUpPaise((baselineSeconds * rate) / SECONDS_PER_HOUR);
   // A refund cannot be shown: idle time that costs less than what was billed
   // means the inputs are wrong, not that the customer is owed money.
-  const netPaise = Math.max(0, baselinePaise - spent);
+  const netTokenCredits = Math.max(0, baselineTokenCredits - spent);
   return {
     available: true,
     baselineSeconds,
-    baselinePaise,
+    baselineTokenCredits,
     billedSeconds: billed,
-    billedPaise: spent,
-    netSavedPaise: netPaise,
+    billedTokenCredits: spent,
+    netSavedTokenCredits: netTokenCredits,
     idleSeconds: Math.max(0, baselineSeconds - billed),
     // Percent of wall-clock time the actor was NOT running, which is what
     // "efficiency" means here; 0 when nothing has elapsed yet.

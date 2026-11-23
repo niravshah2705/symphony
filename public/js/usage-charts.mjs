@@ -67,17 +67,17 @@ const plainNumber = (value) => (
  * it as an empty cell with its own title.
  */
 export function heatmapLevels(days) {
-  const values = days.map((d) => d.paise).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  const values = days.map((d) => d.tokenCredits).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   if (!values.length) return () => null;
   // Zero is its own level: "nothing used" must be visually distinct from "a
   // little", and a quantile over all values would blur them together.
   const positive = values.filter((v) => v > 0);
-  if (!positive.length) return (paise) => (Number.isFinite(paise) && paise === 0 ? 0 : null);
+  if (!positive.length) return (tokenCredits) => (Number.isFinite(tokenCredits) && tokenCredits === 0 ? 0 : null);
   const cuts = [1, 2, 3, 4].map((q) => positive[Math.min(positive.length - 1, Math.floor((positive.length * q) / 5))]);
-  return (paise) => {
-    if (!Number.isFinite(paise)) return null;
-    if (paise === 0) return 0;
-    for (let level = 0; level < cuts.length; level += 1) if (paise <= cuts[level]) return level + 1;
+  return (tokenCredits) => {
+    if (!Number.isFinite(tokenCredits)) return null;
+    if (tokenCredits === 0) return 0;
+    for (let level = 0; level < cuts.length; level += 1) if (tokenCredits <= cuts[level]) return level + 1;
     return 5 - 1;
   };
 }
@@ -102,7 +102,7 @@ export function heatmapSpec(days, { weeks = 13, todayIso = null } = {}) {
         column.push({ tag: 'rect', attrs: { class: 'usage-cell usage-cell-pad', x: week * CELL_STEP_PX, y: dow * CELL_STEP_PX, width: 11, height: 11, rx: 2 } });
         continue;
       }
-      const level = levelOf(cell.paise);
+      const level = levelOf(cell.tokenCredits);
       const future = Boolean(todayIso) && cell.date > todayIso;
       column.push({
         tag: 'rect',
@@ -207,7 +207,7 @@ const round = (value) => Math.round(numberOr(value, 0) * 100) / 100;
 export function trendSpec(points, {
   width = 720,
   height = 220,
-  // Credits, not paise: the axis is read by a customer, and the route already
+  // Credits, not tokenCredits: the axis is read by a customer, and the route already
   // did the money conversion. (Deliberately not named `valueOf`: a binding with
   // that name is looked up as the intrinsic before it is called as a function.)
   creditValueOf = (p) => (p.credits === null || p.credits === undefined ? null : Number(p.credits)),

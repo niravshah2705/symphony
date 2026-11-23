@@ -33,5 +33,5 @@ test('with no FlexPrice configured the gate is off, so a local run is never bloc
   assert.equal(status.orgId, 'org-gate');
   assert.equal(status.gatePolicy, 'off');
   assert.equal(status.fundsAvailable, true);
-  assert.equal(status.balancePaise, null, 'nothing was read, so nothing is claimed');
+  assert.equal(status.balanceTokenCredits, null, 'nothing was read, so nothing is claimed');
 });

@@ -139,7 +139,7 @@ function quote(params = {}) {
     return {
       mode, currency: CURRENCY, subtotalPaise: 0, taxablePaise: 0,
       components: [], gstPaise: 0, totalPaise: 0,
-      bonusPaise: 0, creditPaise: 0, placeOfSupply: null,
+      bonusTokenCredits: 0, creditableTokenCredits: 0, placeOfSupply: null,
     };
   }
 
@@ -175,8 +175,8 @@ function quote(params = {}) {
     components: priced,
     gstPaise,
     totalPaise: subtotalPaise + gstPaise,
-    bonusPaise: roundHalfUpPaise((subtotalPaise * couponBps) / BPS),
-    creditPaise: subtotalPaise,
+    bonusTokenCredits: roundHalfUpPaise((subtotalPaise * couponBps) / BPS),
+    creditableTokenCredits: subtotalPaise,
     placeOfSupply: {
       type: interstate ? 'interstate' : 'intrastate',
       stateCode: place.code,
