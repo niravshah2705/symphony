@@ -22,9 +22,10 @@ export const REASONING_ARTIFACT_NAME = 'Reasoning';
 
 // Chat model selection has no field in an A2A Message, so the SPA sends it as
 // message metadata; the facade consumes and strips it before kagent sees it.
+// There is deliberately no request-header fallback: metadata is the only channel
+// the standard client builds (it passes per-call metadata as undefined), so a
+// second spelling of the same choice would be a second path that can drift.
 export const MODEL_METADATA_KEY = 'fleet.dev/model';
-// Rollback path if the controller rejects unknown message metadata.
-export const MODEL_HEADER = 'x-fleet-model';
 
 export const HITL_EXTENSION_URI = 'https://kagent.dev/extensions/hitl/v1';
 export const TOOL_APPROVAL_RESPONSE_TYPE = 'tool_approval_response';

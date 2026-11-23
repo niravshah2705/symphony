@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import type { Org, User } from '../types';
 import { OnboardingWizard } from './OnboardingWizard';
-import { Chat } from './Chat';
+import { Thread } from '../assistant-ui/Thread';
 import { Costs } from './Costs';
 
 type Tab = 'onboard' | 'chat' | 'costs';
@@ -99,7 +99,7 @@ export function Shell({
           </nav>
           <main className="content">
             {tab === 'onboard' ? <OnboardingWizard key={activeOrg.id} org={activeOrg} /> : null}
-            {tab === 'chat' ? <Chat key={activeOrg.id} org={activeOrg} /> : null}
+            {tab === 'chat' ? <Thread key={activeOrg.id} org={activeOrg} /> : null}
             {tab === 'costs' ? <Costs key={activeOrg.id} org={activeOrg} /> : null}
           </main>
         </>

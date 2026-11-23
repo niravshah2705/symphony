@@ -6,7 +6,6 @@ import {
   A2A_SSE_CONTENT_TYPE,
   A2A_VERSION_HEADER,
   HITL_EXTENSION_URI,
-  MODEL_HEADER,
   MODEL_METADATA_KEY,
   REASONING_ARTIFACT_ID,
   REASONING_ARTIFACT_NAME,
@@ -25,7 +24,6 @@ test('the wire vocabulary is spelled exactly once', () => {
   assert.equal(A2A_SSE_CONTENT_TYPE, 'text/event-stream');
   assert.equal(THOUGHT_PART_KEY, 'kagent.dev/a2a/thought');
   assert.equal(MODEL_METADATA_KEY, 'fleet.dev/model');
-  assert.equal(MODEL_HEADER, 'x-fleet-model');
   assert.equal(REASONING_ARTIFACT_ID, 'fleet.dev/reasoning');
   assert.equal(REASONING_ARTIFACT_NAME, 'Reasoning');
   assert.equal(HITL_EXTENSION_URI, 'https://kagent.dev/extensions/hitl/v1');

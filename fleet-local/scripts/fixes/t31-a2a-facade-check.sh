@@ -16,6 +16,8 @@
 #   6) the legacy /chat relay still works (PR 1 is additive; PR 3 deletes it)
 #   7) a broken provider credential is classified as the platform's fault and is
 #      NOT metered (FAULT_MODEL names the model whose key is dead; empty skips)
+#   8) the SPA's real A2A client (FleetA2AClient over @assistant-ui/react-a2a)
+#      parses the card, types the frames, and lands its model choice on the row
 set -uo pipefail
 CTX=${KCTX:-kind-flexprice-local}
 k() { kubectl --context "$CTX" "$@"; }
@@ -246,6 +248,69 @@ else
       fail "a platform fault reached the invoice: metered_seconds=$sent"
     fi
   fi
+fi
+
+echo
+say "8) the shipping browser client speaks to this facade"
+# Everything above is curl. This gate runs apps/spa/src/a2a/FleetA2AClient.ts (on
+# top of @assistant-ui/react-a2a) against the live facade, because the two
+# failure modes PR 2 lives or dies by are on the CLIENT side: its agent-card
+# parser is strict, and a stream whose frames it cannot type throws
+# "stream ended without any events" — which would look exactly like the old
+# "(no output)". It also proves model choice survives the library's own call
+# path, which passes metadata = void 0 and so could only ever carry the model on
+# the message the client builds.
+CATALOG=$(curl -s "${C[@]}" "$BASE/api/orgs/$ORG/projects/$PROJ/models" \
+  | jq -r '.models[]? | select(.default == true) | .id' | head -1)
+[ -n "$CATALOG" ] || CATALOG=mock
+echo "   client model=$CATALOG"
+node --disable-warning=ExperimentalWarning "$ROOT/scripts/fixes/t31-spa-client.ts" \
+  "$API" "$TOKEN" "$CATALOG" "Reply with exactly T31-CLIENT-OK and nothing else." \
+  >/tmp/t31-client.txt 2>/tmp/t31-client.err
+cexit=$?
+if [ "$cexit" != 0 ]; then
+  fail "the A2A client could not complete a turn (exit $cexit): $(tail -3 /tmp/t31-client.err)"
+else
+  kv() { sed -n "s/^$1=//p" /tmp/t31-client.txt | head -1; }
+  [ -n "$(kv card_name)" ] && pass "the library's strict card parser accepts our rewrite ($(kv card_name))" \
+    || fail "card parse produced no name"
+  [ "$(kv card_streaming)" = true ] && pass "the rewritten card still advertises streaming" \
+    || fail "card streaming capability lost: $(head -c 200 /tmp/t31-client.txt)"
+  kv iface | grep -q "/api/a2a/orgs/$ORG/projects/$PROJ" \
+    && pass "the card the client read points at the facade" || fail "client iface: $(kv iface)"
+  ev=$(kv events); [ "${ev:-0}" -ge 1 ] && pass "the client decoded $ev typed events" \
+    || fail "the client decoded no events"
+  case "$(kv kinds)" in
+    *unknown*|'') fail "untyped frames reached the client: $(kv kinds)" ;;
+    *) pass "every frame was a typed A2A event ($(kv kinds))" ;;
+  esac
+  case "$(kv state)" in
+    completed|failed|canceled|rejected|input_required|auth_required)
+      pass "the client saw the turn settle as $(kv state)" ;;
+    *) fail "the client's stream never reached a settled state ($(kv state))" ;;
+  esac
+  # Answer TEXT needs a model that actually generates: the mock harness completes
+  # silently (which is exactly the case the failure notice exists for), and today
+  # every non-mock credential on this cluster is dead. ANSWER_MODEL names a healthy
+  # one; unset means "plumbing proven, content not".
+  if [ -n "${ANSWER_MODEL:-}" ]; then
+    aprobe=$(node --disable-warning=ExperimentalWarning "$ROOT/scripts/fixes/t31-spa-client.ts" \
+      "$API" "$TOKEN" "$ANSWER_MODEL" "Reply with exactly T31-CLIENT-OK and nothing else." \
+      | sed -n 's/^answer=//p')
+    grep -q 'T31-CLIENT-OK' <<<"$aprobe" \
+      && pass "the answer reached the client as content ($ANSWER_MODEL)" \
+      || fail "the client never saw the answer from $ANSWER_MODEL: $aprobe"
+  else
+    echo "   note: answer content not asserted (ANSWER_MODEL unset; mock answers silently)"
+  fi
+  cctx=$(kv context)
+  crow=$(fp "select coalesce(model,'-') || '|' || coalesce(outcome,'NULL') from sessions where kagent_session_id = '$cctx' order by started_at desc limit 1;")
+  echo "   session row: $crow"
+  [ "${crow%%|*}" = "$CATALOG" ] \
+    && pass "message.metadata['fleet.dev/model'] arrived through the library (model=$CATALOG)" \
+    || fail "the client's model choice did not reach the session row: $crow (want $CATALOG)"
+  [ "${crow##*|}" != "NULL" ] && pass "the client-driven turn settled with an outcome" \
+    || fail "the client-driven turn left outcome NULL"
 fi
 
 echo

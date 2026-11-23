@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { A2A_CONTENT_TYPE, MODEL_HEADER, a2aFacadeBase } from '@fleet-local/shared';
+import { A2A_CONTENT_TYPE, a2aFacadeBase } from '@fleet-local/shared';
 import { config } from '../config.ts';
 import { requireAuth } from '../auth/plugin.ts';
 import { assertMember } from '../db/users.ts';
@@ -100,7 +100,6 @@ export async function a2aRoutes(app: FastifyInstance): Promise<void> {
       const bearer = request.cookies[config.sessionCookie];
       if (!bearer) throw new A2ARequestError(401, 'no session token — sign in again');
       const user = request.fleetUser!;
-      const hint = request.headers[MODEL_HEADER];
       const ctx: FacadeContext = {
         orgId,
         projectId,
@@ -108,7 +107,6 @@ export async function a2aRoutes(app: FastifyInstance): Promise<void> {
         email: user.email,
         bearer,
         facadeBase: a2aFacadeBase(config.publicOrigin, orgId, projectId),
-        modelHint: typeof hint === 'string' && hint ? hint : undefined,
         log: (message, extra) => request.log.info(extra ?? {}, message),
       };
 
