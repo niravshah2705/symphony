@@ -466,6 +466,10 @@ cross-org checks in §11 exercise.
 
 ## 9. Runbook — local
 
+**How to test the token-credit path specifically — the gate map, the live order of commands and
+what each output proves — is [`BILLING_TEST_PLAN.md`](./BILLING_TEST_PLAN.md).** This section is
+the operational runbook; that one is the verification checklist.
+
 Everything below runs against Docker + the `kind-kind` cluster on this machine.
 Nothing deploys to cloud in either phase.
 
