@@ -108,3 +108,11 @@ UPDATE sessions
 -- The facade's conversation handle is the A2A contextId (not a BFF-private
 -- session id), so continuing a conversation looks the context up directly.
 CREATE INDEX IF NOT EXISTS sessions_context_idx ON sessions (project_id, kagent_session_id);
+
+-- The AG-UI leg's conversation handle is the client's threadId, which arrives on
+-- every turn while the contextId is still unknown (a first turn has none). It is
+-- unique per project so a double-submitted first turn collides instead of
+-- silently splitting one conversation into two sessions, and the project scope is
+-- what keeps a guessed uuid from resolving into another tenant's row.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS thread_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_thread_idx ON sessions (project_id, thread_id) WHERE thread_id IS NOT NULL;

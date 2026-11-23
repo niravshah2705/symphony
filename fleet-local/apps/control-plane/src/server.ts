@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth.ts';
 import { orgRoutes } from './routes/orgs.ts';
 import { chatRoutes } from './routes/chat.ts';
 import { a2aRoutes } from './routes/a2a.ts';
+import { aguiRoutes } from './routes/agui.ts';
 import { migrate, close } from './db/client.ts';
 import { startSweeper } from './metering/sweeper.ts';
 import { shutdownMetrics } from './metering/otlp.ts';
@@ -31,6 +32,9 @@ async function build() {
   // fastifyStatic, whose SPA fallback would otherwise answer a mis-typed A2A call
   // with index.html.
   await app.register(a2aRoutes);
+  // The AG-UI leg speaks to the same conversations as the facade above; it is a
+  // separate scope because its error body is plain JSON, not an A2AError.
+  await app.register(aguiRoutes);
 
   if (config.spaRoot) {
     await app.register(fastifyStatic, { root: config.spaRoot, prefix: '/' });

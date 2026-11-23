@@ -25,10 +25,11 @@ export interface SessionRow {
   turn: number;
   metered_seconds: number | null;
   metered_outcome: string | null;
+  thread_id: string | null;
 }
 
 const COLS =
-  'id, org_id, project_id, user_id, agent_name, agent_namespace, model, kagent_session_id, kagent_task_id, status, tier, started_at, ended_at, duration_seconds, metered_at, outcome, close_reason, meter_seconds, billed_seconds, awaiting_since, turn, metered_seconds, metered_outcome';
+  'id, org_id, project_id, user_id, agent_name, agent_namespace, model, kagent_session_id, kagent_task_id, status, tier, started_at, ended_at, duration_seconds, metered_at, outcome, close_reason, meter_seconds, billed_seconds, awaiting_since, turn, metered_seconds, metered_outcome, thread_id';
 
 export async function createSession(input: {
   orgId: string;
@@ -38,11 +39,21 @@ export async function createSession(input: {
   agentNamespace: string;
   model?: string;
   tier?: string;
+  threadId?: string;
 }): Promise<SessionRow> {
   const row = await one<SessionRow>(
-    `INSERT INTO sessions (org_id, project_id, user_id, agent_name, agent_namespace, model, tier)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COLS}`,
-    [input.orgId, input.projectId, input.userId, input.agentName, input.agentNamespace, input.model ?? null, input.tier ?? 'gvisor-default'],
+    `INSERT INTO sessions (org_id, project_id, user_id, agent_name, agent_namespace, model, tier, thread_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${COLS}`,
+    [
+      input.orgId,
+      input.projectId,
+      input.userId,
+      input.agentName,
+      input.agentNamespace,
+      input.model ?? null,
+      input.tier ?? 'gvisor-default',
+      input.threadId ?? null,
+    ],
   );
   if (!row) throw new Error('session insert returned no row');
   return row;
@@ -141,6 +152,16 @@ export async function findSessionByTask(orgId: string, projectId: string, taskId
       WHERE org_id = $1 AND project_id = $2 AND kagent_task_id = $3
       ORDER BY started_at DESC LIMIT 1`,
     [orgId, projectId, taskId],
+  );
+}
+
+// The AG-UI client mints its own threadId and never learns the A2A contextId, so
+// a resumed conversation arrives identified by the thread handle alone. Project
+// scope is the tenant check here, exactly as in the two lookups above.
+export async function findSessionByThread(orgId: string, projectId: string, threadId: string): Promise<SessionRow | undefined> {
+  return one<SessionRow>(
+    `SELECT ${COLS} FROM sessions WHERE org_id = $1 AND project_id = $2 AND thread_id = $3`,
+    [orgId, projectId, threadId],
   );
 }
 
