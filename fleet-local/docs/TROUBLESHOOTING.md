@@ -902,17 +902,31 @@ still outcome `completed`, still billable compute, but explainable to the user.
 
 **Guard:** `scripts/fixes/t31-a2a-facade-check.sh` proves the card rewrite, the
 401-is-JSON routing, a relayed `message:stream` turn, the ownership refusals, and
-the `outcome`/`meter_seconds` read-back against the live cluster.
+the `outcome`/`meter_seconds` read-back against the live cluster. Gate 8 is the
+one that cannot be done with curl: it runs the SPA's real client
+(`apps/spa/src/a2a/FleetA2AClient.ts`, i.e. `@assistant-ui/react-a2a`'s
+`A2AClient`) against the port-forwarded facade and asserts the strict card parser
+accepts the rewrite, every frame arrives as a *typed* A2A event, the turn settles,
+and `message.metadata['fleet.dev/model']` lands on the session row.
 **STATUS: IMPLEMENTED + unit-tested + verified in-cluster (2026-11-23).**
-`t31-a2a-facade-check.sh` passes all 20 gates against `kind-flexprice-local`;
-the SPA still uses the legacy `/chat` relay until PR 2 of this plan lands, and
-the two paths share `pumpTurn`, so they cannot disagree about a turn's outcome.
+`t31-a2a-facade-check.sh` passes all 29 gates against `kind-flexprice-local`.
+PR 2 has landed: the chat tab is now the A2A client talking to this facade, so
+`(no output)` is gone — the bubble shows the `close_reason` recorded here, with
+Retry. The legacy `/chat` relay still exists (PR 3 deletes it) and shares
+`pumpTurn` with the facade, so the two paths cannot disagree about a turn.
 Observed live: a `message:stream` turn relays 4 controller frames verbatim and
 binds `contextId`; the mock worker's silent completion records
 `the agent completed the turn without producing any output`; a nemotron turn
 behind the dead OpenRouter key lands as
-`upstream_error | "…OpenAI API error: 401 Unauthorized" | meter_seconds=3.017 |
+`upstream_error | "…OpenAI API error: 401 Unauthorized" | meter_seconds=3.069 |
 metered_seconds=0` — the reason the user never saw, and 0 seconds billed.
+Two things gate 8 found that curl could not: the client's role spelling is
+lowercase `user` (`toWireMessage` maps anything else to `ROLE_UNSPECIFIED`, which
+this facade refuses with `400 INVALID_ARGUMENT` rather than starting a bad turn),
+and because the library calls `streamMessage(message, configuration, void 0,
+signal)`, per-message metadata is the only channel model choice can ride — which
+is why the `x-fleet-model` header fallback is deleted rather than kept as a
+second path for the same decision.
 
 **If a gate reports `000` on every call** it is not the protocol: with
 `replicas=1` and a 25%/25% rolling update the Deployment can run with zero ready

@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@assistant-ui/react": "0.15.37",
+    "@assistant-ui/react-a2a": "0.2.54",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
