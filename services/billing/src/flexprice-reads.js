@@ -7,10 +7,15 @@
  * deliberately narrow: GET only, no body, no ids taken from the request other
  * than window/limit/filter names. `external_customer_id` and the wallet id are
  * derived from the gateway-resolved org (`resolveCallerOrg`), never from the
- * caller, which is what makes tenant isolation a property of this file rather
- * than of the FlexPrice key — measured in docs/FLEXPRICE_FINDINGS.md §10, the
- * ingest plane's *reads* are shadow-only, so a key that could be pointed at
- * another customer would still answer. The money path (top-up, debit, invoice)
+ * caller — and that org is only honored when the caller *proved* it is the gateway
+ * (`trusted-caller.js`), so which tenant a request addresses is checked at this
+ * endpoint rather than inherited from the network in front of it. An unproven
+ * caller is served a degraded envelope with zero FlexPrice calls. Money fields are
+ * also verified to belong to the org: `gate.resolveWalletId` refuses a stored
+ * wallet id the org's own FlexPrice customer does not have (wallet-scope.js),
+ * because one API key spans the tenant — measured in docs/FLEXPRICE_FINDINGS.md
+ * §10, the ingest plane's *reads* are shadow-only, so a key that could be pointed
+ * at another customer would still answer. The money path (top-up, debit, invoice)
  * stays in `recharge-settle.js` and the jobs; nothing here can move money.
  *
  * Degradation is spelled, never implied: an unreadable number is `null` with a
@@ -40,6 +45,7 @@
  */
 
 const express = require('express');
+const crypto = require('node:crypto');
 const { CONFIG } = require('@software-factory/shared-core/config');
 const { asyncHandler } = require('@software-factory/shared-core/util');
 const log = require('@software-factory/shared-core/logger');
@@ -47,7 +53,9 @@ const store = require('@software-factory/shared-core/store');
 const gate = require('@software-factory/shared-core/billing/gate');
 const moneyWire = require('@software-factory/shared-core/billing/money-wire');
 const { createFlexpriceClient, rowsOf } = require('@software-factory/shared-core/billing/flexprice-client');
+const { WalletScopeError } = require('@software-factory/shared-core/billing/wallet-scope');
 const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
+const { ORG_ID_RE } = require('./trusted-caller');
 // The meter/event/property names come from the outbox's own table: a quantity
 // posted under any other property name is acknowledged with 202 and contributes
 // nothing (billing-outbox.js:28-31), so a read that spells them differently would
@@ -178,6 +186,55 @@ function filterSignature(filters) {
 }
 
 /**
+ * A cache-partition segment.
+ *
+ * The org id is the isolation key, and these caches are keyed by concatenation, so
+ * an org id containing the separator (`a|overview` addressing org `a`'s partition)
+ * would let one tenant be served another's cached numbers. Hashing makes the
+ * segment fixed-width and unforgeable; `invalidate` clears by the same hash.
+ */
+function partition(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 16);
+}
+
+/** A browser-named filter value: an id, not a payload. See `DIMENSIONS`. */
+const FILTER_VALUE_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/**
+ * The request's filters, built server-side from the four dimensions this page
+ * knows about. A value that is not id-shaped is dropped and reported rather than
+ * forwarded: these go into a FlexPrice query body, and the only thing a browser
+ * chooses here is which *narrowing* to apply — never which customer.
+ */
+function parseFilters(query) {
+  const filters = {};
+  const rejected = [];
+  for (const [param, property] of Object.entries(DIMENSIONS)) {
+    const value = String((query && query[param]) ?? '').trim();
+    if (!value) continue;
+    if (FILTER_VALUE_RE.test(value)) filters[property] = [value];
+    else rejected.push(param);
+  }
+  return { filters, rejected };
+}
+
+/**
+ * Why this request may not address an org, or `null` when it may.
+ *
+ * `trusted` is set by `trusted-caller.js` and means the peer proved it is the
+ * gateway. Without that proof the org this route would read is a guess made by
+ * whoever opened the socket, so the answer is a degraded envelope and ZERO
+ * FlexPrice calls — the property the Usage page's isolation rests on is checked
+ * here, at the endpoint, not assumed from the network in front of it.
+ */
+function scopeViolationOf(caller) {
+  if (!caller || caller.trusted !== true) return 'unscoped_caller';
+  const orgId = String(caller.orgId || '').trim();
+  if (!orgId || !ORG_ID_RE.test(orgId)) return 'unscoped_org_id';
+  return null;
+}
+
+/**
  * Resolve a requested range into a `[startMs, endMs]` window.
  *
  * `mtd`/`last-month` are CALENDAR months in UTC because that is what the labels
@@ -260,8 +317,8 @@ function paiseFromMeter(out) {
 /**
  * Parse a windowed SUM read into `{ byDay, totalPaise, bucketed }`.
  *
- * `window_size: "DAY"` on `POST /v1/events/usage` is answered per bucket
- * (`GetUsageResponse.results[].window_size`), and for a windowed SUM the DTO's
+ * `windowSize: "DAY"` on `POST /v1/events/usage` is answered per bucket
+ * (`GetUsageResponse.results[].windowSize`), and for a windowed SUM the DTO's
  * top-level `value` is left at zero and therefore omitted — the total has to be
  * summed from the buckets here, not read off the envelope.
  *
@@ -277,8 +334,8 @@ function seriesFromUsage(out) {
   let total = 0;
   let unreadable = 0;
   for (const row of rows) {
-    const day = row && row.window_size !== undefined && row.window_size !== null
-      ? isoDay(row.window_size)
+    const day = row && row.windowSize !== undefined && row.windowSize !== null
+      ? isoDay(row.windowSize)
       : null;
     const paise = paiseFromMeter(row);
     if (!day || paise === null) {
@@ -298,7 +355,7 @@ function seriesFromUsage(out) {
   return { byDay, totalPaise: unreadable ? null : total, bucketed: true, unreadableRows: unreadable };
 }
 
-/** Credit rows carry `credit_amount`; debit rows `debit_amount`. Both decimal-as-string. */
+/** Decimal-as-string on the wire, number or Date on the model: paise or `null`. */
 function rowAmountPaise(row, field) {
   const raw = row && row[field];
   if (raw === undefined || raw === null || raw === '') return null;
@@ -309,24 +366,34 @@ function rowAmountPaise(row, field) {
   }
 }
 
+/**
+ * The magnitude of a wallet transaction row, in paise.
+ *
+ * `creditAmount` is the credit-side field; a debit row leaves it out and carries its
+ * magnitude in `amount` (measured against a live `MANUAL_BALANCE_DEBIT` row in
+ * `scripts/flexprice-phase5-verify.js`). There is no `debit_amount` on this route —
+ * the earlier fallback here read a key FlexPrice never answers, so a debit would
+ * have rendered as no amount at all.
+ */
 function rowCreditPaise(row) {
-  const direct = rowAmountPaise(row, 'credit_amount');
+  const direct = rowAmountPaise(row, 'creditAmount');
   if (direct !== null) return direct;
-  return rowAmountPaise(row, 'debit_amount');
+  return rowAmountPaise(row, 'amount');
+}
+
+/** `createdAt` is a `Date` on the model and an ISO string on a canned fixture. */
+function isoOf(value) {
+  if (!value) return null;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(String(value));
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
 
 function rowTime(row) {
-  const raw = row && (row.created_at || row.timestamp || row.time_created);
-  if (!raw) return null;
-  const ms = Date.parse(String(raw));
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  return isoOf(row && (row.createdAt || row.timestamp || row.timeCreated));
 }
 
 function rowExpiry(row) {
-  const raw = row && (row.expiry_date || row.expires_at);
-  if (!raw) return null;
-  const ms = Date.parse(String(raw));
-  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+  return isoOf(row && (row.expiryDate || row.expiresAt));
 }
 
 function reasonLabel(reason) {
@@ -361,9 +428,9 @@ function bucketCreditRows(rows) {
   const packages = [];
 
   for (const row of rows) {
-    const reason = String((row && row.transaction_reason) || '').toUpperCase();
+    const reason = String((row && row.transactionReason) || '').toUpperCase();
     const total = rowCreditPaise(row);
-    const remaining = rowAmountPaise(row, 'credits_available');
+    const remaining = rowAmountPaise(row, 'creditsAvailable');
     const target = PLAN_REASONS.has(reason) ? plan : (ADDON_REASONS.has(reason) ? addon : other);
     target.rowCount += 1;
     if (total === null || remaining === null) {
@@ -380,7 +447,7 @@ function bucketCreditRows(rows) {
         ...creditOf(remaining),
         total: creditOf(total),
         expiresAt: rowExpiry(row),
-        orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotency_key || null,
+        orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotencyKey || null,
       });
     }
     // A package is a credit that expires: that is the only thing FlexPrice can
@@ -453,12 +520,14 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
   function invalidate(orgId) {
     const key = String(orgId || '').trim();
     if (!key) return { cleared: null };
+    const orgHash = partition(key);
     wallets.delete(key);
-    // `lastGood` and `windows` are keyed `${orgId}|...`, so a bare delete would
-    // leave a failed read serving the pre-recharge numbers behind the fresh ones.
+    // `lastGood` and `windows` are keyed by the org's hash partition, so a bare
+    // delete of one entry would leave a failed read serving the pre-recharge
+    // numbers behind the fresh ones.
     for (const cache of [lastGood, windows]) {
-      for (const cacheKey of [...cache.keys()]) {
-        if (cacheKey === key || cacheKey.startsWith(`${key}|`)) cache.delete(cacheKey);
+      for (const [cacheKey, entry] of cache) {
+        if (entry && entry.orgHash === orgHash) cache.delete(cacheKey);
       }
     }
     return { cleared: key };
@@ -466,14 +535,28 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
 
   /**
    * The single pre-flight every route shares. Returning an envelope here means a
-   * handler never has to reason about disabled config or a shared-tier account.
+   * handler never has to reason about disabled config, an unproven caller or a
+   * shared-tier account.
    */
-  function guard(orgId) {
+  function guard(caller) {
+    const orgId = String((caller && caller.orgId) || '').trim();
     // Overridable for the tests only; in deployment this is the same switch the
     // gate and the money path read.
     const enabled = deps.flexpriceEnabled === undefined ? CONFIG.FLEXPRICE.enabled : deps.flexpriceEnabled;
     if (!enabled) {
       return envelope({ degraded: true, reason: 'flexprice_disabled', now: now(), note: 'FLEXPRICE_ENABLED is not set, so no FlexPrice read is possible on this deployment.' });
+    }
+    // Who is asking, before what they are asking for: an unproven caller gets no
+    // numbers and costs no FlexPrice read.
+    const violation = scopeViolationOf(caller);
+    if (violation) {
+      log.warn('billing_flexprice_read_unscoped', { orgId: orgId || null, violation });
+      return envelope({
+        degraded: true,
+        reason: violation,
+        now: now(),
+        note: 'This request did not arrive as a verified gateway caller, so it is served by its deployment org only and no organization\'s usage was read.',
+      });
     }
     // The free-tier account has never had a wallet and is permanently exempt from
     // the gate (gate.js:351), so it must not spend catalog or customer reads here.
@@ -486,6 +569,9 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
   async function walletIdFor(orgId) {
     const hit = wallets.get(orgId);
     if (hit && hit.until > now()) return hit.walletId;
+    // `gate.resolveWalletId` is the single answer to "which wallet", and it verifies
+    // the stored id against this org's own FlexPrice customer before returning it —
+    // a mismatch throws rather than reading a neighbour's balance.
     const walletId = await gate.resolveWalletId(client(), orgId, store.getBillingAccount(orgId));
     wallets.set(orgId, {
       walletId: walletId || null,
@@ -508,25 +594,37 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
    * project label.
    */
   async function usageSeries({ orgId, startIso, endIso, filters }) {
-    const key = `${orgId}|${startIso}|${endIso}|${filterSignature(filters)}`;
+    // Every property key here is one this file declared; a filter that could name
+    // an arbitrary key would be a way to query somebody else's selector.
+    const allowed = new Set(Object.values(DIMENSIONS));
+    const scoped = {};
+    for (const [property, values] of Object.entries(filters || {})) {
+      if (allowed.has(property)) scoped[property] = values;
+    }
+    const orgHash = partition(orgId);
+    const key = `${orgHash}:${partition(`${startIso}|${endIso}|${filterSignature(scoped)}`)}`;
     const hit = windows.get(key);
     if (hit && hit.expiresAt > now()) return hit.series;
     const series = seriesFromUsage(await client().eventsUsage({
-      event_name: LLM.eventName,
-      property_name: LLM.field,
-      aggregation_type: 'SUM',
-      external_customer_id: orgId,
-      start_time: startIso,
-      end_time: endIso,
+      eventName: LLM.eventName,
+      propertyName: LLM.field,
+      aggregationType: 'SUM',
+      // Server-derived and the only org selector this route accepts — hence the
+      // explicit refusal to run without it. An unfiltered usage read answers with
+      // the whole tenant's total, which would then be labeled with one org's name.
+      externalCustomerId: orgId,
+      startTime: startIso,
+      endTime: endIso,
       // Day buckets in UTC, matching the `date` keys the page labels. FlexPrice
       // would otherwise bucket in its own default timezone and a day cell would
       // silently contain part of two days.
-      window_size: 'DAY',
+      windowSize: 'DAY',
       timezone: 'UTC',
-      ...(filters && Object.keys(filters).length ? { filters } : {}),
+      ...(Object.keys(scoped).length ? { filters: scoped } : {}),
     }));
     windows.set(key, {
       series,
+      orgHash,
       // A window that has fully closed cannot gain rows (late-arriving events aside),
       // so it is cached long; one still containing "now" is cached for the read TTL.
       expiresAt: now() + (endIso <= new Date(now()).toISOString()
@@ -548,12 +646,13 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       // Some routes answer a different shape depending on the query (the log's
       // `tab`), so the empty shape can be a function of the request.
       const shape = typeof coldShape === 'function' ? coldShape(req) : coldShape;
-      const blocked = guard(orgId);
+      const blocked = guard(caller);
       if (blocked) {
         res.json({ ...blocked, ...shape, orgId, isAdmin: caller.isAdmin });
         return;
       }
-      const stored = lastGood.get(`${orgId}|${route}`);
+      const orgHash = partition(orgId);
+      const stored = lastGood.get(`${orgHash}:${route}`);
       try {
         const out = await fn({ req, res, caller, orgId });
         // The envelope keys are added here rather than in each handler so that
@@ -566,16 +665,27 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
           orgId,
           isAdmin: caller.isAdmin,
         };
-        lastGood.set(`${orgId}|${route}`, { body, at: now() });
+        lastGood.set(`${orgHash}:${route}`, { body, at: now(), orgHash });
         res.json(body);
       } catch (err) {
         const message = err && err.message ? err.message : String(err);
-        log.warn('billing_flexprice_read_failed', { orgId, route, status: err && err.status, holding: Boolean(stored) });
-        const fallback = stored
-          ? { ...stored.body, degraded: true, reason: 'read_failed', reasonDetail: message.slice(0, 200), stale: true, asOf: new Date(now()).toISOString() }
+        // A wallet the org does not own is not a read that failed: answering it
+        // with the cached numbers would show another tenant's money under this
+        // org's name, which is the one thing worse than no data.
+        const scopeFailure = err instanceof WalletScopeError;
+        const reason = scopeFailure ? (err.kind || 'wallet_org_mismatch') : 'read_failed';
+        log.warn('billing_flexprice_read_failed', {
+          orgId,
+          route,
+          status: err && err.status,
+          reason,
+          holding: scopeFailure ? false : Boolean(stored),
+        });
+        const fallback = stored && !scopeFailure
+          ? { ...stored.body, degraded: true, reason, reasonDetail: message.slice(0, 200), stale: true, asOf: new Date(now()).toISOString() }
           : envelope({
             degraded: true,
-            reason: 'read_failed',
+            reason,
             detail: message,
             now: now(),
             // The empty shape is merged in even on a failure with no cache, so a
@@ -718,11 +828,7 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
     });
     const preset = win.range;
 
-    const filters = {};
-    for (const [param, property] of Object.entries(DIMENSIONS)) {
-      const value = String(req.query[param] ?? '').trim();
-      if (value) filters[property] = [value];
-    }
+    const { filters, rejected } = parseFilters(req.query);
 
     // `windowFor` always answers with day boundaries, so these cells are whole
     // UTC days: `endMs` is exclusive and never slices the current day in half.
@@ -744,6 +850,9 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
       range: preset || 'custom',
       window: { startUtc: `${dayKeys[0]}T00:00:00.000Z`, endUtc: new Date(win.endMs).toISOString(), days: dayKeys.length },
       filters,
+      // A dimension value that was not id-shaped is reported, not silently dropped:
+      // an empty series and a refused filter are different answers.
+      ignoredFilters: rejected,
       filterableDimensions: Object.keys(DIMENSIONS),
       total: creditOf(series.totalPaise),
       points,
@@ -861,20 +970,20 @@ function createFlexpriceReadsRouter({ resolveCallerOrg, deps = {} } = {}) {
         return {
           id: row.id || null,
           at: rowTime(row),
-          reason: row.transaction_reason || null,
-          reasonLabel: reasonLabel(row.transaction_reason),
+          reason: row.transactionReason || null,
+          reasonLabel: reasonLabel(row.transactionReason),
           // A debit that is not spend: credits expiring and a wallet closing both
           // reduce the balance without any agent having used anything, and a log
           // that lists them as usage invents cost the org never paid.
-          kind: NOT_USAGE_REASONS.has(String(row.transaction_reason || '').toUpperCase()) ? 'adjustment' : 'movement',
+          kind: NOT_USAGE_REASONS.has(String(row.transactionReason || '').toUpperCase()) ? 'adjustment' : 'movement',
           amount: creditOf(amount),
-          remaining: creditOf(rowAmountPaise(row, 'credits_available')),
-          // What the wallet held after this row landed. `credit_balance_after` is a
+          remaining: creditOf(rowAmountPaise(row, 'creditsAvailable')),
+          // What the wallet held after this row landed. `creditBalanceAfter` is a
           // real field on the transaction (`internal/domain/wallet/transaction.go`),
           // so the log's running-balance column needs no arithmetic of our own.
-          balanceAfter: creditOf(rowAmountPaise(row, 'credit_balance_after')),
+          balanceAfter: creditOf(rowAmountPaise(row, 'creditBalanceAfter')),
           expiresAt: rowExpiry(row),
-          orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotency_key || null,
+          orderId: (row.metadata && row.metadata.fleet_order_id) || row.idempotencyKey || null,
           provider: (row.metadata && row.metadata.provider) || null,
           description: (row.metadata && row.metadata.description) || row.description || null,
         };
@@ -905,6 +1014,11 @@ module.exports = {
   topValuesFor,
   fanOut,
   reasonLabel,
+  // The isolation contract, exported because a test that re-implements them tests
+  // nothing: the point is that the routes call THESE.
+  scopeViolationOf,
+  parseFilters,
+  partition,
   PLAN_REASONS,
   ADDON_REASONS,
   NOT_USAGE_REASONS,

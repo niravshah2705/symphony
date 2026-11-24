@@ -962,6 +962,19 @@ const BILLING = Object.freeze({
   usageRetentionDays: toPositiveNumber(process.env.BILLING_USAGE_RETENTION_DAYS, 90),
   slackWebhookUrl: proxied('/slack-webhook', process.env.BILLING_SLACK_WEBHOOK_URL, ''),
   rechargeIntervalMin: toPositiveNumber(process.env.BILLING_RECHARGE_INTERVAL_MIN, 60),
+  // Who may ASSERT an organization on a billing request. The gateway derives the
+  // caller's org server-side and forwards it as a trusted header; the billing
+  // service honors those headers only from a caller that proves it is the gateway.
+  // In cloud mode (`MESSAGING_MODE=pubsub`) the proof is a Google ID token minted
+  // for `trustedCallerAudience` and signed by one of these service accounts; in
+  // direct mode it is `INTERNAL_API_TOKEN`. Both lists are fail-closed when unset
+  // — an unproven request addresses this deployment's own org and never a named
+  // one — so a missing value degrades the Usage page rather than widening it.
+  trustedServiceAccounts: String(process.env.BILLING_TRUSTED_SERVICE_ACCOUNTS || '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+  trustedCallerAudience: String(process.env.BILLING_TRUSTED_CALLER_AUDIENCE || '').trim(),
 });
 
 /** Server configuration and shared constants. */

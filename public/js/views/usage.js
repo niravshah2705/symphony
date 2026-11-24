@@ -386,8 +386,9 @@ const asOfText = (body) => (body.asOf ? formatDate(body.asOf, { dateStyle: 'shor
 
 /**
  * The sign comes from the tab the server answered for, not from the row: FlexPrice
- * reports `credit_amount` and `debit_amount` as separate unsigned fields, so the
- * direction is a property of the query, and a row cannot contradict it.
+ * reports every wallet transaction's magnitude unsigned in `amount` (a credit and a
+ * debit row share the field; there is no `debit_amount`), so the direction is a
+ * property of the query, and a row cannot contradict it.
  */
 function signed(row, tab) {
   const text = creditText(row.amount);

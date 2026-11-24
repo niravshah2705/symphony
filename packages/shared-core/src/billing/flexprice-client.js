@@ -1,216 +1,196 @@
 'use strict';
 
-// The one HTTP client for the FlexPrice stack.
+// The one FlexPrice client for the billing surface.
 //
-// Three rules come from measurements in docs/FLEXPRICE_FINDINGS.md rather than
-// from taste, so they are enforced here instead of in a README:
+// This file is a façade: it names the operations the product performs and binds
+// each to a plane. `flexprice-sdk.js` is the transport that answers them through
+// `@flexprice/sdk`. Nothing here builds a URL, sets a header, retries a request or
+// calls `fetch` — that is the point of the migration, and it is what makes the
+// four rules below properties of the client rather than habits of the caller.
 //
-//  1. The environment id is never a parameter. Every data route needs
-//     `X-Environment-ID`, and a caller that can choose it can point a correctly
-//     keyed request at another environment in the same tenant. It comes from
-//     config and only from config.
-//  2. Retries need a dedup key. A retried POST without one is two credits, and
-//     FlexPrice dedups events by `event_id` and wallet writes by an
-//     `idempotency_key` JSON field (not a header — their router has none), so a
-//     retry is only safe when one of those is present. GETs are treated as keyed
-//     because they change nothing.
-//  3. There is no method for `PUT /v1/invoices/:id/payment` on purpose. It marks
-//     an invoice paid AND credits the wallet inside FlexPrice, which is the real
-//     double-credit loop for a recharge we already settled through the wallet
-//     API. If someone adds it, they have added the bug.
+// The rules, restated from `docs/FLEXPRICE_FINDINGS.md` (the transport's header
+// says how each is now enforced on SDK knobs):
 //
-// A 202 from `eventsBulk` proves the request was accepted, nothing more: the
-// Kafka publish happens later and a failure is swallowed. Delivery is proven by
-// the outbox read-back (Phase 3), not by this client's return value.
+//  1. The environment id is never a parameter. It comes from config and only from
+//     config, and a request that would leave without it does not leave.
+//  2. Retries need a dedup key: a GET, an `idempotencyKey`, or an event id whose
+//     store row is first-wins. A retried POST without one is two credits.
+//  3. There is no method here for `PUT /v1/invoices/:id/payment`, and the façade
+//     must not grow one. It marks an invoice paid AND credits the wallet inside
+//     FlexPrice — the double-credit loop for a recharge already settled through
+//     the wallet API. `attemptInvoicePayment` and `updateInvoicePaymentStatus`
+//     exist on the generated `invoices` resource and are deliberately unreachable.
+//  4. A scoped query must name its scope. Wallet, transaction and usage reads
+//     carry a wallet id or an `external_customer_id` (see `FlexpriceScopeError`):
+//     with one key for the whole tenant, an unscoped read is a cross-tenant read.
+//
+// ## What the SDK changed for callers
+//
+// Request bodies and responses are the generated models: **camelCase in,
+// camelCase out**. The wire still carries snake_case because the models remap it,
+// so a route contract that was measured against the live stack (`idempotency_key`
+// in the body, `event_id` as the event dedup key) holds exactly as before — it is
+// just no longer spelled by this repo.
+//
+// Two bodies therefore stay snake_case, on purpose:
+//
+//   * event ingest (`ingestEvent`, `eventsBulk`) — `IngestEventRequest.properties`
+//     is typed `record<string, string>`, so `cost_paise: 4120` is either refused or
+//     quoted, and a quoted number aggregates as zero: 202 accepted, nothing billed.
+//     Ingest rides the transport's raw seam with the measured body.
+//   * `debitWallet` — there is no generated `debit` operation at all.
+//
+// Dates: the store and the jobs hold ISO strings, the models want `Date`. The
+// façade converts on the fields it knows are typed `z.date()`, so a caller may
+// pass either; an unparseable value becomes the SDK's own validation error rather
+// than a silently dropped bound.
+//
+// A 202 from `eventsBulk` proves the request was accepted, nothing more: the Kafka
+// publish happens later and a failure is swallowed. Delivery is proven by the
+// outbox read-back, not by this client's return value.
 
 const { FLEXPRICE } = require('./flexprice-config');
+const {
+  PLANES,
+  FlexpriceError,
+  FlexpriceScopeError,
+  FlexpriceValidationError,
+  createSdkTransport,
+  isAlreadyExists,
+  rowsOf,
+  scopedField,
+  scopedId,
+} = require('./flexprice-sdk');
 
-const PLANES = Object.freeze({
-  // Event ingest and usage queries. Measured: an `event_ingestor` service account
-  // writes events and is refused when it creates a meter.
-  ingest: 'ingest',
-  // Anything that can move money or change what money is owed: customers,
-  // wallets, prices, meters, invoices.
-  money: 'money',
-});
-
-const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
-const MAX_ATTEMPTS = 3;
-const BACKOFF_MS = 150;
-
-class FlexpriceError extends Error {
-  constructor({ method, route, status, body, code }) {
-    super(`flexprice ${method} ${route} -> ${status}${code ? ` ${code}` : ''}: ${truncate(body)}`);
-    this.name = 'FlexpriceError';
-    this.method = method;
-    this.route = route;
-    this.status = status;
-    this.code = code || null;
-    // The parsed body when it is JSON. Callers that branch on a specific
-    // FlexPrice error read this instead of matching the message string.
-    this.body = body;
+/** Normalize the date-typed fields of a request body; leave everything else alone. */
+function withDates(body, fields) {
+  const out = { ...body };
+  for (const field of fields) {
+    const value = out[field];
+    if (value === undefined || value === null || value === '') continue;
+    out[field] = value instanceof Date ? value : new Date(value);
   }
-}
-
-function truncate(value, max = 400) {
-  const text = typeof value === 'string' ? value : safeStringify(value);
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-function safeStringify(value) {
-  try { return JSON.stringify(value); } catch { return String(value); }
-}
-
-// Every id that reaches a URL is interpolated into a path segment, and the ids
-// come from the store or from a FlexPrice response — not from a literal. Encoding
-// here means a value containing `/` or `?` addresses one wallet rather than
-// rewriting the route.
-const seg = (value) => encodeURIComponent(String(value));
-
-function parseJson(text) {
-  try { return JSON.parse(text); } catch { return null; }
-}
-
-/**
- * The rows of a list response, whichever of its three shapes FlexPrice used.
- *
- * Measured against the live stack: search routes answer `{items}`, `GET
- * /v1/environments` answers `{environments}`, and `GET /v1/customers/:id/wallets`
- * answers a bare array. A caller that picks one of those keys and finds nothing
- * does not get an error — it gets "there are none", which in the wallet case
- * means creating a resource that already exists and reading back no id.
- */
-function rowsOf(out) {
-  if (Array.isArray(out)) return out;
-  if (!out || typeof out !== 'object') return [];
-  const keyed = ['items', 'data', 'environments', 'wallets', 'prices', 'meters'];
-  for (const key of keyed) if (Array.isArray(out[key])) return out[key];
-  return [];
+  return out;
 }
 
 /**
  * Build a client over a config snapshot.
  *
- * `fetchImpl` is injectable so the unit tests (and the Phase 5 Zoho contract
- * test) run without a stack. There is no default key argument: a client that
- * could be handed a key would be a client that gets handed the config-map one.
+ * `fetchImpl` is injectable so the unit tests (and the Phase 5 Zoho contract test)
+ * run without a stack; it is the transport's seam and receives the finished
+ * `Request`, after auth headers, timeout and retry cloning. There is no key
+ * argument: a client that could be handed a key would be a client that gets handed
+ * the config-map one.
  */
-function createFlexpriceClient({ config = FLEXPRICE, fetchImpl = globalThis.fetch, sleep = defaultSleep } = {}) {
-  if (typeof fetchImpl !== 'function') {
-    throw new TypeError('flexprice-client: global fetch is unavailable; pass fetchImpl');
-  }
-  const base = String(config.baseUrl || '').replace(/\/+$/, '');
-  const environmentId = config.environmentId;
+function createFlexpriceClient({ config = FLEXPRICE, fetchImpl = globalThis.fetch } = {}) {
+  const transports = {
+    [PLANES.money]: createSdkTransport({ config, plane: PLANES.money, fetchImpl }),
+    [PLANES.ingest]: createSdkTransport({ config, plane: PLANES.ingest, fetchImpl }),
+  };
+  const money = transports[PLANES.money];
+  const ingest = transports[PLANES.ingest];
+  const at = (plane) => (plane === PLANES.ingest ? ingest : money);
 
-  function headersFor(plane) {
-    const key = config.keys && config.keys[plane];
-    if (!key) {
-      // A missing plane key is a config error, not an HTTP error: say which
-      // plane, so the operator runs provisioning rather than rotating a secret
-      // that was never the problem.
-      throw new Error(`flexprice-client: no API key configured for the '${plane}' plane (run scripts/flexprice-provision.js)`);
-    }
-    const headers = { 'x-api-key': key, 'Content-Type': 'application/json' };
-    // `/health` is the one route that needs neither; sending a bogus header there
-    // would make a stack-up check fail on config instead of on the stack.
-    if (environmentId) headers['X-Environment-ID'] = environmentId;
-    return headers;
+  function topUp(walletId, body, idempotencyKey) {
+    const id = scopedId('POST wallets/:id/top-up', 'walletId', walletId);
+    // `idempotency_key` is a JSON field FlexPrice reads; their router has no
+    // `Idempotency-Key` header, so sending one would buy a retry that duplicates
+    // the write. The model remaps this back to the snake_case name on the wire.
+    const request = withDates(
+      { ...body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+      ['effectiveDate'],
+    );
+    return money.invoke(
+      { method: 'POST', pattern: 'wallets/{id}/top-up', params: { id }, idempotencyKey },
+      (client, policy) => client.wallets.topUpWallet(id, request, policy),
+    );
   }
-
-  async function once({ plane, method, route, body }) {
-    const url = `${base}${route}`;
-    const headers = plane === null ? {} : headersFor(plane);
-    const res = await fetchImpl(url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : safeStringify(body),
-      signal: AbortSignal.timeout(config.timeoutMs),
-    });
-    const text = await res.text();
-    const json = parseJson(text);
-    return { status: res.status, text, json };
-  }
-
-  async function request(opts) {
-    const { method, route } = opts;
-    // `idempotency_key` is a JSON field FlexPrice reads (dto/wallet.go:346,589);
-    // there is no `Idempotency-Key` header anywhere in their router, so sending
-    // one would buy a retry that duplicates the write. Events have no such field
-    // — their dedup is `event_id`, first-wins — so a caller that is safe to retry
-    // for another reason says so with `deduped`.
-    const body = opts.idempotencyKey && method !== 'GET'
-      ? { ...(opts.body || {}), idempotency_key: opts.idempotencyKey }
-      : opts.body;
-    const mayRetry = opts.deduped === true || method === 'GET' || Boolean(opts.idempotencyKey);
-    let lastError = null;
-    for (let attempt = 1; attempt <= (mayRetry ? MAX_ATTEMPTS : 1); attempt += 1) {
-      let out;
-      try {
-        out = await once({ plane: opts.plane, method, route, body });
-      } catch (err) {
-        // Timeout / connection refused: the request may or may not have landed,
-        // which is exactly what a dedup key is for.
-        lastError = new Error(`flexprice ${method} ${route} failed before a response: ${err.message}`);
-        if (!mayRetry || attempt === MAX_ATTEMPTS) throw lastError;
-        await sleep(BACKOFF_MS * 2 ** (attempt - 1));
-        continue;
-      }
-      if (out.status >= 200 && out.status < 300) return out.json === null ? { raw: out.text } : out.json;
-      if (isAlreadyExists(out)) {
-        // FlexPrice mints most resources under a unique index and answers 409
-        // without a pre-check, so a replay is indistinguishable from a competing
-        // creator. Both mean the resource exists: report it, do not raise.
-        return { alreadyExists: true, status: out.status, detail: out.json || out.text };
-      }
-      if (RETRYABLE_STATUS.has(out.status) && mayRetry && attempt < MAX_ATTEMPTS) {
-        await sleep(BACKOFF_MS * 2 ** (attempt - 1));
-        continue;
-      }
-      throw new FlexpriceError({
-        method,
-        route,
-        status: out.status,
-        body: out.json || out.text,
-        code: out.json && (out.json.code || out.json.error_code),
-      });
-    }
-    throw lastError || new Error(`flexprice ${method} ${route}: exhausted attempts`);
-  }
-
-  const get = (route, opts = {}) => request({ plane: opts.plane || 'money', method: 'GET', route, ...opts });
-  const post = (route, body, opts = {}) => request({ plane: 'money', method: 'POST', route, body, ...opts });
 
   return {
     // Read-only knobs a caller may legitimately want.
     planes: PLANES,
-    request,
 
-    getHealth: () => request({ plane: null, method: 'GET', route: '/health' }),
+    /**
+     * The seam for a route this façade does not model — an admin call a provisioning
+     * or probe script makes against `/v1/secrets/api/keys`, `/v1/plans`, a price
+     * lookup. It rides the transport, so the environment id, the plane key, the
+     * timeout and the retry rule still apply. What it cannot do is enforce rule 4:
+     * nothing here asserts a scope on a route it does not know, which is why no
+     * request path in the product calls it.
+     */
+    request: (opts = {}) => {
+      const { plane = PLANES.money, method = 'GET', route, body, idempotencyKey = null, deduped = false } = opts;
+      if (typeof route !== 'string' || !route.startsWith('/')) {
+        throw new TypeError(`flexprice-client: request() requires a route beginning with '/', got ${String(route)}`);
+      }
+      const underVersionRoot = route.startsWith('/v1/');
+      return at(plane).raw({
+        method,
+        pattern: underVersionRoot ? route.slice('/v1/'.length) : route.slice(1),
+        root: !underVersionRoot,
+        route,
+        body,
+        idempotencyKey,
+        deduped,
+      });
+    },
+
+    getHealth: () => money.raw({ method: 'GET', pattern: 'health', root: true, anonymous: true }),
 
     // ---- catalog (money plane) ------------------------------------------------
-    listEnvironments: () => get('/v1/environments'),
-    createCustomer: (customer) => post('/v1/customers', customer),
-    getCustomerByExternalId: (externalId) => get(`/v1/customers/external/${seg(externalId)}`),
-    createMeter: (meter) => post('/v1/meters', meter),
-    listMeters: () => get('/v1/meters'),
-    createPrice: (price) => post('/v1/prices', price),
-    searchPrices: (query) => post('/v1/prices/search', query),
+    // `GET /v1/environments` has no generated operation (`cloneEnvironment` only).
+    listEnvironments: () => money.raw({ method: 'GET', pattern: 'environments' }),
+    createCustomer: (customer) => money.invoke(
+      { method: 'POST', pattern: 'customers' },
+      (client, policy) => client.customers.createCustomer(customer, policy),
+    ),
+    getCustomerByExternalId: (externalId) => {
+      const id = scopedId('GET customers/external/:external_id', 'externalId', externalId);
+      return money.invoke(
+        { method: 'GET', pattern: 'customers/external/{external_id}', params: { external_id: id } },
+        (client, policy) => client.customers.getCustomerByExternalId(id, policy),
+      );
+    },
+    // There is no `meters` resource in the published spec at all.
+    createMeter: (meter) => money.raw({ method: 'POST', pattern: 'meters', body: meter }),
+    listMeters: () => money.raw({ method: 'GET', pattern: 'meters' }),
+    createPrice: (price) => money.invoke(
+      { method: 'POST', pattern: 'prices' },
+      (client, policy) => client.prices.createPrice(price, policy),
+    ),
+    searchPrices: (query) => money.invoke(
+      { method: 'POST', pattern: 'prices/search' },
+      (client, policy) => client.prices.queryPrice(query, policy),
+    ),
 
     // ---- wallets (money plane) -----------------------------------------------
-    createWallet: (wallet) => post('/v1/wallets', wallet),
+    createWallet: (wallet) => money.invoke(
+      { method: 'POST', pattern: 'wallets' },
+      (client, policy) => client.wallets.createWallet(wallet, policy),
+    ),
     /**
-     * `GET /v1/customers/:id/wallets` answers a BARE JSON array (measured live),
-     * unlike the search routes' `{items}` envelope. Normalised here so a caller
-     * cannot confuse "this customer has no wallets" with "the response had no
-     * items key": that confusion is what made a second recharge for the same org
-     * re-create a wallet, take the `409 already_exists` echo as the created
-     * resource, and then read the balance of wallet `undefined`.
+     * The org's own wallets, as `{ items }`.
+     *
+     * `GET /v1/customers/:id/wallets` answers a BARE JSON array (measured live, and
+     * the generated matcher is `z.array(WalletResponse)`), unlike the search routes'
+     * `{items}` envelope. Normalising it here is not decoration: a caller that reads
+     * `out.items` off a bare array gets `undefined`, treats it as "this customer has
+     * no wallets", re-creates one, takes the `409 already_exists` echo as the created
+     * resource, and then reads the balance of wallet `undefined`.
      */
     listWalletsByCustomer: async (customerId) => {
-      const out = await get(`/v1/customers/${seg(customerId)}/wallets`);
-      return { items: rowsOf(out) };
+      const id = scopedId('GET customers/:id/wallets', 'customerId', customerId);
+      const wallets = await money.invoke(
+        { method: 'GET', pattern: 'customers/{id}/wallets', params: { id } },
+        (client, policy) => client.wallets.getWalletsByCustomerId(id, policy),
+      );
+      return { items: wallets };
     },
-    topUpWallet: (walletId, body, opts = {}) => post(`/v1/wallets/${seg(walletId)}/top-up`, body, opts),
+    topUpWallet: (walletId, body = {}, opts = {}) => topUp(
+      walletId,
+      body,
+      opts.idempotencyKey || body.idempotencyKey || null,
+    ),
     /**
      * Promotional / free credit grant.
      *
@@ -220,69 +200,145 @@ function createFlexpriceClient({ config = FLEXPRICE, fetchImpl = globalThis.fetc
      */
     grantPromo: (walletId, { credits, expiresAt = null, priority = 0, idempotencyKey, description } = {}) => {
       if (!idempotencyKey) throw new TypeError('flexprice-client: grantPromo requires an idempotencyKey');
-      return post(`/v1/wallets/${seg(walletId)}/top-up`, {
-        transaction_reason: 'FREE_CREDIT_GRANT',
-        credits_to_add: String(credits),
+      return topUp(walletId, {
+        transactionReason: 'FREE_CREDIT_GRANT',
+        creditsToAdd: String(credits),
         priority,
-        ...(expiresAt ? { expiry_date_utc: expiresAt } : {}),
+        ...(expiresAt ? { expiryDateUtc: expiresAt } : {}),
         ...(description ? { description } : {}),
-      }, { idempotencyKey });
+      }, idempotencyKey);
     },
     /**
      * The only route that can push a balance below zero, and the only reason the
      * gate needs three states. `idempotencyKey` is required here even though the
-     * API tolerates its absence, because a platform charge without one is a
-     * charge that can be applied twice.
+     * API tolerates its absence, because a platform charge without one is a charge
+     * that can be applied twice.
+     *
+     * Raw seam, and the body keeps FlexPrice's own snake_case field names: there is
+     * no generated `debit` operation, so there is no model to serialize it.
      */
     debitWallet: (walletId, { credits, idempotencyKey, description, metadata } = {}) => {
       if (!idempotencyKey) throw new TypeError('flexprice-client: debitWallet requires an idempotencyKey');
-      return post(`/v1/wallets/${seg(walletId)}/debit`, {
-        transaction_reason: 'MANUAL_BALANCE_DEBIT',
-        credits: String(credits),
-        ...(description ? { description } : {}),
-        ...(metadata ? { metadata } : {}),
-      }, { idempotencyKey });
+      const id = scopedId('POST wallets/:id/debit', 'walletId', walletId);
+      return money.raw({
+        method: 'POST',
+        pattern: 'wallets/{id}/debit',
+        params: { id },
+        idempotencyKey,
+        body: {
+          transaction_reason: 'MANUAL_BALANCE_DEBIT',
+          credits: String(credits),
+          idempotency_key: idempotencyKey,
+          ...(description ? { description } : {}),
+          ...(metadata ? { metadata } : {}),
+        },
+      });
     },
-    walletRealTimeBalance: (walletId, { cached = false, expand = null } = {}) => {
-      const q = expand ? `?expand=${encodeURIComponent(expand)}` : '';
-      return get(`/v1/wallets/${seg(walletId)}/balance/${cached ? 'real-time-cached' : 'real-time'}${q}`);
+    /**
+     * The wallet's live projection. The transport has one balance route,
+     * `.../balance/real-time`: the SDK does not generate the `real-time-cached`
+     * variant, and nothing in the product asked for a second, staler number.
+     */
+    walletRealTimeBalance: (walletId, { expand = null } = {}) => {
+      const id = scopedId('GET wallets/:id/balance/real-time', 'walletId', walletId);
+      return money.invoke(
+        { method: 'GET', pattern: 'wallets/{id}/balance/real-time', params: { id } },
+        (client, policy) => client.wallets.getWalletBalance(id, expand || undefined, policy),
+      );
     },
-    walletTransactionsSearch: (query) => post('/v1/wallets/transactions/search', query),
+    /**
+     * One wallet's ledger rows. The model's discriminator is `id`; `walletId` is
+     * accepted as the caller-facing spelling and renamed, never passed through —
+     * a key the model does not know is a key it drops, and a dropped `id` on this
+     * route is every wallet in the environment.
+     */
+    walletTransactionsSearch: (query = {}) => {
+      const walletId = scopedField('POST wallets/transactions/search', ['id', 'walletId'], query);
+      const filter = withDates({ ...query, id: String(walletId).trim() }, ['startTime', 'endTime']);
+      return money.invoke(
+        { method: 'POST', pattern: 'wallets/transactions/search' },
+        (client, policy) => client.wallets.queryWalletTransaction(filter, policy),
+      );
+    },
 
     // ---- events (ingest plane) -----------------------------------------------
     // Retry-safe because `event_id` is the dedup key and the store is first-wins
     // (measured): a replay of the same id adds nothing, and a replay with a
-    // different value under the same id is dropped rather than overwriting.
-    ingestEvent: (event, opts = {}) => post('/v1/events', event, { plane: PLANES.ingest, deduped: true, ...opts }),
-    eventsBulk: (events, opts = {}) => post('/v1/events/bulk', { events }, { plane: PLANES.ingest, deduped: true, ...opts }),
-    eventsUsage: (query) => post('/v1/events/usage', query, { plane: PLANES.ingest }),
-    eventsUsageMeter: (query) => post('/v1/events/usage/meter', query, { plane: PLANES.ingest }),
+    // different value under the same id is dropped rather than overwriting. Raw
+    // seam, because the generated model would quote a numeric `properties` value
+    // and a quoted number aggregates as zero.
+    ingestEvent: (event, opts = {}) => ingest.raw({ method: 'POST', pattern: 'events', body: event, deduped: true, ...opts }),
+    eventsBulk: (events, opts = {}) => ingest.raw({ method: 'POST', pattern: 'events/bulk', body: { events }, deduped: true, ...opts }),
+    /**
+     * Aggregated usage for one event name. `aggregationType` is required by the
+     * model and is not defaulted here: SUM for a cost meter and COUNT_UNIQUE for a
+     * seats meter are different bills, and a client that guesses which one the
+     * caller meant is the bug this repo already guards elsewhere.
+     *
+     * The selector is `externalCustomerId` and nothing else. Accepting the old
+     * snake_case spelling here would be the cross-tenant read Part A exists to
+     * prevent: the assertion would pass, and the model would strip the key it does
+     * not know — an unscoped usage query that looks scoped in the log.
+     */
+    eventsUsage: (query = {}) => {
+      scopedId('POST events/usage', 'externalCustomerId', query.externalCustomerId);
+      const body = withDates(query, ['startTime', 'endTime', 'billingAnchor']);
+      return ingest.invoke(
+        { method: 'POST', pattern: 'events/usage' },
+        (client, policy) => client.events.getUsageStatistics(body, policy),
+      );
+    },
+    eventsUsageMeter: (query = {}) => {
+      scopedId('POST events/usage/meter', 'externalCustomerId', query.externalCustomerId);
+      scopedId('POST events/usage/meter', 'meterId', query.meterId);
+      const body = withDates(query, ['startTime', 'endTime', 'billingAnchor']);
+      return ingest.invoke(
+        { method: 'POST', pattern: 'events/usage/meter' },
+        (client, policy) => client.events.getUsageByMeter(body, policy),
+      );
+    },
 
     // ---- invoices (money plane) ----------------------------------------------
-    createInvoice: (invoice, opts = {}) => post('/v1/invoices', invoice, opts),
-    searchInvoices: async (query) => {
-      const out = await post('/v1/invoices/search', query);
-      return { ...out, items: rowsOf(out) };
+    createInvoice: (invoice = {}, opts = {}) => {
+      const idempotencyKey = opts.idempotencyKey || invoice.idempotencyKey || null;
+      const body = withDates(
+        { ...invoice, ...(idempotencyKey ? { idempotencyKey } : {}) },
+        ['issueDate', 'dueDate', 'periodStart', 'periodEnd'],
+      );
+      return money.invoke(
+        { method: 'POST', pattern: 'invoices', idempotencyKey },
+        (client, policy) => client.invoices.createInvoice(body, policy),
+      );
     },
-    getInvoice: (invoiceId) => get(`/v1/invoices/${seg(invoiceId)}`),
-    finalizeInvoice: (invoiceId, opts = {}) => post(`/v1/invoices/${seg(invoiceId)}/finalize`, undefined, opts),
+    searchInvoices: (query = {}) => money.invoke(
+      { method: 'POST', pattern: 'invoices/search' },
+      (client, policy) => client.invoices.queryInvoice(withDates(query, ['startTime', 'endTime']), policy),
+    ),
+    getInvoice: (invoiceId) => {
+      const id = scopedId('GET invoices/:id', 'invoiceId', invoiceId);
+      return money.invoke(
+        { method: 'GET', pattern: 'invoices/{id}', params: { id } },
+        (client, policy) => client.invoices.getInvoice(id, undefined, undefined, undefined, policy),
+      );
+    },
+    finalizeInvoice: (invoiceId, opts = {}) => {
+      const id = scopedId('POST invoices/:id/finalize', 'invoiceId', invoiceId);
+      return money.invoke(
+        { method: 'POST', pattern: 'invoices/{id}/finalize', params: { id }, idempotencyKey: opts.idempotencyKey || null },
+        (client, policy) => client.invoices.finalizeInvoice(id, policy),
+      );
+    },
   };
-}
-
-function isAlreadyExists(out) {
-  if (out.status !== 409) return false;
-  const text = `${out.json && (out.json.code || out.json.message) || ''} ${out.text || ''}`.toLowerCase();
-  return /already_exists|already exists|duplicate|conflict/.test(text);
-}
-
-function defaultSleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 module.exports = {
   PLANES,
   FlexpriceError,
+  FlexpriceScopeError,
+  FlexpriceValidationError,
   createFlexpriceClient,
   isAlreadyExists,
   rowsOf,
+  scopedField,
+  scopedId,
 };

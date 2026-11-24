@@ -20,10 +20,11 @@ const gate = require('./gate');
 const ON = { gatePolicy: 'enforced' };
 
 /**
- * The two calls the gate makes, in the shapes measured live against v2.1.48:
- * `GET /v1/customers/external/:id`, then the wallet list (a bare array), then the
- * real-time projection (money as quoted decimal strings, `omitempty` nowhere in
- * sight). `credits` is what the projection answers.
+ * The two calls the gate makes, in the shapes the SDK models answer for
+ * v2.1.48: `getCustomerByExternalId` (a flat `CustomerResponse`), the wallet list
+ * (`{items}` of `WalletResponse`), then the real-time projection (money as quoted
+ * decimal strings, `omitempty` nowhere in sight). `credits` is what the projection
+ * answers.
  */
 function makeFlex({ credits = '500', wallets = null, customer = true, throws = null, delayMs = 0 } = {}) {
   const calls = { customer: [], wallets: [], balance: [] };
@@ -32,22 +33,22 @@ function makeFlex({ credits = '500', wallets = null, customer = true, throws = n
       calls.customer.push(orgId);
       if (throws) throw throws;
       if (!customer) throw Object.assign(new Error('not found'), { status: 404 });
-      return { id: `cust_of_${orgId}`, external_id: orgId };
+      return { id: `cust_of_${orgId}`, externalId: orgId };
     },
     listWalletsByCustomer: async (customerId) => {
       calls.wallets.push(customerId);
       if (wallets !== null) return { items: wallets };
-      return { items: [{ id: `wal_of_${customerId}`, currency: 'inr', wallet_type: 'PRE_PAID', conversion_rate: '1' }] };
+      return { items: [{ id: `wal_of_${customerId}`, currency: 'inr', walletType: 'PRE_PAID', conversionRate: '1' }] };
     },
     walletRealTimeBalance: async (walletId) => {
       calls.balance.push(walletId);
       if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
       return {
         id: walletId,
-        real_time_credit_balance: credits,
-        current_period_usage: '12.50',
-        unpaid_invoices_amount: '0',
-        is_cached_fallback: false,
+        realTimeCreditBalance: credits,
+        currentPeriodUsage: '12.50',
+        unpaidInvoicesAmount: '0',
+        isCachedFallback: false,
       };
     },
   };
@@ -186,20 +187,38 @@ test('gateEnabled:false opts out, and costs no read', () => {
   assert.equal(flex.calls.customer.length, 0);
 });
 
-test('the cached wallet id on the account is used instead of the lookup', async () => {
+test('a cached wallet id is used, but only once FlexPrice says it is the org’s', async () => {
+  const orgId = 'org-gate-cached';
+  // `makeFlex` mints the org's wallet as `wal_of_cust_of_<orgId>`, so this stored id
+  // is one the customer genuinely has.
+  const owned = `wal_of_cust_of_${orgId}`;
   const flex = makeFlex({ credits: '3' });
-  store.upsertBillingAccount('org-gate-cached', { flexprice: { walletId: 'wal_saved_1' } });
-  await gate.ensureFundStatus('org-gate-cached', { ...ON, client: flex.client });
-  assert.equal(flex.calls.customer.length, 0);
-  assert.deepEqual(flex.calls.balance, ['wal_saved_1']);
+  store.upsertBillingAccount(orgId, { flexprice: { walletId: owned } });
+  await gate.ensureFundStatus(orgId, { ...ON, client: flex.client });
+  assert.deepEqual(flex.calls.balance, [owned], 'the stored id is the one read, not a re-resolved one');
+  assert.deepEqual(flex.calls.customer, [orgId], 'and it was proven against this org before it was trusted');
+});
+
+test('a cached wallet id the org does not own reads no balance and reports unknown', async () => {
+  const orgId = 'org-gate-foreign-wallet';
+  const flex = makeFlex({ credits: '900' });
+  // The mis-provisioned / hand-edited record: a real wallet id, belonging to
+  // somebody else. One FlexPrice key spans the tenant, so reading it would have
+  // answered with another org's money and looked entirely plausible.
+  store.upsertBillingAccount(orgId, { flexprice: { walletId: 'wal_of_cust_of_org-elsewhere' } });
+  const status = await gate.ensureFundStatus(orgId, { ...ON, client: flex.client });
+  assert.deepEqual(flex.calls.balance, [], 'a wallet that is not the org’s is never read');
+  assert.equal(status.balancePaise, null);
+  assert.equal(status.state, 'unknown', 'unknown, not zero: an unreadable record is not a spent wallet');
+  assert.equal(status.fundsAvailable, true, 'the gate’s unknown-state policy still admits runs');
 });
 
 test('only the INR prepaid wallet is the balance of record', async () => {
   const flex = makeFlex({
     credits: '3',
     wallets: [
-      { id: 'wal_free', currency: 'usd', wallet_type: 'FREE_TIER' },
-      { id: 'wal_inr', currency: 'inr', wallet_type: 'PRE_PAID' },
+      { id: 'wal_free', currency: 'usd', walletType: 'FREE_TIER' },
+      { id: 'wal_inr', currency: 'inr', walletType: 'PRE_PAID' },
     ],
   });
   await gate.ensureFundStatus('org-gate-two', { ...ON, client: flex.client });
@@ -209,8 +228,8 @@ test('only the INR prepaid wallet is the balance of record', async () => {
 test('a balance the code cannot read admits, and says which one it could not read', async () => {
   const flex = {
     getCustomerByExternalId: async () => ({ id: 'cust_x' }),
-    listWalletsByCustomer: async () => ({ items: [{ id: 'wal_x', currency: 'inr', wallet_type: 'PRE_PAID' }] }),
-    walletRealTimeBalance: async () => ({ real_time_credit_balance: 'NaN-ish' }),
+    listWalletsByCustomer: async () => ({ items: [{ id: 'wal_x', currency: 'inr', walletType: 'PRE_PAID' }] }),
+    walletRealTimeBalance: async () => ({ realTimeCreditBalance: 'NaN-ish' }),
   };
   const status = await gate.ensureFundStatus('org-gate-junk', { ...ON, client: flex });
   assert.equal(status.fundsAvailable, true);

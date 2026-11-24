@@ -1444,3 +1444,38 @@ Practical traps found doing it:
   a 404 does not prove a route is absent — see also `deploy/flexprice/README.md`, whose
   `/v1/tenants` curl example was stale.
 
+
+## 16. What the endpoint now refuses to ask (2026-11-22)
+
+§7 established that one FlexPrice key spans the environment and that read RBAC is
+shadow-only: the narrowest useful role can read every wallet balance, invoice and
+meter usage inside its tenant. §15 added the two shapes that make an unscoped query a
+cross-tenant one — `POST /v1/events/usage` without `external_customer_id` answers the
+tenant total, and a wallet read that ignores its filter answers *every wallet in the
+environment*. Neither is a provider bug; both mean the org selector has to be a
+property of the request our code builds, not of the network in front of it.
+
+So three refusals are now in the code, each with a test that names the other tenant:
+
+- **`trusted-caller.js`** honors the gateway's `x-ai-fleet-billing-*` headers only
+  behind a proof (`x-internal-token`, a Google OIDC ID token for this service's
+  audience signed by `BILLING_TRUSTED_SERVICE_ACCOUNTS`, or a loopback socket on the
+  `AUTH_MODE=disabled` profile). Everything else is pinned to `CONFIG.BILLING.orgId`
+  with `isAdmin: false`. `X-Forwarded-For` is never a proof — the gateway writes it.
+- **`flexprice-reads.js` `guard()`** returns a degraded envelope and **zero** FlexPrice
+  calls for an unproven caller or an org id that is not id-shaped
+  (`unscoped_caller` / `unscoped_org_id`), per the §14 degraded contract.
+- **`flexprice-client.js`** refuses the call before transport when a scoped read has no
+  selector (`FlexpriceScopeError`): `events/usage[/meter]` needs `external_customer_id`,
+  `wallets/transactions/search` needs `id`, and the wallet/customer reads need their id.
+  The route check and the client check are deliberately redundant — a future route that
+  forgets the selector fails at the client, not in production.
+
+The one new provider-side number: proving a stored `account.flexprice.walletId`
+belongs to the org costs **two reads** (`GET /v1/customers/external/:orgId` then
+`GET /v1/customers/:id/wallets`) — the same pair `resolveWalletId` already pays on a
+cache miss. It is memoized per *(org, wallet)* pair for 10 minutes; keyed by the wallet
+id alone it would have let the first org to verify a wallet vouch for every later org
+holding the same id, which is the exact record this check exists to catch. A mismatch
+(`wallet_org_mismatch`) suppresses the last-known-view fallback: an unread balance is
+reportable, another tenant's balance is not.

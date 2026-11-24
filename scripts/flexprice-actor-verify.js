@@ -138,7 +138,7 @@ async function main() {
       timeoutMs: 5000, keys: { ingest: stack.FLEXPRICE_API_KEY_INGEST, money: stack.FLEXPRICE_API_KEY_MONEY },
     };
     const client = require('../packages/shared-core/src/billing/flexprice-client').createFlexpriceClient({ config });
-    await client.createCustomer({ external_id: orgId, name: orgId, address_line1: 'Not provided', address_country: 'IN' });
+    await client.createCustomer({ externalId: orgId, name: orgId, addressLine1: 'Not provided', addressCountry: 'IN' });
     const drain = require('../packages/shared-core/src/billing/outbox-drain');
     await drain.drainOnce({ enabled: true, client });
     await waitFor(async () => {

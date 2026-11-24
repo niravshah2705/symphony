@@ -29,7 +29,9 @@ function invoiceSearch(key) {
     filters: [{
       field: 'idempotency_key',
       operator: 'eq',
-      data_type: 'string',
+      // `field` is FlexPrice's own column name and stays snake_case; `dataType` is
+      // the model's key, which the SDK serializes to `data_type`.
+      dataType: 'string',
       value: { string: key },
     }],
     limit: 2,
@@ -38,16 +40,16 @@ function invoiceSearch(key) {
 
 function invoiceBody({ orgId, customerId, month }) {
   return {
-    customer_id: customerId,
-    invoice_type: 'ONE_OFF',
-    billing_reason: 'MANUAL',
-    invoice_status: 'FINALIZED',
+    customerId,
+    invoiceType: 'ONE_OFF',
+    billingReason: 'MANUAL',
+    invoiceStatus: 'FINALIZED',
     currency: 'INR',
     subtotal: String(CHARGE_CREDITS),
     total: String(CHARGE_CREDITS),
-    amount_due: String(CHARGE_CREDITS),
-    line_items: [{
-      display_name: `Software Factory platform charge ${month}`,
+    amountDue: String(CHARGE_CREDITS),
+    lineItems: [{
+      displayName: `Software Factory platform charge ${month}`,
       quantity: '1',
       amount: String(CHARGE_CREDITS),
     }],
@@ -82,7 +84,7 @@ async function findDebit(client, walletId, key) {
     filters: [{
       field: 'idempotency_key',
       operator: 'eq',
-      data_type: 'string',
+      dataType: 'string',
       value: { string: key },
     }],
     limit: 2,
@@ -94,7 +96,7 @@ async function findDebit(client, walletId, key) {
 
 async function readBalance(client, walletId) {
   const out = await client.walletRealTimeBalance(walletId);
-  const credits = Number(out && out.real_time_credit_balance);
+  const credits = Number(out && out.realTimeCreditBalance);
   if (!Number.isFinite(credits)) throw new Error(`wallet ${walletId} returned no readable real_time_credit_balance`);
   return credits;
 }

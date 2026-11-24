@@ -6,6 +6,9 @@ const { CONFIG } = require('../config');
 const { resolveOrgId, SHARED_ORG_ID } = require('./org-context');
 const { paiseFromCredits } = require('./money-wire');
 const { createFlexpriceClient, rowsOf } = require('./flexprice-client');
+const {
+  assertWalletOwnership, rememberOwnership, forgetOwnership, customerIdOf, WalletScopeError,
+} = require('./wallet-scope');
 
 /**
  * Organization-level admission: may this org start another run?
@@ -134,10 +137,20 @@ function stateForPaise(paise) {
   return STATE.exhausted;
 }
 
-/** `walletId` for the org's INR prepaid wallet, without creating anything. */
+/**
+ * `walletId` for the org's INR prepaid wallet, without creating anything.
+ *
+ * The stored id is a cache, not an answer: one FlexPrice key spans the tenant, so
+ * `account.flexprice.walletId` is verified against the org's own customer before it
+ * is handed back (wallet-scope.js). A record that cannot be proven throws — reading
+ * another org's balance is not a slower path, it is the wrong number.
+ */
 async function resolveWalletId(client, orgId, account) {
   const cached = account && account.flexprice && account.flexprice.walletId;
-  if (cached) return cached;
+  if (cached) {
+    await assertWalletOwnership(client, orgId, cached);
+    return cached;
+  }
   let customer = null;
   try {
     customer = await client.getCustomerByExternalId(orgId);
@@ -145,15 +158,16 @@ async function resolveWalletId(client, orgId, account) {
     if (err && err.status === 404) return null;
     throw err;
   }
-  const customerId = customer && (customer.id || (customer.customer && customer.customer.id));
+  const customerId = customerIdOf(customer);
   if (!customerId) return null;
   const wallets = rowsOf(await client.listWalletsByCustomer(customerId));
   // `currency` answers lower-case from this route, hence the case-insensitive
   // compare; there is normally exactly one wallet per customer.
   const wallet = wallets.find(
     (w) => String(w.currency || '').toUpperCase() === 'INR'
-      && String(w.wallet_type || '').toUpperCase() === 'PRE_PAID',
+      && String(w.walletType || '').toUpperCase() === 'PRE_PAID',
   );
+  if (wallet && wallet.id) rememberOwnership(orgId, wallet.id, customerId);
   return wallet && wallet.id ? wallet.id : null;
 }
 
@@ -161,7 +175,17 @@ async function fetchView(orgId, deps = {}) {
   const client = deps.client
     || createFlexpriceClient({ config: deps.flexpriceConfig || CONFIG.FLEXPRICE });
   const account = accountFor(orgId, deps);
-  const walletId = await resolveWalletId(client, orgId, account);
+  let walletId = null;
+  try {
+    walletId = await resolveWalletId(client, orgId, account);
+  } catch (err) {
+    if (err instanceof WalletScopeError) {
+      // Not an outage to ride out on a stale view: the number this process would
+      // hold is somebody else's. Report the balance as unknown instead.
+      return emptyView(orgId, 'wallet_unverified', { error: err.message.slice(0, 200) });
+    }
+    throw err;
+  }
   if (!walletId) {
     // Not the same as "zero". A recharge or the provisioner creates the wallet,
     // so this is a provisioning state, and blocking on it would take down every
@@ -169,10 +193,10 @@ async function fetchView(orgId, deps = {}) {
     return emptyView(orgId, 'wallet_missing');
   }
   const balance = await client.walletRealTimeBalance(walletId);
-  if (!balance || balance.real_time_credit_balance === undefined) {
+  if (!balance || balance.realTimeCreditBalance === undefined) {
     return emptyView(orgId, 'balance_unreadable', { walletId });
   }
-  const credits = String(balance.real_time_credit_balance);
+  const credits = String(balance.realTimeCreditBalance);
   let balancePaise;
   try {
     balancePaise = paiseFromCredits(credits);
@@ -203,8 +227,8 @@ async function fetchView(orgId, deps = {}) {
     // `unpaid_invoices_amount` is kept on the other hand: it is reported, never
     // subtracted — FlexPrice computes `real_time_credit_balance` from it itself,
     // so taking it off again would bill the same money twice.
-    unpaidInvoicesPaise: paise(balance.unpaid_invoices_amount),
-    isCachedFallback: Boolean(balance.is_cached_fallback),
+    unpaidInvoicesPaise: paise(balance.unpaidInvoicesAmount),
+    isCachedFallback: Boolean(balance.isCachedFallback),
     fetchedAt: Date.now(),
     nextAttemptAt: 0,
   };
@@ -274,6 +298,16 @@ function shape(orgId, view, { policy, named }) {
   };
   if (policy === 'off') return base;
   if (!view || view.state === STATE.unknown) {
+    if (view && view.reason === 'wallet_unverified' && !reportedUnknown.has(`${orgId}:scope`)) {
+      reportedUnknown.add(`${orgId}:scope`);
+      // Runs continue (the gate's unknown-state policy), but this is a record to
+      // fix, not a condition to ride out: the stored wallet is not this org's.
+      log.error('billing_gate_wallet_unverified', {
+        orgId,
+        note: `${named} stores a FlexPrice wallet the org's own customer does not have; balance unknown, runs allowed`,
+        detail: view.error || null,
+      });
+    }
     if (view && view.reason === 'wallet_missing' && !reportedUnknown.has(`${orgId}:wallet`)) {
       reportedUnknown.add(`${orgId}:wallet`);
       log.warn('billing_gate_wallet_missing', {
@@ -408,12 +442,16 @@ function invalidate(orgId = null) {
     // reset abandons them rather than racing them.
     inflight.clear();
     reportedUnknown.clear();
+    forgetOwnership();
     return { cleared: 'all' };
   }
   const key = String(orgId).trim();
   const had = views.delete(key);
   reportedUnknown.delete(key);
   reportedUnknown.delete(`${key}:wallet`);
+  // A settle can create the wallet, and an admin edit can replace a wrong one: the
+  // proof must be re-derived from FlexPrice, not served from before the change.
+  forgetOwnership(key);
   return { cleared: key, had };
 }
 

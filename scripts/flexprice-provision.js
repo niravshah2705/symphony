@@ -51,10 +51,10 @@ const CATALOG_PLAN = 'fleet-catalog';
 // would be right for exactly one recharge size, and tax is not a size.
 // `quantity` on the invoice line carries the taxable rupees.
 const CATALOG_FLAT_PRICES = [
-  { lookup_key: 'recharge-principal', display_name: 'Recharge value', unit_amount_paise: 100, rate_bps: null },
-  { lookup_key: 'gst-cgst-9', display_name: 'CGST @ 9%', unit_amount_paise: 9, rate_bps: 900 },
-  { lookup_key: 'gst-sgst-9', display_name: 'SGST @ 9%', unit_amount_paise: 9, rate_bps: 900 },
-  { lookup_key: 'gst-igst-18', display_name: 'IGST @ 18%', unit_amount_paise: 18, rate_bps: 1800 },
+  { lookupKey: 'recharge-principal', displayName: 'Recharge value', unit_amount_paise: 100, rate_bps: null },
+  { lookupKey: 'gst-cgst-9', displayName: 'CGST @ 9%', unit_amount_paise: 9, rate_bps: 900 },
+  { lookupKey: 'gst-sgst-9', displayName: 'SGST @ 9%', unit_amount_paise: 9, rate_bps: 900 },
+  { lookupKey: 'gst-igst-18', displayName: 'IGST @ 18%', unit_amount_paise: 18, rate_bps: 1800 },
 ];
 
 const METERS = [
@@ -272,7 +272,7 @@ async function ensurePlan(client) {
  */
 async function ensurePrice(client, planId, spec) {
   try {
-    const hit = await client.request({ plane: 'money', method: 'GET', route: `/v1/prices/lookup/${encodeURIComponent(spec.lookup_key)}` });
+    const hit = await client.request({ plane: 'money', method: 'GET', route: `/v1/prices/lookup/${encodeURIComponent(spec.lookupKey)}` });
     if (hit && hit.id) {
       // Converge rather than skip. A price that exists with the wrong amount is
       // the failure this catches: the first run of this script minted CGST at
@@ -282,13 +282,13 @@ async function ensurePrice(client, planId, spec) {
       const want = paiseFromDecimal(spec.amount);
       if (stored !== want) {
         if (DRY) {
-          report('price', spec.lookup_key, 'dry-run', `amount ${hit.amount} -> ${spec.amount}`);
+          report('price', spec.lookupKey, 'dry-run', `amount ${hit.amount} -> ${spec.amount}`);
           return hit.id;
         }
         await client.request({ plane: 'money', method: 'PUT', route: `/v1/prices/${encodeURIComponent(hit.id)}`, body: { amount: spec.amount } });
-        report('price', spec.lookup_key, 'updated', `${hit.amount} -> ${spec.amount} (${hit.id})`);
+        report('price', spec.lookupKey, 'updated', `${hit.amount} -> ${spec.amount} (${hit.id})`);
       } else {
-        report('price', spec.lookup_key, 'existing', hit.id);
+        report('price', spec.lookupKey, 'existing', hit.id);
       }
       return hit.id;
     }
@@ -296,33 +296,33 @@ async function ensurePrice(client, planId, spec) {
     if (err.status !== 404) throw err;
   }
   if (DRY) {
-    report('price', spec.lookup_key, 'dry-run', `amount ${spec.amount}`);
+    report('price', spec.lookupKey, 'dry-run', `amount ${spec.amount}`);
     return 'DRY';
   }
   const created = await client.createPrice({
     ...spec,
-    entity_type: 'PLAN',
-    entity_id: planId,
+    entityType: 'PLAN',
+    entityId: planId,
     currency: CURRENCY,
-    billing_period_count: 1,
+    billingPeriodCount: 1,
     // USAGE prices must be ARREAR or the create is refused 400; FIXED catalog
     // lines carry ADVANCE, which is what a prepaid recharge statement wants.
-    invoice_cadence: spec.type === 'USAGE' ? 'ARREAR' : 'ADVANCE',
+    invoiceCadence: spec.type === 'USAGE' ? 'ARREAR' : 'ADVANCE',
   });
-  report('price', spec.lookup_key, 'created', created.id);
+  report('price', spec.lookupKey, 'created', created.id);
   return created.id;
 }
 
 async function ensurePrices(client, planId, meterIds) {
   const ids = {};
   for (const flat of CATALOG_FLAT_PRICES) {
-    ids[flat.lookup_key] = await ensurePrice(client, planId, {
-      lookup_key: flat.lookup_key,
-      display_name: flat.display_name,
+    ids[flat.lookupKey] = await ensurePrice(client, planId, {
+      lookupKey: flat.lookupKey,
+      displayName: flat.displayName,
       type: 'FIXED',
-      price_unit_type: 'FIAT',
-      billing_model: 'FLAT_FEE',
-      billing_period: 'ONETIME',
+      priceUnitType: 'FIAT',
+      billingModel: 'FLAT_FEE',
+      billingPeriod: 'ONETIME',
       amount: decimalFromPaise(flat.unit_amount_paise),
       metadata: {
         fleet_gst: flat.rate_bps ? 'true' : 'false',
@@ -347,14 +347,14 @@ async function ensurePrices(client, planId, meterIds) {
   for (const meter of METERS) {
     const spec = meterPrice[meter.name];
     ids[`meter:${meter.name}`] = await ensurePrice(client, planId, {
-      lookup_key: `meter-${meter.name}`,
-      display_name: `Software Factory ${meter.name}`,
+      lookupKey: `meter-${meter.name}`,
+      displayName: `Software Factory ${meter.name}`,
       type: 'USAGE',
-      meter_id: meterIds[meter.name],
-      price_unit_type: 'FIAT',
-      billing_model: 'PACKAGE',
-      transform_quantity: { divide_by: 1, round: 'down' },
-      billing_period: 'MONTHLY',
+      meterId: meterIds[meter.name],
+      priceUnitType: 'FIAT',
+      billingModel: 'PACKAGE',
+      transformQuantity: { divideBy: 1, round: 'down' },
+      billingPeriod: 'MONTHLY',
       amount: decimalFromPaise(spec.unit_paise),
       metadata: { fleet_meter: meter.name, fleet_meter_id: String(meterIds[meter.name] || ''), fleet_note: spec.note },
     });
@@ -375,12 +375,12 @@ async function ensurePrices(client, planId, meterIds) {
       const fxHundredths = BigInt(Math.round(fx * 100));
       const inrPaise = Number(roundDiv(BigInt(paiseFromDecimal(String(usd))) * fxHundredths, 100n));
       ids[`rate:${provider}:${direction}`] = await ensurePrice(client, planId, {
-        lookup_key: `rate-${provider}-${direction}`,
-        display_name: `${provider} ${direction} (per 1M tokens)`,
+        lookupKey: `rate-${provider}-${direction}`,
+        displayName: `${provider} ${direction} (per 1M tokens)`,
         type: 'FIXED',
-        price_unit_type: 'FIAT',
-        billing_model: 'FLAT_FEE',
-        billing_period: 'ONETIME',
+        priceUnitType: 'FIAT',
+        billingModel: 'FLAT_FEE',
+        billingPeriod: 'ONETIME',
         amount: decimalFromPaise(inrPaise),
         metadata: {
           fleet_rate_card: 'true',
@@ -458,19 +458,20 @@ async function ensureOrg(client, orgId, opts) {
       report('credit', orgId, 'dry-run', decision.grant ? `would ${decision.why.toLowerCase()}` : decision.why);
       return { orgId, walletId: 'DRY' };
     }
-    // Flat `address_*` names. The nested `billing_address` object is accepted at
-    // 201 and silently drops every field, and place of supply is read from this
-    // address, so a dropped state means the wrong tax split on every invoice.
+    // Flat `address*` names — the SDK's `CreateCustomerRequest` shape. The nested
+    // `billing_address` object is accepted at 201 and silently drops every field,
+    // and place of supply is read from this address, so a dropped state means the
+    // wrong tax split on every invoice.
     customer = await client.createCustomer({
-      external_id: orgId,
+      externalId: orgId,
       name,
-      address_line1: opts.line1,
-      address_city: opts.city,
-      address_state: opts.stateName,
-      address_postal_code: opts.postal,
-      address_country: 'IN',
+      addressLine1: opts.line1,
+      addressCity: opts.city,
+      addressState: opts.stateName,
+      addressPostalCode: opts.postal,
+      addressCountry: 'IN',
     });
-    if (customer.address_country !== 'IN') {
+    if (customer.addressCountry !== 'IN') {
       throw new Error(`customer ${orgId}: address did not round-trip (${JSON.stringify(customer).slice(0, 160)})`);
     }
     report('customer', orgId, 'created', customer.id);
@@ -480,7 +481,7 @@ async function ensureOrg(client, orgId, opts) {
   // The wallets route reports `currency` lower-case ('inr'), so an exact match on
   // 'INR' would re-create a wallet on every run and report the 409 as a new id.
   let wallet = (wallets.items || []).find(
-    (w) => String(w.currency || '').toUpperCase() === CURRENCY && (w.wallet_type || '').toUpperCase() === 'PRE_PAID',
+    (w) => String(w.currency || '').toUpperCase() === CURRENCY && String(w.walletType || '').toUpperCase() === 'PRE_PAID',
   );
   if (!wallet) {
     if (DRY) {
@@ -490,16 +491,17 @@ async function ensureOrg(client, orgId, opts) {
       return { orgId, walletId: 'DRY' };
     }
     wallet = await client.createWallet({
-      external_customer_id: orgId,
+      externalCustomerId: orgId,
       currency: CURRENCY,
-      wallet_type: 'PRE_PAID',
-      name: `${name} wallet`,
+      walletType: 'PRE_PAID',
+      // `CreateWalletRequest` has no `name`; `description` is the label the UI shows.
+      description: `${name} wallet`,
       // Measured, from TopUpWalletRequest: amount = credits_to_add *
       // conversion_rate. At 1, one credit is one rupee (decision D6), which is
       // what money-wire's PAISE_PER_CREDIT assumes.
-      conversion_rate: '1',
-      alert_settings: {
-        alert_enabled: true,
+      conversionRate: '1',
+      alertSettings: {
+        alertEnabled: true,
         // Conditions are lower-case (`above`|`below`); 'BELOW' is refused 400.
         critical: { threshold: '100', condition: 'below' },
         warning: { threshold: '500', condition: 'below' },
@@ -512,7 +514,7 @@ async function ensureOrg(client, orgId, opts) {
   }
 
   const balance = await client.walletRealTimeBalance(wallet.id);
-  const already = Number(balance.real_time_credit_balance || 0);
+  const already = Number(balance.realTimeCreditBalance || 0);
   const decision = openingCreditDecision(tier, opening, already);
   if (!decision.grant) {
     report('credit', orgId, 'skipped', decision.why);

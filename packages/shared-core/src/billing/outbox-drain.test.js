@@ -21,8 +21,10 @@ const METERS = [{ id: 'met_llm', name: 'llm-cost', event_name: 'fleet.llm_cost',
 /**
  * A stand-in for the ingest plane that reproduces the three measured behaviours
  * the drain exists for: a 202 that proves nothing, first-wins dedup on
- * `event_id`, and a `value` that is `omitempty` so a meter which aggregates
- * nothing reads as a 200 with no key rather than an error.
+ * `event_id` (the ingest body is the wire's snake_case, since the generated
+ * `Event` model would quote a numeric `properties` value), and a `value` that is
+ * `omitempty` so a meter which aggregates nothing reads as a 200 with no key
+ * rather than an error. The usage query is the façade's camelCase model form.
  */
 function makeFlex(over = {}) {
   const table = [];
@@ -46,13 +48,13 @@ function makeFlex(over = {}) {
     },
     eventsUsageMeter: async (query) => {
       calls.usage.push(query);
-      const meter = METERS.find((m) => m.id === query.meter_id);
+      const meter = METERS.find((m) => m.id === query.meterId);
       const sum = table
         .filter((e) => e.event_name === meter.event_name
-          && e.external_customer_id === query.external_customer_id
-          && e.timestamp >= query.start_time && e.timestamp <= query.end_time)
+          && e.external_customer_id === query.externalCustomerId
+          && e.timestamp >= query.startTime && e.timestamp <= query.endTime)
         .reduce((total, e) => total + Number(e.properties[meter.field]), 0);
-      return sum === 0 ? {} : { value: String(sum) };
+      return sum === 0 ? {} : { value: sum };
     },
   };
   return { client, calls, table };
@@ -112,9 +114,9 @@ test('the window it reads back starts at the oldest event, not at now', async ()
   const flex = makeFlex();
   enqueueOne('org-drain-3', 'd4', 100, { occurredAt: '2026-11-12T01:00:00.000Z' });
   await drain.drainOnce({ client: flex.client, enabled: true, now: '2026-11-12T09:00:00.000Z' });
-  assert.equal(flex.calls.usage[0].start_time, '2026-11-12T01:00:00.000Z');
-  assert.equal(flex.calls.usage[0].end_time, '2026-11-12T09:00:00.000Z');
-  assert.equal(flex.calls.usage[0].meter_id, 'met_llm');
+  assert.equal(flex.calls.usage[0].startTime, '2026-11-12T01:00:00.000Z');
+  assert.equal(flex.calls.usage[0].endTime, '2026-11-12T09:00:00.000Z');
+  assert.equal(flex.calls.usage[0].meterId, 'met_llm');
 });
 
 test('an event no meter aggregates is reported, not quietly accepted', async () => {
@@ -210,7 +212,7 @@ test('one org’s delivery never reads another org’s meter window', async () =
   enqueueOne('org-drain-11b', 'x2', 500, { occurredAt: '2026-11-12T01:10:00.000Z' });
   const summary = await drain.drainOnce({ client: flex.client, enabled: true, now: '2026-11-12T02:00:00.000Z' });
   assert.equal(summary.verified, 2);
-  const customers = flex.calls.usage.map((q) => q.external_customer_id).sort();
+  const customers = flex.calls.usage.map((q) => q.externalCustomerId).sort();
   assert.deepEqual(customers, ['org-drain-11a', 'org-drain-11b']);
 });
 

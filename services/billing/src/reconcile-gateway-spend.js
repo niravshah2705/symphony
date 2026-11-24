@@ -153,11 +153,13 @@ async function fetchFlexpriceSpend({ client, meter, orgId, since, until }) {
   if (!meter || !meter.available) return meter || { available: false, reason: 'flexprice_meter_unavailable' };
   try {
     const usage = await client.eventsUsageMeter({
-      meter_id: meter.meterId,
-      external_customer_id: orgId,
-      start_time: since,
-      end_time: until,
+      meterId: meter.meterId,
+      externalCustomerId: orgId,
+      startTime: since,
+      endTime: until,
     });
+    // `listMeters` is a raw-seam read, so its rows keep the wire spelling (`name`);
+    // `value` here is the model's number, not a decimal string.
     const value = Number(usage && usage.value);
     if (!Number.isFinite(value)) return { available: false, reason: 'flexprice_usage_unshapeled' };
     return { available: true, meterId: meter.meterId, spendPaise: Math.round(value) };

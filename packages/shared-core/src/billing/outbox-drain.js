@@ -130,12 +130,14 @@ async function verify({ client, meterIds, nowIso }) {
     let observed;
     try {
       const out = await client.eventsUsageMeter({
-        meter_id: meterId,
-        external_customer_id: group.orgId,
-        start_time: from,
-        end_time: nowIso,
+        meterId,
+        externalCustomerId: group.orgId,
+        startTime: from,
+        endTime: nowIso,
       });
-      observed = Number(out && out.value !== undefined ? out.value : 0);
+      // `value` is `omitempty` on this route, so an absent key is the zero case —
+      // and the model types it a number, so no re-parsing happens here.
+      observed = out && out.value !== undefined ? out.value : 0;
     } catch (err) {
       log.warn('outbox_readback_failed', {
         orgId: group.orgId,

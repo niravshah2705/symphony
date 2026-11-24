@@ -100,29 +100,31 @@ async function readCredits(client, walletId) {
     throw new SettleError(502, 'flexprice_balance_unreadable',
       `FlexPrice did not return the wallet balance: ${err.message}`);
   }
-  const creditBalance = Number(balance && balance.real_time_credit_balance);
+  const creditBalance = Number(balance && balance.realTimeCreditBalance);
   if (!Number.isFinite(creditBalance)) {
     throw new SettleError(502, 'flexprice_balance_unreadable',
-      `FlexPrice returned no readable real_time_credit_balance for wallet ${walletId}.`);
+      `FlexPrice returned no realTimeCreditBalance for wallet ${walletId}.`);
   }
   return { credits: creditBalance, raw: balance };
 }
 
 /**
- * Flat `address_*` fields, never the nested `billing_address` — the nested form is
+ * Flat `address*` fields, never the nested `billing_address` — the nested form is
  * accepted at 201 and silently drops every field, and the state in it is what
- * decides CGST/SGST vs IGST on the invoice FlexPrice later renders.
+ * decides CGST/SGST vs IGST on the invoice FlexPrice later renders. `metadata`
+ * keys stay snake_case because that map is FlexPrice's pass-through store, not a
+ * modeled object.
  */
 function customerBody(orgId, paymentInfo = {}) {
   const address = paymentInfo.address || {};
   const body = {
-    external_id: orgId,
+    externalId: orgId,
     name: paymentInfo.billingName || orgId,
-    address_line1: String(address.line1 || 'Not provided').slice(0, 120),
-    address_city: String(address.city || 'Not provided').slice(0, 60),
-    address_state: String(address.state || 'Not provided').slice(0, 60),
-    address_postal_code: String(address.postalCode || '').slice(0, 20),
-    address_country: String(address.country || 'IN').slice(0, 10),
+    addressLine1: String(address.line1 || 'Not provided').slice(0, 120),
+    addressCity: String(address.city || 'Not provided').slice(0, 60),
+    addressState: String(address.state || 'Not provided').slice(0, 60),
+    addressPostalCode: String(address.postalCode || '').slice(0, 20),
+    addressCountry: String(address.country || 'IN').slice(0, 10),
     metadata: { fleet_org_id: orgId, gstin: String(paymentInfo.taxId || '') },
   };
   return body;
@@ -130,7 +132,7 @@ function customerBody(orgId, paymentInfo = {}) {
 
 /**
  * The org's INR prepaid wallet, creating the customer and wallet if the cache on
- * the billing account has been lost. `conversion_rate` is asserted rather than
+ * the billing account has been lost. `conversionRate` is asserted rather than
  * assumed: probe A measured that `credits_to_add` is denominated in credits, so a
  * rate other than 1 would silently change what those credits are *worth*.
  */
@@ -159,15 +161,15 @@ async function ensureWallet({ client, orgId, account, storeImpl, now }) {
     // is case-insensitive by necessity, not by taste.
     let wallet = (listed.items || []).find(
       (w) => String(w.currency || '').toUpperCase() === CURRENCY
-        && String(w.wallet_type || '').toUpperCase() === 'PRE_PAID',
+        && String(w.walletType || '').toUpperCase() === 'PRE_PAID',
     );
     if (!wallet) {
       wallet = await client.createWallet({
-        external_customer_id: orgId,
+        externalCustomerId: orgId,
         currency: CURRENCY,
-        wallet_type: 'PRE_PAID',
-        name: `${(account && account.paymentInfo && account.paymentInfo.billingName) || orgId} wallet`,
-        conversion_rate: '1',
+        walletType: 'PRE_PAID',
+        description: `${(account && account.paymentInfo && account.paymentInfo.billingName) || orgId} wallet`,
+        conversionRate: '1',
       });
     }
     if (!wallet || !wallet.id) {
@@ -180,10 +182,10 @@ async function ensureWallet({ client, orgId, account, storeImpl, now }) {
     return { customerId: customer.id, wallet };
   })();
 
-  const rate = String(found.wallet.conversion_rate == null ? '1' : found.wallet.conversion_rate);
+  const rate = String(found.wallet.conversionRate == null ? '1' : found.wallet.conversionRate);
   if (Number(rate) !== 1) {
     throw new SettleError(500, 'wallet_conversion_rate',
-      `Wallet ${found.wallet.id} has conversion_rate ${rate}, not 1: 1 credit is not ₹1 here, so this recharge would credit the wrong value.`);
+      `Wallet ${found.wallet.id} has conversionRate ${rate}, not 1: 1 credit is not ₹1 here, so this recharge would credit the wrong value.`);
   }
   // The ids are cached, not invented: the next recharge (and the Phase 3 gate)
   // reads them from the account instead of walking the customer API again.
@@ -317,10 +319,12 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
 
   const before = await readCredits(client, walletId);
   const topUp = await client.topUpWallet(walletId, {
-    transaction_reason: 'PURCHASED_CREDIT_DIRECT',
-    credits_to_add: String(prepaidCredits),
+    transactionReason: 'PURCHASED_CREDIT_DIRECT',
+    creditsToAdd: String(prepaidCredits),
     priority: PRIORITY_PURCHASED,
     description: `Recharge ${key}`,
+    // FlexPrice's own metadata map: keys are ours on the wire, so they keep the
+    // snake_case spelling the reads and the reconciler look for.
     metadata: {
       fleet_order_id: key,
       subtotal_paise: String(intent.subtotalPaise),

@@ -48,14 +48,14 @@ function fakeFlexprice(overrides = {}) {
       record('listWalletsByCustomer', customerId);
       return {
         items: overrides.wallets === undefined
-          ? [{ id: WALLET, currency: 'INR', wallet_type: 'PRE_PAID' }]
+          ? [{ id: WALLET, currency: 'INR', walletType: 'PRE_PAID' }]
           : overrides.wallets,
       };
     },
     walletRealTimeBalance: async (walletId) => {
       record('walletRealTimeBalance', walletId);
       return overrides.balance === undefined
-        ? { real_time_credit_balance: '3760.00', unpaid_invoices_amount: '0' }
+        ? { realTimeCreditBalance: '3760.00', unpaidInvoicesAmount: '0' }
         : overrides.balance;
     },
     walletTransactionsSearch: async (query) => {
@@ -65,7 +65,7 @@ function fakeFlexprice(overrides = {}) {
         : { items: overrides.transactions || [] };
     },
     // The only usage read the routes are allowed to make. `results` is what
-    // `window_size: "DAY"` answers with, and a windowed SUM leaves the top-level
+    // `windowSize: "DAY"` answers with, and a windowed SUM leaves the top-level
     // `value` at zero — which `omitempty` drops — so a fake that returned a scalar
     // would let a per-day bug hide.
     eventsUsage: async (query) => {
@@ -90,25 +90,25 @@ function fakeFlexprice(overrides = {}) {
     if (typeof overrides.usage === 'function') return overrides.usage(query);
     if (overrides.usage && overrides.usage.fail) throw new Error('usage read refused');
     if (overrides.usage && overrides.usage.scalarOnly) {
-      return { value: overrides.usage.value ?? 5000, event_name: 'fleet.llm_cost', type: 'SUM' };
+      return { value: overrides.usage.value ?? 5000, eventName: 'fleet.llm_cost', type: 'SUM' };
     }
     if (overrides.usage && overrides.usage.results) return { results: overrides.usage.results };
     return {
       results: windowDays(query).map((iso) => ({
-        window_size: `${iso}T00:00:00.000Z`,
+        windowSize: `${iso}T00:00:00.000Z`,
         value: dayOf(iso).getTime() % (7 * 86400000) === 0 ? 700 : 100,
       })),
-      event_name: 'fleet.llm_cost',
+      eventName: 'fleet.llm_cost',
       type: 'SUM',
     };
   }
 }
 
-/** Every UTC day in a `[start_time, end_time)` window, as FlexPrice buckets them. */
+/** Every UTC day in a `[startTime, endTime)` window, as FlexPrice buckets them. */
 function windowDays(query) {
   const out = [];
-  const end = Date.parse(query.end_time);
-  for (let ms = dayOf(query.start_time).getTime(); ms < end; ms += 86400000) {
+  const end = Date.parse(query.endTime);
+  for (let ms = dayOf(query.startTime).getTime(); ms < end; ms += 86400000) {
     out.push(new Date(ms).toISOString().slice(0, 10));
   }
   return out;
@@ -133,10 +133,13 @@ function serve(router) {
 }
 
 /** Mount a router over a fake FlexPrice for one org. */
-async function withRoutes({ orgId, client, ttlMs, now = NOW, isAdmin = true, enabled } = {}, run) {
+async function withRoutes({ orgId, client, ttlMs, now = NOW, isAdmin = true, trusted = true, enabled } = {}, run) {
   gate.invalidate(orgId);
   const router = createFlexpriceReadsRouter({
-    resolveCallerOrg: () => ({ orgId, isAdmin, userId: 'u1' }),
+    // `trusted: true` is what `trusted-caller.js` sets once a request has proved it
+    // came from the gateway; `flexprice-reads-isolation.test.js` covers the other
+    // side of that flag.
+    resolveCallerOrg: () => ({ orgId, isAdmin, userId: 'u1', trusted }),
     deps: {
       client,
       now: () => now,
@@ -160,13 +163,19 @@ async function withRoutes({ orgId, client, ttlMs, now = NOW, isAdmin = true, ena
   }
 }
 
+/**
+ * A `WalletTransactionResponse`. The money fields are decimal-as-string because
+ * FlexPrice sends them that way and the model keeps them so; the timestamps are
+ * `Date` objects because that is what the model parses them into — the reads
+ * normalise both back to the ISO strings the page and the store use.
+ */
 const creditRow = (id, reason, { amount, remaining, expiresAt, meta } = {}) => ({
   id,
-  transaction_reason: reason,
-  credit_amount: amount,
-  credits_available: remaining,
-  created_at: '2026-11-01T09:00:00.000Z',
-  ...(expiresAt ? { expiry_date: expiresAt } : {}),
+  transactionReason: reason,
+  creditAmount: amount,
+  creditsAvailable: remaining,
+  createdAt: new Date('2026-11-01T09:00:00.000Z'),
+  ...(expiresAt ? { expiryDate: new Date(expiresAt) } : {}),
   ...(meta ? { metadata: meta } : {}),
 });
 
@@ -222,7 +231,7 @@ test('an empty bucket is zero credit, not an unreadable one', () => {
   assert.equal(buckets.plan.resetsOn, null);
   assert.deepEqual(buckets.packages, []);
   // A row this code cannot read is reported, never guessed at.
-  const unreadable = bucketCreditRows([{ id: 'r1', transaction_reason: 'FREE_CREDIT_GRANT' }]);
+  const unreadable = bucketCreditRows([{ id: 'r1', transactionReason: 'FREE_CREDIT_GRANT' }]);
   assert.equal(unreadable.plan.unreadableRows, 1);
   assert.equal(unreadable.plan.total.paise, 0, 'and it contributes nothing to the totals');
 });
@@ -246,7 +255,7 @@ test('overview reports a missing wallet as nulls, not as zero credit', async () 
 test('an unparseable balance is unknown, and unknown is not zero', async () => {
   const orgId = 'org-overview-bad-balance';
   store.upsertBillingAccount(orgId, { flexprice: { walletId: WALLET } });
-  await withRoutes({ orgId, client: fakeFlexprice({ balance: { real_time_credit_balance: 'not-a-number' } }) }, async ({ get }) => {
+  await withRoutes({ orgId, client: fakeFlexprice({ balance: { realTimeCreditBalance: 'not-a-number' } }) }, async ({ get }) => {
     const body = await get('/overview');
     assert.equal(body.balance.paise, null);
     assert.equal(body.fundState, 'unknown');
@@ -267,15 +276,15 @@ test('heatmap is ONE windowed read for 91 cells and clamps the window', async ()
     assert.equal(body.days[90].date, '2026-11-20');
     // The window covers every cell's full day, and is scoped server-side.
     const arg = usageCalls()[0].arg;
-    assert.equal(arg.external_customer_id, orgId, 'the org is never taken from the request');
-    assert.equal(arg.window_size, 'DAY', 'per-day buckets come from FlexPrice, not from 91 reads');
+    assert.equal(arg.externalCustomerId, orgId, 'the org is never taken from the request');
+    assert.equal(arg.windowSize, 'DAY', 'per-day buckets come from FlexPrice, not from 91 reads');
     assert.equal(arg.timezone, 'UTC', 'a day cell must not straddle two days in the stack’s timezone');
-    assert.equal(arg.start_time, '2026-08-22T00:00:00.000Z');
-    assert.equal(arg.end_time, '2026-11-21T00:00:00.000Z');
+    assert.equal(arg.startTime, '2026-08-22T00:00:00.000Z');
+    assert.equal(arg.endTime, '2026-11-21T00:00:00.000Z');
     assert.equal(arg.filters, undefined, 'an unfiltered grid sends no filter object');
-    assert.equal(arg.event_name, 'fleet.llm_cost');
-    assert.equal(arg.property_name, 'cost_paise');
-    assert.equal(arg.aggregation_type, 'SUM');
+    assert.equal(arg.eventName, 'fleet.llm_cost');
+    assert.equal(arg.propertyName, 'cost_paise');
+    assert.equal(arg.aggregationType, 'SUM');
     // The header number and the grid are the same response, so they cannot differ.
     assert.equal(body.total.paise, body.days.reduce((sum, d) => sum + d.paise, 0));
     assert.equal(body.partial, false);
@@ -291,7 +300,7 @@ test('a window FlexPrice did not bucket is reported, never drawn as an empty gri
   const orgId = 'org-heatmap-shapes';
   store.upsertBillingAccount(orgId, { flexprice: { walletId: WALLET } });
 
-  // A scalar with no `results` means the server ignored `window_size`. Drawing
+  // A scalar with no `results` means the server ignored `windowSize`. Drawing
   // that as 91 zero cells would claim the org used nothing on 90 days.
   await withRoutes({ orgId, client: fakeFlexprice({ usage: { scalarOnly: true, value: 5000 } }) }, async ({ get }) => {
     const body = await get('/heatmap?weeks=13');
@@ -315,7 +324,7 @@ test('a window FlexPrice did not bucket is reported, never drawn as an empty gri
   // total is not the period total.
   await withRoutes({
     orgId: 'org-heatmap-badrow',
-    client: fakeFlexprice({ usage: { results: [{ window_size: '2026-11-19T00:00:00.000Z', value: 'not-a-number' }] } }),
+    client: fakeFlexprice({ usage: { results: [{ windowSize: '2026-11-19T00:00:00.000Z', value: 'not-a-number' }] } }),
   }, async ({ get }) => {
     store.upsertBillingAccount('org-heatmap-badrow', { flexprice: { walletId: WALLET } });
     const body = await get('/heatmap?weeks=1');
@@ -355,11 +364,11 @@ test('trend filters by bare property names and never by a dotted path', async ()
     // A dotted filter matches nothing and `property_filters` silently answers the
     // tenant total (findings §7c): the exact keys are the whole correctness here.
     assert.deepEqual(usage[0].arg.filters, { project_id: ['p-1'], agent_id: ['a-2'] });
-    assert.equal(usage[0].arg.property_name, 'cost_paise');
-    assert.equal(usage[0].arg.event_name, 'fleet.llm_cost');
-    assert.equal(usage[0].arg.aggregation_type, 'SUM');
-    assert.equal(usage[0].arg.external_customer_id, orgId);
-    assert.equal(usage[0].arg.window_size, 'DAY');
+    assert.equal(usage[0].arg.propertyName, 'cost_paise');
+    assert.equal(usage[0].arg.eventName, 'fleet.llm_cost');
+    assert.equal(usage[0].arg.aggregationType, 'SUM');
+    assert.equal(usage[0].arg.externalCustomerId, orgId);
+    assert.equal(usage[0].arg.windowSize, 'DAY');
     assert.deepEqual(body.filters, { project_id: ['p-1'], agent_id: ['a-2'] });
     assert.deepEqual(body.filterableDimensions, ['project', 'user', 'agent', 'tier']);
     const ignored = await get('/trend?range=7d&model=gpt-5');
@@ -431,8 +440,8 @@ test('usage-breakdown reads one window per value, bounded, and never calls an un
 
   const client = fakeFlexprice({
     usage: (query) => (query.filters.project_id[0] === 'p-small'
-      ? { results: [{ window_size: '2026-11-19T00:00:00.000Z', value: 'oops' }] }
-      : { results: [{ window_size: '2026-11-19T00:00:00.000Z', value: 1000 }] }),
+      ? { results: [{ windowSize: '2026-11-19T00:00:00.000Z', value: 'oops' }] }
+      : { results: [{ windowSize: '2026-11-19T00:00:00.000Z', value: 1000 }] }),
   });
   await withRoutes({ orgId, client }, async ({ get }) => {
     const body = await get('/usage-breakdown?dimension=project&range=7d');
@@ -445,8 +454,8 @@ test('usage-breakdown reads one window per value, bounded, and never calls an un
     assert.equal(args.length, 2, 'one read per value');
     assert.deepEqual(args.map((a) => a.filters).sort((a, b) => String(a.project_id).localeCompare(String(b.project_id))),
       [{ project_id: ['p-big'] }, { project_id: ['p-small'] }]);
-    assert.equal(args[0].window_size, 'DAY');
-    assert.equal(args[0].external_customer_id, orgId);
+    assert.equal(args[0].windowSize, 'DAY');
+    assert.equal(args[0].externalCustomerId, orgId);
   });
 
   // A dimension the events do not carry is refused before any read is spent.
@@ -480,8 +489,10 @@ test('the log asks debit rows for the used tab and explains why they are sparse'
     transactions: (query) => (query.type === 'debit'
       ? {
         items: [
-          { id: 'd1', transaction_reason: 'MANUAL_BALANCE_DEBIT', debit_amount: '150.00', created_at: '2026-11-10T08:00:00.000Z' },
-          { id: 'd2', transaction_reason: 'CREDIT_EXPIRED', debit_amount: '40.00', credit_balance_after: '3610.00', created_at: '2026-11-11T08:00:00.000Z' },
+          // A debit row carries its magnitude in `amount` — there is no
+          // `debit_amount` on this route (measured live in phase5-verify).
+          { id: 'd1', transactionReason: 'MANUAL_BALANCE_DEBIT', amount: '150.00', createdAt: new Date('2026-11-10T08:00:00.000Z') },
+          { id: 'd2', transactionReason: 'CREDIT_EXPIRED', amount: '40.00', creditBalanceAfter: '3610.00', createdAt: new Date('2026-11-11T08:00:00.000Z') },
         ],
         pagination: { total: 3 },
       }

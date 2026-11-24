@@ -259,7 +259,7 @@ async function main() {
     const walletId = intent.flexprice_settlement?.walletId || '';
     check('settled into a wallet', settleRes.status === 200 && Boolean(walletId),
       `status=${settleRes.status} wallet=${walletId || '(none)'}`);
-    const fundedCredits = await until(async () => Number((await client.walletRealTimeBalance(walletId)).real_time_credit_balance), 500);
+    const fundedCredits = await until(async () => Number((await client.walletRealTimeBalance(walletId)).realTimeCreditBalance), 500);
     check('wallet holds exactly 500 credits', fundedCredits.value === 500,
       `real_time_credit_balance=${fundedCredits.value} after ${fundedCredits.attempts} reads`);
 
@@ -364,9 +364,9 @@ async function main() {
     section('6. the gate reads the wallet, not the store');
     const projection = await client.walletRealTimeBalance(walletId);
     check('the wallet projection still reports no period usage',
-      Number(projection.current_period_usage || 0) === 0,
-      `current_period_usage=${projection.current_period_usage} with ${EXPECTED_PAISE}p metered`);
-    const afterUsage = Number((await client.walletRealTimeBalance(walletId)).real_time_credit_balance);
+      Number(projection.currentPeriodUsage || 0) === 0,
+      `current_period_usage=${projection.currentPeriodUsage} with ${EXPECTED_PAISE}p metered`);
+    const afterUsage = Number((await client.walletRealTimeBalance(walletId)).realTimeCreditBalance);
     check('the credit balance has NOT moved (billing, not finalization)', afterUsage === 500,
       `real_time_credit_balance=${afterUsage}`);
     const fund = await gate.ensureFundStatus(orgId);
@@ -448,13 +448,13 @@ async function main() {
 async function meterRead(client, meterIds, orgId, fromIso) {
   const end = new Date(Date.now() + 60_000).toISOString();
   const out = await client.eventsUsageMeter({
-    meter_id: meterIds.get('llm-cost'),
-    external_customer_id: orgId,
-    start_time: fromIso,
-    end_time: end,
+    meterId: meterIds.get('llm-cost'),
+    externalCustomerId: orgId,
+    startTime: fromIso,
+    endTime: end,
   });
   const value = Number(out && out.value !== undefined ? out.value : 0);
-  const rows = out && out.items ? out.items : undefined;
+  const rows = out && out.results ? out.results : undefined;
   return { value, raw: rows === undefined ? out : rows };
 }
 

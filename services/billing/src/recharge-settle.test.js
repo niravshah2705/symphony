@@ -80,21 +80,21 @@ function fakeFlexprice({ opening = 500, conversionRate = '1', creditOnTopUp = tr
     state,
     getCustomerByExternalId: async (externalId) => {
       if (customerMissing) { const err = new Error('not found'); err.status = 404; throw err; }
-      return { id: 'cust_1', external_id: externalId };
+      return { id: 'cust_1', externalId: externalId };
     },
     createCustomer: async (body) => { state.creates.customers += 1; state.customerBody = body; return { id: 'cust_1', ...body }; },
     listWalletsByCustomer: async () => ({
       // `currency` is reported lower-case by the live route, so the match that
       // decides "this org already has a wallet" has to be case-insensitive.
-      items: conversionRate === null ? [] : [{ id: 'wallet_1', currency: 'inr', wallet_type: 'PRE_PAID', conversion_rate: conversionRate }],
+      items: conversionRate === null ? [] : [{ id: 'wallet_1', currency: 'inr', walletType: 'PRE_PAID', conversionRate: conversionRate }],
     }),
     createWallet: async (body) => { state.creates.wallets += 1; return { id: 'wallet_1', ...body }; },
-    walletRealTimeBalance: async () => ({ real_time_credit_balance: state.balance }),
+    walletRealTimeBalance: async () => ({ realTimeCreditBalance: state.balance }),
     topUpWallet: async (walletId, body, opts = {}) => {
       state.topUps.push({ walletId, body, idempotencyKey: opts.idempotencyKey });
       if (seen.has(opts.idempotencyKey)) return { alreadyExists: true };
       seen.add(opts.idempotencyKey);
-      if (creditOnTopUp) state.balance += Number(body.credits_to_add);
+      if (creditOnTopUp) state.balance += Number(body.creditsToAdd);
       return { id: 'wtxn_1' };
     },
     grantPromo: async (walletId, opts = {}) => {
@@ -158,12 +158,12 @@ test('a ₹500 recharge collects ₹590 and credits 500 spendable credits', asyn
   // The credit base is the subtotal, and the only way to see that the ₹90 stayed
   // out of it is to look at what was sent and what the balance became.
   assert.equal(client.state.topUps.length, 1);
-  assert.equal(client.state.topUps[0].body.credits_to_add, '500');
-  assert.notEqual(client.state.topUps[0].body.credits_to_add, String(moneyWire.paiseToCredits(intent.totalPaise)),
+  assert.equal(client.state.topUps[0].body.creditsToAdd, '500');
+  assert.notEqual(client.state.topUps[0].body.creditsToAdd, String(moneyWire.paiseToCredits(intent.totalPaise)),
     'crediting the taxed total would hand back the ₹90 as spendable credit');
   assert.equal(client.state.balance, 1000, '500 in, not 590 — the tax is collected, never credited');
   assert.equal(client.state.topUps[0].idempotencyKey, `recharge:${intent.orderId}`);
-  assert.equal(client.state.topUps[0].body.transaction_reason, 'PURCHASED_CREDIT_DIRECT');
+  assert.equal(client.state.topUps[0].body.transactionReason, 'PURCHASED_CREDIT_DIRECT');
   assert.equal(client.state.topUps[0].body.metadata.gst_paise, '9000', 'the tax rides along with the credit for the audit trail');
 
   const settled = store.getRechargeIntent(intent.orderId);
@@ -189,10 +189,10 @@ test('the org is provisioned in FlexPrice on first settle, with the flat address
   assert.equal(client.state.creates.customers, 1);
   assert.equal(client.state.creates.wallets, 1);
   const body = client.state.customerBody;
-  assert.equal(body.address_state, 'Gujarat', 'the place of supply is read from the FLAT address_state; nested billing_address is accepted at 201 and silently dropped');
-  assert.equal(body.address_line1, '5 Cross Rd');
-  assert.equal(body.address_country, 'IN');
-  assert.equal(body.external_id, ORG);
+  assert.equal(body.addressState, 'Gujarat', 'the place of supply is read from the FLAT addressState; nested billing_address is accepted at 201 and silently dropped');
+  assert.equal(body.addressLine1, '5 Cross Rd');
+  assert.equal(body.addressCountry, 'IN');
+  assert.equal(body.externalId, ORG);
   assert.equal(body.metadata.gstin, '24AAAAA0000A1Z5', 'the GSTIN reaches FlexPrice, which is where Zoho reads it from');
   assert.equal(body.billing_address, undefined);
 });
@@ -237,8 +237,8 @@ test('an org with no billing account at all still settles, with placeholder addr
 
   assert.equal(r.status, 'settled');
   assert.equal(r.creditCount, 500);
-  assert.equal(client.state.customerBody.address_line1, 'Not provided');
-  assert.equal(client.state.customerBody.address_country, 'IN');
+  assert.equal(client.state.customerBody.addressLine1, 'Not provided');
+  assert.equal(client.state.customerBody.addressCountry, 'IN');
   assert.equal(client.state.customerBody.metadata.gstin, '', 'an absent GSTIN is an empty string, never "undefined"');
 });
 
@@ -444,7 +444,7 @@ test('an unconfigured gateway is refused unless the dev mock flag is on', async 
   });
   assert.equal(result.mock, true);
   assert.equal(result.collectedPaise, 59000, 'the mock reports the intent total, so the amount check still means something');
-  assert.equal(client.state.topUps[0].body.credits_to_add, '500');
+  assert.equal(client.state.topUps[0].body.creditsToAdd, '500');
 });
 
 test('with FlexPrice disabled there is no credit at all — and the gateway is not consulted', async () => {
@@ -459,7 +459,7 @@ test('with FlexPrice disabled there is no credit at all — and the gateway is n
   assert.equal(client.state.topUps.length, 0);
 });
 
-test('a wallet whose conversion_rate is not 1 is refused before the credit', async () => {
+test('a wallet whose conversionRate is not 1 is refused before the credit', async () => {
   const intent = makeIntent();
   const client = fakeFlexprice({ conversionRate: '2' });
   await expectRefused(settleWith(intent, { client }), 'wallet_conversion_rate', 500);
@@ -485,7 +485,7 @@ test('a 10% coupon credits a second, expiring row and charges the same ₹590', 
 
   assert.equal(result.creditCount, 500);
   assert.equal(result.promoCredits, 50);
-  assert.equal(client.state.topUps[0].body.credits_to_add, '500');
+  assert.equal(client.state.topUps[0].body.creditsToAdd, '500');
   assert.deepEqual(
     client.state.grants.map((g) => [g.credits, g.expiresAt, g.idempotencyKey]),
     [[50, '2027-03-31T23:59:59.000Z', `recharge:${intent.orderId}:promo`]],

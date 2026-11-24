@@ -159,7 +159,7 @@ async function main() {
 
     async function balance(walletId) {
       const out = await client.walletRealTimeBalance(walletId);
-      const value = Number(out && out.real_time_credit_balance);
+      const value = Number(out && out.realTimeCreditBalance);
       if (!Number.isFinite(value)) throw new Error(`wallet ${walletId} returned no readable balance`);
       return value;
     }
@@ -175,12 +175,12 @@ async function main() {
         filters: [{
           field: 'idempotency_key',
           operator: 'eq',
-          data_type: 'string',
+          dataType: 'string',
           value: { string: idempotencyKey },
         }],
         limit: 2,
       });
-      return rowsOf(out).filter((row) => row.idempotency_key === idempotencyKey);
+      return rowsOf(out).filter((row) => row.idempotencyKey === idempotencyKey);
     }
 
     async function ensureAccount(orgId) {
@@ -190,26 +190,26 @@ async function main() {
       } catch (err) {
         if (err.status !== 404) throw err;
         customer = await client.createCustomer({
-          external_id: orgId,
+          externalId: orgId,
           name: `Phase 5 verify ${orgId}`,
-          address_line1: 'Local verification only',
-          address_country: 'IN',
+          addressLine1: 'Local verification only',
+          addressCountry: 'IN',
         });
       }
       if (!customer || !customer.id) throw new Error(`customer unresolved for ${orgId}`);
       const listed = await client.listWalletsByCustomer(customer.id);
       let wallet = rowsOf(listed).find((item) => String(item.currency || '').toUpperCase() === 'INR'
-        && String(item.wallet_type || '').toUpperCase() === 'PRE_PAID');
+        && String(item.walletType || '').toUpperCase() === 'PRE_PAID');
       if (!wallet) {
         wallet = await client.createWallet({
-          external_customer_id: orgId,
+          externalCustomerId: orgId,
           currency: 'INR',
-          wallet_type: 'PRE_PAID',
-          name: `Phase 5 verify ${orgId}`,
-          conversion_rate: '1',
+          walletType: 'PRE_PAID',
+          description: `Phase 5 verify ${orgId}`,
+          conversionRate: '1',
         });
       }
-      const conversionRate = String(wallet && wallet.conversion_rate == null ? '1' : wallet.conversion_rate);
+      const conversionRate = String(wallet && wallet.conversionRate == null ? '1' : wallet.conversionRate);
       if (!wallet || !wallet.id) throw new Error(`wallet unresolved for ${orgId}`);
       if (Number(conversionRate) !== 1) throw new Error(`wallet ${wallet.id} conversion_rate is ${conversionRate}`);
       const account = store.upsertBillingAccount(orgId, {
@@ -228,8 +228,8 @@ async function main() {
       const walletId = account.flexprice.walletId;
       const before = await balance(walletId);
       await client.topUpWallet(walletId, {
-        transaction_reason: 'PURCHASED_CREDIT_DIRECT',
-        credits_to_add: String(credits),
+        transactionReason: 'PURCHASED_CREDIT_DIRECT',
+        creditsToAdd: String(credits),
         priority: 1,
         description: 'Phase 5 local verification fixture',
       }, { idempotencyKey: key });
@@ -261,7 +261,7 @@ async function main() {
 
     const platformKeys = keysFor(chargedOrg, PLATFORM_MONTH);
     const invoiceRows = rowsOf(await client.searchInvoices(invoiceSearch(platformKeys.invoice)))
-      .filter((invoice) => invoice.idempotency_key === platformKeys.invoice);
+      .filter((invoice) => invoice.idempotencyKey === platformKeys.invoice);
     check('exact invoice-key search returns one invoice', invoiceRows.length === 1,
       `matches=${invoiceRows.length}`);
     check('invoice search resolves the charged invoice identity', invoiceRows[0]?.id === first.invoiceId,
@@ -269,7 +269,7 @@ async function main() {
     const platformDebits = await debitRows(chargedAccount.flexprice.walletId, platformKeys.debit);
     check('exact debit-key search finds one logical 3000-credit manual debit',
       platformDebits.length === 1
-        && platformDebits[0].transaction_reason === 'MANUAL_BALANCE_DEBIT'
+        && platformDebits[0].transactionReason === 'MANUAL_BALANCE_DEBIT'
         && Number(platformDebits[0].amount) === 3000,
       `matches=${platformDebits.length} amount=${platformDebits[0]?.amount || '(none)'}`);
 
@@ -284,7 +284,7 @@ async function main() {
       `status=${poorResult.status}`);
     const poorKeys = keysFor(poorOrg, PLATFORM_MONTH);
     const poorInvoices = rowsOf(await client.searchInvoices(invoiceSearch(poorKeys.invoice)))
-      .filter((invoice) => invoice.idempotency_key === poorKeys.invoice);
+      .filter((invoice) => invoice.idempotencyKey === poorKeys.invoice);
     check('insufficient account creates no invoice', poorInvoices.length === 0, `matches=${poorInvoices.length}`);
     const poorDebits = await debitRows(poorAccount.flexprice.walletId, poorKeys.debit);
     check('insufficient account creates no matching debit', poorDebits.length === 0, `matches=${poorDebits.length}`);
@@ -312,12 +312,12 @@ async function main() {
     });
 
     const beforeRows = await creditRows(expiryWalletId);
-    const beforePurchased = beforeRows.find((row) => row.idempotency_key === purchaseKey);
-    const beforePromo = beforeRows.find((row) => row.idempotency_key === promoKey);
-    check('snapshot contains the 100-credit purchased row', Number(beforePurchased?.credits_available) === 100,
-      `available=${beforePurchased?.credits_available || '(missing)'}`);
-    check('snapshot contains the expiring FREE_CREDIT_GRANT row', beforePromo?.transaction_reason === 'FREE_CREDIT_GRANT'
-      && Number(beforePromo?.credit_amount) === 50, `reason=${beforePromo?.transaction_reason || '(missing)'}`);
+    const beforePurchased = beforeRows.find((row) => row.idempotencyKey === purchaseKey);
+    const beforePromo = beforeRows.find((row) => row.idempotencyKey === promoKey);
+    check('snapshot contains the 100-credit purchased row', Number(beforePurchased?.creditsAvailable) === 100,
+      `available=${beforePurchased?.creditsAvailable || '(missing)'}`);
+    check('snapshot contains the expiring FREE_CREDIT_GRANT row', beforePromo?.transactionReason === 'FREE_CREDIT_GRANT'
+      && Number(beforePromo?.creditAmount) === 50, `reason=${beforePromo?.transactionReason || '(missing)'}`);
 
     await sleep(Math.max(0, promoExpiresAt.getTime() - Date.now() + 250));
     await client.debitWallet(expiryWalletId, {
@@ -326,22 +326,22 @@ async function main() {
       description: 'Phase 5 expired-credit draw proof',
     });
     const afterRows = await creditRows(expiryWalletId);
-    const afterPurchased = afterRows.find((row) => row.idempotency_key === purchaseKey);
-    const afterPromo = afterRows.find((row) => row.idempotency_key === promoKey);
-    check('debit reduces purchased row from 100 to 75', Number(beforePurchased?.credits_available) === 100
-      && Number(afterPurchased?.credits_available) === 75,
-      `${beforePurchased?.credits_available || '(missing)'} -> ${afterPurchased?.credits_available || '(missing)'}`);
-    const promoBeforeAvailable = Number(beforePromo?.credits_available);
-    const promoAfterAvailable = Number(afterPromo?.credits_available);
+    const afterPurchased = afterRows.find((row) => row.idempotencyKey === purchaseKey);
+    const afterPromo = afterRows.find((row) => row.idempotencyKey === promoKey);
+    check('debit reduces purchased row from 100 to 75', Number(beforePurchased?.creditsAvailable) === 100
+      && Number(afterPurchased?.creditsAvailable) === 75,
+      `${beforePurchased?.creditsAvailable || '(missing)'} -> ${afterPurchased?.creditsAvailable || '(missing)'}`);
+    const promoBeforeAvailable = Number(beforePromo?.creditsAvailable);
+    const promoAfterAvailable = Number(afterPromo?.creditsAvailable);
     check('expired promo is not drawn by the debit', promoAfterAvailable === promoBeforeAvailable
       || promoAfterAvailable === 0,
-    `${beforePromo?.credits_available ?? '(missing)'} -> ${afterPromo?.credits_available ?? '(missing)'}`);
+    `${beforePromo?.creditsAvailable ?? '(missing)'} -> ${afterPromo?.creditsAvailable ?? '(missing)'}`);
 
     const deadline = Date.now() + flags.expiryTimeoutMs;
     let expiredRows = [];
     do {
       const transactions = rowsOf(await client.walletTransactionsSearch({ id: expiryWalletId, limit: 100 }));
-      expiredRows = transactions.filter((row) => row.transaction_reason === 'CREDIT_EXPIRED');
+      expiredRows = transactions.filter((row) => row.transactionReason === 'CREDIT_EXPIRED');
       if (expiredRows.length) break;
       await sleep(Math.min(1000, Math.max(1, deadline - Date.now())));
     } while (Date.now() < deadline);
