@@ -44,10 +44,10 @@ function makeIntent(overrides = {}) {
     provider: 'cashfree',
     subtotalPaise,
     couponBps,
-    bonusPaise: quote.bonusPaise || 0,
+    bonusTokenCredits: quote.bonusTokenCredits || 0,
     gstPaise: quote.gstPaise,
     totalPaise: quote.totalPaise,
-    creditCount: moneyWire.paiseToCredits(subtotalPaise),
+    creditCount: moneyWire.tokenCreditsToCredits(subtotalPaise),
     supplierStateCode: GUJARAT,
     placeOfSupply: quote.placeOfSupply,
     ...overrides.record,
@@ -159,7 +159,7 @@ test('a ₹500 recharge collects ₹590 and credits 500 spendable credits', asyn
   // out of it is to look at what was sent and what the balance became.
   assert.equal(client.state.topUps.length, 1);
   assert.equal(client.state.topUps[0].body.creditsToAdd, '500');
-  assert.notEqual(client.state.topUps[0].body.creditsToAdd, String(moneyWire.paiseToCredits(intent.totalPaise)),
+  assert.notEqual(client.state.topUps[0].body.creditsToAdd, String(moneyWire.tokenCreditsToCredits(intent.totalPaise)),
     'crediting the taxed total would hand back the ₹90 as spendable credit');
   assert.equal(client.state.balance, 1000, '500 in, not 590 — the tax is collected, never credited');
   assert.equal(client.state.topUps[0].idempotencyKey, `recharge:${intent.orderId}`);
@@ -390,10 +390,10 @@ test('a subtotal that is not a whole number of rupees is refused', async () => {
 test('the store freezes an intent money, so a settled order cannot be repriced', () => {
   const intent = makeIntent();
   const after = store.updateRechargeIntent(intent.orderId, {
-    subtotalPaise: 59000, gstPaise: 0, totalPaise: 59000, creditCount: 590, couponBps: 5000, bonusPaise: 25000, orgId: OTHER,
+    subtotalPaise: 59000, gstPaise: 0, totalPaise: 59000, creditCount: 590, couponBps: 5000, bonusTokenCredits: 25000, orgId: OTHER,
   });
   assert.deepEqual(
-    { subtotal: after.subtotalPaise, gst: after.gstPaise, total: after.totalPaise, credits: after.creditCount, coupon: after.couponBps, bonus: after.bonusPaise, org: after.orgId },
+    { subtotal: after.subtotalPaise, gst: after.gstPaise, total: after.totalPaise, credits: after.creditCount, coupon: after.couponBps, bonus: after.bonusTokenCredits, org: after.orgId },
     { subtotal: 50000, gst: 9000, total: 59000, credits: 500, coupon: 0, bonus: 0, org: ORG },
   );
 });
@@ -477,7 +477,7 @@ test('a read-back that disagrees with the credit is not marked settled', async (
 
 test('a 10% coupon credits a second, expiring row and charges the same ₹590', async () => {
   const intent = makeIntent({ couponBps: 1000, record: { promoExpiresAt: '2027-03-31T23:59:59.000Z' } });
-  assert.equal(intent.bonusPaise, 5000);
+  assert.equal(intent.bonusTokenCredits, 5000);
   assert.equal(intent.totalPaise, 59000, 'a bonus is given away, not discounted out of the tax');
 
   const client = fakeFlexprice();

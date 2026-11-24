@@ -110,21 +110,21 @@ async function fetchBillingContext(orgId, deps) {
  * gate returns null when there is no wallet, the read failed, or enforcement is
  * off. Charging or alerting on any of those would act on a number we never read.
  */
-async function walletBalancePaise(orgId, deps) {
+async function walletBalanceTokenCredits(orgId, deps) {
   const fundStatus = deps.fundStatus || gate.ensureFundStatus;
   const status = await fundStatus(orgId);
-  const raw = status && status.balancePaise;
+  const raw = status && status.balanceTokenCredits;
   if (raw === null || raw === undefined) return null;
   const paise = Number(raw);
   return Number.isFinite(paise) ? paise : null;
 }
 
-/** Opted in and, at `balancePaise`, below its own (amount- or percentage-mode) trigger. */
-function chargeBelowThreshold(account, balancePaise) {
+/** Opted in and, at `balanceTokenCredits`, below its own (amount- or percentage-mode) trigger. */
+function chargeBelowThreshold(account, balanceTokenCredits) {
   const cfg = (account && account.autoRecharge) || {};
   if (!cfg.enabled) return false;
-  if (balancePaise === null || balancePaise === undefined) return false;
-  return Number(balancePaise) < recharge.getEffectiveThresholdPaise(account, cfg);
+  if (balanceTokenCredits === null || balanceTokenCredits === undefined) return false;
+  return Number(balanceTokenCredits) < recharge.getEffectiveThresholdTokenCredits(account, cfg);
 }
 
 /**
@@ -132,11 +132,11 @@ function chargeBelowThreshold(account, balancePaise) {
  * specific crossing was already alerted is decided once, authoritatively, inside
  * notify.checkThresholdsAndNotify.
  */
-function alertSuspect(account, balancePaise) {
-  const thresholds = ((account && account.alertThresholdsPaise) || []).map(Number).filter(Number.isFinite);
+function alertSuspect(account, balanceTokenCredits) {
+  const thresholds = ((account && account.alertThresholdsTokenCredits) || []).map(Number).filter(Number.isFinite);
   if (!thresholds.length) return false;
-  if (balancePaise === null || balancePaise === undefined) return false;
-  return Number(balancePaise) <= Math.max(...thresholds);
+  if (balanceTokenCredits === null || balanceTokenCredits === undefined) return false;
+  return Number(balanceTokenCredits) <= Math.max(...thresholds);
 }
 
 /**
@@ -172,14 +172,14 @@ async function runCandidate(orgId, account, opts) {
 
   // Both duties start from the same read. A balance this process could not read
   // is neither a trigger nor a crossing, and saying so is the only useful output.
-  const balancePaise = await walletBalancePaise(orgId, deps);
-  if (balancePaise === null) {
+  const balanceTokenCredits = await walletBalanceTokenCredits(orgId, deps);
+  if (balanceTokenCredits === null) {
     counters.unread += 1;
     deps.log.warn(`auto-recharge ${orgId}: no wallet balance to decide on (no wallet, unreadable, or the gate is off) — nothing charged, nothing alerted`);
     return;
   }
-  const due = chargeBelowThreshold(account, balancePaise);
-  if (!due && !alertSuspect(account, balancePaise)) return;
+  const due = chargeBelowThreshold(account, balanceTokenCredits);
+  if (!due && !alertSuspect(account, balanceTokenCredits)) return;
 
   // Org info from the org service: proves the tenant still exists and gives the
   // alert audience. Never fall back to a cached email list — an admin who was
@@ -205,8 +205,8 @@ async function runCandidate(orgId, account, opts) {
 
   if (due) {
     counters.due += 1;
-    const trigger = recharge.getEffectiveThresholdPaise(account, cfg);
-    deps.log.warn(`auto-recharge ${orgId} (${context.name}): wallet is at ${balancePaise} paise, below the ${trigger} paise trigger, `
+    const trigger = recharge.getEffectiveThresholdTokenCredits(account, cfg);
+    deps.log.warn(`auto-recharge ${orgId} (${context.name}): wallet is at ${balanceTokenCredits} paise, below the ${trigger} paise trigger, `
       + `but ${rechargeIsNotChargeable(cfg)}.`);
   }
 
@@ -225,7 +225,7 @@ async function runCandidate(orgId, account, opts) {
   };
   const alerted = await deps.notifyApi.checkThresholdsAndNotify(alertAccount, {
     store: deps.storeApi,
-    balancePaise,
+    balanceTokenCredits,
   });
   if (alerted !== null && alerted !== undefined) {
     counters.alerted += 1;
@@ -247,7 +247,7 @@ function selectCandidates(storeApi) {
     .listBillingAccounts()
     .filter((account) => account && account.id && UUID_RE.test(account.id))
     .filter((account) => (account.autoRecharge && account.autoRecharge.enabled)
-      || ((account.alertThresholdsPaise || []).length > 0))
+      || ((account.alertThresholdsTokenCredits || []).length > 0))
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
@@ -316,7 +316,7 @@ module.exports = {
   chargeBelowThreshold,
   alertSuspect,
   rechargeIsNotChargeable,
-  walletBalancePaise,
+  walletBalanceTokenCredits,
   fetchBillingContext,
   UUID_RE,
 };

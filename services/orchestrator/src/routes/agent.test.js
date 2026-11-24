@@ -446,10 +446,10 @@ test('enqueue is role-gated, validates projectId, and queues exactly one project
       fundsAvailable: false,
       fundStatus: 'negative',
       state: 'negative',
-      balancePaise: -50000,
+      balanceTokenCredits: -50000,
       reason: 'Organization credit balance is negative — a platform debit exceeded it. Add credits to resume runner activity.',
     }
-    : { orgId, fundsAvailable: true, fundStatus: 'available', state: 'available', balancePaise: 50000 });
+    : { orgId, fundsAvailable: true, fundStatus: 'available', state: 'available', balanceTokenCredits: 50000 });
   t.after(() => { gate.getOrgFundStatus = originalFundStatus; });
 
   const blocked = await callRoute(router, 'post', '/enqueue', {

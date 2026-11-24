@@ -918,13 +918,14 @@ const MEMORY = Object.freeze({
  *   BILLING_SWEEP_ENABLED  master switch for the periodic usage aggregation and
  *                          retention prune (default off). It moves no money: since
  *                          Phase 3 the only spendable balance is FlexPrice's wallet.
- *   USD_TO_INR             the FX rate applied to third-party LLM cost. It is NOT
- *                          display-only: `pricing.usdToPaise` turns a run's USD cost
- *                          into the `cost_paise` that the outbox delivers to the
- *                          wallet, so changing it reprices every future run. Treat it
- *                          as a versioned catalog input, and note that the same rate
- *                          is stamped into the per-model INR prices that
- *                          `scripts/flexprice-provision.js` writes.
+ *   CREDIT_RATES_FILE      the rate card that prices every run and lists every
+ *                          recharge package (default
+ *                          deploy/billing/credit-rates.yaml, which the images ship and
+ *                          pin). There is NO FX knob any more: the card holds the
+ *                          rupee-per-token rows, so a price change is a card edit plus
+ *                          a redeploy — the card is memoised per process on purpose,
+ *                          because a debit and the invoice reconciled against it months
+ *                          later have to be computable from the same numbers.
  *   INITIAL_CREDIT_INR     the free-tier opening grant, recorded on the account as
  *                          configuration and minted in FlexPrice as
  *                          FREE_CREDIT_GRANT by the provisioner (500 INR). Not a
@@ -952,8 +953,7 @@ const BILLING = Object.freeze({
   sweepEnabled: String(process.env.BILLING_SWEEP_ENABLED || '').trim().toLowerCase() === 'true',
   gatePolicy: gatePolicyFromEnv(),
   gateTtlMs: toPositiveNumber(process.env.BILLING_GATE_TTL_MS, 15000),
-  usdToInr: toPositiveNumber(process.env.USD_TO_INR, 87),
-  initialCreditPaise: Math.round(
+  initialCreditTokenCredits: Math.round(
     (Number.isFinite(Number(process.env.INITIAL_CREDIT_INR)) && Number(process.env.INITIAL_CREDIT_INR) >= 0
       ? Number(process.env.INITIAL_CREDIT_INR)
       : 500) * 100,

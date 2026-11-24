@@ -39,6 +39,11 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY packages/ ./packages/
 COPY services/ ./services/
+# recordUsage runs HERE too (packages/shared-core/src/billing/usage.js is called by the
+# in-process harnesses and by the actor's dispatching planner), so this image needs the
+# rate card for the same reason Dockerfile.billing does: no card, no price, and the boot
+# gate refuses to start a service that cannot bill the runs it accepts.
+COPY deploy/billing/credit-rates.yaml ./deploy/billing/credit-rates.yaml
 
 # This image installs the FULL workspace closure (COPY packages/ + services/
 # above) on purpose: the actor RUNS the agent runtime, invoking the native
@@ -67,7 +72,8 @@ RUN apk add --no-cache git openssh-client ca-certificates bash libseccomp
 # atenet-router backend expect.
 ENV NODE_ENV=production \
     SOFTWARE_FACTORY_DATA_DIR=/tmp \
-    SUBSTRATE_ACTOR_MODE=true
+    SUBSTRATE_ACTOR_MODE=true \
+    CREDIT_RATES_FILE=/app/deploy/billing/credit-rates.yaml
 
 COPY --from=builder --chown=node:node /app /app
 COPY --from=sandbox-builder /out/ai-fleet-network-sandbox /usr/local/bin/ai-fleet-network-sandbox

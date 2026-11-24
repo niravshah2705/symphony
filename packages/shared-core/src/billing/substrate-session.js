@@ -54,7 +54,7 @@ function toEpochSeconds(value) {
 }
 
 /** Begin a billable session. `tier` is the actor's resource shape, see TIERS. */
-function openSession({ agentId, orgId, projectId = null, userId = null, tier, startedAt, hourlyRatePaise }, sessions = new Map()) {
+function openSession({ agentId, orgId, projectId = null, userId = null, tier, startedAt, hourlyRateTokenCredits }, sessions = new Map()) {
   const agent = String(agentId || '');
   if (!agent) throw new TypeError('substrateSession.openSession: agentId is required');
   if (!orgId) throw new TypeError('substrateSession.openSession: orgId is required');
@@ -68,7 +68,7 @@ function openSession({ agentId, orgId, projectId = null, userId = null, tier, st
     projectId,
     userId,
     tier,
-    hourlyRatePaise,
+    hourlyRateTokenCredits,
     startedAt: started,
     stoppedAt: null,
     status: SESSION_RUNNING,

@@ -19,8 +19,8 @@ function usageSince(orgId, days, now = Date.now()) {
   const cutoff = new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
   const records = store.listUsageRecords({ orgId }).filter((r) => String(r.createdAt || '') >= cutoff);
   const tokens = records.reduce((sum, r) => sum + ((r.usage && Number(r.usage.totalTokens)) || 0), 0);
-  const costPaise = records.reduce((sum, r) => sum + (Number(r.costPaise) || 0), 0);
-  return { records: records.length, tokens, costInr: paiseToInr(costPaise) };
+  const costTokenCredits = records.reduce((sum, r) => sum + (Number(r.costTokenCredits) || 0), 0);
+  return { records: records.length, tokens, costInr: paiseToInr(costTokenCredits) };
 }
 
 const getBillingUsageTool = defineTool(
@@ -42,9 +42,9 @@ const getBillingUsageTool = defineTool(
     const fund = await gate.ensureFundStatus(orgId);
     const period = input.period && PERIOD_DAYS[input.period] ? input.period : 'week';
     const usage = usageSince(orgId, PERIOD_DAYS[period]);
-    const balance = fund.balancePaise === null || fund.balancePaise === undefined
+    const balance = fund.balanceTokenCredits === null || fund.balanceTokenCredits === undefined
       ? 'unknown (no FlexPrice wallet balance could be read)'
-      : `₹${paiseToInr(fund.balancePaise).toFixed(2)}`;
+      : `₹${paiseToInr(fund.balanceTokenCredits).toFixed(2)}`;
     const lines = [
       `Organization: ${orgId}`,
       `Balance: ${balance}`,

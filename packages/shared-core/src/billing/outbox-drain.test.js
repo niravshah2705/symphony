@@ -16,7 +16,7 @@ const outbox = require('./billing-outbox');
 const drain = require('./outbox-drain');
 
 const ON = { enabled: true };
-const METERS = [{ id: 'met_llm', name: 'llm-cost', event_name: 'fleet.llm_cost', field: 'cost_paise' }];
+const METERS = [{ id: 'met_llm', name: 'llm-token-credits', event_name: 'fleet.llm_cost', field: 'token_credits' }];
 
 /**
  * A stand-in for the ingest plane that reproduces the three measured behaviours
@@ -76,7 +76,7 @@ test.beforeEach(resetOutbox);
 
 function enqueueOne(orgId, runId, quantity, over = {}) {
   return outbox.enqueue({
-    kind: 'llmCost',
+    kind: 'llmTokenCredits',
     orgId,
     runId,
     quantity,
@@ -107,7 +107,7 @@ test('the event carries the delivery key as event_id and the org as its customer
   const [event] = flex.calls.bulk[0];
   assert.equal(event.event_id, row.idempotencyKey);
   assert.equal(event.external_customer_id, 'org-drain-2');
-  assert.deepEqual(event.properties, { cost_paise: 250, org_id: 'org-drain-2' });
+  assert.deepEqual(event.properties, { token_credits: 250, org_id: 'org-drain-2' });
 });
 
 test('the window it reads back starts at the oldest event, not at now', async () => {
@@ -188,7 +188,7 @@ test('a blind retry of a delivered batch cannot double-bill, because the id wins
   assert.equal(flex.table.length, 1, 'FlexPrice kept one event');
   assert.equal(summary.verified, 1);
   // The proof the retry cost nothing: the meter still reads the single 500.
-  assert.equal(Number(flex.table[0].properties.cost_paise), 500);
+  assert.equal(Number(flex.table[0].properties.token_credits), 500);
 });
 
 test('rows already verified inside the window count on the expected side', async () => {
@@ -276,9 +276,9 @@ test('an acknowledged row that never proves becomes an alarm; a proven one ages 
 });
 
 test('quantities are read off whichever field the meter uses', () => {
-  assert.equal(drain.quantityOf({ quantityPaise: 1200 }), 1200);
+  assert.equal(drain.quantityOf({ quantityTokenCredits: 1200 }), 1200);
   assert.equal(drain.quantityOf({ quantitySeconds: 90 }), 90);
   assert.equal(drain.quantityOf({ quantityMinutes: 5 }), 5);
   assert.equal(drain.quantityOf({}), 0);
-  assert.equal(drain.quantityOf({ quantityPaise: 'nonsense' }), 0);
+  assert.equal(drain.quantityOf({ quantityTokenCredits: 'nonsense' }), 0);
 });

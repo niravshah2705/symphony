@@ -18,7 +18,7 @@
  *   4. the GST recomputes to the totals the intent carries — a quote that cannot
  *      be reproduced from its own inputs is not a quote we agreed to;
  *   5. the provider says PAID for exactly `totalPaise` (₹590 for a ₹500 recharge);
- *   6. the wallet is credited `paiseToCredits(subtotalPaise)` — the *subtotal*,
+ *   6. the wallet is credited `tokenCreditsToCredits(subtotalPaise)` — the *subtotal*,
  *      so the ₹90 GST never becomes spendable — and the read-back agrees.
  *
  * Two gates are deliberately here rather than in the adapters:
@@ -83,12 +83,12 @@ function requote(intent, flexpriceConfig) {
   }
 }
 
-function wholeCredits(paise, label) {
+function wholeCredits(tokenCredits, label) {
   try {
-    return moneyWire.paiseToCredits(paise);
+    return moneyWire.tokenCreditsToCredits(tokenCredits);
   } catch (err) {
     throw new SettleError(400, 'not_whole_credit',
-      `${label} must be a whole number of rupees (1 credit = ₹1): ${err.message}`);
+      `${label} must be a whole number of credits (1 credit = ₹1 = 100 token credits): ${err.message}`);
   }
 }
 
@@ -258,14 +258,14 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
   }
 
   const crediting = credits.topUpCrediting({ quote, expiresAt: intent.promoExpiresAt || null });
-  const prepaidCredits = wholeCredits(crediting.prepaidPaise, 'the recharge amount');
-  const promoCredits = wholeCredits(crediting.promoPaise, 'the coupon bonus');
+  const prepaidCredits = wholeCredits(crediting.prepaidTokenCredits, 'the recharge amount');
+  const promoCredits = wholeCredits(crediting.promoTokenCredits, 'the coupon bonus');
   if (intent.creditCount != null && intent.creditCount !== prepaidCredits) {
     throw new SettleError(500, 'credit_count_drift',
       `The intent records ${intent.creditCount} credits but ₹${moneyWire.decimalFromPaise(intent.subtotalPaise)} is ${prepaidCredits} credits.`);
   }
   // Before any write: the number about to be credited must not be the taxed total.
-  credits.assertNoTaxCredited({ amountPaise: crediting.prepaidPaise, quote });
+  credits.assertNoTaxCredited({ amountTokenCredits: crediting.prepaidTokenCredits, quote });
 
   if (!flexpriceConfig.enabled) {
     throw new SettleError(503, 'flexprice_disabled',

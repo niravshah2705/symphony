@@ -10,7 +10,6 @@ const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'core-billing-sweep-'));
 process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.BILLING_SWEEP_ENABLED = 'true';
 process.env.INITIAL_CREDIT_INR = '500';
-process.env.USD_TO_INR = '100';
 process.env.FLEET_ORG_ID = 'org-core-sweep';
 
 const store = require('../store');
@@ -47,17 +46,17 @@ test('a second sweep over the same usage records processes nothing', async () =>
   assert.equal(store.listLedgerEntries().length, 0);
 });
 
-test('aggregateByOrg sums paise and tokens per org', () => {
+test('aggregateByOrg sums token credits and tokens per org', () => {
   const groups = sweep.aggregateByOrg([
-    { orgId: 'a', costPaise: 100, usage: { totalTokens: 10 } },
-    { orgId: 'a', costPaise: 50.5, usage: { totalTokens: 5 } },
-    { orgId: 'b', costPaise: 0, usage: {} },
-    { costPaise: 7 }, // no org → the shared stack, as before
+    { orgId: 'a', costTokenCredits: 100, usage: { totalTokens: 10 } },
+    { orgId: 'a', costTokenCredits: 50.5, usage: { totalTokens: 5 } },
+    { orgId: 'b', costTokenCredits: 0, usage: {} },
+    { costTokenCredits: 7 }, // no org → the shared stack, as before
   ]);
   assert.deepEqual(groups, [
-    { orgId: 'a', costPaise: 150.5, tokens: 15, count: 2 },
-    { orgId: 'b', costPaise: 0, tokens: 0, count: 1 },
-    { orgId: '__shared__', costPaise: 7, tokens: 0, count: 1 },
+    { orgId: 'a', costTokenCredits: 150.5, tokens: 15, count: 2 },
+    { orgId: 'b', costTokenCredits: 0, tokens: 0, count: 1 },
+    { orgId: '__shared__', costTokenCredits: 7, tokens: 0, count: 1 },
   ]);
 });
 
@@ -71,7 +70,7 @@ test('usage past the retention window is pruned', async () => {
   const stale = new Date(nowMs - retentionMs - 60_000).toISOString();
   const rec = store.addUsageRecord({
     orgId, projectId: 'p-old', taskId: 't-old', source: 'coder',
-    costPaise: 100, createdAt: stale, usage: { totalTokens: 1500 },
+    costTokenCredits: 100, createdAt: stale, usage: { totalTokens: 1500 },
   });
 
   const result = await sweep.processBillingSweep({

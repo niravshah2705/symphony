@@ -82,6 +82,34 @@ test('logger: a credential in the meta payload stays masked in both formats', (t
   assert.doesNotMatch(textLine, /sk-or-v1-secret|ghp_secret/);
 });
 
+test('logger: the tokenCredits unit is money, but a key ending in Token is still a credential', (t) => {
+  // Not cosmetic: the balance alerts are Cloud Logging metrics built out of these
+  // stringified fields. If the scrubber ate the unit word, every alert line would
+  // read "••••" and the alert would stop firing with nothing anywhere failing.
+  process.env.LOG_FORMAT = 'json';
+  t.after(() => { delete process.env.LOG_FORMAT; });
+  const fields = {
+    balanceTokenCredits: '9000',
+    thresholdTokenCredits: '10000',
+    token_credits: '2360',
+    accessToken: 'eyJhbGciOi signed',
+    token: 'opaque-value',
+    refreshTokenUrl: 'https://example.invalid/refresh',
+  };
+  const [line] = capture(t, () => log.warn('balance crossed a threshold', fields));
+  const record = JSON.parse(line);
+  assert.deepEqual(
+    [record.meta.balanceTokenCredits, record.meta.thresholdTokenCredits, record.meta.token_credits],
+    ['9000', '10000', '2360'],
+    'the money unit must reach the sink readable',
+  );
+  assert.equal(record.meta.accessToken, '••••');
+  assert.equal(record.meta.token, '••••');
+  assert.equal(record.meta.refreshTokenUrl, '••••');
+  assert.ok(log.isSecretKey('accessToken') && log.isSecretKey('Token') && !log.isSecretKey('balanceTokenCredits'),
+    'isSecretKey is the one predicate — the notify test asserts against this same function');
+});
+
 test('logger: a fabricated or malformed trace id never becomes a trace link', (t) => {
   process.env.LOG_FORMAT = 'json';
   process.env.GOOGLE_CLOUD_PROJECT = 'fleet-prod';

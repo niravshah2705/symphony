@@ -179,7 +179,7 @@ test('every upstream call a trusted request makes carries that org’s selector'
   const orgB = 'org-iso-other';
   const client = tenantFlexprice({ owned: { [orgA]: [walletOf(orgA)], [orgB]: [walletOf(orgB)] } });
   store.upsertBillingAccount(orgA, { flexprice: { walletId: walletOf(orgA) } });
-  store.addUsageRecord({ orgId: orgA, projectId: 'proj-1', tier: 'pro', costPaise: 500, createdAt: new Date(NOW).toISOString() });
+  store.addUsageRecord({ orgId: orgA, projectId: 'proj-1', tier: 'pro', costTokenCredits: 500, createdAt: new Date(NOW).toISOString() });
 
   await mount({ client, callers: { a: trusted(orgA) } }, async ({ get }) => {
     for (const route of ROUTES) assert.equal((await get('a', route)).degraded, false, route);

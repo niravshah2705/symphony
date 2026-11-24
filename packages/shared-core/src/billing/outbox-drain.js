@@ -43,7 +43,7 @@ const MAX_BATCHES_PER_TICK = 5;
 const STALE_SENT_MS = 30 * 60 * 1000;
 
 function quantityOf(row) {
-  const value = Number(row.quantityPaise ?? row.quantitySeconds ?? row.quantityMinutes ?? 0);
+  const value = Number(row.quantityTokenCredits ?? row.quantitySeconds ?? row.quantityMinutes ?? 0);
   return Number.isFinite(value) ? value : 0;
 }
 

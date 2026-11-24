@@ -1,11 +1,14 @@
 'use strict';
 
-// The one place a rupee becomes an integer and an integer becomes a rupee.
+// The one place a rupee or a credit becomes an integer, and back out again.
 //
 // FlexPrice marshals shopspring/decimal as a QUOTED JSON string ("500.005"), and
-// Cashfree/Razorpay want rupees with two decimals. Our whole money path is
-// integer paise. Three unit conversions in one system is where a rounding
-// argument starts, so they all live in this file and nowhere else.
+// Cashfree/Razorpay want rupees with two decimals. Our whole money path is integer
+// MINOR UNITS, in two named currencies of one system: `paise` for a rupee amount —
+// a card charge, a GST line, anything a tax document states — and `tokenCredits`
+// for the prepaid value a wallet holds, at ₹1 = 1 credit = 100 token credits. Three
+// unit conversions in one system is where a rounding argument starts, so they all
+// live in this file and nowhere else.
 //
 // Why not `Math.round(parseFloat(x) * 100)`: binary floating point puts some
 // exact halves just below themselves, and the amount is then short by a paise in
@@ -30,10 +33,10 @@
 const CURRENCY = 'INR';
 
 // D6 of the implementation plan: 1 credit is 1 rupee, so ₹500 is 500 credits and
-// a credit is worth PAISE_PER_CREDIT paise. The number is here, in one place,
+// a credit is worth TOKEN_CREDITS_PER_CREDIT token credits. The number is here, in one place,
 // because probe A measures the engine's `conversion_rate` direction and the fix
 // for a wrong guess must not be spread across the money path.
-const PAISE_PER_CREDIT = 100;
+const TOKEN_CREDITS_PER_CREDIT = 100;
 const CREDITS_PER_RUPEE = 1;
 
 const DECIMAL_RE = /^([+-]?)(\d+)(?:\.(\d*))?$/;
@@ -82,7 +85,7 @@ function formatScaled(scaled, dp) {
 
 function toSafeNumber(scaled, value) {
   if (scaled > BigInt(Number.MAX_SAFE_INTEGER) || scaled < BigInt(-Number.MAX_SAFE_INTEGER)) {
-    throw new RangeError(`money-wire: amount exceeds a safe integer paise count: ${JSON.stringify(value)}`);
+    throw new RangeError(`money-wire: amount exceeds a safe integer money amount: ${JSON.stringify(value)}`);
   }
   return Number(scaled);
 }
@@ -92,60 +95,72 @@ function paiseFromDecimal(value) {
   return toSafeNumber(decimalToScaled(value, 2), value);
 }
 
-/** Integer paise → the decimal string the wire expects ("59000" → "590.00"). */
+/** Integer paise → the decimal string the WIRE expects ("59000" → "590.00"). */
 function decimalFromPaise(paise) {
   return formatScaled(BigInt(wholePaise(paise, 'decimalFromPaise')), 2);
 }
 
-/** Credits → integer paise, half-away-from-zero on any sub-paise remainder. */
-function paiseFromCredits(credits) {
-  const scaled = decimalToScaled(credits, 6) * BigInt(PAISE_PER_CREDIT);
+/** Credits → integer token credits, half-away-from-zero on any sub-unit remainder. */
+function tokenCreditsFromCredits(credits) {
+  const scaled = decimalToScaled(credits, 6) * BigInt(TOKEN_CREDITS_PER_CREDIT);
   return toSafeNumber(roundDiv(scaled, 10n ** 6n), credits);
 }
 
-/** Integer paise → credits as a decimal string ("50000" → "500.00" at ₹1 = 1 credit). */
-function creditsFromPaise(paise) {
-  const n = BigInt(wholePaise(paise, 'creditsFromPaise'));
-  return formatScaled(roundDiv(n * 100n, BigInt(PAISE_PER_CREDIT)), 2);
+/** Token credits → credits as a decimal string ("50000" → "500.00" at ₹1 = 1 credit). */
+function creditsFromTokenCredits(tokenCredits) {
+  const n = BigInt(wholeTokenCredits(tokenCredits, 'creditsFromTokenCredits'));
+  return formatScaled(roundDiv(n * 100n, BigInt(TOKEN_CREDITS_PER_CREDIT)), 2);
 }
 
 /**
- * Integer credits → integer paise.
+ * Integer credits → integer token credits.
  *
  * The named pair the money path uses at the credit boundary (D6: 1 credit = ₹1,
- * so ₹500 is 500 credits and 50000 paise). `paiseFromCredits` is the general
- * decimal form; this is the whole-credit case, named because a recharge is
- * counted in credits on the wire and in paise in our ledger, and a reader of
- * either side should be able to tell which one they are looking at.
+ * so ₹500 is 500 credits and 50000 token credits). `tokenCreditsFromCredits` is the
+ * general decimal form; this is the whole-credit case, named because a recharge is
+ * counted in credits on the wire and in token credits in our ledger, and a reader
+ * of either side should be able to tell which one they are looking at.
  */
-function creditsToPaise(credits) {
-  return paiseFromCredits(credits);
+function creditsToTokenCredits(credits) {
+  return tokenCreditsFromCredits(credits);
 }
 
 /**
- * Integer paise → integer credits, exactly.
+ * Integer token credits → integer credits, exactly.
  *
  * Refuses a non-divisible amount instead of inventing a fraction of a credit:
  * every credit a human is told about is a whole one, because a recharge is a
  * whole number of rupees. A remainder here means a caller is crediting GST or
  * sub-rupee usage money as credits, which is the mistake
- * `credits.assertNoTaxCredited` exists to catch — so `creditsFromPaise` (the
+ * `credits.assertNoTaxCredited` exists to catch — so `creditsFromTokenCredits` (the
  * decimal string) is for display and this is for money movement.
  */
-function paiseToCredits(paise) {
-  const n = wholePaise(paise, 'paiseToCredits');
-  if (n % PAISE_PER_CREDIT !== 0) {
+function tokenCreditsToCredits(tokenCredits) {
+  const n = wholeTokenCredits(tokenCredits, 'tokenCreditsToCredits');
+  if (n % TOKEN_CREDITS_PER_CREDIT !== 0) {
     throw new TypeError(
-      `money-wire: ${n}p is not a whole number of credits (₹1 = ${PAISE_PER_CREDIT}p); a fractional credit is a unit error — use creditsFromPaise to display it`,
+      `money-wire: ${n} token credits is not a whole number of credits (₹1 = ${TOKEN_CREDITS_PER_CREDIT} token credits); a fractional credit is a unit error — use creditsFromTokenCredits to display it`,
     );
   }
-  return n / PAISE_PER_CREDIT;
+  return n / TOKEN_CREDITS_PER_CREDIT;
 }
 
+// Two integer guards over one rule, kept apart because the UNITS are apart: a
+// rupee-side amount (a card charge, a GST line) must not be checked in the
+// vocabulary of a credit, or the name in the thrown message is the one thing a
+// reader cannot use to tell which money went wrong.
 function wholePaise(value, context) {
   const n = Number(value);
   if (!Number.isInteger(n)) {
     throw new TypeError(`money-wire: ${context} wants WHOLE paise, got ${JSON.stringify(value)}. Round it deliberately first.`);
+  }
+  return n;
+}
+
+function wholeTokenCredits(value, context) {
+  const n = Number(value);
+  if (!Number.isInteger(n)) {
+    throw new TypeError(`money-wire: ${context} wants WHOLE token credits, got ${JSON.stringify(value)}. Round it deliberately first.`);
   }
   return n;
 }
@@ -161,26 +176,30 @@ function roundDiv(numerator, denominator) {
   return negative ? -out : out;
 }
 
-/** Paise must be a whole-number amount before it goes anywhere near the wire. */
-function assertPaise(paise, context = 'money') {
-  if (!Number.isInteger(paise)) {
-    throw new TypeError(`${context}: expected integer paise, got ${JSON.stringify(paise)}`);
+/**
+ * Token credits must be a whole number before they go anywhere near the wire.
+ * The outbox quantity is the caller: it aggregates into a FlexPrice meter, and a
+ * fractional metered quantity is a unit error, not a rounding choice.
+ */
+function assertTokenCredits(tokenCredits, context = 'credits') {
+  if (!Number.isInteger(tokenCredits)) {
+    throw new TypeError(`${context}: expected integer token credits, got ${JSON.stringify(tokenCredits)}`);
   }
-  return paise;
+  return tokenCredits;
 }
 
 module.exports = {
   CURRENCY,
-  PAISE_PER_CREDIT,
+  TOKEN_CREDITS_PER_CREDIT,
   CREDITS_PER_RUPEE,
   decimalToScaled,
   formatScaled,
   roundDiv,
   paiseFromDecimal,
   decimalFromPaise,
-  paiseFromCredits,
-  creditsFromPaise,
-  creditsToPaise,
-  paiseToCredits,
-  assertPaise,
+  tokenCreditsFromCredits,
+  creditsFromTokenCredits,
+  creditsToTokenCredits,
+  tokenCreditsToCredits,
+  assertTokenCredits,
 };

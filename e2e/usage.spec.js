@@ -11,7 +11,7 @@ function json(route, body, status = 200) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
-const money = (credits) => ({ paise: Math.round(credits * 100), credits: credits.toFixed(2), inr: credits.toFixed(2) });
+const money = (credits) => ({ tokenCredits: Math.round(credits * 100), credits: credits.toFixed(2), inr: credits.toFixed(2) });
 
 const SUMMARY = {
   currency: 'INR',
@@ -180,9 +180,9 @@ test('the credits log switches tabs by refetching, and keeps the debit explanati
 test('a degraded read shows why, and never a zero balance', async ({ page }) => {
   const degraded = { degraded: true, reason: 'read_failed', reasonDetail: 'FlexPrice refused the read', asOf: '2026-11-20T12:00:00.000Z' };
   await stubBilling(page, {
-    overview: { ...degraded, currency: 'INR', balance: { paise: null, credits: null, inr: null }, planCredits: null, addOnCredits: null, creditPacks: [], packages: [], walletResolved: false },
-    heatmap: { ...degraded, weeks: 13, total: { paise: null, credits: null, inr: null }, days: [] },
-    trend: { ...degraded, points: [], total: { paise: null, credits: null, inr: null }, bucketed: false, filters: {} },
+    overview: { ...degraded, currency: 'INR', balance: { tokenCredits: null, credits: null, inr: null }, planCredits: null, addOnCredits: null, creditPacks: [], packages: [], walletResolved: false },
+    heatmap: { ...degraded, weeks: 13, total: { tokenCredits: null, credits: null, inr: null }, days: [] },
+    trend: { ...degraded, points: [], total: { tokenCredits: null, credits: null, inr: null }, bucketed: false, filters: {} },
     breakdown: { ...degraded, dimension: 'project', values: [] },
     earned: { ...degraded, tab: 'earned', rows: [], total: null, nextOffset: null },
   });

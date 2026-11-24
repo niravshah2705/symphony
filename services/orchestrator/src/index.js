@@ -2,6 +2,7 @@
 
 const log = require('@software-factory/shared-core/logger');
 const { CONFIG } = require('@software-factory/shared-core/config');
+const creditRates = require('@software-factory/shared-core/billing/credit-rates');
 const {
   HttpStageCommandBus,
   createPubSubStageCommandBus,
@@ -43,6 +44,10 @@ function createService(options = {}) {
       code: 'pipeline_cloud_messaging_required',
     });
   }
+  // This process meters the runs it dispatches, and the rate card is what makes a token
+  // count into a debit. Fail at boot rather than swallow the pricing error on every run
+  // and hand the org an invoice for nothing.
+  creditRates.ensureLoaded({ enabled: CONFIG.FLEXPRICE.enabled });
   const repository = options.repository || createPipelineRepository({
     backend: config.storeBackend,
     firestoreFactory: options.firestoreFactory,

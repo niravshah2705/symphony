@@ -4,7 +4,7 @@ const store = require('../store');
 const log = require('../logger');
 const { CONFIG } = require('../config');
 const { resolveOrgId, SHARED_ORG_ID } = require('./org-context');
-const { paiseFromCredits } = require('./money-wire');
+const { tokenCreditsFromCredits } = require('./money-wire');
 const { createFlexpriceClient, rowsOf } = require('./flexprice-client');
 const {
   assertWalletOwnership, rememberOwnership, forgetOwnership, customerIdOf, WalletScopeError,
@@ -122,7 +122,7 @@ function emptyView(orgId, reason, extra = {}) {
     state: STATE.unknown,
     reason,
     walletId: null,
-    balancePaise: null,
+    balanceTokenCredits: null,
     unpaidInvoicesPaise: null,
     isCachedFallback: false,
     fetchedAt: Date.now(),
@@ -131,7 +131,7 @@ function emptyView(orgId, reason, extra = {}) {
   };
 }
 
-function stateForPaise(paise) {
+function stateForTokenCredits(paise) {
   if (paise > 0) return STATE.available;
   if (paise < 0) return STATE.negative;
   return STATE.exhausted;
@@ -197,9 +197,9 @@ async function fetchView(orgId, deps = {}) {
     return emptyView(orgId, 'balance_unreadable', { walletId });
   }
   const credits = String(balance.realTimeCreditBalance);
-  let balancePaise;
+  let balanceTokenCredits;
   try {
-    balancePaise = paiseFromCredits(credits);
+    balanceTokenCredits = tokenCreditsFromCredits(credits);
   } catch (err) {
     // A balance this code cannot read is a balance it must not spend admission on.
     log.warn('billing_gate_balance_unparsable', { orgId, walletId, credits });
@@ -207,14 +207,14 @@ async function fetchView(orgId, deps = {}) {
   }
   const paise = (value) => {
     if (value === undefined || value === null || value === '') return null;
-    try { return paiseFromCredits(value); } catch { return null; }
+    try { return tokenCreditsFromCredits(value); } catch { return null; }
   };
   return {
     orgId,
-    state: stateForPaise(balancePaise),
+    state: stateForTokenCredits(balanceTokenCredits),
     reason: null,
     walletId,
-    balancePaise,
+    balanceTokenCredits,
     // `current_period_usage` is deliberately NOT carried. It reads "0" on all 21
     // wallets in the local stack — including one a manual debit drove to −2900 —
     // because it is anchored to the current *invoice* cycle, which does not exist
@@ -285,7 +285,7 @@ function shape(orgId, view, { policy, named }) {
   const base = {
     orgId,
     gatePolicy: policy,
-    balancePaise: view ? view.balancePaise : null,
+    balanceTokenCredits: view ? view.balanceTokenCredits : null,
     walletId: view ? view.walletId : null,
     state: view ? view.state : STATE.unknown,
     stale: Boolean(view && view.stale),
@@ -415,7 +415,7 @@ function billingStatus(context = {}, deps = {}) {
     blocked,
     orgId,
     gatePolicy: fundInfo.gatePolicy,
-    balancePaise: fundInfo.balancePaise,
+    balanceTokenCredits: fundInfo.balanceTokenCredits,
     fundStatus: fundInfo.fundStatus,
     fundsAvailable: fundInfo.fundsAvailable,
     state: fundInfo.state,

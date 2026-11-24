@@ -25,6 +25,11 @@ COPY package.json package-lock.json ./
 COPY packages/shared-core/ ./packages/shared-core/
 COPY packages/shared/ ./packages/shared/
 COPY services/orchestrator/ ./services/orchestrator/
+# recordUsage runs HERE too (packages/shared-core/src/billing/usage.js is called by the
+# in-process harnesses and by the actor's dispatching planner), so this image needs the
+# rate card for the same reason Dockerfile.billing does: no card, no price, and the boot
+# gate refuses to start a service that cannot bill the runs it accepts.
+COPY deploy/billing/credit-rates.yaml ./deploy/billing/credit-rates.yaml
 
 # @software-factory/shared is selected explicitly: npm only installs the deps of the
 # workspaces named here, so leaving it out would resolve the symlink but ship
@@ -39,7 +44,8 @@ RUN npm ci --omit=dev \
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
-    SOFTWARE_FACTORY_DATA_DIR=/tmp
+    SOFTWARE_FACTORY_DATA_DIR=/tmp \
+    CREDIT_RATES_FILE=/app/deploy/billing/credit-rates.yaml
 COPY --from=builder --chown=node:node /app /app
 USER node
 EXPOSE 8080

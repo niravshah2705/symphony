@@ -87,11 +87,11 @@ test('native projects inside one organization share its operational store', asyn
 
 test('explicit billing and EULA APIs always use the global legacy backend', async () => {
   await store.initStore();
-  store.upsertBillingAccount('org:billing-b', { balancePaise: 12345 });
+  store.upsertBillingAccount('org:billing-b', { balanceTokenCredits: 12345 });
   store.recordEulaOrgDecision('org:eula-b', { status: 'accepted', version: '1.0.0' });
 
   await inWorkspace({ organizationId: 'org:alpha' }, () => {
-    assert.equal(store.getBillingAccount('org:billing-b').balancePaise, 12345);
+    assert.equal(store.getBillingAccount('org:billing-b').balanceTokenCredits, 12345);
     assert.equal(store.getEulaOrg('org:eula-b').status, 'accepted');
     store.addUsageRecord({ orgId: 'org:billing-b', inputTokens: 1 });
     store.recordEulaDecision('user:global', { status: 'accepted', version: '1.0.0' });

@@ -14,7 +14,7 @@ function running(overrides = {}) {
     projectId: 'proj-1',
     userId: 'user-1',
     tier: 'standard-1v1g',
-    hourlyRatePaise: 463,
+    hourlyRateTokenCredits: 463,
     startedAt: BASE,
     ...overrides,
   }, new Map());

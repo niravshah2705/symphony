@@ -119,7 +119,7 @@ async function main() {
     const row = store.listBillingOutboxRows().find((r) => r.actorSessionId === ready.sessionId);
     check('zero price still queues integer seconds with user/project attribution', row.quantitySeconds === closed.durationSeconds
       && row.userId === 'user-verify' && row.projectId === 'project-verify');
-    check('actor compute costs zero paise', store.listUsageRecords()[0].costPaise === 0);
+    check('actor compute costs zero paise', store.listUsageRecords()[0].costTokenCredits === 0);
     await waitFor(async () => {
       const rows = await query(ACTOR_SESSION_METRICS.startTimestamp + selector);
       return rows.length && Number(rows[0].value[1]) === 0;
@@ -128,7 +128,7 @@ async function main() {
     check('final scraped seconds equal frozen duration', Number(final[0].value[1]) === closed.durationSeconds);
     const panel = await require('../services/billing/src/savings-panel').readSavingsPanel({ orgId }, { baseUrl: prom });
     check('savings PromQL is read-only and zero priced', panel.available && panel.actors[0].actualSeconds === closed.durationSeconds
-      && panel.actors[0].savings.netSavedPaise === 0);
+      && panel.actors[0].savings.netSavedTokenCredits === 0);
 
     const stack = Object.fromEntries(fs.readFileSync(path.join(ROOT, 'deploy/flexprice/.env'), 'utf8')
       .split('\n').map((line) => /^([A-Z0-9_]+)=(.*)$/.exec(line.trim())).filter(Boolean).map((m) => [m[1], m[2]]));
@@ -147,7 +147,7 @@ async function main() {
     });
     check('FlexPrice actor-compute meter verifies exact integer seconds', store.listBillingOutboxRows()[0].status === 'verified');
     check('90 seconds at the test rate is exactly 12 paise', require('../packages/shared-core/src/billing/compute-pricing')
-      .priceActorUsage({ durationSeconds: 90, hourlyRatePaise: 463 }).expectedPaise === 12);
+      .priceActorUsage({ durationSeconds: 90, hourlyRateTokenCredits: 463 }).expectedTokenCredits === 12);
     console.log(`${checks}/${checks} checks passed; org=${orgId}`);
   } finally {
     if (child) { const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited; }

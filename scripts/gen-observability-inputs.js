@@ -8,7 +8,7 @@
 //   node scripts/gen-observability-inputs.js          # write alert_thresholds.json
 //   node scripts/gen-observability-inputs.js --check   # fail if it drifts (CI gate)
 //
-// The source of truth is DEFAULT_ALERT_THRESHOLDS_PAISE in
+// The source of truth is DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS in
 // packages/shared-core/src/billing/ledger.js. It is parsed from the source rather
 // required, because ledger.js pulls in the store — this script has to run in CI
 // with no Firestore, no credentials and no network.
@@ -24,21 +24,21 @@ const path = require('node:path');
 
 const LEDGER_PATH = path.resolve(__dirname, '../packages/shared-core/src/billing/ledger.js');
 const OUT_PATH = path.resolve(__dirname, '../deploy/gcp/terraform/alert_thresholds.json');
-const VARIABLE = 'billing_alert_thresholds_paise';
+const VARIABLE = 'billing_alert_thresholds_token_credits';
 
-/** The integer paise list from `const DEFAULT_ALERT_THRESHOLDS_PAISE = Object.freeze([...])`. */
+/** The integer token-credit list from `const DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS = Object.freeze([...])`. */
 function readThresholds(source) {
-  const decl = /const DEFAULT_ALERT_THRESHOLDS_PAISE\s*=\s*Object\.freeze\(\s*\[([^\]]*)\]/.exec(source);
-  if (!decl) throw new Error(`DEFAULT_ALERT_THRESHOLDS_PAISE not found in ${LEDGER_PATH}`);
+  const decl = /const DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS\s*=\s*Object\.freeze\(\s*\[([^\]]*)\]/.exec(source);
+  if (!decl) throw new Error(`DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS not found in ${LEDGER_PATH}`);
   const values = decl[1]
     .split(',')
     .map((entry) => entry.replace(/\/\/.*/, '').trim())
     .filter(Boolean)
     .map((entry) => {
-      if (!/^-?\d+$/.test(entry)) throw new Error(`threshold ${entry} is not an integer paise literal`);
+      if (!/^-?\d+$/.test(entry)) throw new Error(`threshold ${entry} is not an integer token-credit literal`);
       return Number(entry);
     });
-  if (!values.length) throw new Error('DEFAULT_ALERT_THRESHOLDS_PAISE is empty');
+  if (!values.length) throw new Error('DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS is empty');
   return values;
 }
 
@@ -59,12 +59,12 @@ function main() {
       console.error(`alert_thresholds.json is stale — run: npm run observability:inputs (${OUT_PATH})`);
       process.exit(1);
     }
-    console.log(`alert_thresholds.json matches ledger.js (${thresholds.join(', ')} paise).`);
+    console.log(`alert_thresholds.json matches ledger.js (${thresholds.join(', ')} token credits).`);
     return;
   }
 
   fs.writeFileSync(OUT_PATH, output);
-  console.log(`Wrote ${OUT_PATH} (${thresholds.join(', ')} paise).`);
+  console.log(`Wrote ${OUT_PATH} (${thresholds.join(', ')} token credits).`);
 }
 
 if (require.main === module) main();

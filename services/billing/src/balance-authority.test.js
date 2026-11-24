@@ -6,11 +6,11 @@
  *
  * FlexPrice's wallet is the only spendable balance in this product. That is only
  * true while nothing else holds a number that looks like one, and the way a second
- * balance comes back is quiet: someone stores `balancePaise` on the billing account
+ * balance comes back is quiet: someone stores `balanceTokenCredits` on the billing account
  * for convenience, a page reads it, the gate and the wallet disagree, and a tenant
  * is admitted or blocked on a figure no money ever moved. Three of those already
  * existed here and were deleted in Phase 3 (`ledger.balanceFromLedger`,
- * `billingAccounts.balancePaise`, the sweep's aggregated debit).
+ * `billingAccounts.balanceTokenCredits`, the sweep's aggregated debit).
  *
  * So this is a source scan, not a behaviour test: there is no function left to call
  * that would produce the wrong number, which is exactly what it is asserting.
@@ -68,6 +68,9 @@ test('the scan actually covers the money code', () => {
     // operations and the transport that will or will not carry them.
     'packages/shared-core/src/billing/flexprice-client.js',
     'packages/shared-core/src/billing/flexprice-sdk.js',
+    // The metered-event writer: it is the only reader-visible namer of an event's
+    // provenance fields, so the gate below needs it to actually be in the scan.
+    'packages/shared-core/src/billing/billing-outbox.js',
     'services/billing/src/billing-api.js',
     'services/billing/src/auto-recharge-job.js',
     'services/billing/src/recharge-settle.js',
@@ -81,10 +84,10 @@ test('the scan actually covers the money code', () => {
 });
 
 test('no account-shaped object carries a balance', () => {
-  // `status.balancePaise` is fine and expected: that is the gate's wallet reading.
+  // `status.balanceTokenCredits` is fine and expected: that is the gate's wallet reading.
   // Anything named like the billing *account* is the stored document, and the
   // stored document has no balance field. `[\w$]` not `\w`: JS identifiers take $.
-  const read = /(?:^|[^\w$])(?:account|acct|acc|existing|refreshed|stored|billingAccount|patch)\s*\.\s*balancePaise\b/;
+  const read = /(?:^|[^\w$])(?:account|acct|acc|existing|refreshed|stored|billingAccount|patch)\s*\.\s*balanceTokenCredits\b/;
   const violations = matchesPerFile((source) => {
     const hit = source.match(read);
     return hit ? hit[0] : null;
@@ -129,7 +132,7 @@ test('only approved money paths may move credits in FlexPrice', () => {
 });
 
 test('the deleted first-party money functions stay deleted', () => {
-  const BANNED = ['postEntry', 'refreshBalance', 'balanceFromLedger', 'currentBalancePaise', 'maybeAutoRecharge'];
+  const BANNED = ['postEntry', 'refreshBalance', 'balanceFromLedger', 'currentBalanceTokenCredits', 'maybeAutoRecharge'];
   const violations = matchesPerFile((source) => {
     const hit = source.match(new RegExp(`\\b(?:${BANNED.join('|')})\\b`));
     return hit ? hit[0] : null;
@@ -137,13 +140,13 @@ test('the deleted first-party money functions stay deleted', () => {
   assert.deepEqual(violations, []);
 });
 
-test('the browser never does paise arithmetic', () => {
+test('the browser never does token-credit arithmetic', () => {
   // The SPA renders `balanceInr` / `fundState` from the billing API. A client-side
   // balance comparison is a second place the "is this org out of money" rule can
   // live, and it is the one that can be edited in devtools.
   const violations = matchesPerFile((source, file) => {
     if (!file.startsWith(path.join(REPO_ROOT, 'public'))) return null;
-    const hit = source.match(/\bbalancePaise\b/);
+    const hit = source.match(/\bbalance(?:Paise|TokenCredits)\b/);
     return hit ? hit[0] : null;
   });
   assert.deepEqual(violations, []);
@@ -155,6 +158,32 @@ test('nothing claims the deleted ledger route still exists', () => {
   // has, which is worse than a failure: it looks like coverage of a money path.
   const violations = matchesPerFile((source) => {
     const hit = source.match(/['"]\/api\/billing\/ledger|billing\.getLedger\b/);
+    return hit ? hit[0] : null;
+  });
+  assert.deepEqual(violations, []);
+});
+
+// An event's provenance tuple — what the runtime said it billed, the currency it said it
+// in, the FX the card stamped, and the rupee value of THIS debit — exists so a human can
+// audit a charge after the fact. None of it is a money source: the debit is
+// `token_credits`, computed once from the rate card. Sum any of these and you have
+// rebuilt the FX multiplication this stage removed, out of the least trustworthy side of
+// the boundary (a number the runtime reported). So the name may appear only where the
+// tuple is authored, persisted or checked — never where a figure is read back.
+test('event provenance is written and audited, never read as money', () => {
+  const WRITERS = [
+    'packages/shared-core/src/billing/pricing.js', // computes it from the card + the SDK result
+    'packages/shared-core/src/billing/usage.js', // puts it on the usage record
+    'packages/shared-core/src/store.js', // re-asserts it on an already-queued outbox row
+    'packages/shared-core/src/billing/billing-outbox.js', // stamps it onto the event
+    'scripts/flexprice-usage-verify.js', // asserts the stamped payload equals the record
+  ];
+  const names = ['providerCost', 'providerCurrency', 'fxRateToInr', 'inrCost',
+    'provider_cost', 'provider_currency', 'fx_rate_to_inr', 'inr_cost'];
+  const violations = matchesPerFile((source, file) => {
+    const rel = path.relative(REPO_ROOT, file);
+    if (WRITERS.includes(rel)) return null;
+    const hit = source.match(new RegExp(`\\b(?:${names.join('|')})\\b`));
     return hit ? hit[0] : null;
   });
   assert.deepEqual(violations, []);

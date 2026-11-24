@@ -5,7 +5,7 @@
  * One-off maintenance: label usage records that predate BYOK metering.
  *
  * Every record written before `billingSource` existed WAS charged — the sweep
- * debited its `costPaise` and the ledger persisted that debit. So `managed` here
+ * debited its `costTokenCredits` and the ledger persisted that debit. So `managed` here
  * is a statement of fact, not a guess, and it is the only label that keeps the
  * records agreeing with the ledger. This script deliberately never touches money:
  * re-labelling a row to `customer` would claim the platform routed a payment it
@@ -26,9 +26,9 @@ function main() {
   const byOrg = new Map();
   for (const r of unlabeled) {
     const orgId = r.orgId || '(shared)';
-    const acc = byOrg.get(orgId) || { count: 0, chargedPaise: 0, from: r.createdAt, to: r.createdAt };
+    const acc = byOrg.get(orgId) || { count: 0, chargedTokenCredits: 0, from: r.createdAt, to: r.createdAt };
     acc.count += 1;
-    acc.chargedPaise += Number(r.costPaise) || 0;
+    acc.chargedTokenCredits += Number(r.costTokenCredits) || 0;
     if (String(r.createdAt || '') < acc.from) acc.from = r.createdAt;
     if (String(r.createdAt || '') > acc.to) acc.to = r.createdAt;
     byOrg.set(orgId, acc);
@@ -41,9 +41,9 @@ function main() {
   }
 
   console.log('\nThese orgs would be labelled managed (money already debited for them):');
-  for (const [orgId, acc] of [...byOrg.entries()].sort((a, b) => b[1].chargedPaise - a[1].chargedPaise)) {
+  for (const [orgId, acc] of [...byOrg.entries()].sort((a, b) => b[1].chargedTokenCredits - a[1].chargedTokenCredits)) {
     console.log(
-      `  ${orgId}  ${acc.count} run(s)  ₹${(acc.chargedPaise / 100).toFixed(2)} charged  ` +
+      `  ${orgId}  ${acc.count} run(s)  ${acc.chargedTokenCredits} token credits charged  ` +
       `${String(acc.from || '').slice(0, 10)} → ${String(acc.to || '').slice(0, 10)}`,
     );
   }

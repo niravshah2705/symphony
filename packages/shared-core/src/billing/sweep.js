@@ -7,13 +7,13 @@ const { CONFIG } = require('../config');
 // overlaps itself, so the watermark advances once per pass.
 let sweeping = false;
 
-/** Group usage records by orgId, summing paise + tokens. */
+/** Group usage records by orgId, summing token credits + tokens. */
 function aggregateByOrg(records) {
   const byOrg = new Map();
   for (const r of records) {
     const orgId = r.orgId || '__shared__';
-    const acc = byOrg.get(orgId) || { orgId, costPaise: 0, tokens: 0, count: 0 };
-    acc.costPaise += Number(r.costPaise) || 0;
+    const acc = byOrg.get(orgId) || { orgId, costTokenCredits: 0, tokens: 0, count: 0 };
+    acc.costTokenCredits += Number(r.costTokenCredits) || 0;
     acc.tokens += (r.usage && Number(r.usage.totalTokens)) || 0;
     acc.count += 1;
     byOrg.set(orgId, acc);

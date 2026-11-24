@@ -43,10 +43,25 @@ function formatMeta(meta) {
 }
 
 // Never let a credential-shaped field reach a log sink, whatever the caller put
-// in the meta object.
+// in the meta object. The match is a loose SUBSTRING on purpose: accessToken and
+// idToken are camelCase, so an anchored pattern would miss the very names this
+// scrubber exists for.
 const SECRET_KEY_RE = /(secret|apikey|api_key|token|password|passwd|authorization|credential)/i;
+// The one carve-out: tokenCredits is the billing subunit (1 credit = 100 token
+// credits), not a credential — the same reason the pipeline contract spells the
+// billing label `providerSource` rather than `credentialSource`. Exempt only as the
+// TRAILING unit word, so a key ending in `...Token`, or any accessToken-shaped
+// name, still masks. Without this the exemption is not cosmetic: Cloud Logging
+// builds the balance alerts from the stringified balance/threshold fields, so a
+// `••••` there is a silent alert outage.
+const CREDIT_UNIT_KEY_RE = /token[_-]?credits$/i;
+
+function isSecretKey(key) {
+  return SECRET_KEY_RE.test(key) && !CREDIT_UNIT_KEY_RE.test(key);
+}
+
 function secretsAsMask(key, value) {
-  if (typeof value === 'string' && SECRET_KEY_RE.test(key)) return value ? '••••' : value;
+  if (typeof value === 'string' && isSecretKey(key)) return value ? '••••' : value;
   if (Buffer.isBuffer(value)) return '••••';
   return value;
 }
@@ -170,6 +185,7 @@ function currentContext() {
 }
 
 module.exports = {
+  isSecretKey,
   info: (message, meta) => write('info', message, meta),
   warn: (message, meta) => write('warn', message, meta),
   error: (message, meta) => write('error', message, meta),

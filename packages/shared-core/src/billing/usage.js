@@ -22,14 +22,28 @@ function num(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
-/** Reduce a normalized-usage object to the small persisted shape. */
+/**
+ * Whether the card row that priced a run is free on purpose. `0` from ollama is an
+ * answer; `0` from a row that quotes ₹5.22/1M is a rounding, and only the second one
+ * is worth a log line.
+ */
+function pricedAllZero(prices) {
+  return [prices.input, prices.output, prices.cacheRead, prices.cacheWrite].every((rate) => !Number(rate));
+}
+
+/**
+ * Reduce a normalized-usage object to the small persisted shape.
+ *
+ * The four priced dimensions come from `pricing.tokenCountsOf`, so the counts on the
+ * record and the counts the debit was computed from are the same object — two
+ * extractions would be two chances to disagree about what a run consumed.
+ */
 function pickUsage(usage) {
   const u = usage && typeof usage === 'object' ? usage : {};
+  const counts = pricing.tokenCountsOf(u);
   return {
-    inputTokens: num(u.inputTokens),
-    outputTokens: num(u.outputTokens),
-    totalTokens: num(u.totalTokens) || num(u.inputTokens) + num(u.outputTokens),
-    cachedInputTokens: num(u.cachedInputTokens),
+    ...counts,
+    totalTokens: num(u.totalTokens) || counts.inputTokens + counts.outputTokens,
     reasoningOutputTokens: num(u.reasoningOutputTokens),
   };
 }
@@ -65,15 +79,17 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
     const usage = pickUsage(result.usage);
     // Skip empty runs (no tokens) to avoid noise in the ledger/drill-down.
     if (!usage.totalTokens && !usage.inputTokens && !usage.outputTokens) return null;
-    const costUsd = pricing.costUsdFromResult(result, llm);
-    const grossPaise = pricing.usdToPaise(costUsd);
+    const priced = pricing.priceRun({ usage, llm, result });
+    const grossTokenCredits = priced.tokenCredits;
     const orgId = resolveOrgId(attribution);
     const billingSource = resolveBillingSource(attribution);
-    const priceMatch = pricing.priceMatchOf(llm && llm.provider, result && result.costUsd);
-    // Loud, because a silently-guessed rate is a billing error that reads as a
-    // number. The record still posts — an estimate beats an unmetered run — but
-    // the alert on this line is how a new provider gets added to the catalog.
-    if (priceMatch === 'Default' && grossPaise > 0) {
+    // 'Exact' | 'Default' — whether the rate card models this run's model or answered
+    // from its last-resort row. The value is an alert contract: `observability.tf`
+    // counts `jsonPayload.meta.priceMatch="Default"`, and the sentence below is the
+    // line that metric is built from, so it is worded deliberately and asserted
+    // literally by deploy/gcp/observability-config.test.js.
+    const priceMatch = priced.priceMatch;
+    if (priceMatch === 'Default' && grossTokenCredits > 0) {
       log.warn(`cost estimate priced an unmodeled provider from the fallback rate: ${llm.provider}`, {
         priceMatch,
         provider: (llm && llm.provider) || 'unknown',
@@ -81,12 +97,28 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
         runId: attribution.runId || null,
       });
     }
-    // `costPaise` is the ONLY field the billing sweep turns into a debit, so a
-    // run on the org's own key posts zero: the platform never spent that money
-    // and cannot bill it. The same amount is kept as `notionalCostPaise` so the
-    // org still sees the value it consumed. Exactly one of the two is ever
-    // non-zero, and `costPaise + notionalCostPaise` is the gross.
+    // `costTokenCredits` is the only field that becomes a FlexPrice quantity, and so
+    // the only one that can become a debit. A run on the org's own key posts zero:
+    // the platform never spent that money and cannot bill it. The same amount is kept
+    // as `notionalCostTokenCredits` so the org still sees the value it consumed.
+    // Exactly one of the two is ever non-zero, and their sum is the gross.
     const isCustomerKey = billingSource === 'customer';
+    if (!isCustomerKey && grossTokenCredits === 0 && !pricedAllZero(priced.prices)) {
+      // The card prices this run's family above zero, yet the run rounds to nothing:
+      // a small, cache-read-heavy run under a cheap row. The outbox refuses a zero
+      // quantity quietly, because zero is the normal BYOK answer, so without this line
+      // that spend would be unmetered with no signal at all. It counts the rounding;
+      // it does not change it — a debit is never inflated to clear a floor.
+      log.warn('billing_usage_cost_rounded_to_zero', {
+        provider: (llm && llm.provider) || 'unknown',
+        model: (llm && llm.model) || 'unknown',
+        runId: attribution.runId || null,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+      });
+    }
     const record = store.addUsageRecord({
       orgId,
       projectId: attribution.projectId || null,
@@ -108,11 +140,20 @@ function recordUsage(attribution = {}, result = {}, llm = {}) {
       provider: (llm && llm.provider) || 'unknown',
       model: (llm && llm.model) || 'unknown',
       usage,
-      costUsd,
-      // 'Reported' | 'Exact' | 'Default' — how much to trust the two fields below.
       priceMatch,
-      costPaise: isCustomerKey ? 0 : grossPaise,
-      notionalCostPaise: isCustomerKey ? grossPaise : 0,
+      // 'Card' | 'Provider' | 'Default' — how precisely the card answered, kept
+      // beside the coarser alert label so a drill-down can tell a model row from a
+      // provider blend without re-resolving either.
+      rateMatch: priced.rateMatch,
+      // What the provider says it billed, the rate the card was stamped at, and the
+      // rupee value of the debit. Provenance for the event and for a dispute — never
+      // read back to compute money (see balance-authority.test.js).
+      providerCost: priced.providerCost,
+      providerCurrency: priced.providerCurrency,
+      fxRateToInr: priced.fxRateToInr,
+      inrCost: priced.inrCost,
+      costTokenCredits: isCustomerKey ? 0 : grossTokenCredits,
+      notionalCostTokenCredits: isCustomerKey ? grossTokenCredits : 0,
     });
     // Hand the same number to FlexPrice, through the outbox rather than the
     // network: this is the one place a run's cost becomes a fact, so it is also
@@ -140,7 +181,7 @@ function recordActorUsage(session, deps = {}) {
     source: 'substrate-actor',
     meter: 'actor-compute',
     durationSeconds: priced.meterValue,
-    costPaise: priced.expectedPaise,
+    costTokenCredits: priced.expectedTokenCredits,
     createdAt: new Date(session.stoppedAt * 1000).toISOString(),
   });
   const row = billingOutbox.enqueue({

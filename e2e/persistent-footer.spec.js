@@ -101,7 +101,7 @@ function disabledApiPayload(request) {
       // The gate-off shape: the balance is the FlexPrice wallet's and there is no
       // wallet here, so it is unknown rather than zero. A 0 would render as an
       // exhausted org and the page would warn about money this test never touched.
-      balancePaise: null,
+      balanceTokenCredits: null,
       balanceInr: null,
       fundsAvailable: true,
       fundState: 'unknown',

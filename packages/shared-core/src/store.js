@@ -8,6 +8,7 @@ const { SENTINEL_TOKEN } = require('./egress');
 const fileBackend = require('./store/file-backend');
 const firestoreBackend = require('./store/firestore-backend');
 const workspaceContext = require('./store/workspace-context');
+const { migrateTokenCreditKeys } = require('./billing/token-credit-migration');
 const {
   currentWorkspaceContext,
   workspaceOrganizationKey,
@@ -471,12 +472,12 @@ function normalizeStore(parsed) {
     settingsHistory: Array.isArray(source.settingsHistory) ? source.settingsHistory : [],
     globalQuestions: Array.isArray(source.globalQuestions) ? source.globalQuestions : [],
     plugins: Array.isArray(source.plugins) ? source.plugins : [],
-    usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords : [],
+    usageRecords: Array.isArray(source.usageRecords) ? source.usageRecords.map(migrateTokenCreditKeys) : [],
     ledgerEntries: Array.isArray(source.ledgerEntries) ? source.ledgerEntries : [],
-    billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts : [],
-    rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents : [],
-    billingOutbox: Array.isArray(source.billingOutbox) ? source.billingOutbox : [],
-    actorSessions: Array.isArray(source.actorSessions) ? source.actorSessions : [],
+    billingAccounts: Array.isArray(source.billingAccounts) ? source.billingAccounts.map(migrateTokenCreditKeys) : [],
+    rechargeIntents: Array.isArray(source.rechargeIntents) ? source.rechargeIntents.map(migrateTokenCreditKeys) : [],
+    billingOutbox: Array.isArray(source.billingOutbox) ? source.billingOutbox.map(migrateTokenCreditKeys) : [],
+    actorSessions: Array.isArray(source.actorSessions) ? source.actorSessions.map(migrateTokenCreditKeys) : [],
     workflows: Array.isArray(source.workflows) ? source.workflows : [],
     agents: Array.isArray(source.agents) ? source.agents : [],
     personaGrants: Array.isArray(source.personaGrants) ? source.personaGrants : [],
@@ -1171,7 +1172,7 @@ function removePlugin(id) {
 // of them. billingAccounts (id = orgId) is per-org CONFIG only.
 // See packages/shared-core/src/billing/* for the logic that uses these primitives.
 //
-// The BYOK `notionalCostPaise` deliberately has NO ledger copy — a run on the
+// The BYOK `notionalCostTokenCredits` deliberately has NO ledger copy — a run on the
 // org's own key spends no platform money, so there is nothing to post. That makes
 // these pruned records the only history of value consumed under a customer key,
 // which is why every BYOK surface must disclose the retention window rather than
@@ -1236,7 +1237,7 @@ function usageRecordCount() {
 
 /**
  * Merge a `patch` into one usage record by id. Exists for the one-off billing-source
- * backfill; the fields it may rewrite are labels, never money — `costPaise` and
+ * backfill; the fields it may rewrite are labels, never money — `costTokenCredits` and
  * `createdAt` are pinned, because the record's createdAt is what the sweep window
  * and the outbox's delivery proof are both keyed on.
  */
@@ -1247,7 +1248,7 @@ function updateUsageRecord(id, patch = {}) {
   const usageRecords = current.usageRecords.map((r) => {
     if (r.id !== id) return r;
     touched = true;
-    return { ...r, ...patch, id: r.id, costPaise: r.costPaise, createdAt: r.createdAt };
+    return { ...r, ...patch, id: r.id, costTokenCredits: r.costTokenCredits, createdAt: r.createdAt };
   });
   if (touched) writeLegacyStore({ ...current, usageRecords });
   return touched ? usageRecords.find((r) => r.id === id) : null;
@@ -1345,7 +1346,7 @@ function updateActorSession(id, patch) {
 // not the provider order and not the ledger — is the idempotency record. Amounts
 // are integer paise as decided at quote time and are frozen after: `update`
 // appends settlement fields (status, settledAt, providerOrderId) and may not
-// rewrite money, the same rule `updateUsageRecord` applies to `costPaise`.
+// rewrite money, the same rule `updateUsageRecord` applies to `costTokenCredits`.
 
 /** Create one recharge intent (newest first). */
 function addRechargeIntent(intent) {
@@ -1389,7 +1390,7 @@ function updateRechargeIntent(orderId, patch = {}) {
       createdAt: i.createdAt,
       subtotalPaise: i.subtotalPaise,
       couponBps: i.couponBps,
-      bonusPaise: i.bonusPaise,
+      bonusTokenCredits: i.bonusTokenCredits,
       gstPaise: i.gstPaise,
       totalPaise: i.totalPaise,
       creditCount: i.creditCount,
@@ -1493,9 +1494,20 @@ function updateBillingOutboxRow(id, patch = {}) {
       eventName: r.eventName,
       idempotencyKey: r.idempotencyKey,
       createdAt: r.createdAt,
-      quantityPaise: r.quantityPaise,
+      quantityTokenCredits: r.quantityTokenCredits,
       quantitySeconds: r.quantitySeconds,
       quantityMinutes: r.quantityMinutes,
+      // The provenance is as much the row's identity as its quantity: it states what
+      // the quantity was priced FROM, so a retry that rewrote one of them would leave
+      // a verified row whose audit payload describes an event the meter never summed.
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      cacheReadTokens: r.cacheReadTokens,
+      cacheWriteTokens: r.cacheWriteTokens,
+      providerCost: r.providerCost,
+      providerCurrency: r.providerCurrency,
+      fxRateToInr: r.fxRateToInr,
+      inrCost: r.inrCost,
     };
   });
   if (touched) writeLegacyStore({ ...current, billingOutbox });

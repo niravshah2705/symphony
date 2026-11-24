@@ -22,7 +22,7 @@ const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-auto-recharge-'));
 process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
-// 1000 INR of opening credit so the dataset's initialCreditPaise is reproducible.
+// 1000 INR of opening credit so the dataset's initialCreditTokenCredits is reproducible.
 process.env.INITIAL_CREDIT_INR = '1000';
 
 const store = require('@software-factory/shared-core/store');
@@ -46,20 +46,20 @@ function freshSpec(index) {
 
 /**
  * The balance the wallet would report for a dataset org: the fixture spends
- * `debitPaise` off the opening credit. It used to be seeded through the ledger,
+ * `debitTokenCredits` off the opening credit. It used to be seeded through the ledger,
  * which is exactly the number this job is no longer allowed to read.
  */
-function walletPaiseOf(spec) {
-  return spec.account.initialCreditPaise - spec.account.debitPaise;
+function walletTokenCreditsOf(spec) {
+  return spec.account.initialCreditTokenCredits - spec.account.debitTokenCredits;
 }
 
 /** Seed one dataset org's CONFIG into the store. No balance: there is nowhere to put one. */
 function seedOrg(spec) {
   ledger.ensureAccount(spec.orgId);
   return store.upsertBillingAccount(spec.orgId, {
-    initialCreditPaise: spec.account.initialCreditPaise,
+    initialCreditTokenCredits: spec.account.initialCreditTokenCredits,
     autoRecharge: { ...ledger.DEFAULT_AUTO_RECHARGE, ...spec.account.autoRecharge },
-    alertThresholdsPaise: spec.account.alertThresholdsPaise,
+    alertThresholdsTokenCredits: spec.account.alertThresholdsTokenCredits,
     notifyChannels: { browser: true, email: false, slack: false },
     notifyEmails: ['stale-list-should-be-ignored@example.com'],
   });
@@ -72,7 +72,7 @@ function walletStub(balances = {}) {
     reads.push(orgId);
     const raw = balances[orgId];
     if (raw instanceof Error) throw raw;
-    return { balancePaise: raw === undefined ? null : raw };
+    return { balanceTokenCredits: raw === undefined ? null : raw };
   };
   return { fundStatus, reads };
 }
@@ -110,7 +110,7 @@ function runJob({ specs = [], env = {}, wallet, deps = {}, initStoreImpl } = {})
   const exitCodes = [];
   const alerts = [];
   const balances = {};
-  for (const spec of specs) balances[spec.orgId] = walletPaiseOf(spec);
+  for (const spec of specs) balances[spec.orgId] = walletTokenCreditsOf(spec);
   const stub = wallet || walletStub(balances);
   const storeApi = specs.length ? {
     listBillingAccounts: () => specs.map((spec) => store.getBillingAccount(spec.orgId)).filter(Boolean),
@@ -128,7 +128,7 @@ function runJob({ specs = [], env = {}, wallet, deps = {}, initStoreImpl } = {})
       fundStatus: stub.fundStatus,
       notifyApi: {
         checkThresholdsAndNotify: async (account, options) => {
-          alerts.push({ account, balancePaise: options.balancePaise });
+          alerts.push({ account, balanceTokenCredits: options.balanceTokenCredits });
           return null;
         },
       },
@@ -149,28 +149,28 @@ test('candidates come from config, because the balance is not in the store', () 
     // Opted in: a charge candidate whatever its wallet says.
     { id: UUID_B, autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 20, amountPaise: 25000 } },
     // Solvent-looking on paper, but it has thresholds, so it is an alert candidate.
-    { id: '8c3f7d44-5f6e-4b82-ad4e-3a4b5c6d7e8f', alertThresholdsPaise: [10000, 0], autoRecharge: { enabled: false } },
+    { id: '8c3f7d44-5f6e-4b82-ad4e-3a4b5c6d7e8f', alertThresholdsTokenCredits: [10000, 0], autoRecharge: { enabled: false } },
     // Asked for nothing: no opt-in, no thresholds.
-    { id: '7b2e6c33-4e5d-4a71-9c3d-2f3a4b5c6d7e', autoRecharge: { enabled: false }, alertThresholdsPaise: [] },
+    { id: '7b2e6c33-4e5d-4a71-9c3d-2f3a4b5c6d7e', autoRecharge: { enabled: false }, alertThresholdsTokenCredits: [] },
     // The shared stack's pseudo-org has no tenant to validate and no admin to notify.
-    { id: '__shared__', autoRecharge: { enabled: true, thresholdPaise: 40000 } },
+    { id: '__shared__', autoRecharge: { enabled: true, thresholdTokenCredits: 40000 } },
   ];
   const selected = job.selectCandidates({ listBillingAccounts: () => accounts }).map((a) => a.id);
   assert.deepEqual(selected, [UUID_B, '8c3f7d44-5f6e-4b82-ad4e-3a4b5c6d7e8f']);
 });
 
 test('a balance this job cannot read triggers neither a charge nor an alert', () => {
-  const optedIn = { autoRecharge: { enabled: true, mode: 'amount', thresholdPaise: 40000 } };
+  const optedIn = { autoRecharge: { enabled: true, mode: 'amount', thresholdTokenCredits: 40000 } };
   for (const balance of [null, undefined]) {
     assert.equal(job.chargeBelowThreshold(optedIn, balance), false, `unknown balance ${String(balance)} is not a trigger`);
-    assert.equal(job.alertSuspect({ alertThresholdsPaise: [10000, 0] }, balance), false);
+    assert.equal(job.alertSuspect({ alertThresholdsTokenCredits: [10000, 0] }, balance), false);
   }
   assert.equal(job.chargeBelowThreshold(optedIn, 39999), true);
   assert.equal(job.chargeBelowThreshold(optedIn, 40000), false, 'the trigger is strictly below');
-  assert.equal(job.chargeBelowThreshold({ autoRecharge: { enabled: false, thresholdPaise: 40000 } }, 1), false,
+  assert.equal(job.chargeBelowThreshold({ autoRecharge: { enabled: false, thresholdTokenCredits: 40000 } }, 1), false,
     'an org that declined is never a charge candidate, however dry its wallet');
-  assert.equal(job.alertSuspect({ alertThresholdsPaise: [10000, 0] }, 10001), false);
-  assert.equal(job.alertSuspect({ alertThresholdsPaise: [] }, 1), false, 'no thresholds configured, nothing to cross');
+  assert.equal(job.alertSuspect({ alertThresholdsTokenCredits: [10000, 0] }, 10001), false);
+  assert.equal(job.alertSuspect({ alertThresholdsTokenCredits: [] }, 1), false, 'no thresholds configured, nothing to cross');
 });
 
 // --- the charge duty: reported, never executed -----------------------------------
@@ -190,7 +190,7 @@ test('a below-trigger org is reported due and charged nothing', async () => {
     'the mandate is not settled into the FlexPrice wallet; add credits from the billing UI');
   // The alert duty still runs, so the tenant is told rather than merely logged.
   assert.equal(alerts.length, 1);
-  assert.equal(alerts[0].balancePaise, 12000, 'the alert compares against the wallet number');
+  assert.equal(alerts[0].balanceTokenCredits, 12000, 'the alert compares against the wallet number');
   assert.deepEqual(alerts[0].account.notifyEmails, ['ops@amount.sandbox.test'],
     'recipients come from the org service, not the account’s stale list');
   assert.equal(alerts[0].account.notifyChannels.email, true);
@@ -325,10 +325,10 @@ test('an org that is neither due nor a crossing costs no org-service read', asyn
 
 // --- the alert duty, end to end through the real notifier ------------------------
 
-test('a real threshold crossing persists lastAlertedThresholdPaise', async () => {
+test('a real threshold crossing persists lastAlertedThresholdTokenCredits', async () => {
   const spec = freshSpec(2);
   seedOrg(spec);
-  store.upsertBillingAccount(spec.orgId, { lastAlertedThresholdPaise: null });
+  store.upsertBillingAccount(spec.orgId, { lastAlertedThresholdTokenCredits: null });
   const org = orgContextStub([spec]);
 
   const { summary } = await runJob({
@@ -339,13 +339,13 @@ test('a real threshold crossing persists lastAlertedThresholdPaise', async () =>
   assert.equal(summary.alerted, 1);
   assert.equal(summary.due, 0);
   // ₹1.00 of a 40000/0 policy has crossed the low level, not exhaustion.
-  assert.equal(store.getBillingAccount(spec.orgId).lastAlertedThresholdPaise, 40000);
+  assert.equal(store.getBillingAccount(spec.orgId).lastAlertedThresholdTokenCredits, 40000);
 });
 
 // --- the mandate reasons ---------------------------------------------------------
 
 test('every reason a due recharge cannot be charged is named', () => {
-  const base = { enabled: true, mode: 'amount', thresholdPaise: 40000, amountPaise: 50000 };
+  const base = { enabled: true, mode: 'amount', thresholdTokenCredits: 40000, amountPaise: 50000 };
   assert.match(job.rechargeIsNotChargeable({ ...base }), /no ON_DEMAND subscription/);
   assert.match(job.rechargeIsNotChargeable({ ...base, cashfreeSubscriptionId: 'sub_x', amountPaise: 0 }),
     /not positive/);

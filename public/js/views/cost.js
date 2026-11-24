@@ -150,10 +150,9 @@ export async function renderCost(view) {
       metric('Your key (not charged)', inr(sourceSeries(summary, 'customer').notionalInr),
         `${formatNumber(sourceSeries(summary, 'customer').runs)} runs at list price — debited ₹0`),
       metric('Auto-recharge', summary.autoRecharge.enabled ? 'On' : 'Off',
-        // The FX rate is not a display garnish here: `usdToPaise` in the billing
-        // service applied it to produce the paise that was delivered to the wallet,
-        // so every rupee on this page inherits it. Say "estimate rate", not "FX".
-        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : `Estimate rate ₹${summary.fxUsdToInr}/USD`),
+        // No rate is quoted here any more, and that is the point: a debit comes from the
+        // INR rate card, so no currency movement changes what this page says was spent.
+        summary.autoRecharge.enabled ? `+${inr(summary.autoRecharge.amountInr)} below ${inr(summary.autoRecharge.thresholdInr)}` : 'Not scheduled — top up from Recharge'),
     ]),
   );
 
@@ -350,7 +349,7 @@ function adminPanel(view, summary) {
         ...q.components.map((c) => el('div', { class: 'muted' }, `${c.name} ${c.rateBps / 100}% · ${inr(c.inr)}`)),
         el('strong', {}, `Total payable ${inr(q.totalInr)}`),
         el('div', {}, `${q.credits} credits added · 1 credit = ₹1, so the ${inr(q.gstInr)} GST is collected and never spendable`),
-        q.bonusPaise ? el('div', { class: 'muted' }, `Coupon bonus ${inr(q.bonusInr)} (${q.bonusPaise / 100} credits), credited separately`) : null,
+        q.bonusTokenCredits ? el('div', { class: 'muted' }, `Coupon bonus ${inr(q.bonusInr)} (${q.bonusTokenCredits / 100} credits), credited separately`) : null,
         q.placeOfSupply && q.placeOfSupply.assumed
           ? el('small', { class: 'muted' }, `Place of supply assumed as state ${q.placeOfSupply.stateCode}. Add your GSTIN in Organization → Billing for the exact split.`)
           : null,

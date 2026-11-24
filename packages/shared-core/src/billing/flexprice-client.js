@@ -35,7 +35,7 @@
 // Two bodies therefore stay snake_case, on purpose:
 //
 //   * event ingest (`ingestEvent`, `eventsBulk`) — `IngestEventRequest.properties`
-//     is typed `record<string, string>`, so `cost_paise: 4120` is either refused or
+//     is typed `record<string, string>`, so `token_credits: 4120` is either refused or
 //     quoted, and a quoted number aggregates as zero: 202 accepted, nothing billed.
 //     Ingest rides the transport's raw seam with the measured body.
 //   * `debitWallet` — there is no generated `debit` operation at all.

@@ -154,7 +154,7 @@ test('mutations require the admin role on the trusted header', async () => {
     // now, and the proof is that the org still has no account and no ledger row.
     assert.equal(body.settled, false);
     const account = store.getBillingAccount(QUOTE_ORG);
-    assert.ok(!account || account.balancePaise == null, 'a quote must not create or move a balance');
+    assert.ok(!account || account.balanceTokenCredits == null, 'a quote must not create or move a balance');
     assert.equal(store.listLedgerEntries({ orgId: QUOTE_ORG }).length, 0);
     assert.equal(store.listRechargeIntents({ orgId: QUOTE_ORG }).length, 0, 'and must not create an order either');
   } finally {
@@ -181,7 +181,7 @@ test('the quote is the GST breakdown the customer is shown before paying', async
       gstInr: '90.00',
       totalPaise: 59000,
       totalInr: '590.00',
-      bonusPaise: 0,
+      bonusTokenCredits: 0,
       bonusInr: '0.00',
       credits: 500,
       placeOfSupply: body.quote.placeOfSupply,
@@ -308,7 +308,7 @@ test('create-order persists the quote as an intent, and verify-order settles it 
     assert.deepEqual(
       {
         org: intent.orgId, provider: intent.provider, status: intent.status,
-        subtotal: intent.subtotalPaise, coupon: intent.couponBps, bonus: intent.bonusPaise,
+        subtotal: intent.subtotalPaise, coupon: intent.couponBps, bonus: intent.bonusTokenCredits,
         gst: intent.gstPaise, total: intent.totalPaise, credits: intent.creditCount,
         supplierState: intent.supplierStateCode,
       },

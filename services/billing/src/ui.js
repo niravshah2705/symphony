@@ -20,20 +20,20 @@ function renderDashboardHtml(data = {}) {
 
   // The wallet's balance, never a locally maintained one: the balance card shows
   // "—" when the gate could not read it, because an unread number is not zero.
-  const balanceInr = inr(fund.balancePaise);
-  const fundNote = fund.balancePaise === null || fund.balancePaise === undefined
+  const balanceInr = inr(fund.balanceTokenCredits);
+  const fundNote = fund.balanceTokenCredits === null || fund.balanceTokenCredits === undefined
     ? (fund.gatePolicy === 'off'
       ? 'No wallet read: the billing gate is off'
       : `Balance unavailable${fund.reason ? ` (${fund.reason})` : ''}`)
     : `${fund.state}${fund.stale ? ' (cached, last read failed)' : ''} · gate ${fund.gatePolicy}`;
-  const initialCreditInr = inr(account.initialCreditPaise);
+  const initialCreditInr = inr(account.initialCreditTokenCredits);
   const autoRecharge = account.autoRecharge || {};
   const isAutoEnabled = Boolean(autoRecharge.enabled);
   const mode = autoRecharge.mode || 'amount';
   // Configured thresholds are inputs, so they stay bare numbers; only the wallet
   // balance is allowed to be unknown.
   const rupees = (paise) => decimalFromPaise(Number(paise) || 0);
-  const thresholdInr = rupees(autoRecharge.thresholdPaise);
+  const thresholdInr = rupees(autoRecharge.thresholdTokenCredits);
   const thresholdPercent = Number(autoRecharge.thresholdPercent) || 20;
   const rechargeAmountInr = rupees(autoRecharge.amountPaise);
   const subscriptionId = autoRecharge.cashfreeSubscriptionId || '';

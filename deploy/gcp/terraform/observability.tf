@@ -21,9 +21,10 @@
 #                            than the catalog (priceMatch=Default). The money
 #                            version of an unmodeled gateway key: a plausible,
 #                            wrong number that nobody was told about.
-#   balance_under_<paise>    an org's balance crossed an alert threshold. The
+#   balance_under_<token_credits>
+#                            an org's balance crossed an alert threshold. The
 #                            values come from alert_thresholds.json, GENERATED from
-#                            DEFAULT_ALERT_THRESHOLDS_PAISE in
+#                            DEFAULT_ALERT_THRESHOLDS_TOKEN_CREDITS in
 #                            packages/shared-core/src/billing/ledger.js — the
 #                            thresholds are never restated in HCL (the CI test in
 #                            deploy/gcp/observability-config.test.js enforces both
@@ -73,9 +74,9 @@ locals {
   # list is a meaningful state — no balance metrics, no balance alerts — which is
   # exactly what a missing or stale generated file should produce, rather than
   # alerts firing on numbers the ledger no longer uses.
-  billing_alert_thresholds_paise = jsondecode(
+  billing_alert_thresholds_token_credits = jsondecode(
     file("${path.module}/alert_thresholds.json")
-  ).billing_alert_thresholds_paise
+  ).billing_alert_thresholds_token_credits
 
   # The Google-managed identity behind every project log sink.
   observability_log_writer = "serviceAccount:service-${local.project_number}@gcp-sa-logging.iam.gserviceaccount.com"
@@ -118,18 +119,18 @@ locals {
     }
     fleet_cost_price_fallback = {
       filter      = "jsonPayload.meta.priceMatch=\"Default\""
-      description = "Usage rows estimated from the fallback rate because the catalog does not model the provider."
+      description = "Usage rows estimated from the fallback rate because the rate card models neither the model nor its provider."
     }
   } : {}
 
-  # One metric per configured balance threshold, named after the paise value so
+  # One metric per configured balance threshold, named after the token-credit value so
   # the alert's identity carries the number that produced it.
   observability_balance_metrics = local.observability_enabled ? {
-    for t in local.billing_alert_thresholds_paise : "fleet_balance_under_${t}" => {
-      # thresholdPaise is emitted as a STRING by billing/notify.js; matching a
+    for t in local.billing_alert_thresholds_token_credits : "fleet_balance_under_${t}" => {
+      # thresholdTokenCredits is emitted as a STRING by billing/notify.js; matching a
       # numeric field with a quoted filter is what keeps the two in agreement.
-      filter      = "jsonPayload.meta.event=\"balance_threshold_crossed\" AND jsonPayload.meta.thresholdPaise=\"${t}\""
-      description = "Org balances that crossed the ${t} paise alert threshold."
+      filter      = "jsonPayload.meta.event=\"balance_threshold_crossed\" AND jsonPayload.meta.thresholdTokenCredits=\"${t}\""
+      description = "Org balances that crossed the ${t} token-credit alert threshold."
     }
   } : {}
 
@@ -153,15 +154,15 @@ locals {
       metric   = "fleet_cost_price_fallback"
       window_s = 3600
       above    = 0
-      why      = "A usage row was priced by guess because PRICE_PER_MTOK_USD does not model that provider. Add the provider to packages/shared-core/src/billing/pricing.js or the rows keep drifting from what the platform actually paid."
+      why      = "A usage row was priced from the rate card's fallback because deploy/billing/credit-rates.yaml models neither that model nor its provider. Add the row to that file and redeploy — the card is memoised at boot — or the rows keep drifting from what the platform actually paid."
     }
     },
     {
-      for t in local.billing_alert_thresholds_paise : "balance under ${t} paise" => {
+      for t in local.billing_alert_thresholds_token_credits : "balance under ${t} paise" => {
         metric   = "fleet_balance_under_${t}"
         window_s = 3600
         above    = 0
-        why      = "An org's ledger balance crossed ${t} paise. The in-product notification already fired; this is the operator-side signal that the next runner gate will start refusing work for that org."
+        why      = "An org's ledger balance crossed ${t} token credits. The in-product notification already fired; this is the operator-side signal that the next runner gate will start refusing work for that org."
       }
     }
   ) : {}

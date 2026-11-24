@@ -19,24 +19,24 @@
  */
 
 /**
- * Effective recharge trigger in paise, compared against the org's WALLET balance.
+ * Effective recharge trigger in token credits, compared against the org's WALLET balance.
  * Percentage mode is a share of the org's opening credit, which is configuration
- * (`initialCreditPaise`) rather than a balance.
+ * (`initialCreditTokenCredits`) rather than a balance.
  *
  * @param {object} account
  * @param {object} cfg
  * @returns {number}
  */
-function getEffectiveThresholdPaise(account, cfg) {
+function getEffectiveThresholdTokenCredits(account, cfg) {
   const mode = cfg.mode || 'amount';
   if (mode === 'percentage') {
-    const openingCredit = Number(account.initialCreditPaise) || 0;
+    const openingCredit = Number(account.initialCreditTokenCredits) || 0;
     const percent = Number(cfg.thresholdPercent) || 20;
     return Math.round((openingCredit * percent) / 100);
   }
-  return Number(cfg.thresholdPaise) || 0;
+  return Number(cfg.thresholdTokenCredits) || 0;
 }
 
 module.exports = {
-  getEffectiveThresholdPaise,
+  getEffectiveThresholdTokenCredits,
 };
