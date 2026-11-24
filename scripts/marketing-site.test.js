@@ -307,6 +307,21 @@ test('the platform SPA CSP covers every origin it loads, including the injected 
   }
 });
 
+test('the app CSP permits the payment checkout form post', () => {
+  const directives = cspDirectives('app');
+  // public/js/recharge.js hands off to the provider by submitting a form to its
+  // hosted checkout page — Cashfree v3 posts the payment session to
+  // https://sandbox.cashfree.com/pg/view/sessions/checkout. form-action is not
+  // implied by script-src or frame-src, and assertLoadableHosts only scans loaded
+  // assets, so a provider missing here loads the modal and then silently blocks the
+  // submit. Razorpay stays out: its inline checkout is an iframe, not a form post.
+  assert.ok(
+    directives['form-action'].includes('https://*.cashfree.com'),
+    'form-action must allow the Cashfree checkout host or recharge cannot complete'
+  );
+  assert.ok(directives['form-action'].includes("'self'"), "same-origin forms must keep working");
+});
+
 test('the secrets CSP stays tight because that app has no inline scripts', () => {
   const directives = cspDirectives('secrets');
   const texts = sourceTexts('secrets');
