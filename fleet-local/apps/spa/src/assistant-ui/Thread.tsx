@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AssistantRuntimeProvider,
-  AuiIf,
-  ComposerPrimitive,
-  MessagePrimitive,
-  ThreadPrimitive,
-  useAuiState,
-} from '@assistant-ui/react';
+import { AssistantRuntimeProvider, useAuiState } from '@assistant-ui/react';
 import { useA2ATask } from '@assistant-ui/react-a2a';
 import { api } from '../api';
 import type { ModelOption, Org, Project, Session, SessionOutcome } from '../types';
 import { useFleetA2A } from '../a2a/useFleetA2A';
-import { artifactText, messageArtifacts, REASONING_ARTIFACT_ID } from '../a2a/artifacts';
-import { FailureNotice } from './FailureNotice';
 import { TaskStatusBar } from './TaskStatusBar';
 import { ThoughtPanel } from './ThoughtPanel';
+import { ThreadView } from './ui/ThreadView';
 
 // The outcome badge reuses the wizard's tones: a run the platform broke must not
 // look the same as one that answered.
@@ -84,6 +76,21 @@ function ChatSurface(props: ChatSurfaceProps) {
                 </option>
               ))}
             </select>
+            {/* The model selects the agent for a conversation that has not begun,
+                so it lives with the conversation controls, not the composer. */}
+            <select
+              value={model}
+              onChange={(e) => props.onModel(e.target.value)}
+              disabled={locked || models.length === 0}
+              title={locked ? 'Locked: this conversation runs on one model' : 'Model for the next new conversation'}
+            >
+              {models.length === 0 ? <option value={model}>mock-gpt</option> : null}
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
             <button className="ghost" onClick={props.onNewChat}>
               New chat
             </button>
@@ -99,13 +106,11 @@ function ChatSurface(props: ChatSurfaceProps) {
 
           {!ready ? <p className="error">This project has no agent attached yet — finish onboarding first.</p> : null}
           <ThoughtPanel />
-          <Transcript closeReason={active?.close_reason} transportError={runError} />
-          <Composer
-            ready={ready}
-            locked={locked}
-            models={models}
-            model={model}
-            onModel={props.onModel}
+          <ThreadView
+            welcome="Ask the agent to start working."
+            placeholder={ready ? 'Message the agent…' : 'Onboarding incomplete'}
+            sendDisabled={!ready}
+            run={{ closeReason: active?.close_reason, transportError: runError }}
           />
         </div>
 
@@ -140,99 +145,6 @@ function ChatSurface(props: ChatSurfaceProps) {
 
       <RunWatcher onContext={props.onContext} onRunEnd={props.onRunEnd} />
     </AssistantRuntimeProvider>
-  );
-}
-
-function Transcript({ closeReason, transportError }: { closeReason?: string | null; transportError?: string }) {
-  return (
-    <ThreadPrimitive.Viewport className="messages">
-      <AuiIf condition={(s) => s.thread.isEmpty}>
-        <p className="muted small">No messages yet in this conversation.</p>
-      </AuiIf>
-      <ThreadPrimitive.Messages>
-        {({ message }) =>
-          message.role === 'assistant' ? (
-            <AssistantBubble closeReason={closeReason} transportError={transportError} />
-          ) : message.role === 'user' ? (
-            <UserBubble />
-          ) : null
-        }
-      </ThreadPrimitive.Messages>
-    </ThreadPrimitive.Viewport>
-  );
-}
-
-function UserBubble() {
-  return (
-    <MessagePrimitive.Root className="bubble user">
-      <MessagePrimitive.Parts>
-        {({ part }) => (part.type === 'text' ? <pre>{part.text}</pre> : null)}
-      </MessagePrimitive.Parts>
-    </MessagePrimitive.Root>
-  );
-}
-
-function AssistantBubble({ closeReason, transportError }: { closeReason?: string | null; transportError?: string }) {
-  const status = useAuiState((s) => s.message.status);
-  const hasText = useAuiState((s) => s.message.content.some((part) => part.type === 'text' && part.text !== ''));
-  const metadata = useAuiState((s) => s.message.metadata);
-  // The channel kagent actually answers on. Content wins when the task also put
-  // the text in a status message, so the reply is never printed twice.
-  const answer = artifactText(messageArtifacts(metadata), [REASONING_ARTIFACT_ID]);
-  return (
-    <MessagePrimitive.Root className="bubble agent">
-      <MessagePrimitive.Parts>
-        {({ part }) => {
-          if (part.type === 'text') return <pre>{part.text}</pre>;
-          if (part.type === 'reasoning') return <pre className="muted small">{part.text}</pre>;
-          return null;
-        }}
-      </MessagePrimitive.Parts>
-      {hasText ? null : answer ? <pre>{answer}</pre> : null}
-      <FailureNotice
-        status={status}
-        hasText={hasText || answer !== ''}
-        closeReason={closeReason}
-        transportError={transportError}
-      />
-    </MessagePrimitive.Root>
-  );
-}
-
-function Composer({
-  ready,
-  locked,
-  models,
-  model,
-  onModel,
-}: {
-  ready: boolean;
-  locked: boolean;
-  models: ModelOption[];
-  model: string;
-  onModel: (model: string) => void;
-}) {
-  return (
-    <ComposerPrimitive.Root className="composer">
-      <select
-        value={model}
-        onChange={(e) => onModel(e.target.value)}
-        disabled={locked || models.length === 0}
-        title={locked ? 'Locked: this conversation runs on one model' : 'Model for the next new conversation'}
-      >
-        {models.length === 0 ? <option value={model}>mock-gpt</option> : null}
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.label}
-          </option>
-        ))}
-      </select>
-      <ComposerPrimitive.Input placeholder={ready ? 'Message the agent…' : 'Onboarding incomplete'} disabled={!ready} />
-      <ComposerPrimitive.Send className="primary" disabled={!ready}>
-        Send
-      </ComposerPrimitive.Send>
-      <ComposerPrimitive.Cancel className="ghost">Stop</ComposerPrimitive.Cancel>
-    </ComposerPrimitive.Root>
   );
 }
 

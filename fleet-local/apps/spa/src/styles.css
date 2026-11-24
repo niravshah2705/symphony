@@ -62,7 +62,9 @@ a { color: var(--accent); }
   gap: 12px;
 }
 
-button, .button {
+/* The house control styles stop at the chat: inside `.aui-root` the vendored
+   stylesheet owns every control (see assistant-ui/ui/aui-theme.css). */
+button:not(.aui-root *), .button {
   font: inherit;
   border-radius: 8px;
   border: 1px solid var(--border);
@@ -74,12 +76,12 @@ button, .button {
   display: inline-block;
 }
 
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:not(.aui-root *):disabled { opacity: 0.5; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.ghost, .ghost { background: transparent; }
 button.link { background: none; border: none; color: var(--accent); padding: 0; cursor: pointer; }
 
-input, select, textarea {
+input:not(.aui-root *), select:not(.aui-root *), textarea:not(.aui-root *) {
   font: inherit;
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -162,6 +164,16 @@ input, select, textarea {
 .composer { display: flex; gap: 8px; }
 .composer input, .composer textarea { flex: 1; resize: none; max-height: 140px; }
 
+.notice button {
+  font: inherit;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
 .notice {
   display: flex;
   align-items: center;
@@ -198,7 +210,7 @@ th { color: var(--muted); font-weight: 500; font-size: 12px; }
 
 .trace-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .trace-list li { display: flex; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
-code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; }
+code:not(.aui-root *) { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; }
 
 @media (max-width: 800px) {
   .chat { grid-template-columns: 1fr; }

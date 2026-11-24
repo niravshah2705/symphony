@@ -11,8 +11,11 @@
   "dependencies": {
     "@assistant-ui/react": "0.15.37",
     "@assistant-ui/react-a2a": "0.2.54",
+    "@assistant-ui/react-markdown": "^0.14.26",
+    "@assistant-ui/react-ui": "^0.2.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
