@@ -68,8 +68,6 @@ export interface FacadeContext {
   bearer: string;
   /** Absolute base of this project's facade, used to rewrite the agent card. */
   facadeBase: string;
-  /** x-fleet-model fallback if message.metadata cannot carry the model. */
-  modelHint?: string;
   log?: (message: string, extra?: Record<string, unknown>) => void;
 }
 
@@ -139,7 +137,10 @@ async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ session: 
   if (!org) throw new A2ARequestError(404, 'org not found');
   const catalog = config.modelCatalog;
 
-  const requested = turn.modelId ?? ctx.modelHint;
+  // The model rides on message.metadata (the A2A Message has no other field for
+  // it) and nothing else: there is no header fallback, so a choice cannot arrive
+  // by two paths and disagree with itself.
+  const requested = turn.modelId;
   let entry: ModelCatalogEntry | undefined;
   if (requested) {
     entry = catalog.find((m) => m.id === requested);

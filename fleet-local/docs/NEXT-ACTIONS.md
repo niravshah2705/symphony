@@ -80,7 +80,7 @@ recon time (user ran an upgrade in another thread) — confirm it reached
 Root cause write-up lives in TROUBLESHOOTING.md T-19 (`(no output)` + the
 billing blind spot). Four PRs, one seam:
 
-- **PR 1 — facade (landed, 20/20 in-cluster gates pass).** `apps/control-plane/src/a2a/`
+- **PR 1 — facade (landed; the shared gate now runs 29, see PR 2).** `apps/control-plane/src/a2a/`
   (`contract.ts` classification + settlement policy, `translate.ts` wire reading
   + card rewrite, `facade.ts` orchestration + SSE pump) and `routes/a2a.ts`
   (one wildcard per project under `/api/a2a/orgs/{orgId}/projects/{projectId}`,
@@ -94,25 +94,60 @@ billing blind spot). Four PRs, one seam:
   failure it cannot name stays billable; and a task can complete with **no
   artifact at all** (the mock worker does), which is now recorded as
   `the agent completed the turn without producing any output` instead of an
-  unexplained empty bubble. The card GET needs the identity headers too — the
+  unexplained empty bubble. Rotating the key then exposed a THIRD member of the
+  same class, and it was being billed: a **retired model id** (`404 … is no
+  longer available on OpenRouter`) and a run the controller **refused to start**
+  (`input was not accepted; retry after the session becomes available`) both
+  settled as `failed` and billed 49-82 s of harness retry for a turn that never
+  reached a model. `MODEL_UNAVAILABLE` + `RUN_NOT_STARTED` now cover them — a
+  bare `404` is deliberately not matched, because an agent's own tool can hit
+  one and that compute is real. The card GET needs the identity headers too — the
   controller 401s a bare one, which is how `agentCard()` lost discovery.
   Legacy `/chat` still works — `kagent/proxy.ts` now shares the same pump.
   Gate: `scripts/fixes/t31-a2a-facade-check.sh` (read-only; `REBUILD=1` to roll;
   waits for `/healthz` because a 1-replica rolling update can leave zero ready
   endpoints for minutes and every curl then answers `000`).
-- **PR 2 — SPA switch** to `@assistant-ui/react` + `@assistant-ui/react-a2a`
-  (headless primitives, no Tailwind/shadcn), `FleetA2AClient` for the model
-  metadata, and the failure/status surface: `incomplete (error)` + the agent's
-  own reason inline + Retry, `TaskStatusBar` for the 9 states, `ThoughtPanel`
-  fed by the reasoning artifact. Model choice rides on message **metadata**,
-  proven live: gate 5 posts `{"fleet.dev/model":"not-a-model"}` and gets a 400
-  `unknown_model`, so the facade is reading it (and strips it before kagent
-  sees it). The `x-fleet-model` header path is the redundant fallback — PR 2
-  should delete it unless another client needs it. Also carry the facade gaps:
-  it does NOT rewrite the card's `capabilities`, which advertises
-  `pushNotifications: true` and `extendedAgentCard: true` while the facade
-  answers both with `501` (`push_notifications_unsupported`), and `message:send`
-  exists server-side but the SPA never uses it (it streams).
+- **PR 2 — SPA switch (landed).** `apps/spa` now runs the real library runtime
+  (`@assistant-ui/react@0.15.37` + `@assistant-ui/react-a2a@0.2.54`, headless
+  primitives on our own `styles.css` — no Tailwind/shadcn):
+  `src/a2a/{FleetA2AClient,useFleetA2A}.ts` and
+  `src/assistant-ui/{Thread,TaskStatusBar,FailureNotice,ThoughtPanel}.tsx`,
+  mounted in place of `Chat.tsx` by `Shell.tsx`. A provider 401 is now an
+  `incomplete (error)` bubble carrying the controller's own words plus Retry,
+  never `(no output)`. What the library forced into the open, all of it verified
+  against shipped source and the live facade:
+  * it calls `streamMessage(message, configuration, void 0, signal)`, so
+    per-message **metadata** is the only place the model choice can ride — and
+    that is now proven end-to-end (gate 8), so the `x-fleet-model` header
+    fallback is **deleted** rather than kept as a second path that can drift;
+  * the agent-card parser is strict and card discovery gates every run, and a
+    stream whose frames the client cannot type throws `…ended without any
+    events` — the exact shape the old `(no output)` had, which is why the gate
+    asserts typed events, not just HTTP 200;
+  * its A2A role spelling is lowercase (`toWireMessage` maps `"user"` →
+    `ROLE_USER`, anything else → `ROLE_UNSPECIFIED`). A mis-spelled role is
+    refused by the facade with `400 INVALID_ARGUMENT` instead of silently
+    starting a bad turn;
+  * changing the client identity rebuilds its controller, so the client is
+    pinned per conversation and switching sessions means a new client — not a
+    new option on a stale one;
+  * artifacts are NOT merged into message content (they live on
+    `message.metadata.custom.a2a.artifacts`), so `ThoughtPanel` reads
+    `useA2AArtifacts()` and cannot duplicate the answer. Still contract +
+    plumbing: nothing emits a thought part yet (PR 4).
+  Cost of the switch: the SPA bundle went 240 kB → 698 kB (211 kB gzip) and now
+  trips Vite's 500 kB chunk warning. Not yet rewritten: the card's
+  `capabilities`, which advertises `pushNotifications` / `extendedAgentCard`
+  while the facade answers both with `501`. `message:send` exists server-side
+  and the SPA never uses it (it streams). Browser click-through is still manual:
+  a normal answer, an inline 401 with Retry, a >60 s turn, an `input-required`
+  pause. Gate 8 asserts answer *content* when `ANSWER_MODEL` names a model that
+  actually generates, and the gate's own assertion passes for each of the three
+  healthy catalog entries — `nemotron`, `nemotron-claude` and `nemotron-codex`
+  (the claude harness delivers its text in `artifactUpdate` frames, the other two
+  in the task's status message; all three reach the client). `mock` still
+  completes with no text at all, which is the silent-completion case the notice
+  exists for.
 - **PR 3 — delete the bespoke relay:** `/chat`, `Chat.tsx`, `api.chat`, the
   private `event: session` frame, `verify-e2e.sh` §4 wording.
 - **PR 4 — make the unreachable features real:** `mcp_require_approval` in the
@@ -121,6 +156,15 @@ billing blind spot). Four PRs, one seam:
   advertises `https://kagent.dev/extensions/hitl/v1`, so only the CR field and
   the harness emission are missing.
 
-Blocking any visible test: the OpenRouter key behind LiteLLM is dead
-(`/api/v1/models` lies with a 200 — only generation proves it). Rotate, patch
-`litellm-fleet-secrets` `OPENROUTER_API_KEY`, `rollout restart deploy/litellm`.
+The OpenRouter key behind LiteLLM was dead and **was rotated 2026-11-23** into
+`litellm-fleet-secrets` `OPENROUTER_API_KEY` (+ `rollout restart deploy/litellm`);
+`nemotron`, `nemotron-claude` and `nemotron-codex` now answer real text through
+the facade and the browser client. What is still broken is a **retired model id**:
+the `claude` catalog entry maps to `openrouter/anthropic/claude-sonnet-4`, which
+OpenRouter no longer serves at all (`404 … is no longer available … no provider
+serves this model anymore`). Fix = a live slug in **two** places that must move
+together: `deploy/litellm/values-base.yaml` `model_list` (e.g.
+`anthropic/claude-sonnet-4.6`) and `deploy/bff/configmap.yaml`'s `FLEET_MODELS`
+`model` field — LiteLLM matches `model_name` verbatim, so one without the other
+just moves the failure. `/api/v1/models` lies with a 200 either way; only
+generation proves it.

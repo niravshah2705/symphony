@@ -97,7 +97,7 @@ cr=$(grep -riE 'cloudrun|cloud-run|run\.app' deploy/ 2>/dev/null | grep -v 'kube
 echo "=== 13. A2A facade (T-19) — the BFF is an A2A server per project ==="
 # Runs a real agent turn, so it stays explicit rather than firing on every
 # re-verify: REBUILD=1 scripts/fixes/t31-a2a-facade-check.sh
-man "t31-a2a-facade-check.sh: card rewrite, 401-as-JSON routing, a relayed message:stream turn, outcome + meter_seconds read-back (incl. a silent completion explaining its own empty bubble), the refusal shapes (unknown conversation/model, push config, foreign task), and a provider credential fault landing as upstream_error with 0 seconds metered"
+man "t31-a2a-facade-check.sh: card rewrite, 401-as-JSON routing, a relayed message:stream turn, outcome + meter_seconds read-back (incl. a silent completion explaining its own empty bubble), the refusal shapes (unknown conversation/model, push config, foreign task), a provider credential fault landing as upstream_error with 0 seconds metered, and the shipping SPA client (FleetA2AClient over @assistant-ui/react-a2a) parsing the card, typing every frame and landing its model choice on the session row"
 
 echo
 echo "RESULT  PASS=$PASS FAIL=$FAIL MANUAL=$MANUAL"

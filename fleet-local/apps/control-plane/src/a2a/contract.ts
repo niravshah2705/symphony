@@ -70,8 +70,25 @@ const PAUSED = new Set(['input-required', 'auth-required']);
 const PLATFORM_FAULT =
   /unauthorized|invalid api key|authentication|\b401\b|\b402\b|\b429\b|payment required|rate limit|insufficient (quota|credit|balance)|no healthy upstream|service unavailable|overloaded/i;
 
+// Two more classes the platform owns, both found live when the credential was
+// rotated: the MODEL ID itself is gone — LiteLLM answers
+// `anthropic/claude-sonnet-4 is no longer available on OpenRouter: no provider
+// serves this model anymore` with a 404, and kagent then settles that as an
+// ordinary agent failure and bills ~50-80s of harness retries for a run that
+// could never have reached a model. A bare `404` is deliberately NOT matched,
+// because an agent's own tool can hit one: the 404 must come out of the LLM
+// error envelope.
+const MODEL_UNAVAILABLE =
+  /is no longer available|no provider serves this model|model not found|(?:llm error response|openai api error)[\s\S]{0,64}?\b404\b/i;
+
+// The run never started: the actor or session was not ready and the controller
+// refused the input. Compute that was never issued cannot be billed, and the
+// only honest thing for the user is "retry".
+const RUN_NOT_STARTED = /input was not accepted|session becomes available/i;
+
 export function isPlatformFault(reason: string | undefined): boolean {
-  return reason !== undefined && reason !== '' && PLATFORM_FAULT.test(reason);
+  if (reason === undefined || reason === '') return false;
+  return PLATFORM_FAULT.test(reason) || MODEL_UNAVAILABLE.test(reason) || RUN_NOT_STARTED.test(reason);
 }
 
 export function classifyState(raw: unknown): StateClass {
