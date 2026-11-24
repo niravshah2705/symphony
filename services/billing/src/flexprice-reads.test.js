@@ -16,9 +16,9 @@ process.env.FLEXPRICE_ENABLED = 'true';
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
 const express = require('express');
-const store = require('@ai-fleet/shared-core/store');
-const gate = require('@ai-fleet/shared-core/billing/gate');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
+const store = require('@software-factory/shared-core/store');
+const gate = require('@software-factory/shared-core/billing/gate');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
 const { createFlexpriceReadsRouter, bucketCreditRows, CREDIT_METER } = require('./flexprice-reads');
 
 const WALLET = 'wallet_test_1';

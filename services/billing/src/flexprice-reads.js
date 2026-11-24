@@ -40,19 +40,19 @@
  */
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
-const log = require('@ai-fleet/shared-core/logger');
-const store = require('@ai-fleet/shared-core/store');
-const gate = require('@ai-fleet/shared-core/billing/gate');
-const moneyWire = require('@ai-fleet/shared-core/billing/money-wire');
-const { createFlexpriceClient, rowsOf } = require('@ai-fleet/shared-core/billing/flexprice-client');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const { asyncHandler } = require('@software-factory/shared-core/util');
+const log = require('@software-factory/shared-core/logger');
+const store = require('@software-factory/shared-core/store');
+const gate = require('@software-factory/shared-core/billing/gate');
+const moneyWire = require('@software-factory/shared-core/billing/money-wire');
+const { createFlexpriceClient, rowsOf } = require('@software-factory/shared-core/billing/flexprice-client');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
 // The meter/event/property names come from the outbox's own table: a quantity
 // posted under any other property name is acknowledged with 202 and contributes
 // nothing (billing-outbox.js:28-31), so a read that spells them differently would
 // silently report zero usage.
-const { METERS } = require('@ai-fleet/shared-core/billing/billing-outbox');
+const { METERS } = require('@software-factory/shared-core/billing/billing-outbox');
 
 const LLM = METERS.llmCost;
 const DAY_MS = 24 * 60 * 60 * 1000;
