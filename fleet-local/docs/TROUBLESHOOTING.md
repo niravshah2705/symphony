@@ -945,6 +945,13 @@ route is a 404 now, gate 9 drives the AG-UI run. The A2A turn, the task model an
 this metering window are unchanged, because both legs resolve and settle a turn
 through the same `openTurn`/`pumpTurn`: only the protocol the browser speaks
 changed, so the two paths cannot disagree about a turn.
+**Gates 6 and 9 verified live (2026-11-24)**, with the BFF rebuilt from this tree:
+`POST /chat` answers 404, a run with no `threadId` answers
+`400 missing_thread_id`, and a `mock` run on the AG-UI wire streams
+`RUN_STARTED → TEXT_MESSAGE_START → 4×TEXT_MESSAGE_CONTENT → TEXT_MESSAGE_END →
+RUN_FINISHED` — the answer arrives as ordinary message text, which is why the
+artifact bridge PR 2 needed is gone — and the row lands
+`model=mock outcome=completed` keyed on the client's `thread_id`.
 Observed live: a `message:stream` turn relays 4 controller frames verbatim and
 binds `contextId`; a streaming `mock` turn now delivers `mock reply` as an
 `artifactUpdate` frame and settles `completed` with no `close_reason`, while a

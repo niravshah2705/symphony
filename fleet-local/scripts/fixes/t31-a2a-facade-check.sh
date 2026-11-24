@@ -302,10 +302,10 @@ else
       pass "the client saw the turn settle as $(kv state)" ;;
     *) fail "the client's stream never reached a settled state ($(kv state))" ;;
   esac
-  # Answer TEXT needs a model that actually generates: the mock harness completes
-  # silently (which is exactly the case the failure notice exists for), and today
-  # every non-mock credential on this cluster is dead. ANSWER_MODEL names a healthy
-  # one; unset means "plumbing proven, content not".
+  # Answer TEXT needs a model that repeats the prompt back: `mock` streams, but it
+  # answers with its own fixed "mock reply", so the T31-CLIENT-OK probe below can
+  # only match a real model. ANSWER_MODEL names one; unset means "framing proven,
+  # echoed content not".
   if [ -n "${ANSWER_MODEL:-}" ]; then
     aprobe=$(node --disable-warning=ExperimentalWarning "$ROOT/scripts/fixes/t31-spa-client.ts" \
       "$API" "$TOKEN" "$ANSWER_MODEL" "Reply with exactly T31-CLIENT-OK and nothing else." \
@@ -314,7 +314,7 @@ else
       && pass "the answer reached the client as content ($ANSWER_MODEL)" \
       || fail "the client never saw the answer from $ANSWER_MODEL: $aprobe"
   else
-    echo "   note: answer content not asserted (ANSWER_MODEL unset; mock answers silently)"
+    echo "   note: answer content not asserted (ANSWER_MODEL unset — set it to a model that echoes the prompt)"
   fi
   cctx=$(kv context)
   crow=$(fp "select coalesce(model,'-') || '|' || coalesce(outcome,'NULL') from sessions where kagent_session_id = '$cctx' order by started_at desc limit 1;")
@@ -338,8 +338,9 @@ say "9) the AG-UI run endpoint carries a client-minted thread handle"
 AGUI="$BASE/api/agui/orgs/$ORG/projects/$PROJ/agent"
 uuid() { node -e 'process.stdout.write(crypto.randomUUID())'; }
 AGUI_THREAD=$(uuid)
-# The encoder writes data:-only frames (the event type lives in the JSON), so read
-# .type rather than an event: line — see @ag-ui/encoder's SseLineEvent.
+# The encoder writes data:-only frames — the event type lives inside the JSON
+# (`data: ${JSON.stringify(event)}\n\n`, @ag-ui/encoder's encodeSSE) — so read
+# .type rather than an event: line.
 agui_run() {
   local body=$1 out=$2
   curl -sN "${C[@]}" -H 'Content-Type: application/json' -H 'Accept: text/event-stream' \
@@ -368,9 +369,11 @@ echo "$types" | grep -qx RUN_STARTED \
   || fail "no RUN_STARTED head: $(head -c 200 /tmp/t31-agui.txt)"
 # The client matches every frame to the run by these two handles, so an echo of
 # the A2A context id instead of the client's threadId would drop the transcript.
-echo "$(grep '^data:' /tmp/t31-agui.txt | sed 's/^data: *//' | jq -r 'select(.type=="RUN_STARTED") | .threadId' | head -1)" = "$AGUI_THREAD" \
-  && pass "RUN_STARTED echoed the threadId the client named (not kagent's context id)" \
-  || fail "RUN_STARTED carried a different threadId than the one we sent"
+started_thread=$(grep '^data:' /tmp/t31-agui.txt | sed 's/^data: *//' \
+  | jq -r 'select(.type=="RUN_STARTED") | .threadId' | head -1)
+[ "$started_thread" = "$AGUI_THREAD" ] \
+  && pass "RUN_STARTED echoed the threadId the client named, not kagent's context id" \
+  || fail "RUN_STARTED echoed '$started_thread' instead of the threadId we sent"
 term=$(echo "$types" | grep -xE 'RUN_FINISHED|RUN_ERROR' | head -1)
 if [ "$term" = RUN_FINISHED ]; then
   pass "the run settled with RUN_FINISHED"
@@ -383,7 +386,7 @@ ntext=$(echo "$types" | grep -c '^TEXT_MESSAGE_' || true)
 if [ "${ntext:-0}" -ge 3 ]; then
   pass "answer text arrived as TEXT_MESSAGE_START/CONTENT/END ($ntext frames)"
 else
-  echo "   note: $ntext TEXT_MESSAGE_* frames — mock answers silently, so content is asserted under ANSWER_MODEL only"
+  echo "   note: $ntext TEXT_MESSAGE_* frames — this run produced no answer text (the silent-completion case the failure notice exists for); ANSWER_MODEL asserts a generating model"
 fi
 if [ -n "${ANSWER_MODEL:-}" ]; then
   am_body=$(jq -nc --arg th "$(uuid)" --arg rn "$(uuid)" --arg t "$TEXT" --arg m "$ANSWER_MODEL" \

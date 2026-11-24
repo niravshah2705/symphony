@@ -190,9 +190,10 @@ billing blind spot). Four PRs, one seam:
   Gates: 6 asserts `POST /chat → 404` (a route that comes back, or an SPA fallback
   swallowing `/api`, both fail it); 9 drives the AG-UI run end-to-end and reads
   `sessions.thread_id` + `outcome` back off the row.
-  **Not yet run against the live cluster** — gate 9 and the 404 need a BFF image
-  built from this tree (`REBUILD=1 scripts/fixes/t31-a2a-facade-check.sh`), and the
-  browser click-through the user does themselves.
+  Gates 6 and 9 pass live against `kind-flexprice-local` (BFF rebuilt from this
+  tree, 2026-11-24). Still manual: the browser click-through — a normal answer, an
+  inline 401 with Retry, a >60 s turn, an `input-required` pause answered by
+  typing into the composer.
 - **PR 4 — make the unreachable features real:** `mcp_require_approval` in the
   tenant chart (no Agent CR sets `requireApproval` today), HITL extension
   declaration + approval payload, and thought-part emission. The card already
