@@ -38,6 +38,11 @@ const VERIFICATION_FILES = ['googleca0fdd26d71dc36f.html'];
 // directory rather than riding the /adlc/ -> / rewrite: a page copied verbatim to www
 // would otherwise point at a url that only exists on the platform origin.
 const BRAND_DIR = 'brand';
+// The shared system sheets sit at the source root because the app origin serves them
+// to /adlc/ and /archagentix/ from there. www has no app tree, so they must be
+// promoted to the marketing root or every page's `@import url("/tokens.css")` resolves
+// to a 404, which Firebase answers as text/html and the browser then refuses to apply.
+const SHARED_SHEETS = ['tokens.css', 'base.css'];
 const BINARY_EXT = /\.(?:png|jpe?g|ico|webp|avif|gif|woff2?|ttf|otf)$/i;
 const isBinary = (rel) => BINARY_EXT.test(rel);
 
@@ -52,20 +57,31 @@ const REWRITES = [
   ['/adlc/', '/'],
 ];
 
+// The model-intelligence panel is a platform-origin page: it self-canonicalises to
+// PLATFORM_ORIGIN/archagentix/ and is not published on www, so the nav link that the
+// redesign put on every page would 404 there. Matched as an attribute rather than as a
+// bare path because llms.txt already spells the absolute url, and a string replace would
+// nest one origin inside the other.
+const PLATFORM_LINK_ATTR = [/href="\/archagentix\/"/g, 'href="' + PLATFORM_ORIGIN + '/archagentix/"'];
+
 function rewriteText(text) {
-  var out = text;
+  var out = text.replace(PLATFORM_LINK_ATTR[0], PLATFORM_LINK_ATTR[1]);
   for (var i = 0; i < REWRITES.length; i += 1) {
     out = out.split(REWRITES[i][0]).join(REWRITES[i][1]);
   }
   return out;
 }
 
-// Every marketing file is text; test files never leave the source tree.
+// Every marketing file is text; test files never leave the source tree. Dot
+// directories (a design run's .hallmark/ scratch lives beside several pages) are
+// skipped outright: firebase ignores them on upload, so shipping them into the
+// generated tree would only make marketing/ and the published site disagree.
 function walkFiles(dir, prefix) {
   var rel = prefix === undefined ? '' : prefix;
   var found = [];
   var names = fs.readdirSync(path.join(dir, rel)).sort();
   for (var i = 0; i < names.length; i += 1) {
+    if (names[i][0] === '.') continue;
     var child = rel ? rel + '/' + names[i] : names[i];
     if (fs.statSync(path.join(dir, child)).isDirectory()) {
       found = found.concat(walkFiles(dir, child));
@@ -201,6 +217,7 @@ function buildMarketingSite(options) {
   var promoted = walkFiles(adlcDir);
   for (var i = 0; i < promoted.length; i += 1) copyFile(adlcDir, outDir, promoted[i]);
   for (i = 0; i < PUBLISHED_PAGES.length; i += 1) copyFile(srcDir, outDir, PUBLISHED_PAGES[i] + '/index.html');
+  for (i = 0; i < SHARED_SHEETS.length; i += 1) copyFile(srcDir, outDir, SHARED_SHEETS[i]);
   for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i]);
   for (i = 0; i < VERIFICATION_FILES.length; i += 1) copyFile(srcDir, outDir, VERIFICATION_FILES[i]);
   var brandDir = path.join(srcDir, BRAND_DIR);
@@ -293,8 +310,10 @@ module.exports = {
   validateTree: validateTree,
   walkFiles: walkFiles,
   REWRITES: REWRITES,
+  PLATFORM_LINK_ATTR: PLATFORM_LINK_ATTR,
   COMPANY_PAGES: COMPANY_PAGES,
   BRAND_DIR: BRAND_DIR,
+  SHARED_SHEETS: SHARED_SHEETS,
   LEGAL_PAGE_SLUGS: LEGAL_PAGE_SLUGS,
   PUBLISHED_PAGES: PUBLISHED_PAGES,
   DISCOVERY_FILES: DISCOVERY_FILES,
