@@ -144,25 +144,6 @@ input:not(.aui-root *), select:not(.aui-root *), textarea:not(.aui-root *) {
 
 .chat { display: grid; grid-template-columns: 1fr 240px; gap: 16px; }
 .chat-main { display: flex; flex-direction: column; min-height: 60vh; }
-.messages {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 12px;
-  max-height: 55vh;
-}
-.bubble { max-width: 85%; padding: 10px 12px; border-radius: 12px; }
-.bubble pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: inherit; }
-.bubble.user { align-self: flex-end; background: var(--accent); color: #fff; }
-.bubble.agent { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--border); }
-.composer { display: flex; gap: 8px; }
-.composer input, .composer textarea { flex: 1; resize: none; max-height: 140px; }
 
 .notice button {
   font: inherit;
@@ -184,15 +165,6 @@ input:not(.aui-root *), select:not(.aui-root *), textarea:not(.aui-root *) {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
-
-.thought {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  background: var(--panel);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-}
-.thought pre { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; font: inherit; color: var(--muted); }
 
 .chat-side { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
 .session-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }

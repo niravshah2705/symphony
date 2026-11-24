@@ -1,6 +1,8 @@
-// The BFF as an A2A server: a facade over the kagent controller. The browser
-// speaks standard A2A (REST bindings) here and @assistant-ui/react-a2a drives it,
-// so nothing about this conversation is a private protocol.
+// The BFF as an A2A server: a facade over the kagent controller. Any standard
+// A2A client (REST bindings) speaks it — the live gate drives it with
+// @assistant-ui/react-a2a, and the browser through src/agui, which re-spokes THIS
+// facade's turn as AG-UI run events — so nothing about a conversation is a
+// private protocol.
 //
 // Two rules shape everything below.
 //

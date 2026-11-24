@@ -4,17 +4,9 @@ import { config } from '../config.ts';
 import { assertMember } from '../db/users.ts';
 import { findProjectById } from '../db/projects.ts';
 import { getSession, settleTurn } from '../db/sessions.ts';
-import { streamChat } from '../kagent/proxy.ts';
 import { a2aHeaders, agentCard, makeTraceparent } from '../kagent/a2a.ts';
 
 export async function chatRoutes(app: FastifyInstance): Promise<void> {
-  app.post('/api/orgs/:orgId/projects/:projectId/chat', { preHandler: requireAuth }, async (request, reply) => {
-    const { orgId, projectId } = request.params as { orgId: string; projectId: string };
-    const body = (request.body ?? {}) as { text?: string; sessionId?: string; model?: string };
-    if (!body.text) return reply.code(400).send({ error: 'text is required' });
-    await streamChat(request, reply, { orgId, projectId, text: body.text, sessionId: body.sessionId, model: body.model });
-  });
-
   // P6: the model picker's source of truth (catalog; BFF restarts on FLEET_MODELS).
   app.get('/api/orgs/:orgId/projects/:projectId/models', { preHandler: requireAuth }, async (request, reply) => {
     const { orgId, projectId } = request.params as { orgId: string; projectId: string };

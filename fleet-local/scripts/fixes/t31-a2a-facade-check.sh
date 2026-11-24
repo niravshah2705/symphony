@@ -13,13 +13,17 @@
 #   4) the session row records WHAT the turn was and how long it actually ran
 #   5) the refusal paths are honest: unknown conversation, unknown model, push
 #      notifications, and a task belonging to someone else
-#   6) the legacy /chat relay still works (PR 1 is additive; PR 3 deletes it)
+#   6) the legacy /chat relay is gone (PR 3 deleted it — the browser now speaks
+#      AG-UI, and one browser wire per app is the point)
 #   7) a turn the PLATFORM could not run (dead credential or retired model id) is
 #      classified upstream_error and is NOT metered (FAULT_MODEL names it; empty
 #      skips)
 #   8) a real A2A client (scripts/fixes/FleetA2AClient.ts over
 #      @assistant-ui/react-a2a) parses the card, types the frames, and lands its
 #      model choice on the row
+#   9) the AG-UI run endpoint that replaced /chat accepts the client-minted
+#      thread handle, streams RUN_STARTED / TEXT_MESSAGE_* / a terminal frame, and
+#      records thread_id + outcome on the session row
 set -uo pipefail
 CTX=${KCTX:-kind-flexprice-local}
 k() { kubectl --context "$CTX" "$@"; }
@@ -196,13 +200,16 @@ if [ -n "${CTXID:-}" ]; then
   fi
 fi
 
-say "6) the legacy /chat relay still works (PR 1 is additive)"
+say "6) the legacy /chat relay is gone"
+# PR 3 deleted the bespoke browser relay, and this is the gate that notices if it
+# comes back: the route must 404, not 405 (a registered route with the method
+# removed) and not 200 answering index.html (the SPA fallback swallowing an unknown
+# API path — gate 1 exists because that fallback once hid a whole class of errors).
 code=$(curl -s -o /tmp/t31-legacy.txt -w '%{http_code}' "${C[@]}" -H 'Content-Type: application/json' \
-  -X POST --max-time ${STREAM_TIMEOUT:-240} -d "$(jq -nc --arg t "$TEXT" '{text:$t}')" \
+  -X POST --max-time 30 -d "$(jq -nc --arg t "$TEXT" '{text:$t}')" \
   "$BASE/api/orgs/$ORG/projects/$PROJ/chat")
-[ "$code" = 200 ] && grep -q '^event: session' /tmp/t31-legacy.txt \
-  && pass "legacy /chat still streams + emits its private session frame" \
-  || fail "legacy /chat -> $code: $(head -c 200 /tmp/t31-legacy.txt)"
+[ "$code" = 404 ] && pass "POST /chat -> 404 (the relay and its SSE frames are gone)" \
+  || fail "legacy /chat -> $code, want 404: $(head -c 200 /tmp/t31-legacy.txt)"
 
 say "7) a turn the platform could not run is not billed"
 # The failure the user actually hit, and its sibling: kagent reports BOTH a dead
@@ -318,6 +325,86 @@ else
   [ "${crow##*|}" != "NULL" ] && pass "the client-driven turn settled with an outcome" \
     || fail "the client-driven turn left outcome NULL"
 fi
+
+echo
+say "9) the AG-UI run endpoint carries a client-minted thread handle"
+# The browser leg is AG-UI now, so this is the wire the SPA actually sits on:
+# a RunAgentInput whose threadId the CLIENT invented (the app's useFleetAgUi mints
+# a uuid per conversation), and the A2A turn behind the facade unchanged. It proves
+# three things curl alone could not: the encoder's frames parse as AG-UI events,
+# the refusal of a missing threadId is a real 400 rather than a silent merge onto
+# one session, and the row records the handle the browser named — which is what
+# "resume" reads back.
+AGUI="$BASE/api/agui/orgs/$ORG/projects/$PROJ/agent"
+uuid() { node -e 'process.stdout.write(crypto.randomUUID())'; }
+AGUI_THREAD=$(uuid)
+# The encoder writes data:-only frames (the event type lives in the JSON), so read
+# .type rather than an event: line — see @ag-ui/encoder's SseLineEvent.
+agui_run() {
+  local body=$1 out=$2
+  curl -sN "${C[@]}" -H 'Content-Type: application/json' -H 'Accept: text/event-stream' \
+    -X POST --max-time ${STREAM_TIMEOUT:-240} -d "$body" "$AGUI" >"$out" 2>/dev/null
+}
+agui_types() { grep '^data:' "$1" | sed 's/^data: *//' | jq -r '.type // empty'; }
+
+# First the refusal, because a run that silently resumed someone else's
+# conversation would pass every assertion below.
+code=$(curl -s -o /tmp/t31-agui-noid.json -w '%{http_code}' "${C[@]}" -H 'Content-Type: application/json' \
+  -X POST --max-time 30 -d "$(jq -nc --arg t "$TEXT" '{runId:"r-1",messages:[{id:"m-1",role:"user",content:$t}]}')" "$AGUI")
+reason=$(jq -r '.error.reason // empty' /tmp/t31-agui-noid.json 2>/dev/null)
+[ "$code" = 400 ] && [ "$reason" = "missing_thread_id" ] \
+  && pass "a run with no threadId is refused (400 missing_thread_id)" \
+  || fail "threadId-less run -> $code reason=${reason:-none}: $(head -c 200 /tmp/t31-agui-noid.json)"
+
+agui_body=$(jq -nc --arg th "$AGUI_THREAD" --arg rn "$(uuid)" --arg t "$TEXT" --arg m "$CATALOG" \
+  '{threadId:$th, runId:$rn, state:{}, tools:[], context:[],
+    forwardedProps:{"fleet.dev/model":$m},
+    messages:[{id:"m-1",role:"user",content:$t}]}')
+agui_run "$agui_body" /tmp/t31-agui.txt
+types=$(agui_types /tmp/t31-agui.txt)
+echo "   frames: $(echo "$types" | tr '\n' ' ')"
+echo "$types" | grep -qx RUN_STARTED \
+  && pass "the run opened with RUN_STARTED" \
+  || fail "no RUN_STARTED head: $(head -c 200 /tmp/t31-agui.txt)"
+# The client matches every frame to the run by these two handles, so an echo of
+# the A2A context id instead of the client's threadId would drop the transcript.
+echo "$(grep '^data:' /tmp/t31-agui.txt | sed 's/^data: *//' | jq -r 'select(.type=="RUN_STARTED") | .threadId' | head -1)" = "$AGUI_THREAD" \
+  && pass "RUN_STARTED echoed the threadId the client named (not kagent's context id)" \
+  || fail "RUN_STARTED carried a different threadId than the one we sent"
+term=$(echo "$types" | grep -xE 'RUN_FINISHED|RUN_ERROR' | head -1)
+if [ "$term" = RUN_FINISHED ]; then
+  pass "the run settled with RUN_FINISHED"
+elif [ "$term" = RUN_ERROR ]; then
+  fail "the AG-UI run reported RUN_ERROR: $(grep '^data:' /tmp/t31-agui.txt | sed 's/^data: *//' | jq -r 'select(.type=="RUN_ERROR") | .message' | head -1)"
+else
+  fail "the stream ended without a terminal event (the client would hang)"
+fi
+ntext=$(echo "$types" | grep -c '^TEXT_MESSAGE_' || true)
+if [ "${ntext:-0}" -ge 3 ]; then
+  pass "answer text arrived as TEXT_MESSAGE_START/CONTENT/END ($ntext frames)"
+else
+  echo "   note: $ntext TEXT_MESSAGE_* frames — mock answers silently, so content is asserted under ANSWER_MODEL only"
+fi
+if [ -n "${ANSWER_MODEL:-}" ]; then
+  am_body=$(jq -nc --arg th "$(uuid)" --arg rn "$(uuid)" --arg t "$TEXT" --arg m "$ANSWER_MODEL" \
+    '{threadId:$th, runId:$rn, state:{}, tools:[], context:[],
+      forwardedProps:{"fleet.dev/model":$m},
+      messages:[{id:"m-1",role:"user",content:$t}]}')
+  agui_run "$am_body" /tmp/t31-agui-answer.txt
+  grep -q 'T31-OK' /tmp/t31-agui-answer.txt \
+    && pass "the answer reached the AG-UI stream ($ANSWER_MODEL)" \
+    || fail "the AG-UI stream never carried the answer: $(head -c 200 /tmp/t31-agui-answer.txt)"
+fi
+# forwardedProps is the model channel the SPA's FleetAgUiAgent overrides
+# prepareRunAgentInput to write; if it drifted, the row would name the default.
+aguirow=$(fp "select coalesce(model,'-') || '|' || coalesce(outcome,'NULL') from sessions where thread_id = '$AGUI_THREAD';")
+echo "   session row: $aguirow"
+[ "${aguirow%%|*}" = "$CATALOG" ] \
+  && pass "forwardedProps['fleet.dev/model'] arrived through the run input (model=$CATALOG)" \
+  || fail "the client's model choice did not reach the session row: $aguirow (want $CATALOG)"
+[ "${aguirow##*|}" != "NULL" ] \
+  && pass "sessions.thread_id resolved the conversation and settled with an outcome" \
+  || fail "no session row for thread_id=$AGUI_THREAD, or outcome stayed NULL"
 
 echo
 if [ "$FAILS" = 0 ]; then

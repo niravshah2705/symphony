@@ -36,7 +36,7 @@ echo "=== 3. onboarding org-demo (interactive) ==="
 man "Google login at https://app.fleet.dev -> wizard -> onboard org-demo; re-run = zero duplicates; ORG_UUID=$ORG_UUID"
 
 echo "=== 4. long-running multi-turn chat SSE (interactive) ==="
-man "chat >60s mock-gpt streams SSE; session/task ids recorded; kagent.fleet.dev SSO shows same agent"
+man "chat >60s mock-gpt streams AG-UI events (RUN_STARTED → TEXT_MESSAGE_* → a terminal frame) on POST /api/agui/…; sessions.thread_id + outcome recorded; kagent.fleet.dev SSO shows same agent"
 
 echo "=== 5. llm-mock echo: baggage fleet_user_id + x-fleet-org-id arrived ==="
 mocklog=$(kubectl -n litellm logs deploy/llm-mock --tail=200 2>/dev/null | grep -E 'fleet_user_id|x-fleet-org-id' | tail -1 || true)
@@ -82,7 +82,7 @@ allow=$(kubectl -n ingress-nginx get cm ingress-nginx-controller -o jsonpath='{.
 for d in fleet-oauth2-proxy kagent-oauth2-proxy; do
   ut=$(kubectl -n fleet-system get deploy "$d" -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | tr ',' '\n' | sed -n 's/.*--upstream-timeout=\([0-9]*\)s.*/\1/p')
   [ "${ut:-0}" -ge 1800 ] && ok "$d upstream-timeout=${ut}s" \
-    || bad "$d upstream-timeout=${ut:-30 (default)}s — POST /chat 502s during actor wake"
+    || bad "$d upstream-timeout=${ut:-30 (default)}s — the browser's POST /api/agui 502s during actor wake"
 done
 
 echo "=== 11. online claude-sonnet-4 via OpenRouter (interactive) ==="
@@ -97,7 +97,7 @@ cr=$(grep -riE 'cloudrun|cloud-run|run\.app' deploy/ 2>/dev/null | grep -v 'kube
 echo "=== 13. A2A facade (T-19) — the BFF is an A2A server per project ==="
 # Runs a real agent turn, so it stays explicit rather than firing on every
 # re-verify: REBUILD=1 scripts/fixes/t31-a2a-facade-check.sh
-man "t31-a2a-facade-check.sh: card rewrite, 401-as-JSON routing, a relayed message:stream turn, outcome + meter_seconds read-back (incl. a silent completion explaining its own empty bubble), the refusal shapes (unknown conversation/model, push config, foreign task), a provider credential fault landing as upstream_error with 0 seconds metered, and a real A2A client (scripts/fixes/FleetA2AClient.ts over @assistant-ui/react-a2a) parsing the card, typing every frame and landing its model choice on the session row"
+man "t31-a2a-facade-check.sh: card rewrite, 401-as-JSON routing, a relayed message:stream turn, outcome + meter_seconds read-back (incl. a silent completion explaining its own empty bubble), the refusal shapes (unknown conversation/model, push config, foreign task), the legacy /chat relay gone (404), a provider credential fault landing as upstream_error with 0 seconds metered, a real A2A client (scripts/fixes/FleetA2AClient.ts over @assistant-ui/react-a2a) parsing the card, typing every frame and landing its model choice on the session row, and the AG-UI run endpoint the browser now speaks (client-minted threadId → RUN_STARTED/TEXT_MESSAGE_*/terminal frame → sessions.thread_id + outcome on the row)"
 
 echo
 echo "RESULT  PASS=$PASS FAIL=$FAIL MANUAL=$MANUAL"

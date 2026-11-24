@@ -798,10 +798,12 @@ raises nginx to `proxy-read-timeout: 1800` — but nginx is not the hop that die
 **each proxy on the path enforces its own deadline, and the shortest one wins.**
 Chain: browser → ingress-nginx (1800s) → oauth2-proxy (**30s**) → fleet-bff.
 
-**Why only `/chat` breaks:** `apps/control-plane/src/kagent/proxy.ts` awaits
-`streamMessage(...)` (line 125) BEFORE `reply.hijack()` + `writeHead(200)` (line
-131). `fetch` resolves on upstream RESPONSE HEADERS, so the BFF emits zero bytes
-until kagent starts streaming — and a cold actor wake is 30–60s (T-15). The wake
+**Why only the chat stream breaks:** the browser leg is AG-UI
+(`POST /api/agui/orgs/…/projects/…/agent`) and before PR 3 it was the bespoke
+`POST /api/orgs/…/projects/…/chat`. Either way the hop that died was the same: the
+BFF awaited `streamMessage(...)` BEFORE `reply.hijack()` + `writeHead(200)`, and
+`fetch` resolves on upstream RESPONSE HEADERS, so the BFF emits zero bytes until
+kagent starts streaming — and a cold actor wake is 30–60s (T-15). The wake
 overruns the 30s budget by seconds, so the run usually SUCCEEDS behind a dead
 front: the actor finishes waking into a connection nobody is reading.
 **Fix:** `--upstream-timeout=1800s` on both proxies
@@ -815,11 +817,15 @@ out: the session lives in the cookie and `google-oauth/cookie-secret` is unchang
 instead of showing a 502 only when someone happens to chat with a cold agent.
 **STATUS: RESOLVED (2026-11-22).**
 
-> Deeper fix, not taken: move `hijack()`/`writeHead`/the `event: session` frame
-> above the `await streamMessage(...)`, so headers flush at t=0 and NO
-> intermediate timeout can ever matter. Cost is error semantics — a failed kagent
-> call would arrive as an SSE error event instead of a 502 status the SPA
-> branches on. Revisit if a 502/timeout class returns on another long route.
+> Deeper fix, not taken: flush the SSE head at t=0, before the
+> `await streamMessage(...)`, so no intermediate timeout can ever matter. Cost is
+> error semantics — a failed kagent dial would arrive as a stream event instead of
+> an HTTP status the caller branches on. PR 3 split that cost rather than paying it
+> whole: the AG-UI leg DOES report a refused dial as `RUN_ERROR` (the reason has to
+> reach the transcript, `agui/server.ts:56-68`), but it still writes its
+> `text/event-stream` head only after `streamMessage` resolves, so a cold wake
+> stays byte-silent and the flag above remains the guard. Revisit if a
+> 502/timeout class returns on another long route.
 
 ---
 
@@ -832,7 +838,8 @@ page, the session closes. The kagent controller log DID name the reason, e.g.
 behind LiteLLM — see the rotation note below), and the user never sees it.
 
 **Where the reason went — three separate losses, all in the BFF:**
-1. `kagent/proxy.ts` typed the frame's `status` as `{ state?: string }` and read
+1. `kagent/proxy.ts` (the bespoke relay, deleted by PR 3 — the pump now lives in
+   `src/a2a/facade.ts`) typed the frame's `status` as `{ state?: string }` and read
    only the state, so `status.message` — the agent's own explanation, which IS
    on the wire — was parsed away before it ever reached the browser.
 2. `parseEvent` had no notion of a non-terminal-but-not-running state, so
@@ -926,14 +933,18 @@ one that cannot be done with curl: it runs a real A2A client
 accepts the rewrite, every frame arrives as a *typed* A2A event, the turn settles,
 and `message.metadata['fleet.dev/model']` lands on the session row.
 **STATUS: IMPLEMENTED + unit-tested + verified in-cluster (2026-11-23).**
-`t31-a2a-facade-check.sh` passes all 30 gates against `kind-flexprice-local`.
+`t31-a2a-facade-check.sh` passes every gate against `kind-flexprice-local` (the
+gate count grows with each PR — run it with `REBUILD=1` so the image under test is
+the tree under test).
 PR 2 has landed: the chat tab talks to this facade, so `(no output)` is gone —
 the bubble shows the `close_reason` recorded here, with Retry. PR 3 re-spoke the
-browser leg as AG-UI (`/api/agui/...`, `apps/spa/src/agui`): the A2A turn, the
-task model and this metering window stay exactly as they were, and only the
-protocol the browser speaks changed. The legacy `/chat` relay still exists (PR 3
-deletes it) and shares `pumpTurn` with the facade, so the two paths cannot
-disagree about a turn.
+browser leg as AG-UI (`/api/agui/orgs/{orgId}/projects/{projectId}/agent`,
+`apps/spa/src/agui` + `apps/control-plane/src/agui/`) and deleted the legacy
+`/chat` relay with `Chat.tsx`/`api.chat`/`kagent/proxy.ts` — gate 6 asserts the
+route is a 404 now, gate 9 drives the AG-UI run. The A2A turn, the task model and
+this metering window are unchanged, because both legs resolve and settle a turn
+through the same `openTurn`/`pumpTurn`: only the protocol the browser speaks
+changed, so the two paths cannot disagree about a turn.
 Observed live: a `message:stream` turn relays 4 controller frames verbatim and
 binds `contextId`; a streaming `mock` turn now delivers `mock reply` as an
 `artifactUpdate` frame and settles `completed` with no `close_reason`, while a
