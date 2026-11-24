@@ -72,7 +72,7 @@
             { "key": "Strict-Transport-Security", "value": "max-age=31536000" },
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://sdk.cashfree.com https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com; img-src 'self' data: blob: https://api.qrserver.com https://www.google-analytics.com https://www.gstatic.com; font-src 'self' data:; connect-src 'self' https://unpkg.com https://*.run.app https://*.googleapis.com wss://*.googleapis.com https://accounts.google.com https://apis.google.com https://securetoken.google.com https://www.google.com https://*.firebaseapp.com https://*.google-analytics.com https://analytics.google.com https://*.cashfree.com https://*.razorpay.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self' https://accounts.google.com https://apis.google.com https://*.firebaseapp.com https://*.cashfree.com https://*.razorpay.com; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://*.cashfree.com; frame-ancestors 'none'; upgrade-insecure-requests"
+              "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://apis.google.com https://www.googletagmanager.com https://sdk.cashfree.com https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com https://fonts.googleapis.com; img-src 'self' data: blob: https://api.qrserver.com https://www.google-analytics.com https://www.gstatic.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://unpkg.com https://*.run.app https://*.googleapis.com wss://*.googleapis.com https://accounts.google.com https://apis.google.com https://securetoken.google.com https://www.google.com https://*.firebaseapp.com https://*.google-analytics.com https://analytics.google.com https://*.cashfree.com https://*.razorpay.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self' https://accounts.google.com https://apis.google.com https://*.firebaseapp.com https://*.cashfree.com https://*.razorpay.com; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://*.cashfree.com; frame-ancestors 'none'; upgrade-insecure-requests"
             }
           ]
         }
@@ -103,7 +103,12 @@
         { "source": "/adlc/brief", "destination": "/brief/index.html" },
         { "source": "/adlc/brief/", "destination": "/brief/index.html" },
         { "source": "/adlc/config.js", "destination": "/config.js" },
+        { "source": "/adlc/field.js", "destination": "/field.js" },
         { "source": "/adlc/manifest.webmanifest", "destination": "/manifest.webmanifest" },
+        { "source": "/adlc/media/activity-omnibox.png", "destination": "/media/activity-omnibox.png" },
+        { "source": "/adlc/media/adlc-team-card.png", "destination": "/media/adlc-team-card.png" },
+        { "source": "/adlc/media/agent-harness-map.png", "destination": "/media/agent-harness-map.png" },
+        { "source": "/adlc/media/usage-record.png", "destination": "/media/usage-record.png" },
         { "source": "/adlc/styles.css", "destination": "/styles.css" },
         { "source": "/adlc/sw.js", "destination": "/sw.js" }
       ],
@@ -162,7 +167,7 @@
             { "key": "Strict-Transport-Security", "value": "max-age=31536000" },
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https://api.qrserver.com; font-src 'self' data:; connect-src 'self' https://unpkg.com https://platform.archagentix.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+              "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https://api.qrserver.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://unpkg.com https://platform.archagentix.com https://fonts.googleapis.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
             }
           ]
         }
