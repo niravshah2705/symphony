@@ -26,6 +26,7 @@ test('reflects an allowlisted origin and calls next', () => {
   assert.equal(res.headers.vary, 'Origin');
   assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Organization-Id/);
   assert.match(res.headers['access-control-allow-headers'], /X-AI-Fleet-Project-Id/);
+  assert.match(res.headers['access-control-allow-headers'], /\bIf-Match\b/);
   assert.equal(nexted, 1);
 });
 
@@ -106,6 +107,9 @@ test('the ArchAgentix panel on the platform domain can call the bank cross-origi
   assert.match(preflight.headers['access-control-allow-methods'], /POST/);
   assert.match(preflight.headers['access-control-allow-methods'], /DELETE/);
   assert.match(preflight.headers['access-control-allow-headers'], /X-AI-Fleet-Organization-Id/i);
+  // Workflow edits are PUT with If-Match (optimistic concurrency), and If-Match is
+  // not a CORS-safelisted request header — omitting it fails the browser preflight.
+  assert.match(preflight.headers['access-control-allow-headers'], /\bIf-Match\b/i);
 
   const post = makeRes();
   cors({ method: 'POST', get: (name) => (name === 'origin' ? platform : '') }, post, () => { nexted += 1; });
