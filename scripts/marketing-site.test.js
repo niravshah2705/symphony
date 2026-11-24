@@ -369,6 +369,20 @@ test('the vendored Firebase auth bundles are inside their host CSP', () => {
   }
 });
 
+// A page with no <link rel=icon> makes every browser probe the origin root, and
+// only the secrets target had nothing to serve there.
+test('the secrets page declares icons that exist', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'secrets', 'index.html'), 'utf8');
+  const icons = [...html.matchAll(/<link rel="icon"[^>]+\bhref="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(icons.length, 'secrets/index.html must declare an icon or the browser requests /favicon.ico');
+  for (const href of icons) {
+    assert.ok(
+      fs.existsSync(path.join(ROOT, 'secrets', href.replace(/^\.\/?/, ''))),
+      `secrets/index.html references ./${href.replace(/^\.\/?/, '')} but the file is not in the tree`
+    );
+  }
+});
+
 // Two more origins that no file in the tree can be scanned for, because they are
 // resolved at runtime from the Firebase config rather than written down: the popup
 // flow frames `${authDomain}/__/auth/iframe`, which is the project's own
