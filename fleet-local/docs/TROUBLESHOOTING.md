@@ -920,17 +920,20 @@ NOT hit it.
 **Guard:** `scripts/fixes/t31-a2a-facade-check.sh` proves the card rewrite, the
 401-is-JSON routing, a relayed `message:stream` turn, the ownership refusals, and
 the `outcome`/`meter_seconds` read-back against the live cluster. Gate 8 is the
-one that cannot be done with curl: it runs the SPA's real client
-(`apps/spa/src/a2a/FleetA2AClient.ts`, i.e. `@assistant-ui/react-a2a`'s
+one that cannot be done with curl: it runs a real A2A client
+(`scripts/fixes/FleetA2AClient.ts`, i.e. `@assistant-ui/react-a2a`'s
 `A2AClient`) against the port-forwarded facade and asserts the strict card parser
 accepts the rewrite, every frame arrives as a *typed* A2A event, the turn settles,
 and `message.metadata['fleet.dev/model']` lands on the session row.
 **STATUS: IMPLEMENTED + unit-tested + verified in-cluster (2026-11-23).**
 `t31-a2a-facade-check.sh` passes all 30 gates against `kind-flexprice-local`.
-PR 2 has landed: the chat tab is now the A2A client talking to this facade, so
-`(no output)` is gone — the bubble shows the `close_reason` recorded here, with
-Retry. The legacy `/chat` relay still exists (PR 3 deletes it) and shares
-`pumpTurn` with the facade, so the two paths cannot disagree about a turn.
+PR 2 has landed: the chat tab talks to this facade, so `(no output)` is gone —
+the bubble shows the `close_reason` recorded here, with Retry. PR 3 re-spoke the
+browser leg as AG-UI (`/api/agui/...`, `apps/spa/src/agui`): the A2A turn, the
+task model and this metering window stay exactly as they were, and only the
+protocol the browser speaks changed. The legacy `/chat` relay still exists (PR 3
+deletes it) and shares `pumpTurn` with the facade, so the two paths cannot
+disagree about a turn.
 Observed live: a `message:stream` turn relays 4 controller frames verbatim and
 binds `contextId`; a streaming `mock` turn now delivers `mock reply` as an
 `artifactUpdate` frame and settles `completed` with no `close_reason`, while a

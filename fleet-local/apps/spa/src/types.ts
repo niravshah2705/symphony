@@ -49,6 +49,10 @@ export interface Session {
   model?: string | null;
   kagent_session_id: string | null;
   kagent_task_id: string | null;
+  // The AG-UI thread handle the browser minted for this conversation. It is what
+  // the run endpoint resolves a session by, and what "resume" has to send back —
+  // kagent's own context id is not something the browser may name.
+  thread_id: string | null;
   status: string;
   tier: string;
   started_at: string;

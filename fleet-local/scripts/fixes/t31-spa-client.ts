@@ -1,8 +1,11 @@
-// T-31 gate 8: drive the REAL browser client — the shipping FleetA2AClient, on
-// top of @assistant-ui/react-a2a's A2AClient — against the live facade.
+// T-31 gate 8: drive the A2A library client itself — FleetA2AClient, on top of
+// @assistant-ui/react-a2a's A2AClient — against the live facade.
 //
-// curl proves the facade speaks A2A; this proves the client and the facade agree,
-// which is the half that a hand-written reader could not cover:
+// The browser no longer uses it (that leg speaks AG-UI now, see
+// apps/spa/src/agui); what this gate still proves is the facade's northbound
+// contract, which is the same A2A the harness speaks. curl proves the facade
+// speaks A2A; this proves a real A2A client and the facade agree, which is the
+// half that a hand-written reader could not cover:
 //   - the library's strict agent-card parser accepts our rewrite
 //   - its SSE decoder yields typed events from our relayed frames (so the run
 //     does not die with "stream ended without any events")
@@ -12,7 +15,7 @@
 // The shell gate reads the printed key=value lines and does the DB assertion.
 // Auth is a Cookie header because node has no cookie jar; the browser sends the
 // same cookie itself.
-import { FleetA2AClient } from '../../apps/spa/src/a2a/FleetA2AClient.ts';
+import { FleetA2AClient } from './FleetA2AClient.ts';
 
 const [baseUrl, token, model, text] = process.argv.slice(2);
 if (!baseUrl || !token || !model || !text) {

@@ -7,20 +7,21 @@ import {
   type A2ATask,
 } from '@assistant-ui/react-a2a';
 
+// The A2A client the live gate drives (t31-spa-client.ts). The SPA does not use
+// it any more — the browser leg speaks AG-UI, see apps/spa/src/agui — so this
+// file lives with the gate that runs it rather than inside the app bundle.
+//
 // Mirrors MODEL_METADATA_KEY in packages/shared/src/a2a.ts. An A2A Message has no
 // field for "which model", so the choice rides on message metadata and the facade
 // consumes it before kagent ever sees it. If the two spellings drift, the facade
 // silently falls back to the default model instead of failing loudly.
 const MODEL_METADATA_KEY = 'fleet.dev/model';
 
-// Mirrors a2aFacadeBase() in packages/shared/src/a2a.ts. The project scope has to
-// live inside baseUrl because the client derives the agent-card URL from baseUrl
-// alone — basePath and tenant are not applied to discovery.
-export function facadeBase(orgId: string, projectId: string): string {
-  return `${window.location.origin.replace(/\/+$/, '')}/api/a2a/orgs/${orgId}/projects/${projectId}`;
-}
-
 export interface FleetClientOptions extends A2AClientOptions {
+  // baseUrl must carry the whole project scope (/api/a2a/orgs/…/projects/…),
+  // because the client derives the agent-card URL from baseUrl alone — basePath
+  // and tenant are not applied to discovery. The gate passes it on the command
+  // line: node has no window.location to derive it from.
   /** Read at send time, so changing the model selector never rebuilds the client. */
   model: () => string | undefined;
 }

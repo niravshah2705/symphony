@@ -1,13 +1,14 @@
-import type { FC } from 'react';
+import type { FC, KeyboardEvent } from 'react';
 import {
   AuiIf,
   ComposerPrimitive,
   MessagePartPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
 } from '@assistant-ui/react';
-import { artifactText, messageArtifacts, REASONING_ARTIFACT_ID } from '../../a2a/artifacts';
+import { useAgUiInterrupts, useAgUiSubmitInterruptResponses } from '@assistant-ui/react-ag-ui';
 import { FailureNotice } from '../FailureNotice';
 import { MarkdownText } from './Markdown';
 import { ArrowDownIcon, SendIcon, StopIcon } from './icons';
@@ -29,17 +30,16 @@ export interface RunFacts {
   transportError?: string;
 }
 
-export function ThreadView({
-  welcome,
-  placeholder,
-  sendDisabled,
-  run,
-}: {
+export interface ThreadViewProps {
   welcome: string;
   placeholder: string;
   sendDisabled: boolean;
   run: RunFacts;
-}) {
+  /** Reporting a resume the endpoint refused, in the same place as a run error. */
+  onAnswerError?: (message: string) => void;
+}
+
+export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerError }: ThreadViewProps) {
   return (
     <ThreadPrimitive.Root className="aui-root aui-thread-root">
       <ThreadPrimitive.Viewport className="aui-thread-viewport">
@@ -75,7 +75,7 @@ export function ThreadView({
               <ArrowDownIcon />
             </button>
           </ThreadPrimitive.ScrollToBottom>
-          <Composer placeholder={placeholder} disabled={sendDisabled} />
+          <Composer placeholder={placeholder} disabled={sendDisabled} onAnswerError={onAnswerError} />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
@@ -93,11 +93,14 @@ const UserMessage: FC = () => (
 const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
   const status = useAuiState((s) => s.message.status);
   const hasText = useAuiState((s) => s.message.content.some((part) => part.type === 'text' && part.text !== ''));
-  const metadata = useAuiState((s) => s.message.metadata);
-  // The channel kagent answers on for the A2A leg: an artifact, which the adapter
-  // keeps on message metadata rather than in content. Content wins when the task
-  // also put the text in a status message, so a reply is never printed twice.
-  const answer = artifactText(messageArtifacts(metadata), [REASONING_ARTIFACT_ID]);
+  // A pause is not a failure: the run ended with an interrupt, and the question
+  // it carries is the thing the human has to read. It reached the transcript as
+  // text whenever the agent also said it in a part, and the encoder leaves it out
+  // of the interrupt then, so this prints it only when nothing else does.
+  const paused = status?.type === 'requires-action' && status.reason === 'interrupt';
+  const interrupts = useAgUiInterrupts();
+  const question = paused ? interrupts.map((interrupt) => interrupt.message ?? '').filter((text) => text !== '').join('\n') : '';
+
   return (
     <MessagePrimitive.Root className="aui-assistant-message-root">
       {/* The grid reserves column 1 for the avatar, and the library paints one per
@@ -107,8 +110,8 @@ const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
       </div>
       <div className="aui-assistant-message-content">
         <MessagePrimitive.Parts components={{ Text: MarkdownText, Reasoning: Reasoning }} />
-        {hasText || answer === '' ? null : <p className="aui-md-p">{answer}</p>}
-        <FailureNotice status={status} hasText={hasText || answer !== ''} closeReason={closeReason} transportError={transportError} />
+        {question === '' ? null : <p className="aui-md-p">{question}</p>}
+        <FailureNotice status={status} hasText={hasText || question !== ''} closeReason={closeReason} transportError={transportError} />
       </div>
     </MessagePrimitive.Root>
   );
@@ -123,24 +126,72 @@ const Reasoning: FC<{ text: string }> = ({ text }) => (
   </details>
 );
 
-function Composer({ placeholder, disabled }: { placeholder: string; disabled: boolean }) {
+function Composer({
+  placeholder,
+  disabled,
+  onAnswerError,
+}: {
+  placeholder: string;
+  disabled: boolean;
+  onAnswerError?: (message: string) => void;
+}) {
+  const aui = useAui();
+  const text = useAuiState((s) => s.composer.text);
+  const pending = useAgUiInterrupts()[0];
+  const submit = useAgUiSubmitInterruptResponses();
+  const paused = pending !== undefined;
+
+  // An open interrupt blocks an ordinary send — the runtime refuses to start a
+  // second run over a conversation the agent is still waiting on — so the typed
+  // words go back as its answer instead. That is the same turn continuing, on the
+  // A2A side exactly what replying to a paused task used to be.
+  async function answer() {
+    const reply = text.trim();
+    if (!reply || !pending) return;
+    // The way a send empties the composer: before the run, not after it.
+    aui.composer.setText('');
+    try {
+      await submit([{ interruptId: pending.id, status: 'resolved', payload: reply }]);
+    } catch (err) {
+      onAnswerError?.(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Enter is the other half of the same decision: the composer's own submit path
+  // is the ordinary send, and the runtime refuses to start a run over a paused
+  // one — so on a paused conversation Enter answers, exactly like the button.
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!paused || event.key !== 'Enter' || event.shiftKey) return;
+    event.preventDefault();
+    void answer();
+  }
+
   return (
     <ComposerPrimitive.Root className="aui-composer-root">
       <ComposerPrimitive.Input
         className="aui-composer-input"
         rows={1}
-        aria-label="Message the agent"
-        placeholder={placeholder}
+        aria-label={paused ? 'Answer the agent' : 'Message the agent'}
+        placeholder={paused ? 'Answer the agent to continue this task…' : placeholder}
         disabled={disabled}
+        onKeyDown={onKeyDown}
       />
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send
-          className="aui-button aui-button-primary aui-composer-send"
-          aria-label="Send"
-          disabled={disabled}
-        >
-          <SendIcon />
-        </ComposerPrimitive.Send>
+        {paused ? (
+          <button
+            type="button"
+            className="aui-button aui-button-primary aui-composer-send"
+            aria-label="Answer"
+            disabled={disabled || text.trim() === ''}
+            onClick={() => void answer()}
+          >
+            <SendIcon />
+          </button>
+        ) : (
+          <ComposerPrimitive.Send className="aui-button aui-button-primary aui-composer-send" aria-label="Send" disabled={disabled}>
+            <SendIcon />
+          </ComposerPrimitive.Send>
+        )}
       </AuiIf>
       <AuiIf condition={(s) => s.thread.isRunning}>
         <ComposerPrimitive.Cancel type="button" className="aui-button aui-button-outline aui-composer-cancel" aria-label="Stop">

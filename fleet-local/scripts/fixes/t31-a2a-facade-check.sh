@@ -17,8 +17,9 @@
 #   7) a turn the PLATFORM could not run (dead credential or retired model id) is
 #      classified upstream_error and is NOT metered (FAULT_MODEL names it; empty
 #      skips)
-#   8) the SPA's real A2A client (FleetA2AClient over @assistant-ui/react-a2a)
-#      parses the card, types the frames, and lands its model choice on the row
+#   8) a real A2A client (scripts/fixes/FleetA2AClient.ts over
+#      @assistant-ui/react-a2a) parses the card, types the frames, and lands its
+#      model choice on the row
 set -uo pipefail
 CTX=${KCTX:-kind-flexprice-local}
 k() { kubectl --context "$CTX" "$@"; }
@@ -256,8 +257,8 @@ else
 fi
 
 echo
-say "8) the shipping browser client speaks to this facade"
-# Everything above is curl. This gate runs apps/spa/src/a2a/FleetA2AClient.ts (on
+say "8) a real A2A client speaks to this facade"
+# Everything above is curl. This gate runs scripts/fixes/FleetA2AClient.ts (on
 # top of @assistant-ui/react-a2a) against the live facade, because the two
 # failure modes PR 2 lives or dies by are on the CLIENT side: its agent-card
 # parser is strict, and a stream whose frames it cannot type throws

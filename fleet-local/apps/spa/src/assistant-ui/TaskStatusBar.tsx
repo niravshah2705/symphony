@@ -1,32 +1,38 @@
 import { useAuiState } from '@assistant-ui/react';
-import { useA2ATask, type A2ATaskState } from '@assistant-ui/react-a2a';
+import { useAgUiInterrupts } from '@assistant-ui/react-ag-ui';
 
-// The nine A2A task states, in the words an operator uses. The tones reuse the
-// house badge classes (styles.css), so the chat header matches the wizard.
-const STATE_META: Record<A2ATaskState, { label: string; tone: string; hint?: string }> = {
-  unspecified: { label: 'no state yet', tone: '' },
-  submitted: { label: 'submitted', tone: 'running' },
-  working: { label: 'working', tone: 'running' },
-  completed: { label: 'completed', tone: 'done' },
-  failed: { label: 'failed', tone: 'failed' },
-  canceled: { label: 'cancelled', tone: 'failed' },
-  rejected: { label: 'rejected', tone: 'failed' },
-  input_required: { label: 'awaiting your reply', tone: 'state', hint: 'Reply below to continue the same task.' },
-  auth_required: { label: 'needs approval', tone: 'state', hint: 'Reply below to continue the same task.' },
-};
+// Mirrors INTERRUPT_INPUT_REQUIRED / INTERRUPT_AUTH_REQUIRED in
+// packages/shared/src/agui.ts: the paused A2A state IS the interrupt reason the
+// encoder writes, so this is the same two words the facade settled the row with.
+// A drift here costs an operator the plain-language label, not the turn.
+const INPUT_REQUIRED = 'input-required';
+const AUTH_REQUIRED = 'auth-required';
 
+// The tones reuse the house badge classes (styles.css), so the chat header
+// matches the wizard.
 export function TaskStatusBar() {
-  const task = useA2ATask();
   const isRunning = useAuiState((s) => s.thread.isRunning);
-  const state = task?.status.state ?? (isRunning ? 'working' : undefined);
-  if (!state) return null;
+  const interrupts = useAgUiInterrupts();
+  const paused = interrupts[0];
 
-  const meta = STATE_META[state] ?? STATE_META.unspecified;
-  return (
-    <>
-      {meta.hint ? <span className="muted small">{meta.hint}</span> : null}
-      {task?.id ? <span className="muted small">task {task.id.slice(0, 8)}</span> : null}
-      <span className={`badge${meta.tone ? ` badge-${meta.tone}` : ''}`}>{meta.label}</span>
-    </>
-  );
+  if (paused) {
+    const meta =
+      paused.reason === AUTH_REQUIRED
+        ? { label: 'needs approval', tone: 'state' }
+        : paused.reason === INPUT_REQUIRED
+          ? { label: 'awaiting your reply', tone: 'state' }
+          : { label: `waiting: ${paused.reason}`, tone: 'state' };
+    // The interrupt id IS the paused A2A task, which is the handle an operator
+    // follows in the session row and the kagent logs.
+    return (
+      <>
+        <span className="muted small">Reply below to continue the same task.</span>
+        <span className="muted small">task {paused.id.slice(0, 8)}</span>
+        <span className={`badge badge-${meta.tone}`}>{meta.label}</span>
+      </>
+    );
+  }
+
+  if (!isRunning) return null;
+  return <span className="badge badge-running">working</span>;
 }
