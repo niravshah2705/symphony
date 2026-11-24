@@ -27,13 +27,9 @@ function fileFor(urlPath) {
 
 const firebaseConfig = () => JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));
 
-function cspDirectives(target) {
-  const site = firebaseConfig().hosting.find((s) => s.target === target);
-  const block = site.headers.find((rule) => rule.source === '/**');
-  const header = block.headers.find((h) => h.key === 'Content-Security-Policy');
-  assert.ok(header, `the ${target} target must publish a Content-Security-Policy`);
+function parseCsp(value) {
   return Object.fromEntries(
-    header.value
+    value
       .split(';')
       .map((d) => d.trim())
       .filter(Boolean)
@@ -42,6 +38,34 @@ function cspDirectives(target) {
         return [name, sources];
       })
   );
+}
+
+function cspDirectives(target) {
+  const site = firebaseConfig().hosting.find((s) => s.target === target);
+  const block = site.headers.find((rule) => rule.source === '/**');
+  const header = block.headers.find((h) => h.key === 'Content-Security-Policy');
+  assert.ok(header, `the ${target} target must publish a Content-Security-Policy`);
+  return parseCsp(header.value);
+}
+
+// A document can carry a <meta http-equiv="Content-Security-Policy"> next to the
+// response header, and the browser enforces BOTH: a source allowed by only one of
+// them is still blocked. So every assertion below runs against the merged policy.
+function metaPolicies(htmlTexts) {
+  const out = [];
+  for (const text of htmlTexts) {
+    for (const m of text.matchAll(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/g)) {
+      out.push(parseCsp(m[1].replace(/&quot;/g, '"')));
+    }
+  }
+  return out;
+}
+
+// Returns allows(directive, host) — true only if the header and every meta policy
+// in the served documents permit that host.
+function effectiveAllows(target, htmlTexts) {
+  const policies = [cspDirectives(target), ...metaPolicies(htmlTexts)];
+  return (directive, host) => policies.every((p) => hostAllowed(host, p[directive] || p['default-src']));
 }
 
 // Every file a hosting target actually serves, minus vendored SDKs (same origin)
@@ -91,7 +115,7 @@ function hostAllowed(host, sources) {
   });
 }
 
-function assertLoadableHosts(texts, directives, target) {
+function assertLoadableHosts(texts, allows, target) {
   for (const [kind, directive] of [
     ['script', 'script-src'],
     ['style', 'style-src'],
@@ -99,7 +123,7 @@ function assertLoadableHosts(texts, directives, target) {
   ]) {
     for (const host of loadedHosts(texts)[kind]) {
       assert.ok(
-        hostAllowed(host, directives[directive]),
+        allows(directive, host),
         `${host} is loaded as ${kind} by the ${target} tree but ${directive} does not allow it`
       );
     }
@@ -111,7 +135,7 @@ function assertLoadableHosts(texts, directives, target) {
   const hosts = loadedHosts(texts);
   for (const host of new Set([...hosts.script, ...hosts.style])) {
     assert.ok(
-      hostAllowed(host, directives['connect-src']),
+      allows('connect-src', host),
       `${host} serves code to the ${target} tree, so connect-src must allow its source map too`
     );
   }
@@ -259,13 +283,13 @@ test('the CSP matches what the published pages actually load', () => {
   );
   assert.ok(directives['script-src'].includes("'unsafe-inline'"), 'inline scripts need unsafe-inline');
   assert.ok(directives['style-src'].includes("'unsafe-inline'"), 'inline styles need unsafe-inline');
-  assertLoadableHosts(texts, directives, 'www');
+  assertLoadableHosts(texts, effectiveAllows('www', texts), 'www');
 });
 
 test('the platform SPA CSP covers every origin it loads, including the injected ones', () => {
   const directives = cspDirectives('app');
   const texts = sourceTexts('public');
-  assertLoadableHosts(texts, directives, 'app');
+  assertLoadableHosts(texts, effectiveAllows('app', texts), 'app');
 
   // The app shell has inline <script> blocks and an onload attribute on the
   // print-media stylesheet, so 'unsafe-inline' is load-bearing here as it is on www.
@@ -286,7 +310,7 @@ test('the platform SPA CSP covers every origin it loads, including the injected 
 test('the secrets CSP stays tight because that app has no inline scripts', () => {
   const directives = cspDirectives('secrets');
   const texts = sourceTexts('secrets');
-  assertLoadableHosts(texts, directives, 'secrets');
+  assertLoadableHosts(texts, effectiveAllows('secrets', texts), 'secrets');
 
   assert.equal(
     texts.filter((t) => /<script>/.test(t)).length,
@@ -309,22 +333,22 @@ test('the vendored Firebase auth bundles are inside their host CSP', () => {
   const REACHABLE = 'apis.google.com';
   const RECAPTCHA = 'www.google.com';
 
-  for (const [target, bundle] of [
-    ['app', 'public/vendor/firebase/firebase-auth.js'],
-    ['secrets', 'secrets/vendor/firebase-auth-compat.js']
+  for (const [target, bundle, dir] of [
+    ['app', 'public/vendor/firebase/firebase-auth.js', 'public'],
+    ['secrets', 'secrets/vendor/firebase-auth-compat.js', 'secrets']
   ]) {
-    const directives = cspDirectives(target);
+    const allows = effectiveAllows(target, sourceTexts(dir));
     const scripts = [
       ...fs.readFileSync(path.join(ROOT, bundle), 'utf8').matchAll(/https:\/\/([a-z0-9.-]+)\/[^\s"'`]*\.js/g)
     ].map((m) => m[1]);
 
     assert.ok(scripts.includes(REACHABLE), `${bundle} should still load gapi from ${REACHABLE}`);
     assert.ok(
-      hostAllowed(REACHABLE, directives['script-src']),
+      allows('script-src', REACHABLE),
       `${bundle} loads gapi on sign-in, but ${target} script-src blocks it`
     );
     assert.ok(
-      hostAllowed(REACHABLE, directives['frame-src']),
+      allows('frame-src', REACHABLE),
       `${target} frame-src must allow the gapi iframe ${REACHABLE} creates`
     );
 
@@ -338,11 +362,33 @@ test('the vendored Firebase auth bundles are inside their host CSP', () => {
         `a RecaptchaVerifier now exists: add ${RECAPTCHA} to ${target} script-src and frame-src`
       );
       assert.ok(
-        !hostAllowed(RECAPTCHA, directives['script-src']),
+        !allows('script-src', RECAPTCHA),
         `${RECAPTCHA} is only needed for reCAPTCHA, which this product does not use`
       );
     }
   }
+});
+
+// Two more origins that no file in the tree can be scanned for, because they are
+// resolved at runtime from the Firebase config rather than written down: the popup
+// flow frames `${authDomain}/__/auth/iframe`, which is the project's own
+// firebaseapp.com host, and the Google Identity Services client injects a
+// stylesheet from accounts.google.com. Both fail silently apart from a console
+// line, so a manual sign-in is the only other way to notice.
+const FIREBASE_PROJECT = JSON.parse(fs.readFileSync(path.join(ROOT, '.firebaserc'), 'utf8')).projects.default;
+const AUTH_DOMAIN = `${FIREBASE_PROJECT}.firebaseapp.com`;
+
+test('the sign-in flow can frame the auth handler and load the GIS stylesheet', () => {
+  for (const [target, dir] of [['app', 'public'], ['secrets', 'secrets']]) {
+    assert.ok(
+      effectiveAllows(target, sourceTexts(dir))('frame-src', AUTH_DOMAIN),
+      `${target} must frame https://${AUTH_DOMAIN}/__/auth/iframe or signInWithPopup never returns`
+    );
+  }
+  assert.ok(
+    effectiveAllows('app', sourceTexts('public'))('style-src', 'accounts.google.com'),
+    'public/js/auth.js loads the GIS client, which then loads https://accounts.google.com/gsi/style'
+  );
 });
 
 test('deploy-www builds the marketing tree before publishing it', () => {

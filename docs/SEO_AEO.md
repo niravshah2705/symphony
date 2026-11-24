@@ -345,7 +345,7 @@ behind Firebase Hosting, which would need a new hosting target here —
 
 All three Firebase Hosting targets publish a CSP from their `/**` rule in
 `firebase.json`, and `scripts/marketing-site.test.js` compares each policy against
-the tree that target actually serves. Two scans, because one was not enough:
+the tree that target actually serves. Three things make that harder than it looks:
 
 1. **Markup and app JS** — `<script src>`, `<link rel=stylesheet>`, `<img src>`,
    and the JS that injects vendor SDKs at runtime. A third-party `<script>` also
@@ -356,14 +356,28 @@ the tree that target actually serves. Two scans, because one was not enough:
    `https://apis.google.com/js/api.js` on the sign-in path, which had to be added
    to `script-src` and `frame-src` on `app` and `secrets` after it was reported as
    a blocked request.
+3. **A second policy in the document itself.** `secrets/index.html` also ships
+   `<meta http-equiv="Content-Security-Policy">`, and the browser enforces the
+   header *and* the meta: a source allowed by only one is still blocked. That meta
+   declared `script-src 'self'`, so the gapi fix in the header could not have
+   reached it. `effectiveAllows()` in the test therefore intersects the two and
+   every assertion runs against the result; a header-only check is what let the
+   previous two fixes ship incomplete.
+
+Origins in the header that appear in no file at all, because they are built at
+runtime from the Firebase config: the popup flow frames
+`${authDomain}/__/auth/iframe`, which is `adlc-9e72f.firebaseapp.com` (the project id
+comes from `.firebaserc`, and the test derives the host from it), and the GIS client
+loads its own stylesheet from `https://accounts.google.com/gsi/style`. Both are pinned
+in `the sign-in flow can frame the auth handler and load the GIS stylesheet`.
 
 | Target | Host | `script-src` | Why |
 |---|---|---|---|
 | `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. No sign-in, so no Google code. |
 | `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://apis.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, the gapi bundle Firebase auth loads, GA4, and the two payment SDKs — all injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
-| `secrets` | secrets.archagentix.com | `'self' https://apis.google.com` | Serves only local code plus the gapi bundle its vendored `firebase-auth-compat.js` loads for `signInWithPopup`. Still no `'unsafe-inline'`: verified to contain no inline `<script>`. |
+| `secrets` | secrets.archagentix.com | `'self' https://apis.google.com`, in the header *and* the meta | Serves only local code plus the gapi bundle its vendored `firebase-auth-compat.js` loads for `signInWithPopup`. Still no `'unsafe-inline'`: verified to contain no inline `<script>`. |
 
-Three decisions worth knowing about:
+Four decisions worth knowing about:
 
 - **`https://www.google.com` is deliberately *not* in any `script-src`.** The same
   auth bundles also reference `recaptcha/api.js` and `enterprise.js`, but neither
@@ -383,6 +397,15 @@ Three decisions worth knowing about:
   the gateway, Google, and the two payment vendors), but they do not stop an
   injected inline script. Removing `'unsafe-inline'` means hashing or externalising
   those blocks first.
+- **`https://*.firebaseapp.com` is a wildcard, not the project's own host.** Pinning
+  `adlc-9e72f.firebaseapp.com` would be narrower, and the Identity Platform
+  `authorized_domains` list in `deploy/gcp/terraform/firebase.tf` does exactly that.
+  The CSP keeps the wildcard because `firebase_auth_domain`
+  (`deploy/gcp/terraform/variables.tf`) is an override: a deployment that sets it
+  frames a host no constant in `firebase.json` could name, and a silent sign-in
+  failure is the worse outcome. Framing a cross-origin page grants it no script
+  access to this origin, and `connect-src` already admits the strictly larger
+  `https://*.run.app` and `https://*.googleapis.com`.
 
 `public/contact/index.html` renders its QR code from `https://api.qrserver.com`, so
 that host is in `img-src` on both hosts serving the contact page. It is a
@@ -395,7 +418,7 @@ would remove both the CSP allowance and the leak.
 ```bash
 node --test scripts/seo-archagentix.test.js scripts/seo-discovery.test.js \
   scripts/marketing-site.test.js public/adlc/adlc-static.test.mjs \
-  public/archagentix/archagentix-static.test.mjs     # 34 pass
+  public/archagentix/archagentix-static.test.mjs     # 46 pass, with marketing/ built first
 node scripts/build-marketing-site.js && node scripts/build-marketing-site.js --check
 xmllint --noout public/sitemap.xml public/sitemap-platform.xml
 for f in $(find public -name index.html); do grep -q '<title>[^<]*Archagentix' $f || echo "MISS $f"; done
