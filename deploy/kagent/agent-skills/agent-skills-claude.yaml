@@ -76,7 +76,7 @@ spec:
     file, a command you echo, or a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/agent-skills-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/agent-skills-plugin@sha256:78edcf2d298e9990820a46688326fb21015b6b8772db803a6f46aac881125b5a'
     skills:
     - 'api-and-interface-design'
     - 'browser-testing-with-devtools'

@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const {
   createPreflightSnapshot,
   createStageCommandV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
-const { toPipelinePushEnvelope } = require('@ai-fleet/shared-core/pipeline/bus');
+} = require('@software-factory/shared-core/pipeline/contracts');
+const { toPipelinePushEnvelope } = require('@software-factory/shared-core/pipeline/bus');
 const {
   DEFAULT_ORCHESTRATOR_PORT,
   createStageCommandProcessor,

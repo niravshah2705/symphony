@@ -93,7 +93,7 @@ test('the statement shape is ₹3000, finalized and tax/payment free', () => {
   assert.equal(body.total, '3000');
   assert.equal(body.amountDue, '3000');
   assert.equal(body.lineItems[0].amount, '3000');
-  assert.equal(body.lineItems[0].displayName, `AI Fleet platform charge ${MONTH}`);
+  assert.equal(body.lineItems[0].displayName, `Software Factory platform charge ${MONTH}`);
   assert.equal(body.metadata.auto_completed, 'true');
   // The SDK model's own spellings: the request is camelCase, so a key in the snake
   // form would not even reach the wire — these are the names it could have used.

@@ -93,7 +93,7 @@ resource "helm_release" "flexprice_migration" {
           bootstrapNamespaces = [{
             name        = "default"
             retention   = "72h"
-            description = "Default Temporal namespace for AI Fleet billing."
+            description = "Default Temporal namespace for Software Factory billing."
           }]
         })
       },

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# AI Fleet — one-shot GCP deploy (no-cost design).
+# Software Factory — one-shot GCP deploy (no-cost design).
 #
 # Orchestrates the full deploy from an operator machine: enables APIs, creates
 # the Terraform state bucket, stages Secret Manager versions, builds + pushes the

@@ -1,10 +1,10 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const store = require('@ai-fleet/shared-core/store');
-const gate = require('@ai-fleet/shared-core/billing/gate');
-const { createFlexpriceClient } = require('@ai-fleet/shared-core/billing/flexprice-client');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const store = require('@software-factory/shared-core/store');
+const gate = require('@software-factory/shared-core/billing/gate');
+const { createFlexpriceClient } = require('@software-factory/shared-core/billing/flexprice-client');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHARGE_CREDITS = 3000;
@@ -49,7 +49,7 @@ function invoiceBody({ orgId, customerId, month }) {
     total: String(CHARGE_CREDITS),
     amountDue: String(CHARGE_CREDITS),
     lineItems: [{
-      displayName: `AI Fleet platform charge ${month}`,
+      displayName: `Software Factory platform charge ${month}`,
       quantity: '1',
       amount: String(CHARGE_CREDITS),
     }],
@@ -140,7 +140,7 @@ async function chargeAccount(account, options) {
   const debit = await client.debitWallet(flexprice.walletId, {
     credits: String(CHARGE_CREDITS),
     idempotencyKey: keys.debit,
-    description: `AI Fleet platform charge ${month}`,
+    description: `Software Factory platform charge ${month}`,
     metadata: { invoice_id: resolved.invoice.id },
   });
   gateApi.invalidate(orgId);

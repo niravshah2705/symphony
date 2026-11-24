@@ -1,7 +1,7 @@
 'use strict';
 
-const { getOrgFundStatus } = require('@ai-fleet/shared-core/billing/gate');
-const { ensureAtespace, resolveSubstrateUrl } = require('@ai-fleet/shared-core/agent/substrate');
+const { getOrgFundStatus } = require('@software-factory/shared-core/billing/gate');
+const { ensureAtespace, resolveSubstrateUrl } = require('@software-factory/shared-core/agent/substrate');
 
 /**
  * Transport-agnostic provision/teardown dispatch. The Pub/Sub push surface

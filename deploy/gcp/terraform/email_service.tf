@@ -11,7 +11,7 @@ locals {
 resource "google_service_account" "email" {
   project      = var.project_id
   account_id   = "email-sa"
-  display_name = "AI Fleet shared transactional email"
+  display_name = "Software Factory shared transactional email"
 }
 
 # Durable best-effort idempotency claims live in a service-owned Firestore

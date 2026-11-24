@@ -9,7 +9,7 @@
 // dispatches them. It authenticates with a mounted Kubernetes service-account
 // token; provider credentials stay behind ModelConfig apiKeySecret /
 // RemoteMCPServer headersFrom references inside the cluster, so nothing here
-// reads or writes Fleet secrets.
+// reads or writes Software Factory secrets.
 //
 // Unconfigured cluster (the default) is inert: renders and saves still work,
 // publish/list/report kagent_not_configured (HTTP 503 territory).
@@ -121,6 +121,9 @@ function renderAgentCrd(input, { namespace } = {}) {
   const ns = namespace || (kagentConfig() || { namespace: 'kagent' }).namespace;
 
   const inline = { modelConfig: spec.modelConfig || { name: 'default-model-config' } };
+  // The designer's Model dropdown names a preset id from the global catalog;
+  // it overrides the ModelConfig default on the agent template.
+  if (input.model) inline.model = String(input.model).slice(0, 128);
   const cr = {
     apiVersion: 'api.kagent.dev/v1alpha3',
     kind: 'Agent',

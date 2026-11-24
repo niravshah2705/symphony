@@ -30,12 +30,12 @@
  * flipping a real deployment on.
  */
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const store = require('@ai-fleet/shared-core/store');
-const recharge = require('@ai-fleet/shared-core/billing/recharge');
-const notify = require('@ai-fleet/shared-core/billing/notify');
-const gate = require('@ai-fleet/shared-core/billing/gate');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const store = require('@software-factory/shared-core/store');
+const recharge = require('@software-factory/shared-core/billing/recharge');
+const notify = require('@software-factory/shared-core/billing/notify');
+const gate = require('@software-factory/shared-core/billing/gate');
 
 // Org ids are UUIDs (services/org scopes every document by one). Anything else —
 // notably the shared stack's '__shared__' pseudo-org — has no org-service record

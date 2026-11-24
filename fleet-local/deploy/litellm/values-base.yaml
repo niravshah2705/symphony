@@ -1,0 +1,84 @@
+# LiteLLM baseline install (scripts/setup/s03-litellm.sh) — chart
+# oci://ghcr.io/berriai/litellm-helm 1.109.1, rebuilt from the live release
+# values with every plaintext credential REMOVED.
+#
+# Secret contract (all created inline by the setup script, never committed):
+#   secret/litellm-postgres    username|password  -> db auth (copied from flexprice-postgresql)
+#   secret/litellm-masterkey   masterkey          -> PROXY_MASTER_KEY (the chart wires
+#                                                    <release>-masterkey into the pod env;
+#                                                    proxy_config reads os.environ/PROXY_MASTER_KEY)
+#   secret/litellm-fleet-secrets OPENROUTER_API_KEY, FLEXPRICE_API_KEY (+ non-secret
+#                                                    FLEXPRICE_API_URL, FLEXPRICE_ENVIRONMENT_ID)
+#   secret/litellm-langfuse-keys                   -> added later by scripts/30-litellm.sh
+#                                                    once Langfuse exists (step 5: it needs
+#                                                    the RustFS bucket that arrives with
+#                                                    substrate in step 6)
+#
+# Therefore this baseline wires only the flexprice half of the callback chain;
+# 30-litellm.sh adds `- langfuse` + environmentSecrets: [litellm-langfuse-keys]
+# via deploy/litellm/values-patch.yaml on a later helm upgrade --reuse-values.
+image:
+  tag: lts
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+db:
+  useExisting: true
+  deployStandalone: false
+  endpoint: flexprice-postgresql.flexprice.svc.cluster.local
+  database: litellm
+  secret:
+    name: litellm-postgres
+    usernameKey: username
+    passwordKey: password
+
+redis:
+  enabled: false
+
+# Point the chart at the Secret the setup script creates — the chart would
+# otherwise autogenerate its own; either way the pod gets PROXY_MASTER_KEY from
+# this secret ref, so no master key ever appears in values.
+masterkeySecretName: litellm-masterkey
+masterkeySecretKey: masterkey
+
+envVars:
+  PYTHONPATH: /callbacks
+  REDIS_HOST: flexprice-redis-master.flexprice.svc.cluster.local
+  REDIS_PORT: "6379"
+
+environmentSecrets:
+  - litellm-fleet-secrets
+
+volumes:
+  - name: callbacks
+    configMap:
+      name: litellm-callback
+
+volumeMounts:
+  - name: callbacks
+    mountPath: /callbacks
+    readOnly: true
+
+proxy_config:
+  general_settings:
+    master_key: os.environ/PROXY_MASTER_KEY
+  litellm_settings:
+    drop_params: true
+    callbacks:
+      - flexprice_callback.flexprice_logger
+      - fleet_metadata.fleet_hook
+  model_list:
+    - model_name: claude-sonnet-4
+      litellm_params:
+        model: openrouter/anthropic/claude-sonnet-4
+        api_key: os.environ/OPENROUTER_API_KEY
+    - model_name: openrouter/*
+      litellm_params:
+        model: openrouter/*
+        api_key: os.environ/OPENROUTER_API_KEY
+    - model_name: mock-gpt
+      litellm_params:
+        model: openai/mock-gpt
+        api_base: http://llm-mock:8000/v1
+        api_key: mock-key

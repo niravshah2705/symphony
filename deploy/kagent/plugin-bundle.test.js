@@ -109,6 +109,22 @@ test("the composers keep the bundle inside kagent's limits and keep the entry fi
   assert.match(pluginComposer, /agent-plugins\.org\/schemas\/1\.0\.0\/plugin\.schema\.json/, 'plugin.json must name the spec it claims');
   assert.match(pluginComposer, /PLUGIN_SKILLS_LIST/, 'the allowlist is an input, not a constant');
   assert.match(pluginComposer, /PLUGIN_MCP_FILE/, 'mcp.json is emitted only when a pack names one');
+  // A skill that cites its pack's reviewer prompts is not self-contained, so the
+  // composer takes root-level companions as an input. Naming skills/ or the root
+  // manifest would let a pack overwrite what the composer authors, and the copy
+  // has to precede the cap measurement or the extras ship uncounted.
+  assert.match(pluginComposer, /PLUGIN_EXTRA_PATHS/, "a pack's root-level companions are an input, not a constant");
+  assert.match(pluginComposer, /^\s+skills \| plugin\.json \| mcp\.json\)/m,
+    'the companion list must deny the names the composer authors at the bundle root');
+  assert.ok(pluginComposer.indexOf('PLUGIN_EXTRA_PATHS entry') < pluginComposer.indexOf('ENTRY_COUNT='),
+    'companions must be validated and copied before the bundle is measured against kagent limits');
+  // Companions are upstream-relative, so the resolver must not rewrite them into
+  // this repository the way it does an allowlist or an overlay dir.
+  const packInputs = read('deploy/kagent/pack-inputs.sh');
+  assert.match(packInputs, /export PLUGIN_EXTRA_PATHS="\$\{PLUGIN_EXTRA_PATHS:-\}"/,
+    'the resolver must pass companions through raw, not resolve them against REPO_ROOT');
+  assert.equal(/PLUGIN_EXTRA_PATHS="\$\(resolve/.test(packInputs), false,
+    'resolve() would prefix REPO_ROOT onto an upstream path');
   // Only a comment may mention it: the skill track authors no root manifest, and
   // that is what distinguishes its artifact from a bundle.
   const manifestLines = skillComposer.split('\n')
@@ -129,6 +145,25 @@ test('local builds and CI resolve the same row through one helper', () => {
     assert.match(text, /v2\/.*manifests/, `${name}: the builder proves the manifest resolves in-cluster`);
   }
   assert.equal(local.includes('VERSION_FILE'), false, 'a builder must not re-derive the version source itself');
+});
+
+test('a PR composes the bundles it is not allowed to publish', () => {
+  // The merge is the first run that builds, so a skills.txt name absent
+  // upstream, or a PLUGIN_EXTRA_PATHS entry that does not resolve, would die
+  // there — the build fails, the stamp job never runs, and the committed
+  // manifest keeps an all-zero digest that only an in-cluster apply notices.
+  const ci = read('.github/workflows/build-plugin-images.yml');
+  const parts = ci.split('name: Dry-compose every selected bundle');
+  assert.equal(parts.length, 2, 'the plan job must dry-compose exactly once');
+  const step = parts[1].split('\n      - name:')[0];
+  assert.match(step, /if: \$\{\{ github\.event_name == 'pull_request' \}\}/,
+    'a merge run already builds, so the leg must not double the work');
+  assert.match(step, /deploy\/kagent\/pack-inputs\.sh/,
+    'the PR leg must resolve the row through the same helper as the build');
+  assert.match(step, /compose-bundle\.sh/, 'the PR leg must run the real composer');
+  // Every upstream fetch goes through the pin, so the leg cannot pass on a
+  // stale cache the way a repeat local run can.
+  assert.equal(/--branch|--depth 0/.test(step), false, 'the leg must not fetch a moving ref');
 });
 
 test('every script a workflow runs by path is executable', () => {

@@ -1,0 +1,64 @@
+# kagent baseline install (scripts/setup/s07-kagent.sh) — chart
+# oci://ghcr.io/kagent-dev/kagent/helm/kagent 1.0.0, rebuilt from the live
+# release values. Contains NO real credential: the openAI key is a deliberate
+# placeholder so the provider block validates; every actual LLM call goes to
+# LiteLLM (per-tenant ModelConfig), never to api.openai.com.
+#
+# Auth: trusted-proxy + userIdClaim=email — the controller reads the email claim
+# from the Bearer JWT that oauth2-proxy delivers and does NOT verify the
+# signature. The :8083 NetworkPolicy (deploy/networkpolicy/kagent-controller.yaml)
+# is what makes this safe. Scripts 10-ingress-oauth.sh / 40-kagent-fix.sh keep
+# their own values-patch.yaml for re-patching an existing release; this file is
+# the same shape for a FRESH install so no patch round is needed.
+config:
+  server:
+    auth:
+      mode: trusted-proxy
+      userIdClaim: email
+  substrate:
+    apiEndpoint: dns:///api.ate-system.svc:443
+    routerUrl: https://atenet-router.ate-system.svc:443
+
+controller:
+  substrateClientCertificate:
+    enabled: true
+  # The chart default (~60s: 15s delay + 3x15s) kills the pod mid-migration on
+  # the FIRST start against an empty kagent schema — the symptom is
+  # "run database migrations: core migrations: context canceled", which looks
+  # like a DB bug but is the startup probe racing the migration. 10-minute
+  # budget; a healthy restart still passes in the first few probes.
+  startupProbe:
+    httpGet:
+      path: /health
+      port: http
+      scheme: HTTP
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 40
+    successThreshold: 1
+
+database:
+  postgres:
+    # The controller mounts its DB logins as podcert bundles
+    # (/run/postgres.podcert.ate.dev/kagent_{owner,readwrite}_user.pem) — the
+    # only auth the bundled substrate postgres accepts. The two DSN Secrets
+    # (kagent-postgres-{owner,readwrite}) + the kagent schema/roles are
+    # created by scripts/setup/s07-kagent.sh before this install.
+    clientCertificate:
+      enabled: true
+
+providers:
+  default: openAI
+  openAI:
+    apiKey: sk-local-placeholder
+
+substrateWorkerPool:
+  create: true
+  workerImage: ghcr.io/kagent-dev/substrate/ateworker-gvisor:v1.0.0
+
+ui:
+  additionalForwardedHeaders:
+    - X-Auth-Request-Email
+    - X-Auth-Request-User
+    - X-Auth-Request-Preferred-Username

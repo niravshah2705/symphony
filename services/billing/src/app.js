@@ -1,16 +1,16 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
-const store = require('@ai-fleet/shared-core/store');
-const ledger = require('@ai-fleet/shared-core/billing/ledger');
-const gate = require('@ai-fleet/shared-core/billing/gate');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
-const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
-const { processBillingSweep } = require('@ai-fleet/shared-core/billing/sweep');
-const outboxDrain = require('@ai-fleet/shared-core/billing/outbox-drain');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const { asyncHandler } = require('@software-factory/shared-core/util');
+const store = require('@software-factory/shared-core/store');
+const ledger = require('@software-factory/shared-core/billing/ledger');
+const gate = require('@software-factory/shared-core/billing/gate');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
+const cashfreeClient = require('@software-factory/shared-core/billing/cashfree-client');
+const { processBillingSweep } = require('@software-factory/shared-core/billing/sweep');
+const outboxDrain = require('@software-factory/shared-core/billing/outbox-drain');
 const billingApi = require('./billing-api');
 const { createTrustedCallerMiddleware } = require('./trusted-caller');
 const { sweepActorSessions } = require('./actor-session-sweeper');

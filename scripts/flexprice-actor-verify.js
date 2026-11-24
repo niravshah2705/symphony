@@ -48,7 +48,7 @@ async function waitFor(check, timeoutMs = 45000) {
 
 async function main() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-actor-verify-'));
-  process.env.AI_FLEET_DATA_DIR = dir;
+  process.env.SOFTWARE_FACTORY_DATA_DIR = dir;
   const orgId = `org-actor-verify-${Date.now().toString(36)}`;
   const endpoint = process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT || 'http://127.0.0.1:14319/v1/metrics';
   const prom = process.env.SUBSTRATE_PROMETHEUS_URL || 'http://127.0.0.1:19093';
@@ -77,7 +77,7 @@ async function main() {
       cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
       env: {
         PATH: process.env.PATH, HOME: process.env.HOME,
-        AI_FLEET_DATA_DIR: dir, ACTOR_VERIFY_ORG: orgId,
+        SOFTWARE_FACTORY_DATA_DIR: dir, ACTOR_VERIFY_ORG: orgId,
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: endpoint,
       },
     });

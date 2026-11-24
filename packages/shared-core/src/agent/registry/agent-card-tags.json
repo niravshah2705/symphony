@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "note": "AgentCard tags: which agent card types surface each published pack. Keyed by the pack ids in plugin-catalog.json / skill-catalog.json; values are agent profile ids from workflow-defaults.js / CURATED_AGENT_CATALOG. scripts/seed-plugin-catalog.js --store merges these onto the Firestore mirror records, and the workflow designer's catalog endpoint serves them so a picker can say which cards a pack belongs to.",
+  "tags": {
+    "ecc": ["coding", "engineering", "testing", "quality"],
+    "agent-skills": ["coding", "engineering", "planning", "quality"],
+    "superpowers": ["coding", "engineering", "planning"],
+    "spec-kit": ["requirements", "planning", "ideation"],
+    "graphify": ["research", "engineering", "quality"],
+    "code-review-graph": ["quality", "security", "engineering"],
+    "hallmark": ["quality", "testing"],
+    "security-audit": ["security", "compliance"]
+  }
+}

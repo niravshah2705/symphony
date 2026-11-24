@@ -409,7 +409,7 @@ function protectedRanges(text) {
 function protectText(text, textIndex = 0) {
   const ranges = protectedRanges(text);
   const digest = crypto.createHash('sha256').update(text).digest('hex').slice(0, 10).toUpperCase();
-  let prefix = `__AI_FLEET_L10N_${textIndex}_${digest}_`;
+  let prefix = `__SOFTWARE_FACTORY_L10N_${textIndex}_${digest}_`;
   while (text.includes(prefix)) prefix = `_${prefix}`;
   const tokens = [];
   let cursor = 0;
@@ -436,7 +436,7 @@ function restoreProtected(value, protection) {
   // The token namespace is reserved. Reject invented or partially copied
   // markers even when the source contained no protected ranges; otherwise a
   // confused model can leak an internal marker into the visible UI.
-  if (restored.includes('__AI_FLEET_L10N_')) {
+  if (/__(?:AI_FLEET|SOFTWARE_FACTORY)_L10N_/u.test(restored)) {
     throw new Error('translation introduced an unknown protected token');
   }
   return restored;
@@ -468,7 +468,7 @@ function translationPrompt(locale, protections) {
   ];
   if (protections.some((entry) => entry.tokens.length)) {
     instructions.push(
-      'Keep tokens beginning __AI_FLEET_L10N_ byte-for-byte unchanged; they represent placeholders, URLs, HTML, or code.',
+      'Keep tokens beginning __SOFTWARE_FACTORY_L10N_ byte-for-byte unchanged; they represent placeholders, URLs, HTML, or code.',
       'Only copy tokens already present in an input. Never invent, rename, wrap, or add a token.'
     );
   }

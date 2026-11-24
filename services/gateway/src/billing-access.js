@@ -1,8 +1,8 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
 const { bearerToken } = require('./auth');
 const { callJson } = require('./service-client');
 const { requestContext } = require('./request-context');

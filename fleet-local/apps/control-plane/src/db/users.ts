@@ -1,0 +1,49 @@
+import { one, query } from './client.ts';
+import type { GoogleIdentity } from '../auth/google.ts';
+
+export interface UserRow {
+  id: string;
+  email: string;
+  google_sub: string | null;
+  name: string | null;
+}
+
+// Find-or-create by email (the canonical identity across the fleet). The Google
+// sub/name are refreshed on every login so a renamed account stays current.
+export async function upsertUser(identity: GoogleIdentity): Promise<UserRow> {
+  const row = await one<UserRow>(
+    `INSERT INTO users (email, google_sub, name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE
+       SET google_sub = EXCLUDED.google_sub,
+           name = COALESCE(EXCLUDED.name, users.name)
+     RETURNING id, email, google_sub, name`,
+    [identity.email, identity.sub, identity.name ?? null],
+  );
+  if (!row) throw new Error('user upsert returned no row');
+  return row;
+}
+
+export async function getUser(id: string): Promise<UserRow | undefined> {
+  return one<UserRow>('SELECT id, email, google_sub, name FROM users WHERE id = $1', [id]);
+}
+
+export async function orgsForUser(userId: string): Promise<{ id: string; slug: string; name: string; role: string }[]> {
+  const res = await query(
+    `SELECT o.id, o.slug, o.name, m.role
+       FROM org_members m JOIN orgs o ON o.id = m.org_id
+      WHERE m.user_id = $1
+      ORDER BY o.created_at`,
+    [userId],
+  );
+  return res.rows as { id: string; slug: string; name: string; role: string }[];
+}
+
+export async function assertMember(orgId: string, userId: string): Promise<void> {
+  const row = await one('SELECT 1 AS ok FROM org_members WHERE org_id = $1 AND user_id = $2', [orgId, userId]);
+  if (!row) {
+    const err = new Error('not a member of this organisation') as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
+}

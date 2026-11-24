@@ -1,12 +1,12 @@
 'use strict';
 
 // Isolate the store on a throwaway data dir BEFORE requiring it: the backend is
-// bound at module load from CONFIG (file backend + AI_FLEET_DATA_DIR).
+// bound at module load from CONFIG (file backend + SOFTWARE_FACTORY_DATA_DIR).
 const os = require('node:os');
 const fs = require('node:fs');
 
 process.env.STORE_BACKEND = 'file';
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(os.tmpdir() + '/workflow-store-');
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(os.tmpdir() + '/workflow-store-');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

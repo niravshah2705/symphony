@@ -1,0 +1,24 @@
+# ingress-nginx on kind — the edge the fleet Ingresses need.
+# Chart 4.10.1 pins controller v1.10.x (the version the fleet-local cluster runs).
+# The data path is hostPort 80/443 inside the kind node, matching the kind
+# extraPortMappings in kind-config.yaml (this is how the live cluster is wired —
+# NOT the chart's default LoadBalancer/NodePort path).
+# allow-snippet-annotations is REQUIRED: deploy/ingress/{app,kagent}.yaml use
+# configuration-snippet to strip spoofable identity headers before oauth2-proxy.
+# watch-ingress-without-class keeps the pre-existing flexprice HTTP Ingresses
+# (no ingressClassName) working, as in the live cluster.
+controller:
+  replicaCount: 1
+  config:
+    allow-snippet-annotations: "true"
+    annotation-value-word-blocklist: "load_module,lua_package,_by_lua,location,root,proxy_pass,serviceaccount,{,},\\'"
+  extraArgs:
+    watch-ingress-without-class: "true"
+    enable-metrics: "false"
+    publish-status-address: "localhost"
+  hostPort:
+    enabled: true
+  admissionWebhooks:
+    enabled: false
+  publishService:
+    enabled: false

@@ -265,7 +265,7 @@ test.describe('recorded anonymous security journey', () => {
       expect(privateRequestLabels(requests), 'a greeting never touches tenant state').toEqual([]);
 
       requests.length = 0;
-      await sendAgentRequest(page, 'What is the AI Fleet project?');
+      await sendAgentRequest(page, 'What is the Software Factory project?');
       await expect(page.locator('.intent-message[data-agent-intent="general"]')).toBeVisible();
       await settlePublishedWork(page);
       expect(privateRequestLabels(requests), 'a generic project question never touches tenant state').toEqual([]);

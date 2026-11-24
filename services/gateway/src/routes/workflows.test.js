@@ -2,19 +2,19 @@
 
 // Isolate the durable store on a throwaway dir BEFORE requiring anything that
 // binds CONFIG: the file backend and the legacy root both live under
-// AI_FLEET_DATA_DIR, and every test here asserts through them.
+// SOFTWARE_FACTORY_DATA_DIR, and every test here asserts through them.
 const os = require('node:os');
 const fs = require('node:fs');
 
 process.env.STORE_BACKEND = 'file';
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'gw-workflows-'));
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'gw-workflows-'));
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const express = require('express');
 const { createWorkflowsRouter } = require('./workflows');
-const wfStore = require('@ai-fleet/shared-core/workflow/store');
+const wfStore = require('@software-factory/shared-core/workflow/store');
 
 const IDENTITIES = {
   builder: { authenticated: true, mode: 'firebase', role: 'operator', user: { sub: 'uid-builder', email: 'build@t.test' } },
@@ -350,6 +350,57 @@ test('a substrate node publishes the profile behind it, and the persona gate sti
     assert.equal(denied.body.code, 'persona_denied');
     assert.match(denied.body.violations[0], /Coding/, 'the node it points at, not the graph, is what the grant is checked against');
     assert.equal(published.length, 1, 'a denied publish never reached the runtime');
+  } finally { server.close(); }
+});
+
+test('GET /catalog serves the global component catalog with AgentCard tags', async () => {
+  const { app } = buildApp();
+  const { server, url } = await start(app);
+  try {
+    const res = await call(url, 'GET', '/api/workflows/catalog');
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.body.harnesses) && res.body.harnesses.length, 'runtime images present');
+    assert.ok(res.body.harnesses.every((row) => row.runtime && row.image && row.version));
+    assert.ok(res.body.plugins.every((row) => row.id && Array.isArray(row.tags)));
+    assert.ok(res.body.skills.every((row) => row.id && Array.isArray(row.tags)));
+    assert.ok(res.body.modelFamilies.some((row) => row.id === 'anthropic' && row.providers.includes('claude')),
+      'model families come from the registry file, not a browser constant');
+    assert.deepEqual(res.body.modelFamilyProblems, []);
+    const ecc = res.body.plugins.find((row) => row.id === 'ecc');
+    assert.ok(ecc && ecc.tags.includes('coding'));
+  } finally { server.close(); }
+});
+
+test('an agent node keeps a global runtime harness and a preset model id', async () => {
+  const { app } = buildApp();
+  const { server, url } = await start(app);
+  try {
+    const saved = await call(url, 'POST', '/api/workflows', {
+      body: graph({
+        id: 'catalog-node-flow',
+        nodes: [{
+          id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0,
+          backend: 'kagent', harness: 'deepseek', modelFamily: 'anthropic', model: 'claude-opus-4-8',
+          kagentSpec: { plugins: [{ source: { oci: `ghcr.io/x/ecc@sha256:${'a'.repeat(64)}` }, skills: ['tdd-workflow'] }] },
+        }],
+      }),
+    });
+    assert.equal(saved.status, 201);
+    const read = await call(url, 'GET', '/api/workflows');
+    const node = read.body.workflows.find((row) => row.id === 'catalog-node-flow').nodes[0];
+    assert.equal(node.harness, 'deepseek');
+    assert.equal(node.model, 'claude-opus-4-8');
+    assert.equal(node.kagentSpec.plugins.length, 1);
+    assert.deepEqual(node.kagentSpec.plugins[0].skills, ['tdd-workflow']);
+
+    // A name that cannot be a CR name is still refused.
+    const bad = await call(url, 'POST', '/api/workflows', {
+      body: graph({ id: 'bad-harness-flow', nodes: [{ id: 'n1', kind: 'agent', refId: 'coding', name: 'Coding', x: 0, y: 0, harness: 'Not A Name!' }] }),
+    });
+    assert.equal(bad.status, 201);
+    const badRead = await call(url, 'GET', '/api/workflows');
+    const badNode = badRead.body.workflows.find((row) => row.id === 'bad-harness-flow').nodes[0];
+    assert.equal(badNode.harness, '');
   } finally { server.close(); }
 });
 

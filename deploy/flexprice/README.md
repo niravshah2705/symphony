@@ -59,7 +59,7 @@ the one-shot `migrate`), four infrastructure stores, one one-shot `seed`, and th
 | `temporal` | `temporalio/auto-setup:1.26.2` | 17233 | scheduled workflows |
 
 Host ports are bound to `127.0.0.1` only. They sit outside the ranges this machine
-already uses (4000–4090 and 8000/8100 for the Fleet services, 5432/6379 for
+already uses (4000–4090 and 8000/8100 for the Software Factory services, 5432/6379 for
 litellm-poc, 8084/8088 for other stacks).
 
 **The store images are tag-pinned, not digest-pinned** — `postgres:17` and

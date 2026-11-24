@@ -26,7 +26,7 @@ const { executeAgentRuntime } = require('./runtimes');
 const { verifyActorJwt } = require('./substrate-runner');
 const { resolveSubstrateAtespace } = require('./substrate');
 const { runWithRemoteTraceparent } = require('./langfuse');
-const { cleanTraceparent } = require('@ai-fleet/shared-core/traceparent');
+const { cleanTraceparent } = require('@software-factory/shared-core/traceparent');
 const { getJwks } = require('./substrate-jwks');
 const log = require('../logger');
 

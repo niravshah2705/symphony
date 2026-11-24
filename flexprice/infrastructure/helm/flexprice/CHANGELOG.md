@@ -1,0 +1,467 @@
+# Changelog
+
+All notable changes to the FlexPrice Helm chart are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Chart versions are independent of the application (`appVersion`) version —
+`Chart.yaml#version` bumps on every chart change, `appVersion` follows the
+FlexPrice app release.
+
+## [1.7.0] - 2026-10-01
+
+### Added
+- **`ingress.type`** — `nginx` or `gce`, superseding `ingress.provider`. Unset by
+  default, so `provider` still decides and no existing values file changes
+  behaviour. `type: gce` renders the `gceIngress` templates and reads its options
+  from `gceIngress`, not the older `ingress-gcp` set. `aws` is reserved and not
+  implemented.
+  - Gating moved behind two helpers, `flexprice.ingressType` and
+    `flexprice.gceParallelEnabled`, so every template resolves the flavor through
+    one place instead of repeating the condition.
+
+### Deprecated
+- **`ingress.provider`** — still honored, and remains the ONLY key that controls
+  the legacy `templates/ingress-gcp` objects. Setting `type` never stops them
+  rendering, so no release can delete them without an explicit `provider`
+  change; set `provider: nginx` to retire them deliberately.
+
+Inert: with `type` unset, every values file consuming this chart renders
+identically to 1.6.0.
+
+## [1.6.0] - 2026-10-01
+
+### Added
+- **Per-path backends on the `gceIngress` path.** A `gceIngress.hosts` entry may
+  now be a map carrying `paths`, each with its own `path`, `pathType`, `service`
+  and `port`, matching what `ingress.hosts` already supports. A bare hostname
+  string still yields one `/*` path to the parallel api Service, so existing
+  values render unchanged.
+  - Needed to serve an API and a UI from one load balancer. Two Ingress objects
+    cannot share a static IP, so per-host rules on a single Ingress are the only
+    way to put both hostnames on one address.
+- **`gceIngress.ownService`** (default `true`). When false the chart annotates
+  the shared api Service with the NEG and BackendConfig links instead of
+  rendering a parallel `-gce` Service, which is what `ingress.provider: gce`
+  does. Only safe when no other Ingress serves that Service.
+
+Both additions are inert: with `ownService` at its default and hosts given as
+strings, every existing values file renders byte-identically.
+
+## [1.5.2] - 2026-10-01
+
+### Fixed
+- `ingress.gce.backendConfig.logging.enable` now defaults to unset instead of
+  `false`, and the `logging` block is omitted entirely unless it is set. A chart
+  release reaches production on its own schedule, so a default of `false` would
+  assert logging OFF on a backend that had been logging via the load balancer
+  default. Unset preserves existing behaviour; an explicit `false` still means
+  off.
+
+## [1.5.1] - 2026-09-30
+
+### Added
+- **`ingress.gce.backendConfig.logging`** — load balancer request logging on the
+  `ingress.provider: gce` path, which had no way to set it. `gceIngress` already
+  had this block; the two GCE paths now expose the same key.
+  - Rendered for BOTH boolean values on purpose. Omitting `spec.logging` does
+    not disable logging — GKE falls back to the load balancer default, which can
+    still record every request. Only an explicit `enable: false` turns it off.
+  - Consequence for existing `provider: gce` users: the new default of
+    `enable: false` makes the chart assert what was previously inherited. A
+    backend that was logging via the load balancer default will STOP unless its
+    values file sets `enable: true` explicitly. Set it in the same change.
+
+### Changed
+- `gceIngress.backendConfig.logging.sampleRate` default `1.0` → `0.1`, and the
+  new `ingress.gce` equivalent defaults to `0.1` to match. Request logs exist to
+  show Cloud Armor rule matches; 10% keeps the volume trivial at production
+  scale. Raise it before sizing rules off low-frequency matches, since a
+  previewed rule only appears in requests that were logged.
+
+## [1.5.0] - 2026-09-30
+
+### Added
+- **`gceIngress` — an optional SECOND api Ingress on a GCE global external
+  Application Load Balancer, rendered alongside `ingress.*` instead of replacing
+  it.** Default `enabled: false`, so every existing values file renders
+  byte-identically and `ingress.provider: gce` is unchanged.
+  - Purpose: migrate an API off ingress-nginx onto a GCE load balancer with zero
+    downtime. `ingress.provider: gce` cannot do this — the chart renders exactly
+    one api Ingress, so flipping that provider CONVERTS it, deleting the nginx
+    load balancer before the replacement serves. Measured on GCP staging: a fresh
+    GCE load balancer took ~12 minutes from apply to its first 200, and an
+    ADDRESS plus HEALTHY backends appeared ~6 minutes BEFORE it served. A
+    conversion is therefore a ~12 minute hole.
+  - With this block both Ingresses serve the same pods through their own load
+    balancers, DNS decides which takes traffic, and reverting the DNS record is
+    the rollback.
+  - Renders a parallel `Service` carrying the NEG and BackendConfig annotations,
+    so the chart's own api Service is never mutated, plus `BackendConfig`,
+    `FrontendConfig`, an optional cert-manager `Certificate` (or
+    `ManagedCertificate`), and the `Ingress`.
+  - `nameOverride` pins the object name to match objects already created out of
+    band during a migration. Matching the name is necessary but NOT sufficient:
+    Helm refuses to manage a resource it did not create (`invalid ownership
+    metadata; missing key "app.kubernetes.io/managed-by"`), so such objects must
+    first be labelled `app.kubernetes.io/managed-by=Helm` and annotated with
+    `meta.helm.sh/release-name` / `-namespace`, or deleted and recreated. A name
+    mismatch is worse than either — it creates a SECOND load balancer and
+    orphans the original.
+- **`gceIngress.frontendConfig.sslPolicy`.** The GCE frontend default accepts TLS
+  1.0/1.1 while ingress-nginx refuses them, so migrating without a policy WEAKENS
+  TLS. The existing `ingress-gcp/frontendconfig.yaml` has no such field, which is
+  why a region already on `provider: gce` currently accepts TLS 1.0.
+- **`gceIngress.backendConfig.logging`.** Load balancer request logging, needed to
+  see Cloud Armor preview-rule matches, which are otherwise invisible. `enable`
+  is rendered for both boolean values: omitting `spec.logging` does not disable
+  access logging, it falls back to the load balancer default, so only an explicit
+  `enable: false` turns it off.
+
+### Notes
+- `gceIngress.backendConfig.timeoutSec` defaults to **60** to match
+  ingress-nginx's `proxy-read-timeout`. The load balancer's own default is 30,
+  which silently cuts requests the nginx path serves.
+- `gceIngress.tls.mode` defaults to `certManager`, not the Google-managed
+  certificate used by `ingress.provider: gce`. A `ManagedCertificate` validates
+  over HTTP against the load balancer, so it can only go Active AFTER DNS already
+  points there, and takes 15-60 minutes — guaranteeing a TLS error window. With a
+  DNS-01 issuer, cert-manager issues before cutover with no port 80.
+- `gceIngress.allowHttp` defaults to `false` (443 only). With `tls.mode: managed`
+  it must START as `true` — Google validates a managed certificate over plain HTTP
+  against the load balancer, so closing port 80 before the load balancer is fully
+  programmed prevents issuance. Deploy with `true`, wait for the certificate to
+  report Active, then set `false` in a second upgrade. `certManager` mode has no
+  such constraint, since DNS-01 never touches port 80.
+- The Ingress is claimed with the legacy `kubernetes.io/ingress.class` annotation,
+  not `spec.ingressClassName`. GKE enables the httpLoadBalancing addon without
+  necessarily creating a `gce` IngressClass object, and with
+  `ingressClassName: gce` and no such object no controller claims the Ingress —
+  no events, no ADDRESS. `kubectl` warns the annotation is deprecated; that
+  warning is expected.
+
+## [1.4.1] - 2026-08-31
+
+### Fixed
+- **The migration Job's `verify` step queried ClickHouse over HTTP on the NATIVE
+  protocol port.** In `mode: external` the port came from splitting
+  `clickhouse.address`, which is the endpoint the application uses natively
+  (9000). The HTTP GET failed, `|| echo 0` turned that into `n=0`, and every
+  table was reported `MISSING` against a ClickHouse that was healthy.
+  - Surfaced on GCP staging the first time migrations were enabled there:
+    `❌ MISSING ClickHouse table: events`, while the table existed with 20
+    others. Proven directly — the same query returns `1` on 8123 and fails on
+    9000.
+  - `external` now uses `clickhouse.httpPort` (default `8123`), matching what
+    `altinity` mode already hardcoded. Set `clickhouse.httpPort` if a deployment
+    moves it.
+- **A failed query is no longer reported as a missing table.** `|| echo 0`
+  collapsed every failure — unreachable host, wrong port, bad credentials — into
+  `MISSING`, sending whoever is on call to inspect a schema that was never the
+  problem. Connectivity failures now say so, print what `wget` returned, and name
+  the likely causes; a genuine miss reports the count it actually saw.
+
+## [1.4.0] - 2026-08-30
+
+### Changed
+- **PostgreSQL migrations now run from reviewed `.sql` files instead of Ent
+  auto-migration.** New `migration.steps.dbmate` (default `true`) adds an init
+  container that runs `./migrate postgres up`, applying the files in
+  `migrations/versioned/postgres` that the target database has not recorded and
+  writing each one to `schema_migrations`. `migration.steps.ent` now defaults to
+  `false`.
+  - Ent auto-migration inferred DDL by diffing the live schema against the Go
+    models at deploy time. Nothing reviewed what it would run and nothing
+    recorded what it did, so the same chart produced different DDL against
+    different databases and drift was invisible. It also silently skipped
+    `DropIndex`, `DropColumn` and `ModifyIndex`, which is how a wrong unique
+    index survived on India production from 2026-07-25 undetected.
+  - The two steps are mutually exclusive; enabling both fails template rendering
+    rather than running the schema through two mechanisms in one Job.
+  - Rolling back is `migration.steps.dbmate: false` +
+    `migration.steps.ent: true`. The Ent path stays in the image.
+
+### Fixed
+- `migration.backoffLimit` now defaults to `0`, and the template no longer passes
+  it through `| default 3` — Helm's `default` treats `0` as empty, so an explicit
+  `backoffLimit: 0` would have silently rendered as `3`.
+  - A retry only helps a transient failure. A migration killed part-way through
+    `CREATE INDEX CONCURRENTLY` leaves the index INVALID, and
+    `CREATE INDEX CONCURRENTLY IF NOT EXISTS` skips an invalid index — so the
+    retry reported success while the index stayed permanently broken.
+  - `migrate postgres up` now refuses to start while any index is INVALID,
+    naming each one and printing the `DROP INDEX CONCURRENTLY` to run.
+
+- **The migration Job no longer deletes its own logs.** `hook-delete-policy` was
+  `hook-succeeded,hook-failed`, which removed the Job — and its pod — the instant
+  the migration ended, so the one artefact explaining *why* a migration failed
+  disappeared before anyone could read it. During the 2026-08-31 staging bring-up
+  the only way to see a failure was to race the deletion with `kubectl logs`.
+  - New `migration.hookDeletePolicy`, default `before-hook-creation`: the previous
+    Job is removed just before the next one is created. That still prevents the
+    stale-Job collision that stalled the northamerica-northeast2 bring-up, but a
+    finished Job and its pod now survive until `ttlSecondsAfterFinished` (1h) or
+    the next migration.
+  - Set it back to `hook-succeeded,hook-failed` to restore the old behaviour.
+  - This does **not** make a re-Sync re-run migrations: ArgoCD tracks hooks per
+    revision, so an unchanged revision skips the hook whether or not a Job object
+    exists. Migrations run when the image or config changes.
+
+### ⚠️ `activeDeadlineSeconds` and long index builds
+`activeDeadlineSeconds: 900` is a hard SIGKILL of the Job. In Helm the migration
+and its watcher are the same pod, so the deadline aborts the migration itself —
+unlike the ECS path, where the workflow only watches a task that keeps running.
+Before deploying a migration that builds an index on a large table, set
+`migration.activeDeadlineSeconds: null`; the field is then omitted and Helm or
+ArgoCD giving up waiting no longer stops the index from finishing.
+
+### ⚠️ Upgrade note — existing databases must be adopted first
+An existing database has to be adopted once before this chart version deploys
+against it. Adoption records the migrations written so far as already applied
+and executes **zero DDL**, so only new migrations ever run there:
+
+```bash
+make migrate-adopt url="postgres://USER:PASS@HOST:PORT/DB?sslmode=require" dry=1
+make migrate-adopt url="postgres://USER:PASS@HOST:PORT/DB?sslmode=require"
+```
+
+The Job fails with these instructions if it finds tables but no
+`schema_migrations` ledger. It does not adopt on its own: that would silently
+declare a database nobody inspected to be current, and any migration it is
+actually missing would then never run.
+
+Values that set `migration.steps.ent: true` explicitly must drop it, or
+rendering fails on the mutual-exclusion guard.
+
+A fresh install needs nothing: the first migration in the timeline is the schema
+baseline, so the whole schema is built from the same files.
+
+## [1.3.0] - 2026-08-12
+
+### Added
+- **e2eprobe as chart templates** (`templates/probe/deployment.yaml`,
+  `templates/probe/service.yaml`), gated on `e2eprobe.enabled` (default
+  `false`). Ports the synthetic end-to-end probe previously deployed as
+  hand-written manifests into the chart.
+  - `replicaCount: 1` with `strategy.rollingUpdate.maxSurge: 0` is a
+    correctness constraint, not a tunable default: the probe's checks
+    mutate shared seeded fixtures under one tenant, and a second replica
+    races the first into false failures.
+  - The webhook Service (`e2eprobe.service.port`, default `8765`) is
+    ClusterIP only and is never wired into ingress — its endpoint accepts
+    unauthenticated POSTs.
+  - Consumes a pre-created Secret via `e2eprobe.existingSecret` (same
+    convention as `secrets.existingSecret` for the main app) — the chart
+    renders no ExternalSecret for it, matching the rest of the chart.
+  - Image defaults to the separate `ghcr.io/flexprice/e2eprobe` artifact
+    (not the main app image).
+- **GCE managed-ingress support** via `ingress.provider` (`nginx` default,
+  `gce` opt-in). When `ingress.provider: gce` and `ingress.enabled: true`:
+  - New templates under `templates/ingress-gcp/`: `managedcertificate.yaml`
+    (`networking.gke.io/v1` ManagedCertificate), `backendconfig.yaml`
+    (`cloud.google.com/v1` BackendConfig — health check path `/health`,
+    timeouts, optional Cloud Armor via
+    `ingress.gce.backendConfig.cloudArmor.securityPolicyName`), and
+    `frontendconfig.yaml` (`networking.gke.io/v1beta1` FrontendConfig —
+    HTTP→HTTPS redirect).
+  - The api Service (`templates/app/service.yaml`) gains
+    `cloud.google.com/neg` and `beta.cloud.google.com/backend-config`
+    annotations, needed so GCE's native load balancer routes directly to
+    pod IPs via NEG instead of through kube-proxy.
+  - `templates/app/ingress.yaml` needed no changes — it was already
+    class-agnostic (driven by `ingress.className`, no nginx-specific
+    annotations).
+  - Rendering with `ingress.provider: nginx` (the default) is
+    byte-identical to 1.2.0.
+
+## [1.2.0] - 2026-08-05
+
+### Added
+- Custom labels per component. Every workload block (`api`, `consumer`,
+  `worker`, `frontend`) now accepts:
+  - `<component>.labels` — extra labels on that component's Kubernetes objects
+    (Deployment, Service, HPA, PDB, Ingress, ServiceAccount).
+  - `<component>.podLabels` — extra labels on that component's pods only.
+- Global `podLabels`, applied to every FlexPrice pod. Per-component
+  `podLabels` merge on top of it.
+- The pre-existing global `labels` value is now documented in `values.yaml`.
+
+  Intended for log shippers (Filebeat/ELK, Fluent Bit, Datadog) that enrich from
+  pod metadata, so operators no longer have to fork the templates to add an
+  index or team label:
+
+  ```yaml
+  podLabels:
+    logging.company.io/index: flexprice
+  api:
+    podLabels:
+      logging.company.io/index: flexprice-api
+  ```
+
+  Labels are never added to `spec.selector.matchLabels` — selectors are
+  immutable on Deployments, so changing these values stays `helm upgrade`-safe.
+  Rendering with default values is byte-identical to 1.1.0.
+
+  The selector-owned keys (`app.kubernetes.io/name`, `/instance`, `/component`)
+  cannot be overridden from these values. Setting them is silently ignored
+  rather than producing pods that no longer match their own Deployment selector,
+  Service, PDB, and NetworkPolicy.
+
+## [1.1.0] - 2026-06-11
+
+### Added
+- Native OpenTelemetry **trace** export (`otel.traces.*`) for shipping APM/RED
+  metrics (request rate, error rate, latency) to any OTLP backend (SigNoz,
+  Tempo, Datadog). Mirrors the existing `logging.otel` (logs) wiring; the traces
+  auth value reuses the `logging-otel-auth-value` secret key.
+- `logging.environment` to set the OTel resource `deployment.environment`
+  (rendered as the `FLEXPRICE_LOGGING_ENVIRONMENT` env var).
+
+### Fixed
+- `extraEnv` rendered invalid YAML when non-empty — `{{- toYaml . }}` left-chomped
+  the preceding newline and glued the first env var onto the previous line. Now
+  uses `{{ toYaml . | trim }}`.
+- Chart-managed (dev) Secret now renders the shared `logging-otel-auth-value` key
+  when `otel.traces.enabled` (not only `logging.otel.enabled`), so a traces-only
+  config doesn't fail pods with a missing secret key (`CreateContainerConfigError`).
+
+## [1.0.0] - 2026-05-11
+
+Initial GA release of the FlexPrice Helm chart. Production-ready packaging
+for the FlexPrice billing and pricing platform — API, Kafka consumer,
+Temporal worker, schema migrations, and bundled or external stateful
+dependencies (PostgreSQL, Kafka, Redis, Temporal, ClickHouse).
+
+### Added
+
+#### Workloads & autoscaling
+- Application Deployments for `api`, `consumer`, and `worker`.
+- HorizontalPodAutoscaler for api, consumer, and worker.
+- PodDisruptionBudget for api, consumer, and worker.
+- Per-component RollingUpdate strategy: api/worker default to
+  `maxSurge: 1, maxUnavailable: 0`; consumer defaults to
+  `maxSurge: 0, maxUnavailable: 1` to minimise Kafka consumer-group
+  rebalance churn during rollouts.
+- `terminationGracePeriodSeconds` + optional `preStop` sleep on api,
+  consumer, and worker for graceful shutdown (Kafka consumer-group
+  rebalance, in-flight HTTP drain, Temporal activity completion).
+- `topologySpreadConstraints` value (global + per-component override) for
+  multi-AZ HA. Empty list by default.
+- Opt-in KEDA scaling support for consumer (Kafka lag) and worker
+  (Temporal task queue depth).
+
+#### Jobs & lifecycle
+- Migration Job as Helm `pre-install`/`pre-upgrade` hook.
+- Temporal namespace bootstrap Job as `post-install`/`post-upgrade` hook
+  ([templates/jobs/temporal-namespace-bootstrap.yaml](templates/jobs/temporal-namespace-bootstrap.yaml));
+  configurable via `temporalConfig.bootstrapNamespaces`.
+- `helm test` connectivity probe at
+  [templates/tests/test-api-health.yaml](templates/tests/test-api-health.yaml).
+
+#### Stateful dependencies
+- Subchart dependencies (bundled tarballs in `charts/`, pinned to
+  exact-minor for Renovate visibility):
+  - `postgresql` 16.7.27 (bitnami)
+  - `kafka` 32.4.3 (bitnami)
+  - `redis` 20.13.4 (bitnami)
+  - `temporal` 0.74.0 (temporalio)
+- ClickHouse modes: `standalone`, `altinity` (CRD-managed), `external`.
+- `helm.sh/resource-policy: keep` annotations on PersistentVolumeClaims
+  and StatefulSet `volumeClaimTemplates` across all bundled infra
+  (postgres, kafka, redis, temporal, clickhouse) — on by default so
+  `helm uninstall` cannot destroy customer data.
+- `ClickHouse` `max_memory_usage` configurable via
+  `clickhouse.maxMemoryUsageBytes` (defaults to 90 GB per query).
+
+#### Networking & ingress
+- Ingress (api, frontend, temporal-web) with `nginx` className default.
+- API Service named with `-api` suffix; ingress backend updated to match.
+- Opt-in ingress-only NetworkPolicy for api (TCP/8080 from a
+  configurable ingress controller selector). Egress is intentionally
+  unrestricted.
+
+#### Security & identity
+- Hardened pod and container `securityContext` defaults that are
+  PodSecurityStandard `restricted`-compatible: `runAsNonRoot: true`,
+  non-zero `runAsUser/Group/fsGroup`, `readOnlyRootFilesystem: true`,
+  `allowPrivilegeEscalation: false`, `privileged: false`, drop `ALL`
+  capabilities, and `seccompProfile: RuntimeDefault` on both pod and
+  container.
+- Externalized credentials via `secrets.existingSecret`.
+- Plaintext password defaults removed from `values.yaml`. Installing
+  the chart without `-f values-local.yaml` (dev) or
+  `-f values-prod.example.yaml` / `secrets.existingSecret` (prod) fails
+  fast with a clear `required: ...` error.
+- Opt-in per-workload ServiceAccounts via
+  `serviceAccount.perComponent=true` (with per-component annotations
+  for IRSA / Workload Identity).
+
+#### Images & supply chain
+- Default `image.repository` set to `ghcr.io/flexprice/flexprice`;
+  default `image.tag` resolves to `.Chart.AppVersion` when empty.
+- Multi-arch (`linux/amd64`, `linux/arm64`) app-image publish workflow
+  ([.github/workflows/publish-app-image.yml](../../.github/workflows/publish-app-image.yml))
+  with SBOM, provenance attestation, and Trivy HIGH/CRITICAL scan.
+- Migration container images externalised (separate
+  `migration.image.repository` / `tag`).
+
+#### Values & profiles
+- `values-prod.example.yaml` template for production overrides
+  (external services, `auth.provider: api_key`, ingress, TLS).
+- `values-local.yaml` for local Kind cluster bring-up with bundled
+  infra enabled and pinned image tags.
+- `redisExtended.clusterMode` value (defaults to `true` to preserve
+  ElastiCache / Redis Cluster behaviour; flip to `false` for single-node
+  Redis — `values-local.yaml` does this since the bundled
+  bitnami/redis subchart is single-node).
+- One-click local kind provisioning script ([provision.sh](provision.sh))
+  and [kind-cluster.yaml](kind-cluster.yaml) for OrbStack + Apple Silicon.
+
+#### CI & tooling
+- CI workflow [`.github/workflows/helm-validate.yml`](../../.github/workflows/helm-validate.yml):
+  `helm lint` + `helm template | kubeconform` across three profiles +
+  `helm install --dry-run` against a kind cluster on every PR touching
+  `helm/**`.
+- Chart publish workflow triggers on `chart-v*` tags, decoupling chart
+  releases from app releases.
+- Renovate config ([renovate.json](../../renovate.json)) for chart
+  subchart versions, image tags, and GitHub Actions, grouped and
+  scheduled weekly.
+
+### Fixed
+- Redis client now branches between standalone and cluster topologies
+  via `FLEXPRICE_REDIS_CLUSTER_MODE` (Helm: `redisExtended.clusterMode`);
+  previously always used `ClusterClient`, which broke against single-node
+  ElastiCache.
+- Temporal-enable boolean (`FLEXPRICE_TEMPORAL_ENABLED`) no longer
+  silently coerced to `true` by Sprig's `default` filter when explicitly
+  set to `false`.
+- Local Kind provision no longer trips on immutable
+  `volumeClaimTemplates` annotation diffs across upgrades.
+
+### Documentation
+- Operator runbook for OSS consumers covering EKS, GKE/AKS, and
+  bare-metal deployments ([docs/](../docs/)).
+- Architecture diagram, troubleshooting runbook, and pre-ship
+  validation procedure under [helm/docs/](../docs/).
+- [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md) tracks
+  go-live gaps and reconciliation with chart state.
+- [docs/MIGRATION-GUIDE.md](../docs/MIGRATION-GUIDE.md) documents
+  `helm rollback` schema-change caveats.
+
+### Known caveats
+- `helm rollback` does **not** revert applied database schema
+  migrations. Schema changes are forward-only; rolling the chart back
+  past a migration requires a manual database rollback. See
+  [docs/MIGRATION-GUIDE.md](../docs/MIGRATION-GUIDE.md).
+- `helm.sh/resource-policy: keep` on PVCs means `helm uninstall` will
+  leave PostgreSQL, Kafka, Redis, Temporal, and ClickHouse PVCs
+  behind. This is intentional. Delete them manually with `kubectl
+  delete pvc -l app.kubernetes.io/instance=<release>` once you have
+  confirmed the data is no longer needed.
+- Bundled stateful subcharts (`postgresql`, `kafka`, `redis`,
+  `temporal`) default to `enabled: false`. Production deployments must
+  point at externally managed services or explicitly opt-in.
+
+[1.0.0]: https://github.com/flexprice/flexprice/releases/tag/chart-v1.0.0

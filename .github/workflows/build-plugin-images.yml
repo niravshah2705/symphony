@@ -3,9 +3,9 @@ name: Build agent plugin images
 # Publishes the kagent Agent Plugins 1.0.0 bundle images to ghcr.io, driven by
 # deploy/kagent/plugins.csv. Each row pins an upstream repo to a full 40-hex
 # commit and names the version that commit ships upstream, in the file the pack
-# states that version in (version_source); a PR run only resolves and validates
-# the rows, and the merge to main publishes. Flip `current` to move the :latest
-# tag; add a row to stage a version.
+# states that version in (version_source); a PR run resolves, validates and
+# dry-composes the rows without publishing, and the merge to main publishes. Flip
+# `current` to move the :latest tag; add a row to stage a version.
 #
 # A push to main publishes only the rows whose bytes moved, like
 # build-runtime-images.yml: a bundle build is not byte-reproducible (multi-arch,
@@ -174,6 +174,33 @@ jobs:
           node scripts/seed-plugin-catalog.js --check
           node scripts/gen-kagent-manifests.js --check
 
+      - name: Dry-compose every selected bundle
+        # PR legs only, and only as far as `compose-bundle.sh`: no build, no
+        # push. The reason is where the publish failure would otherwise land.
+        # `build` is skipped on a pull_request, so a bad `skills.txt` name or a
+        # `PLUGIN_EXTRA_PATHS` entry absent upstream first dies on the merge —
+        # the build job fails, the stamp job never runs, and the committed
+        # manifest keeps an all-zero digest that only an in-cluster apply
+        # notices. Composing into the runner temp turns that into a red PR.
+        # Each row composes in its own subshell because `pack-inputs.sh`
+        # defaults `PLUGIN_*` over the CSV values, so a leaked export from the
+        # previous row would resolve the next pack against the wrong repo.
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          SELECTED: ${{ runner.temp }}/selected.txt
+        run: |
+          set -euo pipefail
+          while read -r plugin _version; do
+            [ -n "${plugin:-}" ] || continue
+            echo "::group::$plugin"
+            (
+              export REPO_ROOT="$GITHUB_WORKSPACE" PLUGIN="$plugin"
+              . deploy/kagent/pack-inputs.sh
+              bash deploy/kagent/ecc-plugin/compose-bundle.sh "$RUNNER_TEMP/dry-$plugin"
+            )
+            echo "::endgroup::"
+          done < "$SELECTED"
+
       - name: Report the selection
         env:
           REASON: ${{ steps.select-rows.outputs.reason }}
@@ -287,6 +314,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      # Workload Identity federation for the Firestore catalog mirror below.
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -316,4 +345,66 @@ jobs:
           # [skip ci]: this commit changes no source, and re-running the publish
           # jobs from it would loop on identical digests.
           git commit -m "chore(kagent): record published plugin bundle digests [skip ci]"
-          git push
+          # Any other PR merged while this publish ran moves the branch under
+          # this checkout, and a plain push from a stale base is a
+          # non-fast-forward: the images are already in the registry, the tags
+          # have already moved, and the digests that prove it are recorded
+          # nowhere. Re-derive the commit onto the new tip and retry.
+          BASE_SHA="$(git rev-parse HEAD^)"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
+              echo "Stamped the digests on attempt ${attempt}." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            git fetch -q origin "${GITHUB_REF_NAME}"
+            # A row that moved under this run means these digests describe bytes
+            # the current manifest no longer names. Recording them would pin the
+            # wrong row, so it asks for a re-run instead.
+            if ! git diff --quiet "${BASE_SHA}" "origin/${GITHUB_REF_NAME}" -- "${MANIFEST}"; then
+              echo "${MANIFEST} moved while this run published: re-run with \`rebuild: all\`." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            # The stamp commit is derived output, so it is re-derived rather than
+            # replayed: two publishes of the same row rebase-conflict on the same
+            # generated lines, and whichever one resolves it by hand decides which
+            # digest main names — while both runs' bytes are sitting in the
+            # registry under the moving tag. Reset onto the new tip and run the
+            # same two commands against the artifacts this run built, so the
+            # newest publish wins and every other row keeps what landed. Never
+            # --force: only this run's digest lines move.
+            git reset -q --hard "origin/${GITHUB_REF_NAME}"
+            node scripts/stamp-plugin-digest.js --refs-dir oci-refs
+            node scripts/gen-kagent-manifests.js
+            if git diff --quiet -- packages/shared-core/src/agent/registry deploy/kagent; then
+              echo "Another run already recorded these digests." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            git add packages/shared-core/src/agent/registry deploy/kagent
+            git commit -m "chore(kagent): record published plugin bundle digests [skip ci]"
+            sleep "${attempt}"
+          done
+          echo "Lost the push race 5 times: the images are published and unstamped." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # The stamped catalog is now the authoritative record of what was
+      # published: tag each pack with its AgentCard types and mirror the
+      # tagged rows into the Firestore `plugins` collection so the console
+      # and the runtime read the same versions/digests this run pushed.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies for the store mirror
+        run: npm ci --ignore-scripts --omit=dev
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Mirror the tagged plugin catalog to Firestore
+        env:
+          STORE_BACKEND: firestore
+        run: node scripts/seed-plugin-catalog.js --store

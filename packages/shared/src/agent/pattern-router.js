@@ -11,7 +11,7 @@
  */
 
 const { currentTraceparent } = require('./langfuse');
-const { cleanTraceparent, traceparentFromEnv } = require('@ai-fleet/shared-core/traceparent');
+const { cleanTraceparent, traceparentFromEnv } = require('@software-factory/shared-core/traceparent');
 
 /**
  * The trace this run belongs to, whichever way it was handed to us: an explicit

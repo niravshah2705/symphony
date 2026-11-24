@@ -32,7 +32,7 @@ on:
       rebuild:
         description: "all = every manifest row (use after a Go adapter change); changed = only rows that moved since the previous commit."
         required: false
-        default: "all"
+        default: "changed"
         type: choice
         options:
           - all

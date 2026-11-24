@@ -1,0 +1,42 @@
+# Additive ingress policy for RustFS (S3) in ate-system.
+#
+# The substrate-managed `rustfs` NetworkPolicy admits port 9000 only from
+# ate-system pods (ate-api-server/atelet) and the bucket-init Job. ate-system
+# also has a default-deny-ingress, so Langfuse (ns langfuse) cannot upload trace
+# blobs to RustFS — its OTLP ingestion hangs on "connect ETIMEDOUT :9000".
+#
+# NetworkPolicy ingress rules are additive (union across policies selecting the
+# same pod), so this separate policy grants langfuse access WITHOUT editing the
+# helm-managed one (which a substrate upgrade would revert).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rustfs-langfuse
+  namespace: ate-system
+  labels:
+    app.kubernetes.io/part-of: fleet-local
+spec:
+  podSelector:
+    matchLabels:
+      app: rustfs
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: langfuse
+        # The langfuse bucket-init Job in 00-prereqs runs IN ate-system, and
+        # the substrate-owned `rustfs` policy whitelists jobs only by
+        # job-name=rustfs-bucket-init — our job is silently dropped and its
+        # aws loop hangs (symptom: rustfs-langfuse-bucket wait timeout with
+        # zero log lines). 00-prereqs labels the pod template accordingly.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ate-system
+          podSelector:
+            matchLabels:
+              fleet.local/rustfs-bucket-init: "true"
+      ports:
+        - port: 9000
+          protocol: TCP

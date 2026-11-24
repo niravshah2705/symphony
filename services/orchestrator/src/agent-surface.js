@@ -12,9 +12,9 @@
  */
 
 const express = require('express');
-const { MAX_STAGE_COMMAND_PUSH_BODY_BYTES } = require('@ai-fleet/shared/agent/pipeline-stage-service');
-const { internalServiceAuth } = require('@ai-fleet/shared/internal-auth');
-const { sendError } = require('@ai-fleet/shared/util');
+const { MAX_STAGE_COMMAND_PUSH_BODY_BYTES } = require('@software-factory/shared/agent/pipeline-stage-service');
+const { internalServiceAuth } = require('@software-factory/shared/internal-auth');
+const { sendError } = require('@software-factory/shared/util');
 
 const agentRoutes = require('./routes/agent');
 const settingsRoutes = require('./routes/settings');

@@ -10,12 +10,12 @@ const path = require('node:path');
 // once, settled once, money frozen after) is part of what is being proved, and a
 // mocked store would prove the mock instead.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'recharge-settle-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
-const store = require('@ai-fleet/shared-core/store');
-const gst = require('@ai-fleet/shared-core/billing/gst');
-const moneyWire = require('@ai-fleet/shared-core/billing/money-wire');
+const store = require('@software-factory/shared-core/store');
+const gst = require('@software-factory/shared-core/billing/gst');
+const moneyWire = require('@software-factory/shared-core/billing/money-wire');
 const { settle, allowsMockPayments } = require('./recharge-settle');
 
 const ORG = 'org-a';

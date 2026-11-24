@@ -1,6 +1,6 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 
 /**
  * S2S client for the settings service's per-org secret resolver

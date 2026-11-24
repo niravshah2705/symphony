@@ -1,10 +1,10 @@
 'use strict';
 
-const store = require('@ai-fleet/shared-core/store');
+const store = require('@software-factory/shared-core/store');
 const {
   normalizeWorkspaceContext,
   runWithWorkspaceContext,
-} = require('@ai-fleet/shared-core/store/workspace-context');
+} = require('@software-factory/shared-core/store/workspace-context');
 
 /**
  * Enter the store scope selected by the gateway's authoritative context check.

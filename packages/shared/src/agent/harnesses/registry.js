@@ -34,7 +34,7 @@ const NAME_RE = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/;
 
 // Keep the SDK-heavy registry metadata identical to the SDK-free catalog used
 // by gateway/settings preflight.
-const HARNESS_CATALOG = require('@ai-fleet/shared-core/agent/harness-catalog.json');
+const HARNESS_CATALOG = require('@software-factory/shared-core/agent/harness-catalog.json');
 
 function schemaError(message) {
   const error = new TypeError(`Invalid harness definition: ${message}`);

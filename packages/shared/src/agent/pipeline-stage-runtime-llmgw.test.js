@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const {
   createPreflightSnapshot,
   createStageCommandV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
+} = require('@software-factory/shared-core/pipeline/contracts');
 const { resolveStageAgent } = require('./pipeline-stage-runtime');
 
 const NOW = '2026-08-15T10:00:00.000Z';

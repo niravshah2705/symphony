@@ -169,7 +169,7 @@ async function gateOffBootProbe() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-gate-off-'));
   process.env.NODE_ENV = 'test';
   process.env.STORE_BACKEND = 'file';
-  process.env.AI_FLEET_DATA_DIR = dataDir;
+  process.env.SOFTWARE_FACTORY_DATA_DIR = dataDir;
   try {
     const gate = require(path.join(ROOT, 'packages/shared-core/src/billing/gate'));
     const policy = gate.reportBoot();
@@ -196,7 +196,7 @@ async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fleet-usage-verify-'));
   process.env.NODE_ENV = 'test';
   process.env.STORE_BACKEND = 'file';
-  process.env.AI_FLEET_DATA_DIR = dataDir;
+  process.env.SOFTWARE_FACTORY_DATA_DIR = dataDir;
   process.env.FLEXPRICE_ENABLED = 'true';
   process.env.FLEXPRICE_BASE_URL = baseUrl;
   process.env.FLEXPRICE_ENVIRONMENT_ID = process.env.FLEXPRICE_ENVIRONMENT_ID || stack.FLEXPRICE_ENVIRONMENT_ID || SEED_ENVIRONMENT_ID;
@@ -210,13 +210,13 @@ async function main() {
     'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_BASE_URL']) delete process.env[name];
 
   const { createApp } = require(path.join(ROOT, 'services/billing/src/app.js'));
-  const store = require('@ai-fleet/shared-core/store');
-  const flexpriceConfig = require('@ai-fleet/shared-core/billing/flexprice-config');
-  const { createFlexpriceClient } = require('@ai-fleet/shared-core/billing/flexprice-client');
-  const outbox = require('@ai-fleet/shared-core/billing/billing-outbox');
-  const drain = require('@ai-fleet/shared-core/billing/outbox-drain');
-  const gate = require('@ai-fleet/shared-core/billing/gate');
-  const { recordUsage } = require('@ai-fleet/shared-core/billing/usage');
+  const store = require('@software-factory/shared-core/store');
+  const flexpriceConfig = require('@software-factory/shared-core/billing/flexprice-config');
+  const { createFlexpriceClient } = require('@software-factory/shared-core/billing/flexprice-client');
+  const outbox = require('@software-factory/shared-core/billing/billing-outbox');
+  const drain = require('@software-factory/shared-core/billing/outbox-drain');
+  const gate = require('@software-factory/shared-core/billing/gate');
+  const { recordUsage } = require('@software-factory/shared-core/billing/usage');
   const { FLEXPRICE } = flexpriceConfig;
   const client = createFlexpriceClient({ config: FLEXPRICE });
 
@@ -224,7 +224,7 @@ async function main() {
   const orgId = `org-usage-verify-${stamp}`;
   const typoOrg = `org-usage-typo-${stamp}`;
 
-  console.log('AI Fleet — Phase 3 usage→outbox→gate, verified against the live FlexPrice stack');
+  console.log('Software Factory — Phase 3 usage→outbox→gate, verified against the live FlexPrice stack');
   console.log(`  flexprice ${flexpriceConfig.describe(FLEXPRICE)}`);
   console.log(`  org        ${orgId}`);
   console.log(`  fixture    ${RUNS.length} runs, ${EXPECTED_PAISE}p hand-computed at ₹${FX}/USD`);

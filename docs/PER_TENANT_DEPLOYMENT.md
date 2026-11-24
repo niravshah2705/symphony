@@ -1,6 +1,6 @@
 # Per-Tenant Deployment Distribution
 
-How AI Fleet gives an organization its **own** agent stack, on demand, while
+How Software Factory gives an organization its **own** agent stack, on demand, while
 keeping org-less users on the shared deployment. Built in four phases (#72–#75)
 plus deployment wiring; **disabled by default** so the shared stack is unaffected
 until you opt in.

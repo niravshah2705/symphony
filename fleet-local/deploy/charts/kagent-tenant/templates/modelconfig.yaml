@@ -1,0 +1,37 @@
+{{- include "kagent-tenant.validate" . -}}
+{{- range $model := .Values.models }}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: ModelConfig
+metadata:
+  name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "model" "name" $model.name) }}
+  namespace: {{ include "kagent-tenant.namespace" $ }}
+  labels:
+    {{- include "kagent-tenant.labels" (dict "root" $) | nindent 4 }}
+spec:
+  provider: {{ $model.provider | default "OpenAI" }}
+  model: {{ $model.model | quote }}
+  apiKeySecret: {{ $model.apiKeySecret | default $.Values.litellm.apiKeySecret | quote }}
+  apiKeySecretKey: {{ $model.apiKeySecretKey | default $.Values.litellm.apiKeySecretKey | quote }}
+  {{- if hasKey $model "stream" }}
+  stream: {{ $model.stream }}
+  {{- end }}
+  {{- if eq ($model.provider | default "OpenAI") "OpenAI" }}
+  {{- /* codex harness: apiFormat responses is mandatory and NO other openAI
+  setting beyond baseUrl is accepted; noDefaultHeaders suppresses the fleet
+  attribution headers, which codex ModelConfigs reject outright. */}}
+  openAI:
+    baseUrl: {{ $model.baseUrl | default $.Values.litellm.baseUrl | quote }}
+    apiFormat: {{ $model.apiFormat | default "chatCompletions" }}
+  {{- else if eq $model.provider "Anthropic" }}
+  {{- /* claude harness: the ONLY anthropic setting is baseUrl, and the destination
+  hostname carries the egress-injected x-api-key. defaultHeaders is rejected on
+  claude/codex ModelConfigs, so it is deliberately not rendered here. */}}
+  anthropic:
+    baseUrl: {{ $model.baseUrl | default $.Values.litellm.anthropicBaseUrl | quote }}
+  {{- end }}
+  {{- if and (ne ($model.provider | default "OpenAI") "Anthropic") (not $model.noDefaultHeaders) $model.defaultHeaders }}
+  defaultHeaders:
+    {{- toYaml $model.defaultHeaders | nindent 4 }}
+  {{- end }}
+{{- end }}

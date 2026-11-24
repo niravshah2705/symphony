@@ -5,6 +5,9 @@ const ASSETS = [
   '/adlc/styles.css',
   '/adlc/app.js',
   '/adlc/manifest.webmanifest',
+  // The header mark is a CSS mask, so the offline landing needs the file itself.
+  '/brand/archagentix-mark.svg',
+  '/brand/favicon-32.png',
   '/adlc/blog/',
   '/adlc/brief/',
   '/adlc/blog/governance/',

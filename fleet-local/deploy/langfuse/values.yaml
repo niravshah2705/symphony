@@ -1,0 +1,134 @@
+# Langfuse v3 on the kind cluster, ALL stores external (no bundled sub-charts).
+# Image pinned to v3 (3.224.1): v4 requires ClickHouse >= 25.12, the cluster runs 24.8.
+# Unexposed: ClusterIP only, reached via kubectl port-forward (VPN deferred).
+# No plaintext secrets here — every credential is a secretKeyRef/existingSecret
+# into Secret/langfuse-stores (created by scripts/20-langfuse.sh).
+
+langfuse:
+  image:
+    tag: "3.224.1"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 768Mi
+    limits:
+      memory: 2Gi
+  features:
+    telemetryEnabled: false
+    signUpDisabled: true
+  salt:
+    secretKeyRef:
+      name: langfuse-stores
+      key: salt
+  encryptionKey:
+    secretKeyRef:
+      name: langfuse-stores
+      key: encryption-key
+  nextauth:
+    url: http://localhost:3000
+    secret:
+      secretKeyRef:
+        name: langfuse-stores
+        key: nextauth-secret
+  ingress:
+    enabled: false
+  # Headless initialization: mint one org/project/user with FIXED API keys so the
+  # LiteLLM langfuse callback can authenticate without a manual UI signup.
+  additionalEnv:
+    # Langfuse web init (Next.js + prisma + MCP registration) exceeds Node's
+    # cgroup-derived default heap (~512MB at a 1Gi limit) and OOM-crash-loops.
+    # Give V8 an explicit larger old-space ceiling under the 2Gi container limit.
+    - name: NODE_OPTIONS
+      value: "--max-old-space-size=1536"
+    - name: LANGFUSE_INIT_ORG_ID
+      value: fleet-local
+    - name: LANGFUSE_INIT_ORG_NAME
+      value: Fleet Local
+    - name: LANGFUSE_INIT_PROJECT_ID
+      value: fleet-local
+    - name: LANGFUSE_INIT_PROJECT_NAME
+      value: Fleet Local
+    - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+      value: pk-lf-fleet-local
+    - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-stores
+          key: langfuse-secret-key
+    - name: LANGFUSE_INIT_USER_EMAIL
+      value: admin@fleet.local
+    - name: LANGFUSE_INIT_USER_NAME
+      value: Fleet Admin
+    - name: LANGFUSE_INIT_USER_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-stores
+          key: langfuse-admin-password
+
+postgresql:
+  deploy: false
+  host: flexprice-postgresql.flexprice.svc.cluster.local
+  port: 5432
+  auth:
+    username: flexprice
+    database: langfuse
+    existingSecret: langfuse-stores
+    secretKeys:
+      userPasswordKey: postgres-password
+  migration:
+    autoMigrate: true
+
+redis:
+  deploy: false
+  host: flexprice-redis-master.flexprice.svc.cluster.local
+  port: 6379
+  tls:
+    enabled: false
+  auth:
+    # flexprice redis has no requirepass; omit user/password from the URL.
+    username: null
+    password: null
+    existingSecret: ""
+    existingSecretPasswordKey: ""
+    database: 2
+  cluster:
+    enabled: false
+  sentinel:
+    enabled: false
+
+clickhouse:
+  deploy: false
+  host: flexprice-clickhouse.flexprice.svc.cluster.local
+  httpPort: 8123
+  nativePort: 9000
+  database: langfuse
+  crdCheck: false
+  auth:
+    username: langfuse
+    existingSecret: langfuse-stores
+    existingSecretKey: clickhouse-password
+  migration:
+    autoMigrate: true
+    ssl: false
+  cluster:
+    enabled: false
+  keeper:
+    enabled: false
+
+s3:
+  deploy: false
+  storageProvider: s3
+  bucket: langfuse
+  region: us-east-1
+  endpoint: http://rustfs.ate-system.svc.cluster.local:9000
+  forcePathStyle: true
+  accessKeyId:
+    secretKeyRef:
+      name: langfuse-stores
+      key: s3-access-key
+  secretAccessKey:
+    secretKeyRef:
+      name: langfuse-stores
+      key: s3-secret-key

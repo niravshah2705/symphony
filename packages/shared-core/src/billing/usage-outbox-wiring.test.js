@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 // on, and no other file in the suite can see it. A separate process per test file
 // is what makes that possible — flipping CONFIG afterwards would prove nothing.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-outbox-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.STORE_BACKEND = 'file';
 process.env.USD_TO_INR = '100';
 process.env.FLEET_ORG_ID = 'org-wire';

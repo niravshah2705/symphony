@@ -33,13 +33,13 @@
  *     not a reason to credit the old first-party balance.
  */
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const store = require('@ai-fleet/shared-core/store');
-const log = require('@ai-fleet/shared-core/logger');
-const gst = require('@ai-fleet/shared-core/billing/gst');
-const credits = require('@ai-fleet/shared-core/billing/credits');
-const moneyWire = require('@ai-fleet/shared-core/billing/money-wire');
-const { createFlexpriceClient } = require('@ai-fleet/shared-core/billing/flexprice-client');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const store = require('@software-factory/shared-core/store');
+const log = require('@software-factory/shared-core/logger');
+const gst = require('@software-factory/shared-core/billing/gst');
+const credits = require('@software-factory/shared-core/billing/credits');
+const moneyWire = require('@software-factory/shared-core/billing/money-wire');
+const { createFlexpriceClient } = require('@software-factory/shared-core/billing/flexprice-client');
 const providers = require('./payment-providers');
 
 const CURRENCY = 'INR';
@@ -216,7 +216,7 @@ async function settle({ orderId, orgId: callerOrgId, actor = 'unknown' } = {}, d
   const env = deps.env || process.env;
   const now = deps.now || (() => new Date().toISOString());
   const logImpl = deps.log || log;
-  const gateImpl = deps.gate || require('@ai-fleet/shared-core/billing/gate');
+  const gateImpl = deps.gate || require('@software-factory/shared-core/billing/gate');
 
   const key = String(orderId || '').trim();
   if (!key) throw new SettleError(400, 'missing_order_id', 'orderId is required.');

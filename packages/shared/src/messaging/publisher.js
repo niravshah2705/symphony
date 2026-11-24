@@ -1,4 +1,4 @@
-// Re-export shim: real implementation moved to @ai-fleet/shared-core.
-// Kept so existing '@ai-fleet/shared/messaging/publisher' imports and internal
+// Re-export shim: real implementation moved to @software-factory/shared-core.
+// Kept so existing '@software-factory/shared/messaging/publisher' imports and internal
 // relative requires keep resolving after the shared-core split.
-module.exports = require('@ai-fleet/shared-core/messaging/publisher');
+module.exports = require('@software-factory/shared-core/messaging/publisher');

@@ -131,6 +131,29 @@ test('agent nodes carry kagent fields through workflow normalization', () => {
   assert.deepEqual(node.kagentSpec.env, [{ name: 'TZ', value: 'UTC' }]);
 });
 
+/**
+ * The family vocabulary is registry/model-families.json, so the write path has
+ * two jobs and only one of them is rejection: keep anything that can name a
+ * family (listed or not, so deleting a row cannot rewrite saved graphs), and
+ * drop what could never be one.
+ */
+test('model family validation reads the registry file, not a hardcoded list', () => {
+  const wf = model.normalizeWorkflowV2({
+    id: 'wf', name: 'graph',
+    nodes: [
+      agentNode({ id: 'listed', modelFamily: '  Anthropic  ' }),
+      agentNode({ id: 'unlisted', modelFamily: 'mistral' }),
+      agentNode({ id: 'garbage', modelFamily: 'not a family!' }),
+    ],
+    edges: [],
+  });
+  assert.equal(wf.nodes.find((node) => node.id === 'listed').modelFamily, 'anthropic');
+  assert.equal(wf.nodes.find((node) => node.id === 'unlisted').modelFamily, 'mistral');
+  assert.equal(wf.nodes.find((node) => node.id === 'garbage').modelFamily, '');
+  assert.equal(model.MODEL_FAMILIES, undefined, 'the vocabulary must not come back as a constant');
+  assert.ok(model.modelFamilies().some((family) => family.id === 'anthropic'), 'the file is the source of the list');
+});
+
 test('migrateV1ToV2 backfills substrate defaults on v1 agent nodes', () => {
   const migrated = model.migrateV1ToV2({
     id: 'wf1', name: 'Legacy', updatedAt: 'not-a-date',

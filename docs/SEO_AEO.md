@@ -290,9 +290,9 @@ engines describe one entity rather than three.
 
 1. **The brand was in none of the strings that matter.** The www root title was
    `ADLC - Agentic Development Life Cycle` and the platform root
-   `ADLC — Agentic Development Life Cycle | AI Fleet`. Neither contains
+   `ADLC — Agentic Development Life Cycle | Software Factory`. Neither contains
    "Archagentix"; `og:site_name` was `ADLC`. A brand query has nothing to match.
-   Three names competed for one entity (Archagentix / ADLC / AI Fleet), and the
+   Three names competed for one entity (Archagentix / ADLC / Software Factory), and the
    benchmarks page spelled it a fourth way (`ArchAgentix`).
 2. **The app host opted out of the index.** `platform.archagentix.com/` shipped
    `rel="canonical" href="https://www.archagentix.com/"` — that tag instructs
@@ -311,34 +311,114 @@ engines describe one entity rather than three.
 |---|---|
 | Brand-first metadata | Every one of the 16 pages under `public/` now includes "Archagentix" in `<title>` (asserted site-wide, and the two surfaces a brand search must win — `public/index.html` and `public/adlc/index.html` — lead with it). Landing `og:site_name` → `Archagentix`; visible header wordmark `ADLC` → `Archagentix`; `aria-label` matched. |
 | Platform root | `public/index.html` self-canonicalises to `https://platform.archagentix.com/`, `og:url` with it, `application-name` `Archagentix`. Its `@graph` `WebSite`/`SoftwareApplication`/`DefinedTerm` now carry platform `@id`s, and reference — never redeclare — the Organization. |
-| Rendered title | `public/js/app.js` `ADLC_BRAND_TITLE` → `Archagentix — ADLC (Agentic Development Life Cycle)`. The static head alone would have been worthless: `app.js:202` overwrites `document.title` on render and Googlebot renders JS. The agent (root) view now renders exactly the static `<title>` instead of appending `| AI Fleet`. `e2e/agent-jobs.spec.js` updated in the same commit. |
+| Rendered title | `public/js/app.js` `ADLC_BRAND_TITLE` → `Archagentix — ADLC (Agentic Development Life Cycle)`. The static head alone would have been worthless: `app.js:202` overwrites `document.title` on render and Googlebot renders JS. The agent (root) view now renders exactly the static `<title>` instead of appending `| Software Factory`. `e2e/agent-jobs.spec.js` updated in the same commit. |
 | Second sitemap | New `public/sitemap-platform.xml` (app root + `/archagentix/`). A sitemap may only list URLs on the host that serves it, so the www sitemap stayed www-only. `public/robots.txt` now advertises both. The platform sitemap is deliberately **not** in `DISCOVERY_FILES` — `validateTree` only inspects `outDir/sitemap.xml`, so a leak would publish platform URLs on www silently; `scripts/seo-archagentix.test.js` pins both the absence and the disjointness. |
 | Benchmarks page | Full head on `public/archagentix/index.html`: brand spelling fixed, self-canonical, 155-char description, `robots` index/follow, `og:*`, `WebPage` + `ItemList` graph that references the www Organization by `@id`. |
 | Entity graph | One Organization node, `@id https://www.archagentix.com/#organization`, present on all 7 marketing surfaces and referenced from platform. www root gained a `WebSite` node (`www#website`) so `SoftwareApplication.isPartOf` resolves instead of declaring an anonymous duplicate. `sameAs` (GitHub) + `alternateName` added. |
 | Topical keywords | `agentic development`, `software factory`, `Human AI Development`, `Centaur Developer`, `AGI` on `SoftwareApplication.keywords` (schema.org), plus 1–2 natural occurrences in visible copy on the landing lede, `/adlc/brief/` canonical definition, and `/adlc/blog/getting-started/`. **Not** a `<meta name="keywords">` tag — asserted absent, since it is a spam signal. |
 | Sitelink anchors | Footer Explore link relabelled `Try now` → `Archagentix Platform` on all 14 marketing pages. Header/body CTAs keep "Try now" (conversion copy); brand anchor text is what Google uses for brand sitelinks. |
-| AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / AI Fleet as three products. |
+| AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / Software Factory as three products. |
 
-## Known issue, deliberately out of scope: the apex domain
+## Resolved (2026-11-24): the apex domain
 
-`https://archagentix.com` (no `www`) still answers `200` from **Hostinger Apache**
-(`server: Apache`, ~8.5 KB of the pre-GCP static tree) — old content, outside this
-repo, served by a second host. Google therefore sees two competing copies of the
-bare brand domain, and the bare domain is exactly what people type. No change in
-this repo fixes it:
+`https://archagentix.com` answered `200` for every path from **Hostinger Apache**
+(`server: Apache`, the pre-GCP static tree) — old content, outside this repo, served
+by a second host, while only its `/` redirected. Google therefore saw two competing
+copies of the bare brand domain, which is exactly what people type.
 
-1. Point the apex at Firebase or issue a registrar-level 301 `archagentix.com` →
-   `https://www.archagentix.com` (the `www` CNAME cutover above already moves the
-   `www` host; the apex A/AAAA records are the remaining part).
-2. Until then, treat any apex appearance in the SERP as expected leakage, not a
-   regression in the on-page work.
+Closed at the host, not in this repo: every apex path now issues a single-hop
+path-preserving `301` to `https://www.archagentix.com` — including `/robots.txt`
+and `/sitemap.xml`, so both hosts advertise the same policy — and unknown paths
+redirect and then `404` on `www` rather than returning the old Apache parking page
+(which injected a plain-`http` third-party script). `www` canonicals are
+self-referencing, so no canonical chain survives the cutover.
+
+Remaining, and still out of reach from this repo: the Apache `301` responses carry
+no `Strict-Transport-Security`, and `www`'s HSTS omits `includeSubDomains; preload`.
+Browsers do not apply HSTS from a redirect response, so the apex and its
+subdomains stay uncovered until the header is set at Hostinger (or the apex moves
+behind Firebase Hosting, which would need a new hosting target here —
+`scripts/marketing-site.test.js` currently pins that the `www` target has no
+`redirects` block).
+
+## Content Security Policy
+
+All three Firebase Hosting targets publish a CSP from their `/**` rule in
+`firebase.json`, and `scripts/marketing-site.test.js` compares each policy against
+the tree that target actually serves. Three things make that harder than it looks:
+
+1. **Markup and app JS** — `<script src>`, `<link rel=stylesheet>`, `<img src>`,
+   and the JS that injects vendor SDKs at runtime. A third-party `<script>` also
+   fetches its own `sourceMappingURL`, which `connect-src` governs, so every
+   script/style host must appear there too.
+2. **The vendored Firebase auth bundles** — these load code no page references, so
+   scan 1 cannot see it. `firebase-auth.js` fetches gapi from
+   `https://apis.google.com/js/api.js` on the sign-in path, which had to be added
+   to `script-src` and `frame-src` on `app` and `secrets` after it was reported as
+   a blocked request.
+3. **A second policy in the document itself.** `secrets/index.html` also ships
+   `<meta http-equiv="Content-Security-Policy">`, and the browser enforces the
+   header *and* the meta: a source allowed by only one is still blocked. That meta
+   declared `script-src 'self'`, so the gapi fix in the header could not have
+   reached it. `effectiveAllows()` in the test therefore intersects the two and
+   every assertion runs against the result; a header-only check is what let the
+   previous two fixes ship incomplete.
+
+Origins in the header that appear in no file at all, because they are built at
+runtime from the Firebase config: the popup flow frames
+`${authDomain}/__/auth/iframe`, which is `adlc-9e72f.firebaseapp.com` (the project id
+comes from `.firebaserc`, and the test derives the host from it), and the GIS client
+loads its own stylesheet from `https://accounts.google.com/gsi/style`. Both are pinned
+in `the sign-in flow can frame the auth handler and load the GIS stylesheet`.
+
+| Target | Host | `script-src` | Why |
+|---|---|---|---|
+| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. No sign-in, so no Google code. |
+| `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://apis.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, the gapi bundle Firebase auth loads, GA4, and the two payment SDKs — all injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
+| `secrets` | secrets.archagentix.com | `'self' https://apis.google.com`, in the header *and* the meta | Serves only local code plus the gapi bundle its vendored `firebase-auth-compat.js` loads for `signInWithPopup`. Still no `'unsafe-inline'`: verified to contain no inline `<script>`. |
+
+Four decisions worth knowing about:
+
+- **`https://www.google.com` is deliberately *not* in any `script-src`.** The same
+  auth bundles also reference `recaptcha/api.js` and `enterprise.js`, but neither
+  app constructs a `RecaptchaVerifier`, so that path is unreachable and the origin
+  stays closed — a page holding session tokens should not hand Google open-ended
+  script execution for code this product never enters. The test asserts both
+  halves: if a `RecaptchaVerifier` is ever added it fails and names the two
+  directives to change.
+- **No `Permissions-Policy` on the `app` target.** The platform records audio and
+  screen share (`public/js/views/calls.js` uses `getUserMedia`, `getDisplayMedia`,
+  `MediaRecorder`), so the marketing target's `microphone=()` would break agent
+  calls if copied across. The test asserts this if the header is ever added.
+- **`'unsafe-inline'` is still required for script and style** on `www` and `app`,
+  because the page shells contain inline blocks and `public/index.html` has an
+  `onload` attribute on its print-media stylesheet. The policies therefore constrain
+  *where* code can come from and where it can send data (`connect-src` is closed to
+  the gateway, Google, and the two payment vendors), but they do not stop an
+  injected inline script. Removing `'unsafe-inline'` means hashing or externalising
+  those blocks first.
+- **`https://*.firebaseapp.com` is a wildcard, not the project's own host.** Pinning
+  `adlc-9e72f.firebaseapp.com` would be narrower, and the Identity Platform
+  `authorized_domains` list in `deploy/gcp/terraform/firebase.tf` does exactly that.
+  The CSP keeps the wildcard because `firebase_auth_domain`
+  (`deploy/gcp/terraform/variables.tf`) is an override: a deployment that sets it
+  frames a host no constant in `firebase.json` could name, and a silent sign-in
+  failure is the worse outcome. Framing a cross-origin page grants it no script
+  access to this origin, and `connect-src` already admits the strictly larger
+  `https://*.run.app` and `https://*.googleapis.com`.
+
+`public/contact/index.html` renders its QR code from `https://api.qrserver.com`, so
+that host is in `img-src` on both hosts serving the contact page. It is a
+third-party request that carries the encoded URL, and it lets that host log every
+contact-page view — generating the QR locally (the page already has the data string)
+would remove both the CSP allowance and the leak.
 
 ## Verification
 
 ```bash
 node --test scripts/seo-archagentix.test.js scripts/seo-discovery.test.js \
   scripts/marketing-site.test.js public/adlc/adlc-static.test.mjs \
-  public/archagentix/archagentix-static.test.mjs     # 34 pass
+  public/archagentix/archagentix-static.test.mjs     # 46 pass, with marketing/ built first
 node scripts/build-marketing-site.js && node scripts/build-marketing-site.js --check
 xmllint --noout public/sitemap.xml public/sitemap-platform.xml
 for f in $(find public -name index.html); do grep -q '<title>[^<]*Archagentix' $f || echo "MISS $f"; done

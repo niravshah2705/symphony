@@ -10,7 +10,7 @@ const { pathToFileURL } = require('url');
 const { CONFIG } = require('../config');
 const { SENTINEL_TOKEN, PROJECT_CONTEXT_HEADER, projectEgressHeaders } = require('../egress');
 const { currentWorkspaceContext } = require('../store/workspace-context');
-const { copySecretFreeJson, isSecretFieldName } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { copySecretFreeJson, isSecretFieldName } = require('@software-factory/shared-core/pipeline/contracts');
 
 const execFileP = promisify(execFile);
 
@@ -1235,7 +1235,7 @@ class RepositoryBroker {
     await this.#workspace(['config', '--local', '--unset-all', 'http.extraHeader'], { allowFailure: true });
     await this.#workspace(['config', '--local', '--unset-all', 'http.proxy'], { allowFailure: true });
     await this.#workspace(['config', '--local', '--unset-all', 'remote.origin.proxy'], { allowFailure: true });
-    await this.#workspace(['config', 'user.name', 'AI Fleet Agent'], { allowFailure: true });
+    await this.#workspace(['config', 'user.name', 'Software Factory Agent'], { allowFailure: true });
     await this.#workspace(['config', 'user.email', 'ai-fleet@localhost'], { allowFailure: true });
     const gitDir = fs.realpathSync(path.join(this.workDir, '.git'));
     const infoDir = path.join(this.workDir, '.git', 'info');

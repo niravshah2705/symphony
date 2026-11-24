@@ -2,7 +2,7 @@
 
 /**
  * Express must know the number of trusted hops before req.ip is used for the
- * advisory locale lookup. AI Fleet's direct Cloud Run topology has exactly one
+ * advisory locale lookup. Software Factory's direct Cloud Run topology has exactly one
  * proxy hop. An explicit override is useful for local ingress tests; invalid or
  * zero values deliberately disable proxy trust.
  */

@@ -282,7 +282,7 @@ test('substrate-actor: an unsigned token is refused when the JWKS endpoint answe
   // Phase 0 end to end: the real verifier + the real cache-shaped seam. keys: [] used
   // to reach verifyActorJwt as "nothing to check against" and the run was accepted.
   const router = createSubstrateActorRouter({
-    verify: require('@ai-fleet/shared/agent/substrate-runner').verifyActorJwt,
+    verify: require('@software-factory/shared/agent/substrate-runner').verifyActorJwt,
     runner: async () => ({ finalText: 'never', messages: [] }),
     jwks: async () => ({ keys: [] }),
   });
@@ -300,7 +300,7 @@ test('substrate-actor: an unsigned token is refused when the JWKS endpoint answe
 
 test('substrate-actor: a JWKS that yields nothing is a 503, not a pass and not a caller 401', async () => {
   const router = createSubstrateActorRouter({
-    verify: require('@ai-fleet/shared/agent/substrate-runner').verifyActorJwt,
+    verify: require('@software-factory/shared/agent/substrate-runner').verifyActorJwt,
     runner: async () => ({ finalText: 'never', messages: [] }),
     jwks: async () => { const e = new Error('no usable signing keys'); e.code = 'jwks_empty'; throw e; },
   });
@@ -321,7 +321,7 @@ test('substrate-actor: binds the caller trace so actor logs and spans join the r
   // the inbound traceparent is the ONLY thing that connects its log lines and
   // spans to the run the user asked for.
   const TP = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
-  const log = require('@ai-fleet/shared/logger');
+  const log = require('@software-factory/shared/logger');
   let seen = null;
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
@@ -344,7 +344,7 @@ test('substrate-actor: binds the caller trace so actor logs and spans join the r
 });
 
 test('substrate-actor: an unusable traceparent is dropped, not carried into the logs', async () => {
-  const log = require('@ai-fleet/shared/logger');
+  const log = require('@software-factory/shared/logger');
   let seen = null;
   const router = createSubstrateActorRouter({
     verify: async () => ({ valid: true, claims: { sub: 'spiffe://cluster.local/ns/ate/sa/a1' } }),
@@ -433,7 +433,7 @@ test('substrate-actor: real verifyActorJwt accepts a well-signed RS256 token', a
   });
   const router = createSubstrateActorRouter({
     // Use the real substrate-runner verify + a fixture getJwks
-    verify: require('@ai-fleet/shared/agent/substrate-runner').verifyActorJwt,
+    verify: require('@software-factory/shared/agent/substrate-runner').verifyActorJwt,
     runner: async () => ({ finalText: 'ok', messages: [] }),
     jwks: async () => ({ keys: [jwk] }),
   });
@@ -459,7 +459,7 @@ test('substrate-actor: real verifyActorJwt rejects a tampered signature', async 
   const [h, p] = token.split('.');
   const tamperedSig = 'A'.repeat(43);
   const router = createSubstrateActorRouter({
-    verify: require('@ai-fleet/shared/agent/substrate-runner').verifyActorJwt,
+    verify: require('@software-factory/shared/agent/substrate-runner').verifyActorJwt,
     runner: async () => ({ finalText: 'never' }),
     jwks: async () => ({ keys: [jwk] }),
   });

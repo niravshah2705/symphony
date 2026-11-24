@@ -1,0 +1,55 @@
+# Local kind verification variant (name it litellm-local.yaml outside docs).
+# Points LiteLLM at the FlexPrice stack's own postgres/redis and mounts the
+# Bridge A callback. LOCAL DEV ONLY: real deployments must source keys from
+# secrets (db.secret / envSecrets), never plaintext values files.
+image:
+  tag: lts
+  pullPolicy: IfNotPresent
+
+db:
+  useExisting: true
+  deployStandalone: false        # without this the chart rolls its own postgres
+  endpoint: flexprice-postgresql.flexprice.svc.cluster.local
+  database: litellm              # create it first: psql -U flexprice -d flexprice -c 'CREATE DATABASE litellm'
+  secret:
+    name: litellm-postgres       # {username, password} of the flexprice postgres
+    usernameKey: username
+    passwordKey: password
+
+redis:
+  enabled: false
+
+envVars:
+  REDIS_HOST: flexprice-redis-master.flexprice.svc.cluster.local
+  REDIS_PORT: "6379"
+  PYTHONPATH: /callbacks
+  FLEXPRICE_API_URL: http://flexprice-api.flexprice.svc.cluster.local  # cross-namespace needs the FQDN
+  FLEXPRICE_API_KEY: <local private key>          # x-api-key
+  FLEXPRICE_ENVIRONMENT_ID: "<environment id>"    # X-Environment-ID
+
+volumes:
+  - name: callbacks
+    configMap:
+      name: litellm-callback     # kubectl create configmap litellm-callback --from-file=flexprice_callback.py=./flexprice_callback.py
+
+volumeMounts:
+  - name: callbacks
+    mountPath: /callbacks
+    readOnly: true
+
+replicaCount: 1
+autoscaling:
+  enabled: false
+
+proxy_config:
+  model_list:
+    - model_name: mock-gpt       # local echo model — no external provider key needed
+      litellm_params:
+        model: openai/mock-gpt
+        api_base: http://llm-mock:8000/v1
+        api_key: mock-key
+  litellm_settings:
+    drop_params: true
+    callbacks: flexprice_callback.flexprice_logger
+  general_settings:
+    master_key: os.environ/PROXY_MASTER_KEY

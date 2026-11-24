@@ -16,8 +16,16 @@ const read = (...parts) => fs.readFileSync(path.join(PUBLIC, ...parts), 'utf8');
 const CANONICAL_ORIGIN = 'https://www.archagentix.com';
 const PLATFORM_URL = 'https://platform.archagentix.com/';
 
-const MARKETING_PAGES = ['pricing', 'about', 'careers', 'newsroom', 'contact'];
+const { PUBLISHED_PAGES } = require('./build-marketing-site.js');
+
+const MARKETING_PAGES = PUBLISHED_PAGES;
 const COMPANY_LINKS = ['About Company', 'Careers', 'Newsroom', 'Contact Us'];
+// A card acquirer crawls these four documents plus About and Pricing; a hash route
+// into the SPA is invisible to a crawler that does not run JavaScript.
+const POLICY_PAGES = ['terms', 'privacy', 'refund-policy', 'shipping-policy'];
+const POLICY_LINKS = ['Terms of Service', 'Privacy Policy', 'Refund &amp; Cancellation', 'Delivery Policy'];
+const SUPPORT_EMAIL = 'support@archagentix.com';
+const SUPPORT_PHONE = '+91 93705 80836';
 
 const locsFrom = (source) =>
   [...source.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
@@ -89,9 +97,11 @@ test('Organization JSON-LD is present and exact on marketing surfaces', () => {
     '@type': 'Organization',
     name: 'Archagentix Private Limited',
     url: `${CANONICAL_ORIGIN}/`,
-    email: 'archagentix@gmail.com',
+    email: 'support@archagentix.com',
+    telephone: '+91-9370580836',
     address: {
       '@type': 'PostalAddress',
+      streetAddress: 'Hinjewadi IT Park',
       addressLocality: 'Pune',
       addressRegion: 'Maharashtra',
       postalCode: '411057',
@@ -249,8 +259,15 @@ test('footer mirrors the platform footer and carries the company sections', () =
       assert.ok(footer.includes(label), `${page} footer missing ${label}`);
     }
     assert.match(footer, /Archagentix Private Limited/);
-    assert.match(footer, /href="https:\/\/www\.archagentix\.com\/#\/privacy"/, `${page} footer missing Privacy`);
-    assert.match(footer, /href="https:\/\/www\.archagentix\.com\/#\/terms"/, `${page} footer missing Terms`);
+    assert.match(footer, /Hinjewadi IT Park, Pune 411057, Maharashtra, India/, `${page} footer missing the registered office`);
+    assert.ok(footer.includes(SUPPORT_PHONE), `${page} footer missing the support phone`);
+    assert.ok(footer.includes(SUPPORT_EMAIL), `${page} footer missing the support email`);
+    for (let i = 0; i < POLICY_PAGES.length; i += 1) {
+      assert.ok(
+        footer.includes(`href="/${POLICY_PAGES[i]}/">${POLICY_LINKS[i]}</a>`),
+        `${page} footer missing ${POLICY_LINKS[i]}`,
+      );
+    }
   }
 
   // The SPA (platform) footer gains the same company sections.
@@ -260,6 +277,14 @@ test('footer mirrors the platform footer and carries the company sections', () =
     assert.ok(spaFooter.includes(label), `platform footer missing ${label}`);
   }
   assert.match(spaFooter, /aria-label="Company"/);
+  // Inside the signed-in app the documents render in-place, so the footer uses the
+  // hash routes; the crawler-facing static pages carry the same four documents.
+  for (const route of ['terms', 'privacy', 'refund', 'shipping']) {
+    assert.ok(spaFooter.includes(`href="#/${route}"`), `platform footer missing #/${route}`);
+  }
+  assert.match(spaFooter, /Archagentix Private Limited/);
+  assert.match(spaFooter, /Hinjewadi IT Park, Pune 411057/);
+  assert.ok(spaFooter.includes(SUPPORT_PHONE), 'platform footer missing the support phone');
 });
 
 test('the brand query has a landing page: every public title names Archagentix', () => {
@@ -267,7 +292,10 @@ test('the brand query has a landing page: every public title names Archagentix',
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.isDirectory()) walk(path.join(dir, entry.name));
-      else if (entry.name.endsWith('.html')) pages.push(path.relative(PUBLIC, path.join(dir, entry.name)));
+      else if (entry.name.endsWith('.html') && !/^google[a-z0-9]+\.html$/.test(entry.name)) {
+        // Search Console token files are verbatim bytes; adding markup breaks verification.
+        pages.push(path.relative(PUBLIC, path.join(dir, entry.name)));
+      }
     }
   };
   walk(PUBLIC);

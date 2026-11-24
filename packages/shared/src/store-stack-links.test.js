@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 // resolved from this env var at module load. Never touch the real data/store.json
 // (it holds live secrets).
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'store-stack-links-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
 const store = require('./store');
 

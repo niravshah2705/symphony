@@ -1,5 +1,5 @@
 # =============================================================================
-# AI Fleet — GCP "no-cost" deployment (Terraform)
+# Software Factory — GCP "no-cost" deployment (Terraform)
 # =============================================================================
 # Scale-to-zero Cloud Run services + a Cloud Run Job, Pub/Sub, Cloud Scheduler,
 # Firestore, Secret Manager, Artifact Registry, and a public GCS bucket for the

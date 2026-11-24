@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { workspaceOrganizationKey } = require('@ai-fleet/shared-core/store/workspace-context');
+const { workspaceOrganizationKey } = require('@software-factory/shared-core/store/workspace-context');
 const pg = require('./postgres-backend');
 
 function record(overrides = {}) {

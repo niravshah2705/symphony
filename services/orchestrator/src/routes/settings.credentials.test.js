@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const store = require('@ai-fleet/shared/store');
+const store = require('@software-factory/shared/store');
 
 function routeHandler(router, method, path) {
   const layer = router.stack.find((candidate) =>

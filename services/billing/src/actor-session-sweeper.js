@@ -1,10 +1,10 @@
 'use strict';
 
-const store = require('@ai-fleet/shared-core/store');
-const log = require('@ai-fleet/shared-core/logger');
-const { settleOrphans, toEpochSeconds, ORPHAN_GRACE_SECONDS } = require('@ai-fleet/shared-core/billing/substrate-session');
-const { finishActorSession } = require('@ai-fleet/shared-core/billing/actor-sessions');
-const { createActorMetrics } = require('@ai-fleet/shared-core/otel/actor-metrics');
+const store = require('@software-factory/shared-core/store');
+const log = require('@software-factory/shared-core/logger');
+const { settleOrphans, toEpochSeconds, ORPHAN_GRACE_SECONDS } = require('@software-factory/shared-core/billing/substrate-session');
+const { finishActorSession } = require('@software-factory/shared-core/billing/actor-sessions');
+const { createActorMetrics } = require('@software-factory/shared-core/otel/actor-metrics');
 
 async function sweepActorSessions(deps = {}) {
   const db = deps.store || store;

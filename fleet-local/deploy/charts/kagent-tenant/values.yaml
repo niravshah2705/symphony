@@ -1,0 +1,134 @@
+# Values for one tenant's kagent execution surface.
+#
+# A tenant is a Helm release, a name prefix, its own credentials Secret and its
+# own snapshot root — not a Kubernetes namespace. See README.md for what that
+# does and does not isolate.
+
+# Namespace for every object this chart renders.
+#
+# Harness.spec.substrate.workerPoolRef is a LocalObjectReference resolved in the
+# Harness's own namespace (kagent go/core/internal/translator/compiler.go:169),
+# so the referenced WorkerPool must live here too. Empty means the release
+# namespace.
+#
+# Leaving "kagent" is the supported configuration: the platform install creates
+# the one shared pool there. If you set this to a tenant namespace, you must
+# also create a WorkerPool in it — no chart can verify that from here, so
+# NOTES.txt prints the check to run.
+namespace: kagent
+
+tenant:
+  # RFC1123 label, and also a Substrate snapshot path segment: only
+  # [a-z0-9_-] are legal there and "atespaces" is reserved, both checked in
+  # _helpers.tpl.
+  id: acme
+
+  # Root for this tenant's actor snapshots. The scheme MUST match the object
+  # store backend Substrate runs with — "s3://" for the S3-compatible RustFS
+  # (kind), "gs://" for GCS (GKE). Substrate reads a gs:// URI on an S3 backend
+  # as someone else's bucket and nothing errors until a snapshot is fetched.
+  # Trailing slash optional; Substrate appends
+  # /atespaces/<atespace>/actors/<uid>/snapshots/<name>.
+  snapshotRoot: "s3://ate-snapshots/acme"
+
+# The shared WorkerPool, in `namespace`.
+workerPool:
+  name: kagent-default
+
+# Model endpoint defaults, applied to any `models` entry that leaves the
+# matching field empty. Points at LiteLLM by default so a tenant never holds an
+# OpenRouter key; the Secret is referenced by name only and is created outside
+# this chart.
+litellm:
+  baseUrl: "http://litellm.litellm.svc.cluster.local:4000/v1"
+  # Anthropic-wire root (NO /v1 — the SDK appends /v1/messages itself). Used by
+  # models[].provider: Anthropic, i.e. the claude harness path.
+  anthropicBaseUrl: "http://litellm.litellm.svc.cluster.local:4000"
+  apiKeySecret: litellm-secrets
+  apiKeySecretKey: LITELLM_MASTER_KEY
+
+# ModelConfig objects. `name` is suffixed onto <tenant.id>-model-.
+models:
+  - name: openai-gpt-4o-mini
+    provider: OpenAI
+    # The LiteLLM alias, not the provider's raw model id.
+    model: openai/gpt-4o-mini
+    # OpenAI wire format. The CRD enum is exactly "responses" or
+    # "chatCompletions" (camelCase — "chat_completions" is rejected), and the
+    # API default is chatCompletions. The codex runtime requires "responses".
+    apiFormat: responses
+    stream: true
+    # Per-model overrides of the litellm block; empty inherits it.
+    baseUrl: ""
+    apiKeySecret: ""
+    apiKeySecretKey: ""
+    # Extra headers sent upstream (OpenRouter attribution, etc.).
+    defaultHeaders: {}
+
+# Harness objects: how an agent is allowed to run. `type` is exactly one of
+# kagent | codex | claude | byo — the CRD enforces ExactlyOneOf.
+harnesses:
+  - name: app
+    type: kagent
+    # workload.image overrides the built-in runtime image for any adapter, and
+    # must be digest-pinned (the CRD pattern is
+    # `^[^[:space:]@]+@sha256:[a-f0-9]{64}$`). Empty uses the release default.
+    # command and args are accepted by kagent and byo only, and byo requires
+    # both image and command.
+    image: ""
+    command: []
+    args: []
+    # kagent adapter only. Passed through verbatim to
+    # Harness.spec.kagent.memory / .compaction, so the CRD's own CEL rules
+    # validate them rather than a second copy here. Because this is free-form,
+    # any modelConfigRef inside must already carry the tenant prefix, e.g.
+    # `acme-model-embeddings`.
+    memory: {}
+    compaction: {}
+    # Literal runtime env vars passed to Harness.spec.env ({name, value} pairs).
+    # The fleet uses this to turn on W3C propagation inside the actor so the
+    # caller's baggage (fleet_org_id/fleet_project_id/fleet_user_id) reaches
+    # LiteLLM: OTEL_PROPAGATORS=tracecontext,baggage plus an OTLP endpoint.
+    env: []
+
+# RemoteMCPServer objects: MCP servers the templates may bind. `name` is
+# suffixed onto <tenant.id>-mcp- and referenced from templates[].mcp below.
+# The fleet binds the shared webfetch server (ns kagent) so agents on any
+# harness can fetch URLs; streamable-HTTP is the only protocol all three
+# runtimes speak (codex/claude do not do SSE).
+mcp: []
+  # - name: webfetch
+  #   url: http://webfetch.kagent.svc.cluster.local:8087/mcp
+  #   protocol: STREAMABLE_HTTP   # default; SSE also exists
+  #   timeout: 30s
+
+# AgentTemplate objects: what an agent does. `modelConfig` is an unprefixed
+# name from `models` above; every other key below is passed through verbatim to
+# AgentTemplateSpec, so follow the CRD for their shape.
+templates:
+  - name: assistant
+    modelConfig: openai-gpt-4o-mini
+    description: ""
+    systemPrompt: |
+      You are a concise, helpful assistant.
+    # Same-namespace ConfigMap reference: {name: …, key: …}
+    systemPromptFrom: {}
+    outputSchema: {}
+    outputSchemaFrom: {}
+    outputSchemaStrict: false
+    tools: []
+    # Unprefixed names from `mcp` above; each renders one tools[].mcp entry.
+    mcp: []
+    skills: []
+    plugins: []
+
+# Agent objects: pair a template with a harness. Both refs name entries above
+# and are validated at render time.
+agents:
+  - name: assistant
+    template: assistant
+    harness: app
+
+# Labels merged onto every object, in addition to the standard ones and
+# kagent.dev/tenant.
+commonLabels: {}

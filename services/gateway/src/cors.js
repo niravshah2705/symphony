@@ -1,6 +1,6 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 
 /**
  * CORS for the GCS-hosted SPA calling the gateway API cross-origin.
@@ -20,7 +20,7 @@ function createCorsMiddleware(allowed = CONFIG.GCP.spaOrigins) {
       res.set('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.set(
         'Access-Control-Allow-Headers',
-        'Authorization,Content-Type,X-AI-Fleet-Organization-Id,X-AI-Fleet-Project-Id,X-AI-Fleet-Llm-Gateway,X-AI-Fleet-Notifications,X-AI-Fleet-Deprecated'
+        'Authorization,Content-Type,If-Match,X-AI-Fleet-Organization-Id,X-AI-Fleet-Project-Id,X-AI-Fleet-Llm-Gateway,X-AI-Fleet-Notifications,X-AI-Fleet-Deprecated'
       );
       res.set('Access-Control-Max-Age', '600');
     }

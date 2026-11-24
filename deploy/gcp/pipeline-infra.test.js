@@ -473,7 +473,7 @@ test('OpenSWE upstream is trusted proxy-only deployment configuration', () => {
 
 test('orchestrator image packages every workspace its own dependency list declares', () => {
   // #283 moved the retired planner's HTTP surface into
-  // services/orchestrator/src/agent-surface.js and added @ai-fleet/shared to the
+  // services/orchestrator/src/agent-surface.js and added @software-factory/shared to the
   // service's dependencies, but left the image packaging only shared-core. The
   // check that used to live here asserted that stale shape as if it were a
   // preference, so the mismatch built green and died at boot with
@@ -484,20 +484,20 @@ test('orchestrator image packages every workspace its own dependency list declar
   const deps = JSON.parse(read('services/orchestrator/package.json')).dependencies || {};
   const dockerfile = read('deploy/gcp/Dockerfile.orchestrator');
   for (const name of ['shared-core', 'shared']) {
-    const declared = deps[`@ai-fleet/${name}`] !== undefined;
+    const declared = deps[`@software-factory/${name}`] !== undefined;
     assert.equal(
       dockerfile.includes(`COPY packages/${name}/`),
       declared,
-      `COPY packages/${name}/ must be present exactly when @ai-fleet/${name} is a dependency`,
+      `COPY packages/${name}/ must be present exactly when @software-factory/${name} is a dependency`,
     );
     assert.equal(
-      dockerfile.includes(`--workspace=@ai-fleet/${name}`),
+      dockerfile.includes(`--workspace=@software-factory/${name}`),
       declared,
-      `@ai-fleet/${name} must be an npm ci workspace exactly when it is a dependency, `
+      `@software-factory/${name} must be an npm ci workspace exactly when it is a dependency, `
       + 'otherwise the library ships with its own dependency tree missing',
     );
   }
-  assert.match(dockerfile, /--workspace=@ai-fleet\/orchestrator/);
+  assert.match(dockerfile, /--workspace=@software-factory\/orchestrator/);
 
   // The half of the old rule that still means something: this is the durable
   // control plane, not the actor. Copying the whole workspace tree would turn it

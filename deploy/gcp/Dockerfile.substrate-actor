@@ -8,7 +8,7 @@
 # from the control plane's environment — everything else the agent needs lives
 # in this image.
 #
-# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared:
+# Build from the MONOREPO ROOT so npm workspaces can resolve @software-factory/shared:
 #   docker build -f deploy/gcp/Dockerfile.substrate-actor -t <tag> .
 #
 # Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
@@ -43,7 +43,7 @@ COPY services/ ./services/
 # This image installs the FULL workspace closure (COPY packages/ + services/
 # above) on purpose: the actor RUNS the agent runtime, invoking the native
 # codex-sdk / claude-agent-sdk factory (packages/shared/src/agent/runtimes.js).
-# Do NOT scope the copy to @ai-fleet/shared-core the way the proxy &
+# Do NOT scope the copy to @software-factory/shared-core the way the proxy &
 # provisioner images do — that would surface as a runtime MODULE_NOT_FOUND when
 # a specific SDK runtime is selected.
 RUN npm ci --omit=dev && npm cache clean --force
@@ -66,7 +66,7 @@ RUN apk add --no-cache git openssh-client ca-certificates bash libseccomp
 # plain Node process; 8080 is what both the ActorTemplate wakeupProbe and the
 # atenet-router backend expect.
 ENV NODE_ENV=production \
-    AI_FLEET_DATA_DIR=/tmp \
+    SOFTWARE_FACTORY_DATA_DIR=/tmp \
     SUBSTRATE_ACTOR_MODE=true
 
 COPY --from=builder --chown=node:node /app /app

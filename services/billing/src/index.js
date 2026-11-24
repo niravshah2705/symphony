@@ -1,7 +1,7 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
 const { createApp } = require('./app');
 const { reportBoot: reportCallerTrustBoot } = require('./trusted-caller');
 
@@ -11,7 +11,7 @@ function start(options = {}) {
   reportCallerTrustBoot(options.trustedCaller || {});
   const app = options.app || createApp(options);
   const port = Number(options.port) || Number(process.env.BILLING_SERVICE_PORT) || CONFIG.SERVICES.billingPort || 4050;
-  const server = app.listen(port, () => log.info(`AI Fleet billing service listening on :${port}`));
+  const server = app.listen(port, () => log.info(`Software Factory billing service listening on :${port}`));
   const shutdown = () => server.close();
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);

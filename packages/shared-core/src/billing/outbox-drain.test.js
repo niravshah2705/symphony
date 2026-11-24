@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'outbox-drain-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.STORE_BACKEND = 'file';
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 

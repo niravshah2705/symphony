@@ -1,7 +1,7 @@
 'use strict';
 
 const { Readable } = require('stream');
-const { LLM_GATEWAY_ORG_HEADER, matchRoute } = require('@ai-fleet/shared-core/egress');
+const { LLM_GATEWAY_ORG_HEADER, matchRoute } = require('@software-factory/shared-core/egress');
 const credentials = require('./credentials');
 const { validateProjectId } = require('./secrets-client');
 
@@ -149,7 +149,7 @@ function upstreamHost(url) {
 function createProxyHandler(opts = {}) {
   const fetchImpl = opts.fetchImpl || (typeof fetch === 'function' ? fetch : null);
   const oauthManager = opts.oauthManager || require('./oauth-manager');
-  const log = opts.logger || require('@ai-fleet/shared-core/logger');
+  const log = opts.logger || require('@software-factory/shared-core/logger');
   const routeResolver = opts.routeResolver || credentials;
   // Pinned at boot: a misconfigured sidecar (PROXY_ORG_ID ≠ FLEET_ORG_ID) must not
   // turn the log path itself into a request failure.

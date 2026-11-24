@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const { asyncHandler } = require('@software-factory/shared-core/util');
 const { cleanContextId } = require('../request-context');
 const { PipelineAdmissionError, createPipelineAdmission } = require('../pipeline-admission');
 

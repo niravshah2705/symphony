@@ -892,7 +892,7 @@ async function renderPersona(section, workspace, rerender) {
   const children = [];
 
   if (!current) {
-    children.push(el('p', { class: 'muted' }, 'Tell us how you plan to use AI Fleet so we can tailor your workspace.'));
+    children.push(el('p', { class: 'muted' }, 'Tell us how you plan to use Software Factory so we can tailor your workspace.'));
     const choices = el('div', { class: 'org-row-actions' }, PERSONAS.map((persona) => {
       const btn = el('button', { class: 'ghost', type: 'button' }, persona.label);
       btn.addEventListener('click', async () => {

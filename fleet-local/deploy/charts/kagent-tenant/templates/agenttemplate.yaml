@@ -1,0 +1,53 @@
+{{- range $template := .Values.templates }}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: AgentTemplate
+metadata:
+  name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "template" "name" $template.name) }}
+  namespace: {{ include "kagent-tenant.namespace" $ }}
+  labels:
+    {{- include "kagent-tenant.labels" (dict "root" $) | nindent 4 }}
+spec:
+  {{- with $template.modelConfig }}
+  modelConfig:
+    name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "model" "name" .) }}
+  {{- end }}
+  {{- with $template.description }}
+  description: {{ . | quote }}
+  {{- end }}
+  {{- with $template.systemPrompt }}
+  systemPrompt: |-
+    {{- . | trim | nindent 4 }}
+  {{- end }}
+  {{- with $template.systemPromptFrom }}
+  systemPromptFrom:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $template.outputSchema }}
+  outputSchema:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $template.outputSchemaFrom }}
+  outputSchemaFrom:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if $template.outputSchemaStrict }}
+  outputSchemaStrict: true
+  {{- end }}
+  {{- $tools := $template.tools | default list }}
+  {{- range $m := $template.mcp | default list }}
+  {{- $tools = append $tools (dict "mcp" (dict "server" (dict "kind" "RemoteMCPServer" "name" (include "kagent-tenant.objectName" (dict "root" $ "kind" "mcp" "name" $m))))) }}
+  {{- end }}
+  {{- with $tools }}
+  tools:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $template.skills }}
+  skills:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $template.plugins }}
+  plugins:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,35 @@
+# Rendered by CI and by hand for the kind parity gate: s3:// snapshots on the
+# bundled RustFS, one LiteLLM model and one model that bypasses LiteLLM to
+# prove the per-model baseUrl/secret overrides work.
+tenant:
+  id: teama
+  snapshotRoot: s3://ate-snapshots/teama
+
+models:
+  - name: openai-gpt-4o-mini
+    model: openai/gpt-4o-mini
+    apiFormat: responses
+  - name: openrouter-direct
+    model: openai/gpt-4o-mini
+    apiFormat: responses
+    baseUrl: https://openrouter.ai/api/v1
+    apiKeySecret: kagent-openrouter
+    apiKeySecretKey: OPENROUTER_API_KEY
+    stream: false
+
+harnesses:
+  - name: app
+    type: kagent
+    image: ghcr.io/kagent-dev/kagent/golang-adk@sha256:f62e9f2820d3325ca147a5d39802dc3e9c914bee97b3e021bd38f6f5df10e3bf
+  - name: codex
+    type: codex
+
+templates:
+  - name: assistant
+    modelConfig: openrouter-direct
+    systemPrompt: You are a helpful assistant powered by OpenRouter via kagent.
+
+agents:
+  - name: assistant
+    template: assistant
+    harness: app

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
 const { BaseCheckpointSaver, copyCheckpoint } = require('@langchain/langgraph');
-const { CONFIG, namespaceCollection } = require('@ai-fleet/shared-core/config');
+const { CONFIG, namespaceCollection } = require('@software-factory/shared-core/config');
 
 const SPECIAL_WRITE_INDEX = Object.freeze({
   __error__: -1,

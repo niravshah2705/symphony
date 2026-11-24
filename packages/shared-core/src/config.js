@@ -686,8 +686,8 @@ const TOOLS = Object.freeze({
  * roots are env-overridable for containerized deployments.
  */
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const DATA_DIR = process.env.AI_FLEET_DATA_DIR || path.join(REPO_ROOT, 'data');
-const PUBLIC_DIR = process.env.AI_FLEET_PUBLIC_DIR || path.join(REPO_ROOT, 'public');
+const DATA_DIR = process.env.SOFTWARE_FACTORY_DATA_DIR || path.join(REPO_ROOT, 'data');
+const PUBLIC_DIR = process.env.SOFTWARE_FACTORY_PUBLIC_DIR || path.join(REPO_ROOT, 'public');
 
 /**
  * Isolated agent-service topology. The gateway is the only browser-facing

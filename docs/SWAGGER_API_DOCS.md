@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI Fleet Gateway exposes OpenAPI 3.0 documentation via Swagger UI for interactive API exploration and testing. Access varies by deployment mode:
+The Software Factory Gateway exposes OpenAPI 3.0 documentation via Swagger UI for interactive API exploration and testing. Access varies by deployment mode:
 
 - **Local Development**: Always available, no authentication required
 - **Cloud Production**: Requires an explicit request header for security
@@ -106,7 +106,7 @@ The `x-ai-fleet-api-docs` header acts as a **shared secret**, not true authentic
 ### Version
 
 - **OpenAPI**: 3.0.0
-- **Info**: AI Fleet Gateway API v1.0.0
+- **Info**: Software Factory Gateway API v1.0.0
 
 ### Servers
 

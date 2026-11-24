@@ -1,0 +1,7 @@
+egm-bootstrap
+egm-brainstorm
+egm-draft
+egm-drift-report
+egm-resolve
+egm-review
+egm-review-loop

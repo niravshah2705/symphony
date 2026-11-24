@@ -1,0 +1,294 @@
+{{- /* Rendered ONLY for legacy (un-migrated) environments. When a values file sets
+       `.Values.env` (config-autobind final-goal shape), config comes from the baked
+       config.yaml + explicit env vars, and this ConfigMap is not rendered. */}}
+{{- if not .Values.env }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flexprice.fullname" . }}-config
+  labels:
+    {{- include "flexprice.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    server:
+      address: ":8080"
+    
+    auth:
+      provider: {{ .Values.auth.provider | quote }}
+      api_key:
+        header: {{ .Values.auth.apiKey.header | quote }}
+    {{- if eq .Values.auth.provider "supabase" }}
+      supabase:
+        base_url: {{ .Values.auth.supabase.baseUrl | quote }}
+    {{- end }}
+    
+    postgres:
+      host: {{ include "flexprice.postgresHost" . | quote }}
+      port: {{ include "flexprice.postgresPort" . }}
+      user: {{ .Values.postgres.user | quote }}
+      # Password is injected via FLEXPRICE_POSTGRES_PASSWORD env var from the secret
+      password: ""
+      dbname: {{ .Values.postgres.dbname | quote }}
+      sslmode: {{ if .Values.postgres.external.enabled }}{{ .Values.postgres.sslmode | quote }}{{ else }}"disable"{{ end }}
+      max_open_conns: {{ .Values.postgres.maxOpenConns }}
+      max_idle_conns: {{ .Values.postgres.maxIdleConns }}
+      conn_max_lifetime_minutes: {{ .Values.postgres.connMaxLifetimeMinutes }}
+    {{- if .Values.postgres.readerHost }}
+      reader_host: {{ .Values.postgres.readerHost | quote }}
+      reader_port: {{ .Values.postgres.readerPort }}
+    {{- end }}
+
+    clickhouse:
+      address: {{ include "flexprice.clickhouseAddress" . | quote }}
+      tls: {{ .Values.clickhouse.tls }}
+      username: {{ .Values.clickhouse.username | quote }}
+      database: {{ .Values.clickhouse.database | quote }}
+
+    redis:
+      host: {{ include "flexprice.redisHost" . | quote }}
+      port: {{ include "flexprice.redisPort" . }}
+      db: {{ .Values.redisConfig.db | default 0 }}
+      use_tls: {{ .Values.redisConfig.useTLS | default false }}
+      timeout: {{ .Values.redisConfig.timeout | default "5s" | quote }}
+
+    kafka:
+      {{- /* One YAML entry per broker. flexprice.kafkaBrokers returns the
+             comma-joined form the FLEXPRICE_KAFKA_BROKERS env var needs, which is
+             correct there but NOT here: emitted as a single list item it produces
+             one malformed address ("b1:9093,b2:9093"), and sarama treats the whole
+             string as one host. It only ever worked because the env var takes
+             precedence over this file at Unmarshal time — remove that env var and
+             the cluster becomes unreachable. Split it back out. */}}
+      brokers:
+        {{- range (splitList "," (include "flexprice.kafkaBrokers" .)) }}
+        - {{ . | trim | quote }}
+        {{- end }}
+      consumer_group: {{ .Values.kafkaConfig.consumerGroup | quote }}
+      topic: {{ .Values.kafkaConfig.topic | quote }}
+      topic_lazy: {{ .Values.kafkaConfig.topicLazy | quote }}
+      tls: {{ .Values.kafkaConfig.tls }}
+      use_sasl: {{ .Values.kafkaConfig.useSASL }}
+      sasl_mechanism: {{ .Values.kafkaConfig.saslMechanism | quote }}
+      client_id: {{ .Values.kafkaConfig.clientId | quote }}
+    {{- if .Values.kafkaConfig.routeTenantsOnLazyMode }}
+      route_tenants_on_lazy_mode:
+        {{- range .Values.kafkaConfig.routeTenantsOnLazyMode }}
+        - {{ . | quote }}
+        {{- end }}
+    {{- end }}
+    
+    temporal:
+      address: {{ include "flexprice.temporalAddress" . | quote }}
+      task_queue: {{ .Values.temporalConfig.taskQueue | quote }}
+      namespace: {{ .Values.temporalConfig.namespace | quote }}
+      tls: {{ .Values.temporalConfig.tls }}
+    {{- if .Values.temporalConfig.apiKeyName }}
+      api_key_name: {{ .Values.temporalConfig.apiKeyName | quote }}
+    {{- end }}
+    
+    logging:
+      level: {{ .Values.logging.level | quote }}
+
+    s3:
+      enabled: {{ .Values.s3.enabled }}
+      region: {{ .Values.s3.region | quote }}
+      invoice:
+        bucket: {{ .Values.s3.invoice.bucket | quote }}
+        presign_expiry_duration: {{ .Values.s3.invoice.presignExpiryDuration | quote }}
+    {{- if .Values.s3.invoice.keyPrefix }}
+        key_prefix: {{ .Values.s3.invoice.keyPrefix | quote }}
+    {{- end }}
+    
+    cache:
+      enabled: {{ .Values.cache.enabled }}
+    
+    event:
+      publish_destination: {{ .Values.event.publishDestination | quote }}
+    
+    dynamodb:
+      in_use: {{ .Values.dynamodb.inUse }}
+      region: {{ .Values.dynamodb.region | quote }}
+      event_table_name: {{ .Values.dynamodb.eventTableName | quote }}
+    
+    event_processing:
+      # enabled gates whether the consumer subscribes to this topic. The Go
+      # struct default is true, but viper does NOT apply Go `default` tags on
+      # Unmarshal, so it must be rendered here or it resolves to false and the
+      # events→ClickHouse consumer never starts. (same class as onboarding_events)
+      enabled: {{ .Values.eventProcessing.enabled }}
+      topic: {{ .Values.eventProcessing.topic | quote }}
+      rate_limit: {{ .Values.eventProcessing.rateLimit }}
+      consumer_group: {{ .Values.eventProcessing.consumerGroup | quote }}
+      topic_dlq: {{ .Values.eventProcessing.topicDLQ | quote }}
+
+    event_processing_lazy:
+      enabled: {{ .Values.eventProcessingLazy.enabled }}
+      topic: {{ .Values.eventProcessingLazy.topic | quote }}
+      rate_limit: {{ .Values.eventProcessingLazy.rateLimit }}
+      consumer_group: {{ .Values.eventProcessingLazy.consumerGroup | quote }}
+      topic_dlq: {{ .Values.eventProcessingLazy.topicDLQ | quote }}
+
+    event_post_processing:
+      enabled: {{ .Values.eventPostProcessing.enabled }}
+      topic: {{ .Values.eventPostProcessing.topic | quote }}
+      rate_limit: {{ .Values.eventPostProcessing.rateLimit }}
+      consumer_group: {{ .Values.eventPostProcessing.consumerGroup | quote }}
+      topic_backfill: {{ .Values.eventPostProcessing.topicBackfill | quote }}
+      rate_limit_backfill: {{ .Values.eventPostProcessing.rateLimitBackfill }}
+      consumer_group_backfill: {{ .Values.eventPostProcessing.consumerGroupBackfill | quote }}
+
+    feature_usage_tracking:
+      enabled: {{ .Values.featureUsageTracking.enabled }}
+      topic: {{ .Values.featureUsageTracking.topic | quote }}
+      rate_limit: {{ .Values.featureUsageTracking.rateLimit }}
+      consumer_group: {{ .Values.featureUsageTracking.consumerGroup | quote }}
+      topic_backfill: {{ .Values.featureUsageTracking.topicBackfill | quote }}
+      rate_limit_backfill: {{ .Values.featureUsageTracking.rateLimitBackfill }}
+      consumer_group_backfill: {{ .Values.featureUsageTracking.consumerGroupBackfill | quote }}
+      topic_dlq: {{ .Values.featureUsageTracking.topicDLQ | quote }}
+
+    feature_usage_tracking_lazy:
+      enabled: {{ .Values.featureUsageTrackingLazy.enabled }}
+      topic: {{ .Values.featureUsageTrackingLazy.topic | quote }}
+      rate_limit: {{ .Values.featureUsageTrackingLazy.rateLimit }}
+      consumer_group: {{ .Values.featureUsageTrackingLazy.consumerGroup | quote }}
+      topic_dlq: {{ .Values.featureUsageTrackingLazy.topicDLQ | quote }}
+
+    # The blocks below were previously absent from this ConfigMap, so on GKE (where the
+    # mounted ConfigMap replaces the baked config.yaml) their FLEXPRICE_* env overrides were
+    # ignored by viper Unmarshal and the consumers silently never started — diverging from the
+    # AWS web_consumer task def. Rendered here so they can be configured per-deployment.
+    event_processing_replay:
+      enabled: {{ .Values.eventProcessingReplay.enabled }}
+      topic: {{ .Values.eventProcessingReplay.topic | quote }}
+      rate_limit: {{ .Values.eventProcessingReplay.rateLimit }}
+      consumer_group: {{ .Values.eventProcessingReplay.consumerGroup | quote }}
+
+    feature_usage_tracking_replay:
+      enabled: {{ .Values.featureUsageTrackingReplay.enabled }}
+      topic: {{ .Values.featureUsageTrackingReplay.topic | quote }}
+      rate_limit: {{ .Values.featureUsageTrackingReplay.rateLimit }}
+      consumer_group: {{ .Values.featureUsageTrackingReplay.consumerGroup | quote }}
+
+    meter_usage_tracking:
+      enabled: {{ .Values.meterUsageTracking.enabled }}
+      topic: {{ .Values.meterUsageTracking.topic | quote }}
+      rate_limit: {{ .Values.meterUsageTracking.rateLimit }}
+      consumer_group: {{ .Values.meterUsageTracking.consumerGroup | quote }}
+      topic_dlq: {{ .Values.meterUsageTracking.topicDLQ | quote }}
+      redis_deduplication_enabled: {{ .Values.meterUsageTracking.redisDeduplicationEnabled }}
+      wallet_alert_push_enabled: {{ .Values.meterUsageTracking.walletAlertPushEnabled | default false }}
+
+    meter_usage_tracking_lazy:
+      enabled: {{ .Values.meterUsageTrackingLazy.enabled }}
+      topic: {{ .Values.meterUsageTrackingLazy.topic | quote }}
+      rate_limit: {{ .Values.meterUsageTrackingLazy.rateLimit }}
+      consumer_group: {{ .Values.meterUsageTrackingLazy.consumerGroup | quote }}
+      topic_dlq: {{ .Values.meterUsageTrackingLazy.topicDLQ | quote }}
+
+    costsheet_usage_tracking:
+      enabled: {{ .Values.costsheetUsageTracking.enabled }}
+      topic: {{ .Values.costsheetUsageTracking.topic | quote }}
+      rate_limit: {{ .Values.costsheetUsageTracking.rateLimit }}
+      consumer_group: {{ .Values.costsheetUsageTracking.consumerGroup | quote }}
+      topic_dlq: {{ .Values.costsheetUsageTracking.topicDLQ | quote }}
+
+    costsheet_usage_tracking_lazy:
+      enabled: {{ .Values.costsheetUsageTrackingLazy.enabled }}
+      topic: {{ .Values.costsheetUsageTrackingLazy.topic | quote }}
+      rate_limit: {{ .Values.costsheetUsageTrackingLazy.rateLimit }}
+      consumer_group: {{ .Values.costsheetUsageTrackingLazy.consumerGroup | quote }}
+      topic_dlq: {{ .Values.costsheetUsageTrackingLazy.topicDLQ | quote }}
+
+    raw_event_consumption:
+      enabled: {{ .Values.rawEventConsumption.enabled }}
+      topic: {{ .Values.rawEventConsumption.topic | quote }}
+      output_topic: {{ .Values.rawEventConsumption.outputTopic | quote }}
+      rate_limit: {{ .Values.rawEventConsumption.rateLimit }}
+      consumer_group: {{ .Values.rawEventConsumption.consumerGroup | quote }}
+
+    usage_benchmark:
+      enabled: {{ .Values.usageBenchmark.enabled }}
+      topic: {{ .Values.usageBenchmark.topic | quote }}
+      rate_limit: {{ .Values.usageBenchmark.rateLimit }}
+      consumer_group: {{ .Values.usageBenchmark.consumerGroup | quote }}
+
+    onboarding_events:
+      enabled: {{ .Values.onboardingEvents.enabled }}
+      topic: {{ .Values.onboardingEvents.topic | quote }}
+      rate_limit: {{ .Values.onboardingEvents.rateLimit }}
+      consumer_group: {{ .Values.onboardingEvents.consumerGroup | quote }}
+      max_retries: {{ .Values.onboardingEvents.maxRetries }}
+
+    {{- with .Values.walletBalanceAlert }}
+    wallet_balance_alert:
+      # Rendered only when a deployment sets walletBalanceAlert; otherwise the section
+      # is omitted and the app's Go struct defaults apply (topic "wallet_alert"). Per-
+      # field defaults mirror the struct so partial overrides stay safe — no chart
+      # values.yaml default needed. enabled gates only the consumer; publish fires regardless.
+      enabled: {{ .enabled | default false }}
+      topic: {{ .topic | default "wallet_alert" | quote }}
+      rate_limit: {{ .rateLimit | default 1 }}
+      consumer_group: {{ .consumerGroup | default "v1_wallet_alert_service" | quote }}
+    {{- end }}
+
+    webhook:
+      enabled: {{ .Values.webhook.enabled }}
+      topic: {{ .Values.webhook.topic | quote }}
+      pubsub: {{ .Values.webhook.pubsub | quote }}
+      consumer_group: {{ .Values.webhook.consumerGroup | quote }}
+      rate_limit: {{ .Values.webhook.rateLimit }}
+      max_retries: {{ .Values.webhook.maxRetries }}
+      initial_interval: {{ .Values.webhook.initialInterval | quote }}
+      max_interval: {{ .Values.webhook.maxInterval | quote }}
+      multiplier: {{ .Values.webhook.multiplier }}
+      max_elapsed_time: {{ .Values.webhook.maxElapsedTime | quote }}
+    {{- if .Values.webhook.svixConfig.enabled }}
+      svix_config:
+        enabled: {{ .Values.webhook.svixConfig.enabled }}
+        base_url: {{ .Values.webhook.svixConfig.baseUrl | quote }}
+    {{- end }}
+
+    # Integration events: consumed from the SAME system_events topic as webhooks,
+    # but under an independent consumer group. Rendered here because viper does not
+    # apply Go `default` tags on Unmarshal (same class as event_processing) — without
+    # this block enabled resolves to false and the integration-events consumer never starts.
+    integration_events:
+      enabled: {{ .Values.integrationEvents.enabled }}
+      consumer_group: {{ .Values.integrationEvents.consumerGroup | quote }}
+      rate_limit: {{ .Values.integrationEvents.rateLimit }}
+
+    billing:
+      tenant_id: {{ .Values.billing.tenantId | quote }}
+      environment_id: {{ .Values.billing.environmentId | quote }}
+
+    checkout:
+      base_url: {{ .Values.checkout.baseUrl | quote }}
+    
+    email:
+      enabled: {{ .Values.app.email.enabled }}
+      from_address: {{ .Values.app.email.fromAddress | quote }}
+      reply_to: {{ .Values.app.email.replyTo | quote }}
+      calendar_url: {{ .Values.app.email.calendarUrl | quote }}
+      # Plain config value (user-signup automation), not a secret → rendered here. The secret
+      # (resend.api_key) is NOT rendered — it's bound from FLEXPRICE_EMAIL_RESEND_API_KEY via BindEnv.
+      zapier_webhook_url: {{ .Values.app.email.zapierWebhookUrl | quote }}
+    
+    feature_flag:
+      enable_feature_usage_for_analytics: {{ .Values.featureFlag.enableFeatureUsageForAnalytics }}
+      force_v1_for_tenant: {{ .Values.featureFlag.forceV1ForTenant | quote }}
+      # Rendered with per-field defaults (Go zero value) so deployments that don't set
+      # them are unchanged; per-env values opt in. The app otherwise resolves these to
+      # false (not the config.yaml baked default), diverging from AWS prod where they are on.
+      enable_meter_usage_for_analytics: {{ .Values.featureFlag.enableMeterUsageForAnalytics | default false }}
+      enable_meter_usage_for_preview_invoice: {{ .Values.featureFlag.enableMeterUsageForPreviewInvoice | default false }}
+      enable_meter_usage_for_billing: {{ .Values.featureFlag.enableMeterUsageForBilling | default false }}
+      enable_usage_benchmark: {{ .Values.featureFlag.enableUsageBenchmark | default false }}
+
+    secrets:
+      encryption_key: {{ .Values.secrets.encryptionKey | quote }}
+    
+    # Note: secrets.encryption_key should be set via environment variable FLEXPRICE_SECRETS_ENCRYPTION_KEY
+    # for security reasons. It's not included in this configmap.
+{{- end }}
+

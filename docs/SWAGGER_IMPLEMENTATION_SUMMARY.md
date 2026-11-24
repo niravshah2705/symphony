@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI Fleet Gateway now provides interactive API documentation via Swagger UI with **production-safe header gating**. The implementation balances developer convenience (dev: always open) with security (production: header-gated).
+The Software Factory Gateway now provides interactive API documentation via Swagger UI with **production-safe header gating**. The implementation balances developer convenience (dev: always open) with security (production: header-gated).
 
 **Status**: ✅ Complete and ready for deployment
 

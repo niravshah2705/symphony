@@ -260,7 +260,7 @@ async function ensurePlan(client) {
     report('plan', CATALOG_PLAN, 'dry-run', 'holds the GST and rate-card prices');
     return 'DRY';
   }
-  const created = await client.request({ plane: 'money', method: 'POST', route: '/v1/plans', body: { name: CATALOG_PLAN, description: 'AI Fleet rate card and GST lines' } });
+  const created = await client.request({ plane: 'money', method: 'POST', route: '/v1/plans', body: { name: CATALOG_PLAN, description: 'Software Factory rate card and GST lines' } });
   report('plan', CATALOG_PLAN, 'created', created.id);
   return created.id;
 }
@@ -348,7 +348,7 @@ async function ensurePrices(client, planId, meterIds) {
     const spec = meterPrice[meter.name];
     ids[`meter:${meter.name}`] = await ensurePrice(client, planId, {
       lookupKey: `meter-${meter.name}`,
-      displayName: `AI Fleet ${meter.name}`,
+      displayName: `Software Factory ${meter.name}`,
       type: 'USAGE',
       meterId: meterIds[meter.name],
       priceUnitType: 'FIAT',
@@ -525,8 +525,8 @@ async function ensureOrg(client, orgId, opts) {
       credits: opening,
       idempotencyKey: `initial-credit:${orgId}`,
       description: FREE_CREDIT_OVERRIDE && tier.isDefault !== true
-        ? 'AI Fleet opening credit (operator --free-credit)'
-        : 'AI Fleet opening credit',
+        ? 'Software Factory opening credit (operator --free-credit)'
+        : 'Software Factory opening credit',
     });
     report('credit', orgId, grant.alreadyExists ? 'existing' : 'created', `${opening} credits`);
   }
@@ -580,7 +580,7 @@ async function main() {
     for (const orgId of orgIds) {
       orgs.push(await ensureOrg(client, orgId, {
         name: val('org-name'),
-        line1: val('address-line1', '1 AI Fleet Road'),
+        line1: val('address-line1', '1 Software Factory Road'),
         city: val('city', 'Bengaluru'),
         stateName: val('state-name', 'Karnataka'),
         postal: val('postal', '560001'),

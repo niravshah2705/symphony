@@ -10,7 +10,7 @@ test('accepts a complete fixed SMTP configuration', () => {
     EMAIL_SMTP_PORT: '587',
     EMAIL_SMTP_USER: 'mailer',
     EMAIL_SMTP_PASSWORD: 'secret',
-    EMAIL_FROM: 'AI Fleet <noreply@example.com>',
+    EMAIL_FROM: 'Software Factory <noreply@example.com>',
     PUBLIC_APP_URL: 'https://fleet.example.com/app',
   });
   assert.deepEqual(configErrors(config), []);

@@ -27,7 +27,7 @@ const getBillingUsageTool = defineTool(
   {
     name: 'get_billing_usage',
     description:
-      "Get the organization's AI Fleet billing status: current credit balance (INR) and " +
+      "Get the organization's Software Factory billing status: current credit balance (INR) and " +
       'token/cost usage over a period. Use to check remaining credit before starting expensive ' +
       'work, or to report spend. Read-only; scoped to the current organization.',
     schema: (z) =>

@@ -1,33 +1,33 @@
 'use strict';
 
 const express = require('express');
-const log = require('@ai-fleet/shared/logger');
-const store = require('@ai-fleet/shared/store');
-const linear = require('@ai-fleet/shared/linear');
+const log = require('@software-factory/shared/logger');
+const store = require('@software-factory/shared/store');
+const linear = require('@software-factory/shared/linear');
 const {
   generatePlan,
   generateIssuesForMilestones,
-} = require('@ai-fleet/shared/agent/plan');
+} = require('@software-factory/shared/agent/plan');
 const {
   applyPlan,
   applyIssuesForMilestones,
   applyAiplanned,
   applyAifail,
-} = require('@ai-fleet/shared/agent/apply');
+} = require('@software-factory/shared/agent/apply');
 const {
   StageExecutionError,
   assertLinearProjectScope,
   executeTestingStage,
   resolveStageAgent,
-} = require('@ai-fleet/shared/agent/pipeline-stage-runtime');
-const { projectStageResult } = require('@ai-fleet/shared/agent/pipeline-labels');
+} = require('@software-factory/shared/agent/pipeline-stage-runtime');
+const { projectStageResult } = require('@software-factory/shared/agent/pipeline-labels');
 const {
   createStageCommandHandler,
   createStageResultPublisher,
   pipelineStageAuth,
-} = require('@ai-fleet/shared/agent/pipeline-stage-service');
-const { redactSecrets } = require('@ai-fleet/shared/agent/tools/exec');
-const { runWithWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
+} = require('@software-factory/shared/agent/pipeline-stage-service');
+const { redactSecrets } = require('@software-factory/shared/agent/tools/exec');
+const { runWithWorkspaceContext } = require('@software-factory/shared/store/workspace-context');
 const { executeCodingStage } = require('./coding-stage');
 
 function plainObject(value) {

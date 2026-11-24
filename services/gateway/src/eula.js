@@ -1,7 +1,7 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const { getEulaUser } = require('@ai-fleet/shared-core/store');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const { getEulaUser } = require('@software-factory/shared-core/store');
 
 /**
  * End User License Agreement acceptance gate.
