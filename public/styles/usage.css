@@ -1,0 +1,104 @@
+/* The Usage route (public/js/views/usage.js): FlexPrice credit buckets, the
+   consumption grid, the trend chart and the credits log. Loaded on demand with
+   operations.css, which supplies the page head, notices and tables; nothing here
+   restyles those, so the Cost page cannot change. */
+
+.usage-section { margin-bottom: 18px; }
+.usage-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.usage-section-head h2 { margin: 0; font-size: 15px; }
+.usage-section-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.usage-asof { color: var(--muted); font-size: 9px; white-space: nowrap; }
+
+/* Credit buckets: two cards, each with a used-of-total bar underneath. */
+.usage-credit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.usage-credit-card {
+  min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
+  box-shadow: 0 1px 3px rgba(23, 32, 51, .04);
+}
+.usage-credit-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.usage-credit-top h3 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.usage-credit-left { font-family: var(--font-serif); font-size: 22px; letter-spacing: -.025em; }
+.usage-credit-figure { font-size: 12px; }
+.usage-credit-figure strong { font-weight: 700; }
+.usage-meter { height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.usage-meter-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width .18s ease; }
+.usage-meter-fill.warn { background: var(--amber); }
+.usage-meter-fill.bad { background: var(--red); }
+.usage-credit-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 9px; }
+.usage-unknown { color: var(--muted); font-style: italic; }
+
+/* Credit packs and the dedicated packages list. */
+.usage-pack-list { display: grid; gap: 6px; margin-top: 4px; }
+.usage-pack-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); font-size: 10px;
+}
+.usage-pack-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-pack-amount { font-weight: 700; }
+.usage-pack-expiry { color: var(--muted); font-size: 9px; }
+
+/* Purchase callout — the Cashfree entry point for this page. */
+.usage-purchase {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; padding: 14px 16px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2);
+}
+.usage-purchase-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; margin-top: 4px; }
+/* An author `display` rule beats the UA `[hidden]{display:none}`, so the collapsed
+   form would stay visible and the toggle would appear to do nothing. */
+.usage-purchase-form[hidden] { display: none; }
+.usage-purchase-form input { width: 150px; }
+.usage-quote { flex: 1 1 260px; min-width: 0; display: grid; gap: 3px; color: var(--muted); font-size: 10px; }
+.usage-quote strong { color: var(--text); }
+
+/* The 13x7 consumption grid. */
+.usage-heatmap { display: grid; gap: 8px; }
+.usage-heatmap-grid { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.usage-svg { display: block; }
+.usage-cell { fill: var(--panel-2); stroke: var(--border); stroke-width: .5; }
+.usage-cell-l0 { fill: color-mix(in srgb, var(--accent) 6%, var(--panel-2)); }
+.usage-cell-l1 { fill: color-mix(in srgb, var(--accent) 26%, var(--panel-2)); }
+.usage-cell-l2 { fill: color-mix(in srgb, var(--accent) 46%, var(--panel-2)); }
+.usage-cell-l3 { fill: color-mix(in srgb, var(--accent) 70%, var(--panel-2)); }
+.usage-cell-l4 { fill: var(--accent); }
+/* A day we could not read is outlined and empty, never filled: any fill level is
+   a claim about how much was used. */
+.usage-cell-unknown { fill: none; stroke: var(--border-strong); stroke-dasharray: 2 2; }
+.usage-cell-future, .usage-cell-pad { fill: none; stroke: var(--border); stroke-dasharray: 2 3; }
+.usage-cell-today { stroke: var(--accent-2); stroke-width: 1.2; }
+.usage-weekday-labels { display: none; }
+.usage-heatmap > .usage-weekday-labels { display: grid; grid-template-rows: repeat(7, 13px); gap: 0; color: var(--muted); font-size: 8px; }
+.usage-weekday { line-height: 13px; }
+.usage-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; color: var(--muted); font-size: 9px; }
+.usage-legend-cell { width: 11px; height: 11px; border-radius: 2px; border: .5px solid var(--border); }
+
+/* The trend chart. */
+.usage-trend { width: 100%; }
+.usage-trend-svg { width: 100%; height: auto; }
+.usage-trend-line { stroke: var(--accent); stroke-width: 2; }
+.usage-trend-area { stroke: none; }
+.usage-trend-peak { fill: var(--accent); stroke: var(--panel); stroke-width: 1.5; }
+.usage-grid-line { stroke: var(--border); stroke-width: 1; }
+.usage-axis-label { fill: var(--muted); font-size: 9px; }
+
+/* Filter pills above the trend and the log. */
+.usage-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.usage-pill {
+  padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--panel); color: var(--muted); font-size: 9px; font-weight: 700; cursor: pointer;
+}
+.usage-pill.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.usage-pill:disabled { cursor: default; opacity: .55; }
+.usage-breakdown { display: grid; gap: 4px; margin-top: 10px; }
+.usage-breakdown-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 10px; }
+.usage-breakdown-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.usage-log-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.usage-log-note { margin: 10px 0 0; color: var(--muted); font-size: 10px; }
+.usage-cell-muted { color: var(--muted); }
+.usage-cell-adjustment { color: var(--amber); font-size: 9px; }
+.usage-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--muted); font-size: 9px; }
+
+@media (max-width: 900px) {
+  .usage-credit-grid { grid-template-columns: minmax(0, 1fr); }
+}

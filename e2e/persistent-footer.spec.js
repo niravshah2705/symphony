@@ -12,6 +12,7 @@ const APP_ROUTES = Object.freeze([
   'board',
   'analytics',
   'cost',
+  'usage',
   'troubleshooting',
   'settings',
   'organization',

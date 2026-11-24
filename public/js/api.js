@@ -35,6 +35,20 @@ export function getRequestContext() {
   return requestContext;
 }
 
+/**
+ * A query string from a params object, dropping anything unset.
+ *
+ * An empty value is never sent: `?project=` would ask the billing route for the
+ * rows whose project id is the empty string, which is a different question from
+ * "no filter".
+ */
+function query(params = {}) {
+  const parts = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value).trim())}`);
+  return parts.length ? `?${parts.join('&')}` : '';
+}
+
 // Read per request (see llm-gateway.mjs for the storage contract), so toggling the
 // flag applies to the next call without a reload.
 function llmGatewayFlag() {
@@ -620,6 +634,14 @@ export const api = {
     verifyCashfreeOrder: (orderId) => request('/billing/cashfree/verify-order', { method: 'POST', body: JSON.stringify({ orderId }) }),
     createRazorpayOrder: (payload = {}) => request('/billing/razorpay/create-order', { method: 'POST', body: JSON.stringify(payload) }),
     verifyRazorpayOrder: (payload = {}) => request('/billing/razorpay/verify-order', { method: 'POST', body: JSON.stringify(payload) }),
+    // The Usage page's FlexPrice reads (services/billing/src/flexprice-reads.js).
+    // Read-only, and the org→wallet resolution is server-side: these send a range
+    // or a page, never an org id, a key, or a FlexPrice endpoint.
+    getFlexpriceOverview: () => request('/billing/flexprice/overview'),
+    getFlexpriceHeatmap: (params = {}) => request(`/billing/flexprice/heatmap${query(params)}`),
+    getFlexpriceTrend: (params = {}) => request(`/billing/flexprice/trend${query(params)}`),
+    getFlexpriceBreakdown: (params = {}) => request(`/billing/flexprice/usage-breakdown${query(params)}`),
+    getFlexpriceLog: (params = {}) => request(`/billing/flexprice/log${query(params)}`),
   },
 
   identity: {
