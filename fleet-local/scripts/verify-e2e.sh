@@ -58,6 +58,14 @@ if curl -s -o /dev/null http://localhost:3000/api/public/health 2>/dev/null; the
   LFPK=$(kubectl -n langfuse get secret langfuse-stores -o jsonpath='{.data.langfuse-secret-key}' 2>/dev/null | base64 -d)
   tr=$(curl -s -u "pk-lf-fleet-local:$LFPK" 'http://localhost:3000/api/public/traces?limit=1' 2>/dev/null)
   echo "$tr" | jq -e '.data | length > 0' >/dev/null 2>&1 && ok "Langfuse traces present" || man "no Langfuse traces yet — run a chat"
+  # The app's Traces panel filters on userId (routes/orgs.ts) — a trace with no
+  # userId is invisible there even though the Langfuse UI shows it. Every trace
+  # observed so far, pre- and post-T-20 drift, has userId null: the actor's LLM
+  # call carries only gen_ai.*/a2a.task.id baggage plus x-fleet-org-id/-project-id,
+  # so the fleet_user_id the BFF stamps is dropped before LiteLLM sees it.
+  uid=$(echo "$tr" | jq -r '.data[0].userId // "NULL"' 2>/dev/null)
+  [ "$uid" != "NULL" ] && ok "trace userId=$uid (the app's Traces panel filter matches)" \
+    || man "traces have no userId — the app's Traces panel filter matches none (T-20)"
 else
   man "run scripts/port-forwards.sh (Langfuse :3000) to verify traces"
 fi
@@ -98,6 +106,21 @@ echo "=== 13. A2A facade (T-19) — the BFF is an A2A server per project ==="
 # Runs a real agent turn, so it stays explicit rather than firing on every
 # re-verify: REBUILD=1 scripts/fixes/t31-a2a-facade-check.sh
 man "t31-a2a-facade-check.sh: card rewrite, 401-as-JSON routing, a relayed message:stream turn, outcome + meter_seconds read-back (incl. a silent completion explaining its own empty bubble), the refusal shapes (unknown conversation/model, push config, foreign task), the legacy /chat relay gone (404), a provider credential fault landing as upstream_error with 0 seconds metered, a real A2A client (scripts/fixes/FleetA2AClient.ts over @assistant-ui/react-a2a) parsing the card, typing every frame and landing its model choice on the session row, and the AG-UI run endpoint the browser now speaks (client-minted threadId → RUN_STARTED/TEXT_MESSAGE_*/terminal frame → sessions.thread_id + outcome on the row)"
+
+echo "=== 14. litellm carries the langfuse half of the callback chain (T-20) ==="
+# Two read-backs, because the drift is a helm list merge: values-base alone gives
+# envFrom WITHOUT litellm-langfuse-keys and callbacks WITHOUT `langfuse`, and the
+# only symptom is the LiteLLM UI saying tracing is disabled — billing still works.
+ef=$(kubectl -n litellm get deploy litellm -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' 2>/dev/null)
+echo "$ef" | grep -q 'litellm-langfuse-keys' && ok "litellm envFrom carries litellm-langfuse-keys" \
+  || bad "litellm envFrom=[$ef] — no LANGFUSE_* on the pod: no trace is written. Fix: bash scripts/30-litellm.sh"
+cb=$(kubectl -n litellm get cm litellm-config -o jsonpath='{.data.config\.yaml}' 2>/dev/null)
+echo "$cb" | grep -qE '^[[:space:]]*- langfuse' && ok "callbacks include langfuse" \
+  || bad "callbacks missing '- langfuse': $(echo "$cb" | sed -n '/callbacks:/,/^  [a-z]/p' | tr '\n' ' ')"
+lfcount=$(kubectl -n litellm exec deploy/litellm -c litellm -- sh -c \
+  'env | grep -c "^LANGFUSE_"' 2>/dev/null)
+[ "${lfcount:-0}" -ge 3 ] && ok "pod env has LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST ($lfcount)" \
+  || man "pod env unreadable (no shell?) — the two read-backs above are authoritative"
 
 echo
 echo "RESULT  PASS=$PASS FAIL=$FAIL MANUAL=$MANUAL"

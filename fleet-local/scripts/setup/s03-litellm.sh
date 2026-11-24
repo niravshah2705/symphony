@@ -8,7 +8,9 @@
 #   litellm-fleet-secrets<- OPENROUTER_API_KEY from your env + the Flexprice
 #                          API key minted into deploy/flexprice/.env by step 2
 # The langfuse callback is NOT here yet: Langfuse needs the RustFS bucket that
-# arrives with substrate, so scripts/30-litellm.sh adds it in step 5.
+# arrives with substrate, so scripts/30-litellm.sh adds it in step 5. On a
+# re-run of a cluster that already has it, this step re-applies that patch
+# itself — values-base would otherwise switch tracing off again.
 # Prereq for online models: export OPENROUTER_API_KEY=... (skippable — mock-gpt
 # still works; the secret is created empty and re-runnable later).
 set -euo pipefail
@@ -157,10 +159,20 @@ helm upgrade --install litellm oci://ghcr.io/berriai/litellm-helm \
   --version 1.109.1 --namespace litellm \
   -f deploy/litellm/values-base.yaml --timeout 10m --wait
 
-# values-base is the FULL fresh-install values set; a re-run drops whatever a
-# later upgrade --reuse-values added (the langfuse half from 30-litellm.sh).
-if helm get values litellm --namespace litellm --kube-context "$CTX" 2>/dev/null | grep -q litellm-langfuse-keys; then
-  warn "previous release had the langfuse bridge — re-apply it: bash scripts/30-litellm.sh"
+# values-base is the FULL fresh-install values set, so this upgrade REPLACES the
+# user values a later `--reuse-values` added — and that silently drops the
+# langfuse half of the callback chain (`- langfuse` + environmentSecrets
+# litellm-langfuse-keys). The LiteLLM UI then reads "Hosted Langfuse tracing is
+# disabled" and no trace lands, while Flexprice billing keeps working (its
+# callback is in values-base), so nothing else complains. Re-apply the bridge
+# instead of warning: the old guard read `helm get values` AFTER this upgrade,
+# i.e. the values it had just replaced, so it never fired. Only when
+# litellm-langfuse-keys already exists — on a fresh cluster Langfuse is not
+# installed yet, and step 5/5b wires it from scratch with scripts/30-litellm.sh.
+if kc -n litellm get secret litellm-langfuse-keys >/dev/null 2>&1; then
+  say "litellm-langfuse-keys exists — values-base just replaced the langfuse half; re-applying the patch"
+  helm upgrade litellm oci://ghcr.io/berriai/litellm-helm --version 1.109.1 -n litellm \
+    --kube-context "$CTX" --reuse-values -f deploy/litellm/values-patch.yaml --timeout 5m --wait
 fi
 
 kc -n litellm rollout status deploy/litellm --timeout=180s
