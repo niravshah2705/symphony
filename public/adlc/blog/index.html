@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Archagentix Blog — Agentic Development Life Cycle Practice</title>
+    <title>ArchAgentix Blog — Agentic Development Life Cycle Practice</title>
     <meta
       name="description"
       content="Articles and insights about Agentic Development Life Cycle, human-governed AI agents, and controlled software delivery."
     />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <meta name="theme-color" content="#16201d" />
+    <meta name="theme-color" content="#f8f9f9" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
@@ -21,262 +21,162 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://www.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://www.archagentix.com/adlc/blog/" />
+    <link rel="describedby" type="text/markdown" href="/llms.txt" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/adlc/styles.css" />
-    <style>
-      .blog-header {
-        padding: clamp(48px, 8vw, 96px) clamp(18px, 5vw, 72px);
-        text-align: center;
-      }
-
-      .blog-header h1 {
-        margin-bottom: 16px;
-      }
-
-      .blog-header p {
-        max-width: 580px;
-        margin: 0 auto;
-        color: var(--muted);
-        font-size: 18px;
-        line-height: 1.6;
-      }
-
-      .blog-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-        gap: 28px;
-        padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px);
-        max-width: 1400px;
-        margin: 0 auto;
-      }
-
-      .blog-card {
-        display: flex;
-        flex-direction: column;
-        padding: 28px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--surface);
-        transition: all 0.2s ease;
-        text-decoration: none;
-      }
-
-      .blog-card:hover {
-        border-color: var(--muted);
-        box-shadow: 0 12px 28px rgba(23, 32, 29, 0.08);
-      }
-
-      .blog-card-tag {
-        display: inline-block;
-        align-self: flex-start;
-        padding: 4px 10px;
-        margin-bottom: 12px;
-        background: #f0f5f3;
-        color: var(--green);
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        border-radius: 4px;
-      }
-
-      .blog-card h3 {
-        margin: 0 0 12px;
-        font-size: 20px;
-        line-height: 1.3;
-      }
-
-      .blog-card p {
-        flex-grow: 1;
-        margin: 0 0 16px;
-        color: var(--muted);
-        line-height: 1.6;
-        font-size: 14px;
-      }
-
-      .blog-card-meta {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: auto;
-      }
-
-      .blog-card-link {
-        color: var(--blue);
-        font-weight: 600;
-        font-size: 14px;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 16px;
-      }
-
-      .blog-card-link:hover {
-        text-decoration: underline;
-      }
-
-      @media (max-width: 640px) {
-        .blog-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
-    <script src="/adlc/config.js"></script>
-    <script defer src="/adlc/app.js"></script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
+
     <header class="site-header">
-      <a class="brand" href="/adlc/" aria-label="Archagentix home">
+      <a class="brand wm" href="/adlc/" aria-label="ArchAgentix home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span>Archagentix</span>
+        <span>ArchAgentix</span>
       </a>
-      <nav aria-label="Primary">
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/#process">Process</a>
-        <a href="/adlc/#evidence">Evidence</a>
-        <a href="/adlc/blog/">Blog</a>
-      </nav>
-      <a class="header-cta" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      <div class="header-side">
+        <details class="nav-menu">
+          <summary>Menu</summary>
+          <nav aria-label="Primary">
+            <a href="/adlc/">ADLC</a>
+            <a href="/archagentix/">Model intelligence</a>
+            <a href="/pricing/">Pricing</a>
+            <a href="/adlc/blog/" aria-current="page">Blog</a>
+            <a href="/about/">About</a>
+            <a href="/contact/">Contact</a>
+          </nav>
+        </details>
+        <a class="key" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      </div>
     </header>
 
-    <main>
-      <div class="blog-header">
-        <h1>Blog</h1>
-        <p>Insights and articles about agentic development, human-governed AI agents, and controlled software delivery.</p>
-      </div>
+    <main id="main">
+      <section class="page-head" aria-labelledby="blog-title">
+        <div class="container">
+          <h1 id="blog-title">Notes from building ADLC.</h1>
+          <p class="lede">Six articles on how agent work is planned, fenced, verified and signed off.</p>
+          <div class="head-actions">
+            <a class="key key--primary" href="/adlc/blog/governance/">Read the newest article</a>
+            <a class="textlink" href="/adlc/brief/">Read the full brief</a>
+          </div>
+        </div>
+      </section>
 
-      <div class="blog-grid">
-        <!-- Card 1: Governance -->
-        <a href="/adlc/blog/governance/" class="blog-card">
-          <span class="blog-card-tag">Governance</span>
-          <h3>Keeping Humans in Control: ADLC Governance Model</h3>
-          <p>
-            Explore how ADLC maintains human oversight through policy-aware handoffs,
-            approval gates, and evidence-driven decisions while leveraging AI agents
-            for bounded work.
-          </p>
-          <div class="blog-card-meta">
-            <span>5 min read</span> • <span>2026-08-15</span>
+      <section class="section" aria-labelledby="latest-title">
+        <div class="container">
+          <div class="head-block split">
+            <h2 id="latest-title">The newest</h2>
+            <p class="lead">Governance is the article people ask for before they ask about the agents.</p>
           </div>
-          <div class="blog-card-link">
-            Read article →
-          </div>
-        </a>
+          <a class="feature cut" href="/adlc/blog/governance/">
+            <span class="tag">Governance</span>
+            <h3>Keeping Humans in Control: ADLC Governance Model</h3>
+            <p>How ADLC maintains human oversight through policy-aware handoffs, approval gates, and evidence-driven decisions while leveraging AI agents for bounded work.</p>
+            <span class="when">15 August 2026 · 5 min read</span>
+            <span class="key key--quiet">Read the article</span>
+          </a>
+        </div>
+      </section>
 
-        <!-- Card 2: Isolation -->
-        <a href="/adlc/blog/isolation/" class="blog-card">
-          <span class="blog-card-tag">Architecture</span>
-          <h3>Secure Isolation: How Credentials Stay Protected</h3>
-          <p>
-            Learn about the egress proxy pattern that keeps raw credentials out of agent
-            containers, enabling safe credential injection for approved destinations only.
-          </p>
-          <div class="blog-card-meta">
-            <span>6 min read</span> • <span>2026-08-14</span>
+      <section class="section band" id="index" aria-labelledby="index-title">
+        <div class="container">
+          <div class="head-block">
+            <h2 id="index-title">The rest, oldest last</h2>
           </div>
-          <div class="blog-card-link">
-            Read article →
+          <div class="post-index">
+            <a href="/adlc/blog/isolation/">
+              <span class="date">14 Aug 2026</span>
+              <h3>Secure Isolation: How Credentials Stay Protected</h3>
+              <p class="summary">The egress proxy pattern that keeps raw credentials out of agent containers, so only approved destinations ever see them.</p>
+              <span class="tag">Architecture</span>
+              <span class="mins">6 min read</span>
+            </a>
+            <a href="/adlc/blog/evidence/">
+              <span class="date">13 Aug 2026</span>
+              <h3>Evidence Over Claims: Building Durable Artifacts</h3>
+              <p class="summary">Why ADLC keeps plans, logs, test results and review notes at every stage instead of relying on an agent's summary of them.</p>
+              <span class="tag">Process</span>
+              <span class="mins">7 min read</span>
+            </a>
+            <a href="/adlc/blog/lifecycle/">
+              <span class="date">12 Aug 2026</span>
+              <h3>The Seven Stages: A Deep Dive into ADLC Workflow</h3>
+              <p class="summary">Each stage from intent capture through operational learning, with the handoffs where a human decides what happens next.</p>
+              <span class="tag">Guide</span>
+              <span class="mins">10 min read</span>
+            </a>
+            <a href="/adlc/blog/integration/">
+              <span class="date">11 Aug 2026</span>
+              <h3>Integrating ADLC with Your Tools</h3>
+              <p class="summary">Connecting ADLC with GitHub, GitLab, Linear and Jira: the configuration patterns and the practices that keep them safe.</p>
+              <span class="tag">Setup</span>
+              <span class="mins">8 min read</span>
+            </a>
+            <a href="/adlc/blog/getting-started/">
+              <span class="date">10 Aug 2026</span>
+              <h3>Getting Started with ADLC</h3>
+              <p class="summary">First steps in the workspace: authentication, your first task, the planning interface, and how to read what comes back.</p>
+              <span class="tag">Tutorial</span>
+              <span class="mins">6 min read</span>
+            </a>
           </div>
-        </a>
+        </div>
+      </section>
 
-        <!-- Card 3: Evidence -->
-        <a href="/adlc/blog/evidence/" class="blog-card">
-          <span class="blog-card-tag">Process</span>
-          <h3>Evidence Over Claims: Building Durable Artifacts</h3>
-          <p>
-            Why ADLC prioritizes observable evidence at every stage—from plans and logs
-            to test results and review notes—instead of relying on agent summaries.
-          </p>
-          <div class="blog-card-meta">
-            <span>7 min read</span> • <span>2026-08-13</span>
+      <section class="section" aria-labelledby="brief-title">
+        <div class="container">
+          <div class="head-block split">
+            <h2 id="brief-title">One document covers all six</h2>
+            <p class="lead">The full brief states the stages, the gates and the evidence in order, without the article breaks.</p>
           </div>
-          <div class="blog-card-link">
-            Read article →
+          <dl class="facts">
+            <dt>The stages</dt><dd>Intent, planning, isolated implementation, verification, review, release: what each takes in and hands on.</dd>
+            <dt>The gates</dt><dd>Where a person decides, what they see before deciding, and what happens when they say no.</dd>
+            <dt>The evidence</dt><dd>Plans, run logs, test output and review decisions, kept so a change can be audited later.</dd>
+          </dl>
+          <div class="head-actions">
+            <a class="key key--primary" href="/adlc/brief/">Read the full brief</a>
+            <a class="textlink" href="/adlc/">See the lifecycle overview</a>
           </div>
-        </a>
+        </div>
+      </section>
 
-        <!-- Card 4: Lifecycle -->
-        <a href="/adlc/blog/lifecycle/" class="blog-card">
-          <span class="blog-card-tag">Guide</span>
-          <h3>The Seven Stages: A Deep Dive into ADLC Workflow</h3>
-          <p>
-            Walk through each stage of the agentic development lifecycle, from intent
-            capture through operational learning, with real examples of how humans and
-            agents collaborate.
-          </p>
-          <div class="blog-card-meta">
-            <span>10 min read</span> • <span>2026-08-12</span>
+      <section class="close-band band" aria-labelledby="ask-title">
+        <div class="container">
+          <div>
+            <h2 id="ask-title">Something to argue with?</h2>
+            <p>Every article here is a position we have to defend in the product.</p>
           </div>
-          <div class="blog-card-link">
-            Read article →
-          </div>
-        </a>
-
-        <!-- Card 5: Integration -->
-        <a href="/adlc/blog/integration/" class="blog-card">
-          <span class="blog-card-tag">Setup</span>
-          <h3>Integrating ADLC with Your Tools</h3>
-          <p>
-            A practical guide to connecting ADLC with GitHub, GitLab, Linear, Jira, and
-            other tools, with configuration patterns and best practices for your team.
-          </p>
-          <div class="blog-card-meta">
-            <span>8 min read</span> • <span>2026-08-11</span>
-          </div>
-          <div class="blog-card-link">
-            Read article →
-          </div>
-        </a>
-
-        <!-- Card 6: Getting Started -->
-        <a href="/adlc/blog/getting-started/" class="blog-card">
-          <span class="blog-card-tag">Tutorial</span>
-          <h3>Getting Started with ADLC</h3>
-          <p>
-            Your first steps with the ADLC workspace: setting up authentication, creating
-            your first task, understanding the planning interface, and reviewing outcomes.
-          </p>
-          <div class="blog-card-meta">
-            <span>6 min read</span> • <span>2026-08-10</span>
-          </div>
-          <div class="blog-card-link">
-            Read article →
-          </div>
-        </a>
-      </div>
+          <a class="key key--primary" href="mailto:support@archagentix.com?subject=Blog%20note">Write to the team</a>
+        </div>
+      </section>
     </main>
-    
+
     <footer class="site-footer" aria-label="Site footer">
-      <div class="footer-brand">
-        <a class="brand" href="/adlc/" aria-label="Archagentix home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Archagentix</span>
-        </a>
+      <div class="container colophon">
+        <p class="wordmark wm"><span class="brand"><span class="brand-mark" aria-hidden="true"></span> ArchAgentix</span></p>
         <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>
-      </div>
-      <nav class="footer-col" aria-label="Company">
-        <h3>Company</h3>
-        <a href="/about/">About Company</a>
-        <a href="/careers/">Careers</a>
-        <a href="/newsroom/">Newsroom</a>
-        <a href="/contact/">Contact Us</a>
-      </nav>
-      <nav class="footer-col" aria-label="Explore">
-        <h3>Explore</h3>
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/adlc/brief/">Full brief</a>
-        <a href="https://platform.archagentix.com/" rel="noopener">Archagentix Platform</a>
-      </nav>
-      <div class="footer-col footer-legal">
-        <p>&copy; 2026 Archagentix Private Limited &middot; Hinjewadi IT Park, Pune 411057, Maharashtra, India</p>
-        <p><a href="tel:+919370580836">+91 93705 80836</a> &middot; <a href="mailto:support@archagentix.com">support@archagentix.com</a></p>
-        <nav aria-label="Legal">
-          <a href="/terms/">Terms of Service</a>
-          <a href="/privacy/">Privacy Policy</a>
-          <a href="/refund-policy/">Refund &amp; Cancellation</a>
-          <a href="/shipping-policy/">Delivery Policy</a>
+        <nav aria-label="Site">
+          <a href="/about/">About Company</a>
+          <a href="/careers/">Careers</a>
+          <a href="/newsroom/">Newsroom</a>
+          <a href="/contact/">Contact Us</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/adlc/blog/">Blog</a>
+          <a href="/archagentix/">Model intelligence</a>
+          <a href="/adlc/brief/">Full brief</a>
+          <a href="https://platform.archagentix.com/" rel="noopener">ArchAgentix Platform</a>
         </nav>
+        <p class="legal">
+            © 2026 Archagentix Private Limited<br />
+            Hinjewadi IT Park, Pune 411057, Maharashtra, India
+            <span class="legal-links"><a href="tel:+919370580836">+91 93705 80836</a><a href="mailto:support@archagentix.com">support@archagentix.com</a></span>
+            <span class="legal-links"><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a><a href="/refund-policy/">Refund &amp; Cancellation</a><a href="/shipping-policy/">Delivery Policy</a></span>
+          </p>
       </div>
     </footer>
-</body>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
+  </body>
 </html>

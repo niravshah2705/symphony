@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Archagentix — Agentic Development Life Cycle (ADLC) Platform</title>
+    <title>ArchAgentix: Agentic Development Life Cycle (ADLC) Platform</title>
     <meta
       name="description"
-      content="Archagentix builds ADLC, the Agentic Development Life Cycle, and Software Factory, where it runs: agents plan, code, test and review; people approve."
+      content="ArchAgentix builds ADLC, the Agentic Development Life Cycle, and Software Factory, where it runs: agents plan, code, test and review; people approve."
     />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <meta name="theme-color" content="#16201d" />
+    <meta name="theme-color" content="#f8f9f9" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
@@ -17,22 +17,26 @@
     <meta property="og:image" content="https://www.archagentix.com/brand/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Archagentix — the Agentic Development Life Cycle" />
+    <meta property="og:image:alt" content="ArchAgentix and the Agentic Development Life Cycle" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://www.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://www.archagentix.com/adlc/" />
     <link rel="manifest" href="/adlc/manifest.webmanifest" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
     <link rel="alternate" type="text/markdown" href="/llms-full.txt" title="Full ADLC machine-readable brief" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/adlc/styles.css" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Archagentix" />
+    <meta property="og:site_name" content="ArchAgentix" />
     <meta property="og:url" content="https://www.archagentix.com/adlc/" />
-    <meta property="og:title" content="Archagentix — Agentic Development Life Cycle (ADLC) Platform" />
+    <meta property="og:title" content="ArchAgentix: Agentic Development Life Cycle (ADLC) Platform" />
     <meta
       property="og:description"
       content="A compact, governed workflow for shipping software with planner, coder, tester, reviewer, and delivery agents."
     />
+    <script>document.documentElement.classList.add('js');</script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -41,9 +45,9 @@
             "@type": "WebSite",
             "@id": "https://www.archagentix.com/#website",
             "url": "https://www.archagentix.com/",
-            "name": "Archagentix",
-            "alternateName": "Archagentix ADLC",
-            "description": "Archagentix is the company behind ADLC, the Agentic Development Life Cycle: agentic development documentation, pricing, and product entry.",
+            "name": "ArchAgentix",
+            "alternateName": "ArchAgentix ADLC",
+            "description": "ArchAgentix is the company behind ADLC, the Agentic Development Life Cycle: agentic development documentation, pricing, and product entry.",
             "inLanguage": "en",
             "publisher": { "@id": "https://www.archagentix.com/#organization" }
           },
@@ -55,7 +59,7 @@
             "operatingSystem": "Web",
             "url": "https://www.archagentix.com/adlc/",
             "description": "A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes.",
-            "brand": { "@type": "Brand", "name": "Archagentix" },
+            "brand": { "@type": "Brand", "name": "ArchAgentix" },
             "publisher": { "@id": "https://www.archagentix.com/#organization" },
             "keywords": [
               "agentic development",
@@ -87,7 +91,7 @@
           { "@type": "PropertyValue", "propertyID": "CIN", "value": "U62011PN2026PTC260563" },
           { "@type": "PropertyValue", "propertyID": "GSTIN", "value": "27ABGCA7851D1ZN" }
         ],
-        "alternateName": ["Archagentix", "ADLC"],
+        "alternateName": ["ArchAgentix", "ADLC"],
         "url": "https://www.archagentix.com/",
         "logo": "https://www.archagentix.com/brand/icon-512.png",
         "email": "support@archagentix.com",
@@ -105,137 +109,168 @@
     </script>
     <script src="/adlc/config.js"></script>
     <script defer src="/adlc/app.js"></script>
+    <script defer src="/adlc/field.js"></script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
+
     <header class="site-header">
-      <a class="brand" href="/adlc/" aria-label="Archagentix home">
+      <a class="brand wm" href="/adlc/" aria-label="ArchAgentix home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span>Archagentix</span>
+        <span>ArchAgentix</span>
       </a>
-      <nav aria-label="Primary">
-        <a href="/pricing/">Pricing</a>
-        <a href="#process">Process</a>
-        <a href="#evidence">Evidence</a>
-        <a href="/adlc/blog/">Blog</a>
-      </nav>
-      <a class="header-cta" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      <div class="header-side">
+        <details class="nav-menu">
+          <summary>Menu</summary>
+          <nav aria-label="Primary">
+            <a href="/adlc/" aria-current="page">ADLC</a>
+            <a href="/archagentix/">Model intelligence</a>
+            <a href="/pricing/">Pricing</a>
+            <a href="/adlc/blog/">Blog</a>
+            <a href="/about/">About</a>
+            <a href="/contact/">Contact</a>
+          </nav>
+        </details>
+        <a class="key" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      </div>
     </header>
 
-    <main>
+    <main id="main">
       <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow">Agentic Development Life Cycle</p>
-          <h1 id="hero-title">Ship software with agents in the loop and humans in control.</h1>
-          <p class="lede">
-            ADLC turns a product intent into planned work, isolated implementation,
-            verification evidence, review decisions, and release learning.
-            Archagentix runs it in Software Factory, its workspace for Human AI
-            Development —
-            centaur developer teams, where people hold intent and approval and
-            agents do the bounded work.
-          </p>
-          <div class="hero-actions">
-            <a class="primary-cta" href="https://platform.archagentix.com/" data-try-now>Try now</a>
-            <a class="secondary-cta" href="/adlc/brief/">Read the full brief</a>
+        <div class="hero__field" data-field aria-hidden="true"><canvas></canvas></div>
+        <div class="hero__inner">
+          <div class="hero__col">
+            <h1 id="hero-title">Agents in the loop.<br>Humans in control.</h1>
+            <p class="lede" data-reveal>ADLC turns one product intent into planned, isolated, verified, human-approved software.</p>
+            <div class="hero-actions" data-reveal>
+              <a class="key key--primary" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+              <a class="textlink" href="/adlc/brief/">Read the full brief</a>
+            </div>
+          </div>
+          <figure class="shot hero__shot">
+            <img src="/adlc/media/activity-omnibox.png" width="1196" height="1190" decoding="async"
+                 alt="The Software Factory omnibox at rest: the question What should we move forward? over a free-text field carrying an intent-aware route chip, with four suggested actions between them." />
+            <figcaption>Where a run starts: one sentence of intent, and the route it takes.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="process" class="section" aria-labelledby="process-title">
+        <div class="container">
+          <div class="head-block split">
+            <h2 id="process-title">A lifecycle built for controlled agent work.</h2>
+            <p class="lead">Four stages, one artifact each, and a human gate before release.</p>
+          </div>
+          <figure class="shot shot--map">
+            <img src="/adlc/media/agent-harness-map.png" width="2226" height="716" loading="lazy" decoding="async"
+                 alt="The five configured harnesses side by side: ideation, planning and spec, development in a sandbox, deployment and CI/CD, observability and QA. Each card names its runtime, its model tiers, its connectors and its egress state. A decision gate sits between ideation and planning, an approval threshold between planning and development, and an amber note marks the failure loopback that returns a rolled back deployment to the coding agent." />
+            <figcaption>The harnesses as configured, the two gates a run passes through, and the loopback that returns a failed deployment to the coding agent.</figcaption>
+          </figure>
+          <div class="run">
+            <div class="run__stage" aria-label="Run ledger for the current stage">
+              <dl class="ledger cut" data-run-ledger>
+                <div class="ledger-line is-active"><dt>intent</dt><dd>captured with acceptance criteria</dd></div>
+                <div class="ledger-line"><dt>planner</dt><dd>split into bounded tickets</dd></div>
+                <div class="ledger-line"><dt>coder</dt><dd>isolated workspace created</dd></div>
+                <div class="ledger-line"><dt>tester</dt><dd>regression and smoke evidence attached</dd></div>
+                <div class="ledger-line"><dt>review</dt><dd>human gate pending</dd></div>
+                <div class="ledger-line"><dt>release</dt><dd>ready when approved</dd></div>
+              </dl>
+            </div>
+            <article class="run__panel" data-run-stage="0">
+              <h3><span class="stage-no num">1.</span> Frame</h3>
+              <p>Capture intent, constraints, source context, and policy boundaries before any agent acts.</p>
+            </article>
+            <article class="run__panel" data-run-stage="1">
+              <h3><span class="stage-no num">2.</span> Plan</h3>
+              <p>Convert goals into sequenced tickets with explicit assumptions, dependencies, and approval gates.</p>
+            </article>
+            <article class="run__panel" data-run-stage="2">
+              <h3><span class="stage-no num">3.</span> Build</h3>
+              <p>Run implementation in isolated workspaces where credentials stay behind controlled services.</p>
+            </article>
+            <article class="run__panel" data-run-stage="3">
+              <h3><span class="stage-no num">4.</span> Verify</h3>
+              <p>Attach tests, traces, diffs, review notes, and release evidence to the work item.</p>
+            </article>
           </div>
         </div>
-        <div class="terminal" aria-label="ADLC workflow terminal">
-          <div class="terminal-bar"><span></span><span></span><span></span></div>
-          <pre><code>$ adlc run "reduce checkout latency"
-intent       captured with acceptance criteria
-planner      split into bounded tickets
-coder        isolated workspace created
-tester       regression and smoke evidence attached
-review       human gate pending
-release      ready when approved</code></pre>
+      </section>
+
+      <section id="evidence" class="section band band--graphite" aria-labelledby="evidence-title">
+        <div class="container">
+          <div class="head-block">
+            <h2 id="evidence-title">Designed for readable state, not agent theatrics.</h2>
+            <p class="lead">Every stage leaves durable artifacts: plans, task context, run logs, test output, review decisions.</p>
+          </div>
+          <dl class="ledger">
+            <div class="ledger-line"><dt>Governance</dt><dd>policy-aware handoffs and human approval points</dd></div>
+            <div class="ledger-line"><dt>Isolation</dt><dd>per-run workspaces with proxied egress and no raw provider secrets</dd></div>
+            <div class="ledger-line"><dt>Continuity</dt><dd>learning loops that feed future planning and support workflows</dd></div>
+          </dl>
+          <p>Teams can inspect what happened without reverse-engineering a chat transcript.</p>
+          <figure class="shot">
+            <img src="/adlc/media/usage-record.png" width="2480" height="1144" loading="lazy" decoding="async"
+                 alt="A workspace usage record: spend, total requests split into successful and failed, total tokens including cache reads, average cost per request, average latency and success rate, then daily spend by model and the top models ranked by share." />
+            <figcaption>One workspace, the week it ran: spend, requests, cache reads, latency and the models behind them.</figcaption>
+          </figure>
         </div>
       </section>
 
-      <section id="process" class="process" aria-labelledby="process-title">
-        <div class="section-heading">
-          <p class="eyebrow">Process</p>
-          <h2 id="process-title">A lifecycle built for controlled agent work.</h2>
+      <section class="close-band band" aria-labelledby="cta-title">
+        <div class="container">
+          <div>
+            <h2 id="cta-title">Open the Software Factory workspace.</h2>
+            <p>Planner, coder, tester and review agents run against your repository; the release gate stays human.</p>
+          </div>
+          <a class="key key--primary" href="https://platform.archagentix.com/" data-try-now>Try now</a>
         </div>
-        <div class="steps">
-          <article>
-            <span>01</span>
-            <h3>Frame</h3>
-            <p>Capture intent, constraints, source context, and policy boundaries before any agent acts.</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h3>Plan</h3>
-            <p>Convert goals into sequenced tickets with explicit assumptions, dependencies, and approval gates.</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h3>Build</h3>
-            <p>Run implementation in isolated workspaces where credentials stay behind controlled services.</p>
-          </article>
-          <article>
-            <span>04</span>
-            <h3>Verify</h3>
-            <p>Attach tests, traces, diffs, review notes, and release evidence to the work item.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="evidence" class="evidence" aria-labelledby="evidence-title">
-        <div>
-          <p class="eyebrow">Evidence</p>
-          <h2 id="evidence-title">Designed for readable state, not agent theatrics.</h2>
-          <p>
-            Every stage produces durable artifacts: plans, task context, run logs,
-            test output, review decisions, and operational feedback. Teams can inspect
-            what happened without reverse-engineering a chat transcript.
-          </p>
-        </div>
-        <ul>
-          <li><strong>Governance:</strong> policy-aware handoffs and human approval points.</li>
-          <li><strong>Isolation:</strong> per-run workspaces with proxied egress and no raw provider secrets.</li>
-          <li><strong>Continuity:</strong> learning loops that feed future planning and support workflows.</li>
-        </ul>
-      </section>
-
-      <section class="cta-band" aria-labelledby="cta-title">
-        <h2 id="cta-title">Open the current Software Factory workspace.</h2>
-        <p>The public ADLC page is separate from the application. The workspace route remains unchanged.</p>
-        <a class="primary-cta" href="https://platform.archagentix.com/" data-try-now>Try now</a>
       </section>
     </main>
-    
+
     <footer class="site-footer" aria-label="Site footer">
-      <div class="footer-brand">
-        <a class="brand" href="/adlc/" aria-label="Archagentix home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Archagentix</span>
-        </a>
+      <div class="container colophon">
+        <p class="wordmark wm"><span class="brand"><span class="brand-mark" aria-hidden="true"></span> ArchAgentix</span></p>
         <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>
-      </div>
-      <nav class="footer-col" aria-label="Company">
-        <h3>Company</h3>
-        <a href="/about/">About Company</a>
-        <a href="/careers/">Careers</a>
-        <a href="/newsroom/">Newsroom</a>
-        <a href="/contact/">Contact Us</a>
-      </nav>
-      <nav class="footer-col" aria-label="Explore">
-        <h3>Explore</h3>
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/adlc/brief/">Full brief</a>
-        <a href="https://platform.archagentix.com/" rel="noopener">Archagentix Platform</a>
-      </nav>
-      <div class="footer-col footer-legal">
-        <p>&copy; 2026 Archagentix Private Limited &middot; Hinjewadi IT Park, Pune 411057, Maharashtra, India</p>
-        <p><a href="tel:+919370580836">+91 93705 80836</a> &middot; <a href="mailto:support@archagentix.com">support@archagentix.com</a></p>
-        <nav aria-label="Legal">
-          <a href="/terms/">Terms of Service</a>
-          <a href="/privacy/">Privacy Policy</a>
-          <a href="/refund-policy/">Refund &amp; Cancellation</a>
-          <a href="/shipping-policy/">Delivery Policy</a>
+        <nav aria-label="Site">
+          <a href="/about/">About Company</a>
+          <a href="/careers/">Careers</a>
+          <a href="/newsroom/">Newsroom</a>
+          <a href="/contact/">Contact Us</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/adlc/blog/">Blog</a>
+          <a href="/archagentix/">Model intelligence</a>
+          <a href="/adlc/brief/">Full brief</a>
+          <a href="https://platform.archagentix.com/" rel="noopener">ArchAgentix Platform</a>
         </nav>
+        <p class="legal">
+            © 2026 Archagentix Private Limited<br />
+            Hinjewadi IT Park, Pune 411057, Maharashtra, India
+            <span class="legal-links"><a href="tel:+919370580836">+91 93705 80836</a><a href="mailto:support@archagentix.com">support@archagentix.com</a></span>
+            <span class="legal-links"><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a><a href="/refund-policy/">Refund &amp; Cancellation</a><a href="/shipping-policy/">Delivery Policy</a></span>
+          </p>
       </div>
     </footer>
-</body>
+    <script>
+      (() => {
+        const panels = [...document.querySelectorAll('[data-run-stage]')];
+        const rows = document.querySelectorAll('[data-run-ledger] .ledger-line');
+        const map = { 0: [0, 1], 1: [1, 2], 2: [2, 3], 3: [3, 4, 5] };
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach((e) => {
+            if (!e.isIntersecting) return;
+            const active = map[e.target.dataset.runStage] || [];
+            rows.forEach((r, i) => r.classList.toggle('is-active', active.includes(i)));
+          });
+        }, { rootMargin: '-40% 0px -40% 0px' });
+        panels.forEach((p) => io.observe(p));
+        document.querySelectorAll('[data-reveal]').forEach((el, i) => {
+          el.style.setProperty('--i', i);
+          new IntersectionObserver(([e], obs) => {
+            if (e.isIntersecting) { el.classList.add('is-in'); obs.disconnect(); }
+          }, { rootMargin: '0px 0px -10% 0px' }).observe(el);
+        });
+      })();
+    </script>
+  </body>
 </html>

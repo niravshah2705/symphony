@@ -26,8 +26,17 @@ const APPS = [
     ],
     html: ['index.html'],
   },
-  { name: 'adlc', css: ['adlc/styles.css'], html: ['adlc/index.html'] },
-  { name: 'archagentix', css: ['archagentix/styles.css'], html: [] },
+  {
+    name: 'adlc',
+    css: [
+      'tokens.css',
+      'base.css',
+      'adlc/styles.css',
+      ...(fs.existsSync(path.join(publicDir, 'adlc', 'pages')) ? fs.readdirSync(path.join(publicDir, 'adlc', 'pages')).filter((file) => file.endsWith('.css')).sort().map((file) => path.join('adlc', 'pages', file)) : []),
+    ],
+    html: ['adlc/index.html'],
+  },
+  { name: 'archagentix', css: ['tokens.css', 'base.css', 'archagentix/styles.css'], html: [] },
 ];
 
 const DECLARATION = /(--[a-z0-9-]+)\s*:/g;

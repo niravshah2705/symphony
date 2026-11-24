@@ -11,7 +11,7 @@ console.log('Running Archagentix Benchmarks Static Tests...');
 // 1. Verify HTML Structure
 const htmlPath = path.join(__dirname, 'index.html');
 const htmlContent = fs.readFileSync(htmlPath, 'utf8');
-assert.ok(htmlContent.includes('<title>Archagentix'), 'index.html must brand the title as Archagentix');
+assert.ok(htmlContent.includes('<title>ArchAgentix'), 'index.html must brand the title as ArchAgentix, the site-wide wordmark');
 assert.ok(htmlContent.includes('benchmarks-table'), 'index.html missing benchmarks table');
 assert.ok(htmlContent.includes('evaluator'), 'index.html missing interactive evaluator section');
 assert.ok(htmlContent.includes('slm-chat'), 'index.html missing SLM chat section');

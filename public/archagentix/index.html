@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Archagentix Model Intelligence — LLM Cost Benchmarks</title>
+  <title>ArchAgentix Model Intelligence: LLM cost benchmarks</title>
   <meta
     name="description"
-    content="Archagentix Model Intelligence benchmarks frontier and open-source LLMs: token cost, rate limits, caching discounts, fallback resilience, SWE-bench efficiency."
+    content="ArchAgentix Model Intelligence lists token prices, caching and batch discounts, context windows and agentic features for the models ADLC runs on, with a scored catalog and a workload evaluator."
   />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
-  <meta name="application-name" content="Archagentix" />
+  <meta name="theme-color" content="#f8f9f9" />
+  <meta name="application-name" content="ArchAgentix" />
   <link rel="canonical" href="https://platform.archagentix.com/archagentix/" />
   <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
   <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
@@ -18,20 +19,20 @@
   <meta property="og:image" content="https://platform.archagentix.com/brand/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Archagentix — the Agentic Development Life Cycle" />
+  <meta property="og:image:alt" content="ArchAgentix, the Agentic Development Life Cycle" />
   <meta name="twitter:image" content="https://platform.archagentix.com/brand/og-image.png" />
   <link rel="sitemap" type="application/xml" href="/sitemap-platform.xml" />
   <link rel="describedby" type="text/markdown" href="/llms.txt" />
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Archagentix" />
+  <meta property="og:site_name" content="ArchAgentix" />
   <meta property="og:url" content="https://platform.archagentix.com/archagentix/" />
-  <meta property="og:title" content="Archagentix Model Intelligence — LLM Benchmarks" />
+  <meta property="og:title" content="ArchAgentix Model Intelligence: LLM cost benchmarks" />
   <meta
     property="og:description"
-    content="Compare LLM cost, rate limits, caching discounts and agentic coding benchmarks in one interactive evaluator."
+    content="Compare LLM list prices, caching discounts, context windows and agentic coding benchmarks in one interactive evaluator."
   />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Archagentix Model Intelligence — LLM Benchmarks" />
+  <meta name="twitter:title" content="ArchAgentix Model Intelligence: LLM cost benchmarks" />
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -40,8 +41,8 @@
           "@type": "WebPage",
           "@id": "https://platform.archagentix.com/archagentix/#webpage",
           "url": "https://platform.archagentix.com/archagentix/",
-          "name": "Archagentix Model Intelligence — LLM Benchmarks, Costs & Rate Limits",
-          "description": "Benchmarks and cost/rate-limit comparison for frontier and open-source LLMs, with an interactive evaluator.",
+          "name": "ArchAgentix Model Intelligence: LLM benchmarks and list prices",
+          "description": "List prices, context windows and agentic features for the models ADLC runs on, with a scored catalog and an interactive workload evaluator.",
           "inLanguage": "en",
           "isPartOf": { "@id": "https://platform.archagentix.com/#website" },
           "publisher": { "@id": "https://www.archagentix.com/#organization" }
@@ -49,93 +50,117 @@
         {
           "@type": "ItemList",
           "@id": "https://platform.archagentix.com/archagentix/#catalog",
-          "name": "Archagentix LLM benchmark catalog",
+          "name": "ArchAgentix LLM benchmark catalog",
           "itemListOrder": "https://schema.org/ItemListOrderDescending",
           "numberOfItems": 5,
           "itemListElement": [
-            "SWE-bench Verified resolution rate",
-            "Blended input/output token cost",
-            "Rate limits and burst headroom",
-            "Prompt-caching discount",
-            "Provider fallback resilience"
+            "Input and output price per million tokens",
+            "Prompt-caching and batch discounts",
+            "Context window and maximum output",
+            "Tool use, function calling and computer use",
+            "SWE-bench and MMLU-Pro in the scored catalog"
           ]
         }
       ]
     }
   </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/archagentix/styles.css">
 </head>
 <body>
-  <header class="navbar">
-    <div class="logo">
-      <span class="brand">Archagentix</span>
-      <span class="badge">Model Intelligence</span>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <a class="brand wm" href="/adlc/" aria-label="ArchAgentix home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>ArchAgentix</span>
+    </a>
+    <div class="header-side">
+      <details class="nav-menu">
+        <summary>Menu</summary>
+        <nav aria-label="Primary">
+          <a href="/adlc/">ADLC</a>
+          <a href="/archagentix/" aria-current="page">Model intelligence</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/adlc/blog/">Blog</a>
+          <a href="/about/">About</a>
+          <a href="/contact/">Contact</a>
+        </nav>
+      </details>
+      <a class="key" href="https://platform.archagentix.com/" data-try-now>Try now</a>
     </div>
-    <nav class="nav-links">
-      <a href="#benchmarks" class="active">Benchmarks & Rank</a>
-      <a href="#agentic-catalog">Agentic Catalog</a>
-      <a href="#providers">Provider Matrix</a>
-      <a href="#evaluator">Interactive Evaluator</a>
-      <a href="#slm-chat">AI Assistant</a>
-      <a href="#questions">Question Bank</a>
-    </nav>
   </header>
 
-  <main class="container">
-    <section class="hero">
-      <h1>Frontier & Open Source Model Benchmarks</h1>
-      <p>Compare cost, rate limits, prompt caching discounts, auto-fallback resilience, regions, and SWE-bench efficiency.</p>
-    </section>
-
-    <!-- Controls & Filters -->
-    <section class="controls-card">
-      <div class="filter-group">
-        <label for="filter-provider">Provider</label>
-        <select id="filter-provider">
-          <option value="">All Providers</option>
-          <option value="DeepSeek">DeepSeek</option>
-          <option value="Anthropic">Anthropic</option>
-          <option value="OpenAI">OpenAI</option>
-          <option value="Alibaba Cloud">Alibaba Cloud</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label for="filter-type">Model Type</label>
-        <select id="filter-type">
-          <option value="">All Types</option>
-          <option value="open_source">Open Source</option>
-          <option value="proprietary">Proprietary</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label for="search-input">Search Model</label>
-        <input type="text" id="search-input" placeholder="e.g. DeepSeek V3, Sonnet...">
+  <main id="main" class="container">
+    <section class="app-head" aria-labelledby="page-title">
+      <p class="byline"><span class="tag">Model intelligence</span></p>
+      <h1 id="page-title">Model cost and capability, side by side.</h1>
+      <p class="lede">Token prices, prompt-caching discounts, context windows, agentic features and a scored catalog for the models ADLC runs on.</p>
+      <div class="head-actions">
+        <a class="key key--primary" href="#evaluator">Evaluate a workload</a>
+        <a class="textlink" href="#agentic-catalog">See the scored catalog</a>
       </div>
     </section>
 
-    <!-- Main Benchmarks Table -->
-    <section id="benchmarks" class="table-section">
+    <nav class="subnav" aria-label="On this page">
+      <a href="#benchmarks">Price sheet</a>
+      <a href="#agentic-catalog">Scored catalog</a>
+      <a href="#evaluator">Workload evaluator</a>
+      <a href="#slm-chat">Assistant</a>
+      <a href="#questions">Question bank</a>
+    </nav>
+
+    <!-- The register: provider list prices, filtered by the three controls above the table -->
+    <section id="benchmarks" class="table-section panel cut" aria-labelledby="benchmarks-title">
       <div class="section-header">
-        <h2>Model Rankings & Features</h2>
-        <span class="formula-note">Simple Score Formula: 40% SWE + 25% MMLU + 20% Cost Efficiency + 15% Features</span>
+        <h2 id="benchmarks-title">List price sheet</h2>
+        <p class="formula-note">Provider list prices from the model registry; the first hundred of 4,784 rows are shown.</p>
       </div>
+
+      <div class="controls" role="group" aria-label="Filter the price sheet">
+        <div class="filter-group">
+          <label for="filter-provider">Provider</label>
+          <select id="filter-provider">
+            <option value="">All providers</option>
+            <option value="DeepSeek">DeepSeek</option>
+            <option value="Anthropic">Anthropic</option>
+            <option value="OpenAI">OpenAI</option>
+            <option value="Alibaba Cloud">Alibaba Cloud</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="filter-type">Model type</label>
+          <select id="filter-type">
+            <option value="">All types</option>
+            <option value="open_source">Open source</option>
+            <option value="proprietary">Proprietary</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="search-input">Search model</label>
+          <input type="text" id="search-input" placeholder="DeepSeek V3, Sonnet…">
+        </div>
+      </div>
+
+      <p class="scroll-hint">Swipe sideways for the rest of the columns.</p>
 
       <div class="table-wrapper">
         <table id="benchmarks-table">
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Model Name</th>
-              <th>Simple Score</th>
-              <th>SWE-bench</th>
-              <th>MMLU-Pro</th>
-              <th>Prompt / 1M</th>
-              <th>Cache Support</th>
-              <th>Auto Fallback</th>
-              <th>Rate Limits</th>
-              <th>Links</th>
+              <th scope="col">Rank</th>
+              <th scope="col">Model</th>
+              <th scope="col">Licence</th>
+              <th scope="col">Context</th>
+              <th scope="col">Input / 1M</th>
+              <th scope="col">Output / 1M</th>
+              <th scope="col">Cache read / 1M</th>
+              <th scope="col">Batch input / 1M</th>
+              <th scope="col">Source</th>
             </tr>
           </thead>
           <tbody id="table-body">
@@ -146,24 +171,26 @@
     </section>
 
     <!-- Agentic Model Catalog: static data regenerated by npm run benchmarks:seed -->
-    <section id="agentic-catalog" class="table-section">
+    <section id="agentic-catalog" class="table-section panel cut" aria-labelledby="catalog-title">
       <div class="section-header">
-        <h2>Agentic Model Catalog</h2>
-        <span class="formula-note">Simple Score Formula: 40% SWE + 25% MMLU + 20% Cost Efficiency + 15% Features</span>
+        <h2 id="catalog-title">Agentic model catalog</h2>
+        <p class="formula-note">Simple score: 40% SWE-bench, 25% MMLU-Pro, 20% cost efficiency, 15% features.</p>
       </div>
+
+      <p class="scroll-hint">Swipe sideways for the rest of the columns.</p>
 
       <div class="table-wrapper">
         <table id="catalog-table">
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Model</th>
-              <th>Type</th>
-              <th>Context</th>
-              <th>Max Out</th>
-              <th>Agentic Features</th>
-              <th>Best Cloud Cost</th>
-              <th>Score</th>
+              <th scope="col">Rank</th>
+              <th scope="col">Model</th>
+              <th scope="col">Type</th>
+              <th scope="col">Context</th>
+              <th scope="col">Max output</th>
+              <th scope="col">Agentic features</th>
+              <th scope="col">Best cloud cost</th>
+              <th scope="col">Score</th>
             </tr>
           </thead>
           <tbody id="catalog-body">
@@ -174,28 +201,31 @@
     </section>
 
     <!-- Interactive Evaluator & ROI Calculator -->
-    <section id="evaluator" class="evaluator-section">
-      <h2>Interactive Workload Evaluator</h2>
+    <section id="evaluator" class="table-section panel cut" aria-labelledby="evaluator-title">
+      <div class="section-header">
+        <h2 id="evaluator-title">Interactive workload evaluator</h2>
+        <p class="note">Set a monthly token volume and a cache-hit ratio; every model is costed on the same numbers.</p>
+      </div>
       <div class="evaluator-grid">
         <div class="evaluator-card">
-          <h3>Workload Parameters</h3>
+          <h3>Workload parameters</h3>
           <div class="form-group">
-            <label for="eval-prompts">Monthly Prompt Tokens (Millions)</label>
+            <label for="eval-prompts">Monthly prompt tokens (millions)</label>
             <input type="number" id="eval-prompts" value="100" min="1">
           </div>
           <div class="form-group">
-            <label for="eval-completions">Monthly Completion Tokens (Millions)</label>
+            <label for="eval-completions">Monthly completion tokens (millions)</label>
             <input type="number" id="eval-completions" value="50" min="1">
           </div>
           <div class="form-group">
-            <label for="eval-cache-hit">Expected Prompt Cache Hit Ratio (%)</label>
+            <label for="eval-cache-hit">Expected prompt cache-hit ratio (%)</label>
             <input type="range" id="eval-cache-hit" value="60" min="0" max="95">
-            <span id="cache-hit-val">60%</span>
+            <output id="cache-hit-val" for="eval-cache-hit">60%</output>
           </div>
         </div>
 
         <div class="evaluator-card result-card">
-          <h3>Cost & Score Comparison</h3>
+          <h3>Cost and score comparison</h3>
           <div id="eval-results">
             <!-- Computed Results -->
           </div>
@@ -203,69 +233,74 @@
       </div>
     </section>
 
-    <!-- On-Device SLM Browser Assistant -->
-    <section id="slm-chat" class="slm-section">
-      <h2>Browser AI Assistant (On-Device SLM / window.ai)</h2>
-      <p class="slm-desc">Asks questions grounded directly on fetched benchmark & rate limit data.</p>
-      
+    <section id="slm-chat" class="panel cut" aria-labelledby="assistant-title">
+      <div class="panel-head">
+        <h2 id="assistant-title">Browser AI assistant</h2>
+        <p class="note">Answers grounded on the pricing and benchmark data on this page. Runs on the on-device model when the browser exposes one.</p>
+      </div>
       <div class="chat-container">
-        <div id="chat-messages" class="messages-list">
-          <div class="msg bot">Hello! Ask me anything about LLM costs, rate limits, prompt caching, or benchmark rankings.</div>
+        <div id="chat-messages" class="messages-list" role="log" aria-live="polite">
+          <p class="msg bot">Hello! Ask me anything about LLM list prices, cache discounts, context windows, or benchmark rankings.</p>
         </div>
         <div class="chat-input-bar">
-          <input type="text" id="chat-input" placeholder="e.g. Which open source model has the highest SWE-bench score under $0.50/1M?">
-          <button id="send-btn">Ask SLM</button>
+          <label class="visually-hidden" for="chat-input">Ask a question about the benchmarks</label>
+          <input type="text" id="chat-input" placeholder="Which open-source model has the highest SWE-bench score under $0.50 per million?">
+          <button type="button" id="send-btn" class="btn btn-primary">Ask</button>
         </div>
       </div>
     </section>
     <!-- Global Discovery Question Bank (per-organization overrides of the platform defaults) -->
-    <section id="questions" class="questions-section">
+    <section id="questions" class="table-section panel cut" aria-labelledby="questions-title">
       <div class="section-header">
-        <h2>Global Discovery Questions</h2>
-        <span id="questions-org" class="org-chip" data-state="anonymous">Checking session…</span>
+        <h2 id="questions-title">Global discovery questions</h2>
+        <span id="questions-org" class="org-chip" data-state="anonymous">Not signed in</span>
       </div>
       <p class="questions-desc">
-        Eighty intake questions about the organisation, the person, and the project. Edits here are
-        saved for this organization only; the platform defaults stay versioned in code and are merged
-        when the bank is read.
+        The intake questions ADLC asks about the organisation, the person, and the project. Edits here
+        are saved for this organization only; the platform defaults stay versioned in code and are
+        merged when the bank is read.
       </p>
 
       <div id="questions-auth" class="auth-gate" hidden></div>
+      <span id="questions-status" class="questions-status" role="status" aria-live="polite"></span>
 
-      <div class="questions-toolbar">
-        <label>Category
-          <select id="questions-filter">
-            <option value="">All categories</option>
-          </select>
-        </label>
-        <label>Origin
-          <select id="questions-origin">
-            <option value="">Any origin</option>
-          </select>
-        </label>
-        <span id="questions-count" class="questions-count"></span>
-        <button type="button" id="questions-reload" class="btn">Reload</button>
-        <button type="button" id="questions-add" class="btn edit-only" hidden>Add question</button>
-        <button type="button" id="questions-ai" class="btn btn-primary edit-only" hidden>Draft with AI</button>
-        <span id="questions-status" class="questions-status" role="status" aria-live="polite"></span>
-      </div>
+      <div class="bank-body" hidden>
+        <div class="questions-toolbar">
+          <label>Category
+            <select id="questions-filter">
+              <option value="">All categories</option>
+            </select>
+          </label>
+          <label>Origin
+            <select id="questions-origin">
+              <option value="">Any origin</option>
+            </select>
+          </label>
+          <span id="questions-count" class="questions-count"></span>
+          <button type="button" id="questions-reload" class="btn">Reload</button>
+          <button type="button" id="questions-add" class="btn edit-only" hidden>Add question</button>
+          <button type="button" id="questions-ai" class="btn btn-primary edit-only" hidden>Draft with AI</button>
+        </div>
 
-      <div class="table-wrapper">
+        <p class="scroll-hint">Swipe sideways for the rest of the columns.</p>
+
+        <div class="table-wrapper">
         <table id="questions-table">
           <thead>
             <tr>
-              <th>Category</th>
-              <th>Sub-dimension</th>
-              <th>Question</th>
-              <th>Why it matters</th>
-              <th>Answer type</th>
-              <th>Choices</th>
-              <th>Origin</th>
-              <th>Actions</th>
+              <th scope="col">Category</th>
+              <th scope="col">Sub-dimension</th>
+              <th scope="col">Question</th>
+              <th scope="col">Why it matters</th>
+              <th scope="col">Answer type</th>
+              <th scope="col">Choices</th>
+              <th scope="col">Origin</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody id="questions-body"></tbody>
         </table>
+        </div>
       </div>
 
       <div id="questions-drawer" class="ai-drawer" hidden>
@@ -300,6 +335,28 @@
       </div>
     </section>
   </main>
+
+  <footer class="site-footer" aria-label="Site footer">
+    <div class="container colophon">
+      <p class="wordmark wm"><span class="brand"><span class="brand-mark" aria-hidden="true"></span> ArchAgentix</span></p>
+      <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>
+      <nav aria-label="Site">
+        <a href="/adlc/">ADLC</a>
+        <a href="/pricing/">Pricing</a>
+        <a href="/adlc/blog/">Blog</a>
+        <a href="/archagentix/">Model intelligence</a>
+        <a href="/adlc/brief/">Full brief</a>
+        <a href="/contact/">Contact</a>
+        <a href="https://platform.archagentix.com/" rel="noopener">ArchAgentix Platform</a>
+      </nav>
+      <p class="legal">
+          © 2026 Archagentix Private Limited<br />
+          Hinjewadi IT Park, Pune 411057, Maharashtra, India
+          <span class="legal-links"><a href="tel:+919370580836">+91 93705 80836</a><a href="mailto:support@archagentix.com">support@archagentix.com</a></span>
+          <span class="legal-links"><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a><a href="/refund-policy/">Refund &amp; Cancellation</a><a href="/shipping-policy/">Delivery Policy</a></span>
+        </p>
+    </div>
+  </footer>
 
   <script type="module" src="/archagentix/app.js"></script>
 </body>

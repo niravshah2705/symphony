@@ -1,5 +1,24 @@
 import { initQuestionBank } from './questions.js';
 
+// Registry keys arrive as snake_case identifiers; the table shows words.
+const readable = (value) => String(value || '').replace(/_/g, ' ');
+
+// A price register: grouped thousands, two decimals, a third only when the cent
+// is finer than a cent. $10.000 would read as ten thousand dollars.
+const money = (value) =>
+  Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+
+// Two rows of one model differ by region or by context tier; the register says which.
+// "global" is nearly always true, so it is never the discriminator — the tier usually is.
+const scopeOf = (m) => {
+  const parts = [];
+  const region = m.available_regions;
+  if (region && !/^global$/i.test(region)) parts.push(readable(region));
+  const tier = m.context_tier;
+  if (tier && tier !== 'standard') parts.push(/^[<>]=?\d/.test(tier) ? `${tier} context` : readable(tier));
+  return parts.join(', ');
+};
+
 let benchmarkData = [];
 let slmWorker = null;
 
@@ -17,14 +36,13 @@ async function initCatalog() {
   renderCatalog(await res.json());
 }
 
-function renderCatalog(rows) {
-  const tbody = document.getElementById('catalog-body');
+function renderCatalog(rows) {  const tbody = document.getElementById('catalog-body');
   if (!tbody) return;
   tbody.textContent = '';
 
-  const cell = (value) => {
+  const cell = (value, className) => {
     const td = document.createElement('td');
-    td.textContent = value;
+        td.textContent = value;
     return td;
   };
 
@@ -40,27 +58,27 @@ function renderCatalog(rows) {
     // Feature labels are fixed strings; only booleans from the data decide which show.
     const features = document.createElement('td');
     for (const [on, label] of [
-      [m.agentic_features?.tool_use, 'Tool Use'],
-      [m.agentic_features?.function_calling, 'Function Calling'],
-      [m.agentic_features?.computer_use, 'Computer Use'],
-      [m.agentic_features?.reasoning_effort_control, 'Reasoning Control'],
+      [m.agentic_features?.tool_use, 'Tool use'],
+      [m.agentic_features?.function_calling, 'Function calling'],
+      [m.agentic_features?.computer_use, 'Computer use'],
+      [m.agentic_features?.reasoning_effort_control, 'Reasoning control'],
     ]) {
       if (!on) continue;
       const tag = document.createElement('span');
-      tag.className = 'score-tag';
+      tag.className = 'feature-pill';
       tag.textContent = label;
       features.appendChild(tag);
       features.appendChild(document.createTextNode(' '));
     }
 
     const cost = m.best_cloud
-      ? `$${Number(m.best_cloud.prompt_cost_per_1m).toFixed(3)}/1M via ${m.best_cloud.provider}`
+      ? `$${money(m.best_cloud.prompt_cost_per_1m)}/1M via ${readable(m.best_cloud.provider)}`
       : 'Direct only';
 
     tr.append(
       rank,
       cell(`${m.name} · ${m.provider}`),
-      cell(m.model_type),
+      cell(readable(m.model_type)),
       cell(`${Number(m.parameters?.context_window_tokens || 0).toLocaleString()} tokens`),
       cell(Number(m.parameters?.max_output_tokens || 0).toLocaleString()),
       features,
@@ -86,29 +104,72 @@ async function initApp() {
 
 function formatVal(val) {
   const num = parseFloat(val);
-  if (!num || num === 0) return '<em>N/A (0.0)</em>';
-  return `$${num.toFixed(3)}/1M`;
+  if (!num || num === 0) return 'N/A';
+  return `$${money(num)}/1M`;
 }
 
+// One row per fetched model. Built from textContent rather than innerHTML: the
+// names and URLs come from an upstream registry file, not from this repo.
 function renderTable(data) {
   const tbody = document.getElementById('table-body');
-  tbody.innerHTML = '';
+  tbody.replaceChildren();
+
+  const cell = (value, className) => {
+    const td = document.createElement('td');
+        if (className) td.className = className;
+    td.textContent = value;
+    return td;
+  };
 
   data.forEach((m, idx) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span class="rank-badge">${idx + 1}</span></td>
-      <td><strong>${m.model_name || m.model_id}</strong><br><small style="color:#8b949e">${m.provider} (${m.category || 'all'})</small></td>
-      <td><span class="score-tag">${m.license || 'N/A'}</span></td>
-      <td>${parseInt(m.context_length_tokens || 0).toLocaleString()} tokens</td>
-      <td>${formatVal(m.input_usd_per_1m)}</td>
-      <td>${formatVal(m.output_usd_per_1m)}</td>
-      <td><small>Batch: ${formatVal(m.batch_input_usd_per_1m)}<br>Cache Read: ${formatVal(m.cache_read_usd_per_1m)}</small></td>
-      <td><small>${m.available_regions || m.region || 'Global'}</small></td>
-      <td>
-        ${m.source_url ? `<a href="${m.source_url}" target="_blank" style="color:#58a6ff; font-size:0.8rem">Source</a>` : ''}
-      </td>
-    `;
+
+    const rank = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'rank-badge';
+    badge.textContent = idx + 1;
+    rank.appendChild(badge);
+
+    const model = document.createElement('td');
+    const name = document.createElement('strong');
+    name.textContent = m.model_name || m.model_id;
+    const meta = document.createElement('span');
+    meta.className = 'muted';
+    meta.textContent = `${m.provider} · ${m.category || 'general'}`;
+    model.append(name, document.createElement('br'), meta);
+    const scope = scopeOf(m);
+    if (scope) {
+      const where = document.createElement('span');
+      where.className = 'row-scope';
+      where.textContent = scope;
+      model.append(document.createElement('br'), where);
+    }
+
+    const source = document.createElement('td');
+    if (m.source_url) {
+      const link = document.createElement('a');
+      link.className = 'textlink';
+      link.href = m.source_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'Source';
+      source.appendChild(link);
+    } else {
+      source.textContent = 'Registry only';
+      source.className = 'muted';
+    }
+
+    tr.append(
+      rank,
+      model,
+      cell(m.license === 'open_source' ? 'Open source' : 'Proprietary'),
+      cell(parseInt(m.context_length_tokens || 0).toLocaleString(), 'num'),
+      cell(formatVal(m.input_usd_per_1m), 'num'),
+      cell(formatVal(m.output_usd_per_1m), 'num'),
+      cell(formatVal(m.cache_read_usd_per_1m), 'num'),
+      cell(formatVal(m.batch_input_usd_per_1m), 'num'),
+      source,
+    );
     tbody.appendChild(tr);
   });
 }
@@ -149,30 +210,41 @@ function setupEvaluator() {
     const promptM = parseFloat(promptInput?.value) || 0;
     const compM = parseFloat(compInput?.value) || 0;
     const hitRatio = (parseFloat(cacheHitInput?.value) || 0) / 100;
-    if (cacheHitVal) cacheHitVal.textContent = `${cacheHitInput.value}%`;
+    if (cacheHitVal) cacheHitVal.value = `${cacheHitInput.value}%`;
 
-    let html = '<div style="display:flex; flex-direction:column; gap:0.5rem">';
-    benchmarkData.slice(0, 10).forEach(m => {
+    if (!resultsDiv) return;
+    resultsDiv.replaceChildren();
+
+    benchmarkData.slice(0, 10).forEach((m) => {
       const inPrice = parseFloat(m.input_usd_per_1m) || 0;
       const outPrice = parseFloat(m.output_usd_per_1m) || 0;
       const cachePrice = parseFloat(m.cache_read_usd_per_1m) || inPrice;
+      if (inPrice <= 0) return;
 
-      if (inPrice > 0) {
-        const promptCostUncached = promptM * (1 - hitRatio) * inPrice;
-        const promptCostCached = promptM * hitRatio * cachePrice;
-        const compCost = compM * outPrice;
-        const totalEst = promptCostUncached + promptCostCached + compCost;
+      const promptCostUncached = promptM * (1 - hitRatio) * inPrice;
+      const promptCostCached = promptM * hitRatio * cachePrice;
+      const compCost = compM * outPrice;
+      const totalEst = promptCostUncached + promptCostCached + compCost;
 
-        html += `
-          <div style="display:flex; justify-content:space-between; padding:0.5rem; background:#161b22; border-radius:4px">
-            <span><strong>${m.model_name || m.model_id}</strong> <small style="color:#8b949e">(${m.provider})</small></span>
-            <span style="color:#58a6ff; font-weight:bold">$${totalEst.toFixed(2)}/mo</span>
-          </div>
-        `;
-      }
+      const row = document.createElement('div');
+      row.className = 'eval-row';
+
+      const who = document.createElement('p');
+      const name = document.createElement('strong');
+      name.textContent = m.model_name || m.model_id;
+      const provider = document.createElement('span');
+      provider.className = 'muted';
+      const scope = scopeOf(m);
+      provider.textContent = scope ? ` (${m.provider}, ${scope})` : ` (${m.provider})`;
+      who.append(name, provider);
+
+      const cost = document.createElement('p');
+      cost.className = 'eval-cost';
+      cost.textContent = `$${money(totalEst)}/mo`;
+
+      row.append(who, cost);
+      resultsDiv.append(row);
     });
-    html += '</div>';
-    if (resultsDiv) resultsDiv.innerHTML = html;
   };
 
   if (promptInput) promptInput.addEventListener('input', recalculate);
@@ -192,9 +264,13 @@ function initWorker() {
 
   slmWorker.onmessage = (e) => {
     const { response } = e.data;
-    const botMsg = document.createElement('div');
+    const botMsg = document.createElement('p');
     botMsg.className = 'msg bot';
-    botMsg.innerHTML = response.replace(/\n/g, '<br>');
+    // The model's text goes in as text nodes: a reply is not trusted markup.
+    String(response).split('\n').forEach((line, i) => {
+      if (i) botMsg.appendChild(document.createElement('br'));
+      botMsg.appendChild(document.createTextNode(line));
+    });
     messagesList.appendChild(botMsg);
     messagesList.scrollTop = messagesList.scrollHeight;
   };
@@ -203,7 +279,7 @@ function initWorker() {
     const query = chatInput.value.trim();
     if (!query) return;
 
-    const userMsg = document.createElement('div');
+    const userMsg = document.createElement('p');
     userMsg.className = 'msg user';
     userMsg.textContent = query;
     messagesList.appendChild(userMsg);
