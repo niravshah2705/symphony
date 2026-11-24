@@ -21,6 +21,12 @@ const NOTIFICATIONS_HEADER = 'x-ai-fleet-notifications';
 // Board, Identity, Agent jobs). They are removed from the default sidebar and
 // stay reachable only when the request carries `x-ai-fleet-deprecated: true`.
 const DEPRECATED_HEADER = 'x-ai-fleet-deprecated';
+// Per-request opt-in (browser header) for the to-be-released SPA pages (Call
+// Recorder, Projects, Organization, Analytics, Cost, Usage, Troubleshooting,
+// Settings). They are hidden from the sidebar and direct links until these
+// features ship, and stay reachable only when the request carries
+// `x-ai-fleet-to-bereleased: true`.
+const TO_BE_RELEASED_HEADER = 'x-ai-fleet-to-bereleased';
 // W3C trace context. Unlike the ids above this is not tenant state — it is the
 // handle that ties one run's logs, Pub/Sub messages, jobs and traces together,
 // so it is read from the request and re-emitted on every downstream call.
@@ -53,6 +59,11 @@ function notificationsRequested(req) {
 /** True only when the request explicitly opted into the deprecated SPA tabs. */
 function deprecatedUiRequested(req) {
   return header(req, DEPRECATED_HEADER).trim().toLowerCase() === 'true';
+}
+
+/** True only when the request explicitly opted into the to-be-released SPA pages. */
+function toBeReleasedUiRequested(req) {
+  return header(req, TO_BE_RELEASED_HEADER).trim().toLowerCase() === 'true';
 }
 
 /**
@@ -143,11 +154,13 @@ module.exports = {
   LLM_GATEWAY_HEADER,
   NOTIFICATIONS_HEADER,
   DEPRECATED_HEADER,
+  TO_BE_RELEASED_HEADER,
   MAX_CONTEXT_ID_CHARS,
   cleanContextId,
   cleanLlmGateway,
   notificationsRequested,
   deprecatedUiRequested,
+  toBeReleasedUiRequested,
   requestContext,
   contextHeaders,
   forwardRequestContext,

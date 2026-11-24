@@ -47,6 +47,21 @@ const AUTHENTICATED_ONLY_ROUTES = new Set(['agent-jobs']);
 // which the gateway echoes as `deprecatedUiEnabled` (request-context.js).
 export const DEPRECATED_ROUTES = new Set(['business', 'board', 'identity', 'agent-jobs']);
 
+// Pages that ship in a later release. Hidden from the sidebar AND blocked at
+// the route renderer until the request opts in with
+// `x-ai-fleet-to-bereleased: true` (gateway echoes `toBeReleasedUiEnabled`).
+// Visibility only — permissions still decide who sees them once revealed.
+export const TO_BE_RELEASED_ROUTES = new Set([
+  'calls',
+  'projects',
+  'organization',
+  'analytics',
+  'cost',
+  'usage',
+  'troubleshooting',
+  'settings',
+]);
+
 const LEVEL_RANK = { read: 1, write: 2 };
 
 export function permitted(permissions, domain, level) {
@@ -63,9 +78,17 @@ export function canAccessRoute(session, route) {
   return permitted(permissions, need.domain, need.level);
 }
 
-// Sidebar visibility: permission check plus the deprecated-tabs opt-in. Direct
-// links keep working (canAccessRoute above) so bookmarks don't break.
+// Sidebar visibility: permission check plus the deprecated-tabs and
+// to-be-released-pages opt-ins. Direct links keep working for deprecated tabs
+// (canAccessRoute above) so bookmarks don't break; to-be-released pages are
+// also blocked at render time by toBeReleasedBlocked.
 export function menuRouteVisible(session, route) {
   if (DEPRECATED_ROUTES.has(route) && !session?.deprecatedUiEnabled) return false;
+  if (toBeReleasedBlocked(session, route)) return false;
   return canAccessRoute(session, route);
+}
+
+// True when the route is unreleased and this request did not opt in.
+export function toBeReleasedBlocked(session, route) {
+  return TO_BE_RELEASED_ROUTES.has(route) && !session?.toBeReleasedUiEnabled;
 }

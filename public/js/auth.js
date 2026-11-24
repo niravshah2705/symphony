@@ -38,6 +38,10 @@ let authState = Object.freeze({
   // Deprecated tabs opt-in (Business, Board, Identity, Agent jobs). Off unless
   // the gateway echoes `x-ai-fleet-deprecated: true` back on the request.
   deprecatedUiEnabled: false,
+  // To-be-released pages opt-in (Call Recorder, Projects, Organization,
+  // Analytics, Cost, Usage, Troubleshooting, Settings). Off unless the gateway
+  // echoes `x-ai-fleet-to-bereleased: true` back on the request.
+  toBeReleasedUiEnabled: false,
 });
 
 function setState(next) {
@@ -83,7 +87,7 @@ async function loadConfiguration() {
   }
   if (!response.ok) throw new Error(payload.error || 'Authentication configuration could not be loaded.');
   if (!payload.enabled || payload.mode === 'disabled') {
-    return { mode: 'disabled', enabled: false, deprecatedUiEnabled: Boolean(payload.deprecatedUiEnabled) };
+    return { mode: 'disabled', enabled: false, deprecatedUiEnabled: Boolean(payload.deprecatedUiEnabled), toBeReleasedUiEnabled: Boolean(payload.toBeReleasedUiEnabled) };
   }
   const firebase = payload.firebase || {};
   if (payload.mode !== 'firebase' || !firebase.apiKey || !firebase.projectId || !firebase.authDomain) {
@@ -201,7 +205,9 @@ export async function initializeAuthentication() {
     auth = null;
     setAccessTokenProvider(null);
     clearWorkspaceContext();
-    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled) });
+    // Trusted local dev profile: to-be-released pages stay usable without the
+    // header (the deployed firebase path below still requires the opt-in).
+    return setState({ mode: 'disabled', enabled: false, authenticated: true, role: 'admin', permissions: ADMIN_PERMISSIONS, user: null, error: '', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled), toBeReleasedUiEnabled: true });
   }
 
   const publicPermissions = configuration.publicPermissions || FALLBACK_PUBLIC_PERMISSIONS;
@@ -220,7 +226,7 @@ export async function initializeAuthentication() {
     // No signed-in user → public visitor (read-only Agent workspace).
     setAccessTokenProvider(null);
     clearWorkspaceContext();
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled) });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: '', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled), toBeReleasedUiEnabled: Boolean(configuration.toBeReleasedUiEnabled) });
   }
 
   let identity;
@@ -231,7 +237,7 @@ export async function initializeAuthentication() {
     setAccessTokenProvider(null);
     clearWorkspaceContext();
     try { await authSdk.signOut(auth); } catch (_) { /* ignore */ }
-    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled) });
+    return setState({ mode: 'firebase', enabled: true, authenticated: false, role: 'public', permissions: publicPermissions, user: null, error: error?.message || 'This account is not allowed.', notificationsEnabled: false, deprecatedUiEnabled: Boolean(configuration.deprecatedUiEnabled), toBeReleasedUiEnabled: Boolean(configuration.toBeReleasedUiEnabled) });
   }
 
   // Validate the device-local org/project choice before any workspace calls.
@@ -255,6 +261,7 @@ export async function initializeAuthentication() {
     orgName: deployment.orgName,
     notificationsEnabled: Boolean(identity.notificationsEnabled),
     deprecatedUiEnabled: Boolean(identity.deprecatedUiEnabled ?? configuration.deprecatedUiEnabled),
+    toBeReleasedUiEnabled: Boolean(identity.toBeReleasedUiEnabled ?? configuration.toBeReleasedUiEnabled),
   });
 }
 
@@ -304,6 +311,7 @@ export function expireAuthentication(message = '') {
     user: null,
     error: message,
     deprecatedUiEnabled: Boolean(configuration?.deprecatedUiEnabled),
+    toBeReleasedUiEnabled: Boolean(configuration?.toBeReleasedUiEnabled),
   });
 }
 

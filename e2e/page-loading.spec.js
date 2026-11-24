@@ -574,6 +574,9 @@ test('Settings Policy uses the active native project and selected-context roles'
   await page.route('**/api/auth/config', (route) => json(route, {
     mode: 'firebase', enabled: true, provider: 'firebase',
     firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj' },
+    // Simulate the opted-in x-ai-fleet-to-bereleased echo: this spec drives the
+    // Settings surface, which ships behind that gate.
+    toBeReleasedUiEnabled: true,
   }));
   await page.route('**/api/auth/me', (route) => json(route, {
     authenticated: true, role: 'admin',
@@ -634,6 +637,9 @@ test('selected organization admins can open scoped policy without global setting
   await page.route('**/api/auth/config', (route) => json(route, {
     mode: 'firebase', enabled: true, provider: 'firebase',
     firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo-proj.firebaseapp.com', projectId: 'demo-proj' },
+    // Simulate the opted-in x-ai-fleet-to-bereleased echo: this spec drives the
+    // Settings surface, which ships behind that gate.
+    toBeReleasedUiEnabled: true,
   }));
   await page.route('**/api/auth/me', (route) => json(route, {
     authenticated: true, role: 'viewer',
