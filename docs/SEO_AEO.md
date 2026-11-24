@@ -345,19 +345,33 @@ behind Firebase Hosting, which would need a new hosting target here —
 
 All three Firebase Hosting targets publish a CSP from their `/**` rule in
 `firebase.json`, and `scripts/marketing-site.test.js` compares each policy against
-the tree that target actually serves — scan markup for `<script src>` /
-`<link rel=stylesheet>` / `<img src>`, plus the JS that injects vendor SDKs at
-runtime. A new third-party origin therefore fails the test instead of failing
-silently in production.
+the tree that target actually serves. Two scans, because one was not enough:
+
+1. **Markup and app JS** — `<script src>`, `<link rel=stylesheet>`, `<img src>`,
+   and the JS that injects vendor SDKs at runtime. A third-party `<script>` also
+   fetches its own `sourceMappingURL`, which `connect-src` governs, so every
+   script/style host must appear there too.
+2. **The vendored Firebase auth bundles** — these load code no page references, so
+   scan 1 cannot see it. `firebase-auth.js` fetches gapi from
+   `https://apis.google.com/js/api.js` on the sign-in path, which had to be added
+   to `script-src` and `frame-src` on `app` and `secrets` after it was reported as
+   a blocked request.
 
 | Target | Host | `script-src` | Why |
 |---|---|---|---|
-| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. |
-| `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, GA4, and the two payment SDKs are injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
-| `secrets` | secrets.archagentix.com | `'self'` only | Verified to have no inline script and to load its vendored Firebase compat SDKs locally. The test pins this, so an added inline `<script>` fails rather than being blocked. |
+| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. No sign-in, so no Google code. |
+| `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://apis.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, the gapi bundle Firebase auth loads, GA4, and the two payment SDKs — all injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
+| `secrets` | secrets.archagentix.com | `'self' https://apis.google.com` | Serves only local code plus the gapi bundle its vendored `firebase-auth-compat.js` loads for `signInWithPopup`. Still no `'unsafe-inline'`: verified to contain no inline `<script>`. |
 
-Two decisions worth knowing about:
+Three decisions worth knowing about:
 
+- **`https://www.google.com` is deliberately *not* in any `script-src`.** The same
+  auth bundles also reference `recaptcha/api.js` and `enterprise.js`, but neither
+  app constructs a `RecaptchaVerifier`, so that path is unreachable and the origin
+  stays closed — a page holding session tokens should not hand Google open-ended
+  script execution for code this product never enters. The test asserts both
+  halves: if a `RecaptchaVerifier` is ever added it fails and names the two
+  directives to change.
 - **No `Permissions-Policy` on the `app` target.** The platform records audio and
   screen share (`public/js/views/calls.js` uses `getUserMedia`, `getDisplayMedia`,
   `MediaRecorder`), so the marketing target's `microphone=()` would break agent
