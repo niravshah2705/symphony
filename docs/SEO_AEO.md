@@ -319,19 +319,62 @@ engines describe one entity rather than three.
 | Sitelink anchors | Footer Explore link relabelled `Try now` → `Archagentix Platform` on all 14 marketing pages. Header/body CTAs keep "Try now" (conversion copy); brand anchor text is what Google uses for brand sitelinks. |
 | AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / Software Factory as three products. |
 
-## Known issue, deliberately out of scope: the apex domain
+## Resolved (2026-11-24): the apex domain
 
-`https://archagentix.com` (no `www`) still answers `200` from **Hostinger Apache**
-(`server: Apache`, ~8.5 KB of the pre-GCP static tree) — old content, outside this
-repo, served by a second host. Google therefore sees two competing copies of the
-bare brand domain, and the bare domain is exactly what people type. No change in
-this repo fixes it:
+`https://archagentix.com` answered `200` for every path from **Hostinger Apache**
+(`server: Apache`, the pre-GCP static tree) — old content, outside this repo, served
+by a second host, while only its `/` redirected. Google therefore saw two competing
+copies of the bare brand domain, which is exactly what people type.
 
-1. Point the apex at Firebase or issue a registrar-level 301 `archagentix.com` →
-   `https://www.archagentix.com` (the `www` CNAME cutover above already moves the
-   `www` host; the apex A/AAAA records are the remaining part).
-2. Until then, treat any apex appearance in the SERP as expected leakage, not a
-   regression in the on-page work.
+Closed at the host, not in this repo: every apex path now issues a single-hop
+path-preserving `301` to `https://www.archagentix.com` — including `/robots.txt`
+and `/sitemap.xml`, so both hosts advertise the same policy — and unknown paths
+redirect and then `404` on `www` rather than returning the old Apache parking page
+(which injected a plain-`http` third-party script). `www` canonicals are
+self-referencing, so no canonical chain survives the cutover.
+
+Remaining, and still out of reach from this repo: the Apache `301` responses carry
+no `Strict-Transport-Security`, and `www`'s HSTS omits `includeSubDomains; preload`.
+Browsers do not apply HSTS from a redirect response, so the apex and its
+subdomains stay uncovered until the header is set at Hostinger (or the apex moves
+behind Firebase Hosting, which would need a new hosting target here —
+`scripts/marketing-site.test.js` currently pins that the `www` target has no
+`redirects` block).
+
+## Content Security Policy
+
+All three Firebase Hosting targets publish a CSP from their `/**` rule in
+`firebase.json`, and `scripts/marketing-site.test.js` compares each policy against
+the tree that target actually serves — scan markup for `<script src>` /
+`<link rel=stylesheet>` / `<img src>`, plus the JS that injects vendor SDKs at
+runtime. A new third-party origin therefore fails the test instead of failing
+silently in production.
+
+| Target | Host | `script-src` | Why |
+|---|---|---|---|
+| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. |
+| `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, GA4, and the two payment SDKs are injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
+| `secrets` | secrets.archagentix.com | `'self'` only | Verified to have no inline script and to load its vendored Firebase compat SDKs locally. The test pins this, so an added inline `<script>` fails rather than being blocked. |
+
+Two decisions worth knowing about:
+
+- **No `Permissions-Policy` on the `app` target.** The platform records audio and
+  screen share (`public/js/views/calls.js` uses `getUserMedia`, `getDisplayMedia`,
+  `MediaRecorder`), so the marketing target's `microphone=()` would break agent
+  calls if copied across. The test asserts this if the header is ever added.
+- **`'unsafe-inline'` is still required for script and style** on `www` and `app`,
+  because the page shells contain inline blocks and `public/index.html` has an
+  `onload` attribute on its print-media stylesheet. The policies therefore constrain
+  *where* code can come from and where it can send data (`connect-src` is closed to
+  the gateway, Google, and the two payment vendors), but they do not stop an
+  injected inline script. Removing `'unsafe-inline'` means hashing or externalising
+  those blocks first.
+
+`public/contact/index.html` renders its QR code from `https://api.qrserver.com`, so
+that host is in `img-src` on both hosts serving the contact page. It is a
+third-party request that carries the encoded URL, and it lets that host log every
+contact-page view — generating the QR locally (the page already has the data string)
+would remove both the CSP allowance and the leak.
 
 ## Verification
 
