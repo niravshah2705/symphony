@@ -73,6 +73,9 @@ async function installStubs(page, state) {
   await page.route('**/api/auth/config', (route) => json(route, {
     mode: 'firebase', enabled: true, provider: 'firebase',
     firebase: { apiKey: 'AIzaTESTKEY', authDomain: 'demo.firebaseapp.com', projectId: 'demo' },
+    // These specs drive Organization/Settings surfaces that ship behind
+    // x-ai-fleet-to-bereleased; simulate the opted-in echo.
+    toBeReleasedUiEnabled: true,
   }));
   await page.route('**/api/auth/me', (route) => json(route, {
     authenticated: true, role: 'admin',

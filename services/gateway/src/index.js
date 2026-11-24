@@ -28,7 +28,7 @@ const sse = require('./sse');
 const { mintStreamToken, mintWorkspaceToken } = require('./stream-token');
 const { createStreamTokenHandlers } = require('./stream-token-handlers');
 const { configureTrustProxy } = require('./trust-proxy');
-const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested, deprecatedUiRequested } = require('./request-context');
+const { enforcePinnedOrganization, requestContext, requireOrganizationContext, notificationsRequested, deprecatedUiRequested, toBeReleasedUiRequested } = require('./request-context');
 const { createContextValidationMiddleware } = require('./context-validator');
 const { createStoreContextMiddleware } = require('./store-context');
 const { createApiDocsGate, serveSwaggerJson, createSwaggerMiddleware, createSwaggerUISetup } = require('./swagger');
@@ -93,6 +93,8 @@ app.get('/api/auth/config', (req, res) => {
     ...publicAuthConfig(),
     // Off by default — see request-context.js DEPRECATED_HEADER.
     deprecatedUiEnabled: deprecatedUiRequested(req),
+    // Off by default — see request-context.js TO_BE_RELEASED_HEADER.
+    toBeReleasedUiEnabled: toBeReleasedUiRequested(req),
   });
 });
 
@@ -158,6 +160,8 @@ app.get('/api/auth/me', (req, res) => {
     notificationsEnabled: notificationsRequested(req),
     // Off by default — see request-context.js DEPRECATED_HEADER.
     deprecatedUiEnabled: deprecatedUiRequested(req),
+    // Off by default — see request-context.js TO_BE_RELEASED_HEADER.
+    toBeReleasedUiEnabled: toBeReleasedUiRequested(req),
   });
 });
 

@@ -28,7 +28,7 @@ import { initCookiePreferences } from './cookie-preferences.js';
 import { initNotifications } from './notifications.js';
 import { trackGoogleAnalyticsPageView } from './google-analytics.mjs';
 import { dismissGuestBanner, guestBannerVisible } from './guest-banner.mjs';
-import { canAccessRoute, menuRouteVisible, permitted, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
+import { canAccessRoute, menuRouteVisible, permitted, toBeReleasedBlocked, DEFAULT_PUBLIC_ROUTE } from './permissions.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
@@ -929,6 +929,20 @@ function renderAccessDenied(name) {
   localize(view);
 }
 
+function renderComingSoon(name) {
+  const view = freshView();
+  syncShell(name, view);
+  syncSidebar(false);
+  view.className = 'view view-standard';
+  view.append(el('div', { class: 'empty' }, [
+    el('span', { class: 'empty-mark', 'aria-hidden': 'true' }, '🚧'),
+    el('h2', {}, t('comingSoonTitle', 'Coming soon')),
+    el('p', { class: 'muted' }, t('comingSoonBody', 'This area has not been released yet.')),
+    el('a', { class: 'btn primary', href: `#/${DEFAULT_PUBLIC_ROUTE}` }, t('backToWorkspace', 'Back to workspace')),
+  ]));
+  localize(view);
+}
+
 async function render({ focus = false } = {}) {
   const session = getAuthenticationState();
   const permissions = session.permissions || {};
@@ -955,6 +969,15 @@ async function render({ focus = false } = {}) {
   if (!canAccessRoute(session, name)) {
     if (!session.authenticated) renderSignInRequired(name);
     else renderAccessDenied(name);
+    return;
+  }
+
+  // Unreleased pages (permissions.js TO_BE_RELEASED_ROUTES) render a coming-soon
+  // panel unless the request opted in with `x-ai-fleet-to-bereleased: true`.
+  // Exception: the forced no-organization landing above must stay usable, or a
+  // new user could never create or join an organization.
+  if (toBeReleasedBlocked(session, name) && !(name === 'organization' && organizationContextRequired(session))) {
+    renderComingSoon(name);
     return;
   }
 

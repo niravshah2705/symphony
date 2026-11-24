@@ -10,6 +10,7 @@ const {
   requireOrganizationContext,
   notificationsRequested,
   deprecatedUiRequested,
+  toBeReleasedUiRequested,
 } = require('./request-context');
 
 function req(headers = {}) {
@@ -125,6 +126,15 @@ test('deprecated-tabs flag: off unless the header is exactly true', () => {
   assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': '1' })), false);
   assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': 'true' })), true);
   assert.equal(deprecatedUiRequested(req({ 'x-ai-fleet-deprecated': ' TRUE ' })), true);
+});
+
+test('to-be-released flag: off unless the header is exactly true', () => {
+  assert.equal(toBeReleasedUiRequested(req()), false);
+  assert.equal(toBeReleasedUiRequested(req({ 'x-ai-fleet-to-bereleased': '' })), false);
+  assert.equal(toBeReleasedUiRequested(req({ 'x-ai-fleet-to-bereleased': 'false' })), false);
+  assert.equal(toBeReleasedUiRequested(req({ 'x-ai-fleet-to-bereleased': '1' })), false);
+  assert.equal(toBeReleasedUiRequested(req({ 'x-ai-fleet-to-bereleased': 'true' })), true);
+  assert.equal(toBeReleasedUiRequested(req({ 'x-ai-fleet-to-bereleased': ' TRUE ' })), true);
 });
 
 test('dedicated gateway rejects a different selected organization', () => {
