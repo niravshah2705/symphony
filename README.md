@@ -1,4 +1,4 @@
-# AI Fleet
+# Software Factory
 
 <p align="center">
   <a href="./EULA.md"><img src="https://img.shields.io/badge/license-Proprietary%20(EULA)-red?style=flat-square" alt="License: Proprietary (EULA)"></a>
@@ -20,7 +20,7 @@
 > **From a business idea to a merged pull request** — a fleet of deep agents that plan
 > the business and ship the code.
 
-**AI Fleet** is a microservice-decomposed Node.js app that manages Linear projects and
+**Software Factory** is a microservice-decomposed Node.js app that manages Linear projects and
 runs two isolated **deep agents** over one shared library: a **business-owner planner**
 that turns a project into a validated plan (milestones, issues, dependencies), and a
 **code-writer** that drives a single ticket end-to-end to a pull request — each powered
@@ -33,7 +33,7 @@ by local (Ollama / LM Studio / OMLX) or hosted (Codex / Claude) models.
 
 <p align="center">
   <img src="diagrams/how-it-works.png" width="100%"
-       alt="How AI Fleet works: a business idea (Linear project) flows to the Planner deep agent (viability gate, business plan, milestones/issues/dependencies), which writes to the Linear board; the Code-writer deep agent picks an active ticket, works in an isolated git clone, and pushes for checks/review, ending in a merged pull request.">
+       alt="How Software Factory works: a business idea (Linear project) flows to the Planner deep agent (viability gate, business plan, milestones/issues/dependencies), which writes to the Linear board; the Code-writer deep agent picks an active ticket, works in an isolated git clone, and pushes for checks/review, ending in a merged pull request.">
 </p>
 
 <sub>Diagram source: <a href="diagrams/how-it-works.excalidraw"><code>diagrams/how-it-works.excalidraw</code></a> (editable in <a href="https://excalidraw.com">Excalidraw</a>).</sub>
@@ -75,7 +75,7 @@ key** (create one at <https://linear.app/settings/api>). See [Run](#run) for opt
 
 ## Demo
 
-AI Fleet in action — from creating a business to shipping merged PRs:
+Software Factory in action — from creating a business to shipping merged PRs:
 
 **1. Create a business** — each business is backed by a Linear project.
 
@@ -309,7 +309,7 @@ Use the default local backend for brokered GitHub/GitLab operation.
 
 <p align="center">
   <img src="diagrams/architecture.png" width="100%"
-       alt="AI Fleet architecture: the browser SPA calls the Gateway (:4000), which reverse-proxies /api/agent and /api/coder to the orchestrator's agent surface (:4010); agent runs execute as Agent Substrate actors (gVisor on GKE); the services build on the @ai-fleet/shared library and reach external systems — Linear, GitHub/GitLab, and LLM providers.">
+       alt="Software Factory architecture: the browser SPA calls the Gateway (:4000), which reverse-proxies /api/agent and /api/coder to the orchestrator's agent surface (:4010); agent runs execute as Agent Substrate actors (gVisor on GKE); the services build on the @software-factory/shared library and reach external systems — Linear, GitHub/GitLab, and LLM providers.">
 </p>
 
 - See [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md) for the visual system
@@ -322,17 +322,17 @@ further: every deep-agent run executes as an **Agent Substrate actor** (a gVisor
 sandbox on GKE) rather than inside a service process. Each service is an
 independently runnable
 Express process with its own port and HTTP surface; all business logic lives in
-a single shared package (`@ai-fleet/shared`) so nothing is copied per service.
+a single shared package (`@software-factory/shared`) so nothing is copied per service.
 
-- **`packages/shared`** (`@ai-fleet/shared`) — the single source of truth:
+- **`packages/shared`** (`@software-factory/shared`) — the single source of truth:
   config, JSON store, Linear GraphQL client, logger/util, and the whole
   deep-agent runtime (framework, tools, skills, LLM router, planner + coder
   modules — these execute inside the actor). Imported by every service; never duplicated.
-- **`services/gateway`** (`@ai-fleet/gateway`, default port 4000) — the only
+- **`services/gateway`** (`@software-factory/gateway`, default port 4000) — the only
   browser-facing origin. Serves the SPA, owns the user-facing REST API
   (settings, projects, issues, businesses, roles) and the OAuth flows, and
   **reverse-proxies** `/api/agent/*` and `/api/coder/*` → the orchestrator's agent surface.
-- **`services/orchestrator`** (`@ai-fleet/orchestrator`) — the single internal
+- **`services/orchestrator`** (`@software-factory/orchestrator`) — the single internal
   agent service: the browser-facing agent surface (the retired planner's
   `/api/agent` + `/api/coder` routes, enrichment scheduler, and legacy queue),
   the durable pipeline control plane, and the substrate control plane + actor
@@ -391,7 +391,7 @@ agent surface), `ORCHESTRATOR_SERVICE_PORT` (pipeline orchestrator),
 and `LOCAL_STREAM_TOKEN_PORT` (standalone local stream-token broker).
 To run services on different hosts, point the gateway at them with `AGENT_URL`
 and the pipeline client at it with `ORCHESTRATOR_URL`. The shared
-`data/store.json` location can be overridden with `AI_FLEET_DATA_DIR`.
+`data/store.json` location can be overridden with `SOFTWARE_FACTORY_DATA_DIR`.
 
 Then open http://localhost:4000, go to **Settings**, and paste a Linear
 **personal API key** (create one at https://linear.app/settings/api). The key is
@@ -605,12 +605,12 @@ Contributions from authorized collaborators are welcome. Please read:
 - [`SECURITY.md`](./SECURITY.md) — how to report a vulnerability **privately** (please
   don't open public issues for security problems).
 
-AI Fleet is proprietary software, so contributions are governed by the
+Software Factory is proprietary software, so contributions are governed by the
 [EULA](./EULA.md); outside contributors may be asked to sign a CLA.
 
 ## License
 
-AI Fleet is proprietary software licensed under the terms of the
+Software Factory is proprietary software licensed under the terms of the
 [End User License Agreement](./EULA.md). Installing or using it constitutes
 acceptance of that Agreement. Bundled third-party components remain under their
 own licenses (see the dependency manifests).

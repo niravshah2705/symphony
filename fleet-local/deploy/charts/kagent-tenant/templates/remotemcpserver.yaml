@@ -1,0 +1,16 @@
+{{- range $mcp := .Values.mcp }}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: RemoteMCPServer
+metadata:
+  name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "mcp" "name" $mcp.name) }}
+  namespace: {{ include "kagent-tenant.namespace" $ }}
+  labels:
+    {{- include "kagent-tenant.labels" (dict "root" $) | nindent 4 }}
+spec:
+  # description is REQUIRED by the CRD (required: [description, url]).
+  description: {{ $mcp.description | default (printf "%s MCP server" $mcp.name) | quote }}
+  url: {{ $mcp.url | quote }}
+  protocol: {{ $mcp.protocol | default "STREAMABLE_HTTP" }}
+  timeout: {{ $mcp.timeout | default "30s" }}
+{{- end }}

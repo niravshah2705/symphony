@@ -1,6 +1,6 @@
 'use strict';
 
-const { createPreflightSnapshot } = require('@ai-fleet/shared-core/pipeline/contracts');
+const { createPreflightSnapshot } = require('@software-factory/shared-core/pipeline/contracts');
 
 /**
  * Default secret-free snapshot builder. Deployments can inject a resolver that

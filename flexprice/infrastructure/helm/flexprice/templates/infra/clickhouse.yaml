@@ -1,0 +1,355 @@
+{{- if eq .Values.clickhouse.mode "standalone" }}
+{{- if and .Values.clickhouse.namespace (ne .Values.clickhouse.namespace .Release.Namespace) }}
+---
+# Dedicated ClickHouse namespace (created only when clickhouse.namespace is set
+# and differs from the release namespace). resource-policy: keep so `helm
+# uninstall` of the app release never cascades a delete of the CH namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.clickhouse.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "flexprice.labels" . | nindent 4 }}
+{{- end }}
+---
+# Single-replica ClickHouse StatefulSet. No operator required.
+# Service: {{ include "flexprice.fullname" . }}-clickhouse  (ports 8123 HTTP, 9000 native)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "flexprice.fullname" . }}-clickhouse
+  namespace: {{ include "flexprice.clickhouseNamespace" . }}
+  labels:
+    {{- include "flexprice.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+  {{- if and .Values.dataProtection .Values.dataProtection.retainStorage }}
+  annotations:
+    {{- include "flexprice.keepAnnotation" . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "flexprice.fullname" . }}-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "flexprice.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  template:
+    metadata:
+      labels:
+        {{- include "flexprice.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse
+    spec:
+      {{- with .Values.clickhouse.standalone.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.clickhouse.standalone.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.standalone.image.repository }}:{{ .Values.clickhouse.standalone.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.standalone.image.pullPolicy }}
+          {{- with .Values.clickhouse.standalone.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+            - name: interserver
+              containerPort: 9009
+          env:
+            - name: CLICKHOUSE_DB
+              value: {{ .Values.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.username | quote }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flexprice.secretName" . }}
+                  key: clickhouse-password
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          resources:
+            {{- toYaml .Values.clickhouse.standalone.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- $keep := include "flexprice.keepAnnotation" . }}
+        {{- if $keep }}
+        annotations:
+          {{- $keep | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- $sc := include "flexprice.componentStorageClass" (dict "ctx" . "override" .Values.clickhouse.standalone.persistence.storageClass) }}
+        {{- if $sc }}
+        storageClassName: {{ $sc | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.standalone.persistence.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flexprice.fullname" . }}-clickhouse
+  namespace: {{ include "flexprice.clickhouseNamespace" . }}
+  labels:
+    {{- include "flexprice.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "flexprice.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+  ports:
+    - name: http
+      port: {{ .Values.clickhouse.standalone.service.httpPort }}
+      targetPort: http
+    - name: native
+      port: {{ .Values.clickhouse.standalone.service.nativePort }}
+      targetPort: native
+
+{{- else if eq .Values.clickhouse.mode "altinity" }}
+---
+# ClickHouseInstallation managed by the Altinity operator.
+# Prerequisites: Altinity operator CRDs + controller must be installed cluster-wide.
+# Install: kubectl apply -f shared/clickhouse/operator/install-bundle.yaml
+#
+# Service naming: the operator creates a ClusterIP service named
+#   chi-<chi-name>-<cluster-name>-0-0
+# Helper resolves to: chi-<fullname>-flexprice-0-0:9000
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: {{ include "flexprice.fullname" . }}
+  namespace: {{ include "flexprice.clickhouseNamespace" . }}
+  labels:
+    {{- include "flexprice.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+  {{- if and .Values.dataProtection .Values.dataProtection.retainStorage }}
+  annotations:
+    {{- include "flexprice.keepAnnotation" . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.clickhouse.altinity.bootstrapServiceTemplateName }}
+  defaults:
+    templates:
+      serviceTemplate: {{ . | quote }}
+  {{- end }}
+  configuration:
+    clusters:
+      - name: flexprice
+        {{- with .Values.clickhouse.altinity.schemaPolicy }}
+        schemaPolicy:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        layout:
+          shardsCount: 1
+          {{- $replicas := .Values.clickhouse.altinity.replicas | default list }}
+          {{- $count := int (.Values.clickhouse.altinity.replicasCount | default 1) }}
+          {{- if $replicas }}
+            {{- $count = len $replicas }}
+          {{- end }}
+          {{- if and (gt $count 1) (not .Values.clickhouse.altinity.keeper.hosts) }}
+            {{- fail "clickhouse.altinity.replicasCount > 1 requires clickhouse.altinity.keeper.hosts: without a Keeper quorum the replicated tables come up read-only." }}
+          {{- end }}
+          replicasCount: {{ $count }}
+          {{- with $replicas }}
+          replicas:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        templates:
+          podTemplate: clickhouse-pod
+          dataVolumeClaimTemplate: clickhouse-data
+{{- if .Values.clickhouse.altinity.keeper.hosts }}
+    # CHK-generated per-pod names, e.g. chk-<chk>-<cluster>-0-N. Keeper is not
+    # chart-managed: it needs its own storage class and must exist first.
+    zookeeper:
+      nodes:
+{{- range .Values.clickhouse.altinity.keeper.hosts }}
+        - host: {{ . | quote }}
+          port: {{ $.Values.clickhouse.altinity.keeper.port | default 2181 }}
+{{- end }}
+{{- end }}
+
+    users:
+      readonly/profile: readonly
+      {{ .Values.clickhouse.username }}/password:
+        valueFrom:
+          secretKeyRef:
+            name: {{ include "flexprice.secretName" . }}
+            key: clickhouse-password
+      {{ .Values.clickhouse.username }}/profile: default
+      {{ .Values.clickhouse.username }}/quota: default
+      {{ .Values.clickhouse.username }}/networks/ip:
+        - "0.0.0.0/0"
+        - "::/0"
+
+    profiles:
+      readonly/readonly: "1"
+      {{- /*
+        Nullable-by-default. MUST be 0 for a ClickHouse server that the
+        migrations will build tables on: with 1, a column declared without an
+        explicit NOT NULL becomes Nullable(...), and ReplacingMergeTree rejects
+        a Nullable version column outright:
+
+          Code: 169. DB::Exception: The column version cannot be used as a
+          version column for storage ReplacingMergeTree because it is of type
+          Nullable(UInt64) (must be of an integer type or of type
+          Date/DateTime/DateTime64). (BAD_TYPE_OF_FIELD)
+
+        Defaults to 1 to preserve existing regions byte-for-byte; their tables
+        were created before this setting was parameterized, and changing it does
+        not alter an existing table, only what future CREATE TABLE statements
+        infer. Any region building a ClickHouse schema from scratch must set 0.
+
+        Tested with `hasKey` rather than `default`, because Helm's `default`
+        treats 0 as empty — `| default 1` would silently rewrite an explicit 0
+        back to 1 and reintroduce the crash.
+      */}}
+      default/data_type_default_nullable: {{ if hasKey .Values.clickhouse.altinity "dataTypeDefaultNullable" }}{{ .Values.clickhouse.altinity.dataTypeDefaultNullable }}{{ else }}1{{ end }}
+      default/insert_distributed_sync: 1
+      {{- if .Values.clickhouse.altinity.asyncInsert.enabled }}
+      default/async_insert: 1
+      default/async_insert_busy_timeout_ms: {{ .Values.clickhouse.altinity.asyncInsert.busyTimeoutMs }}
+      default/async_insert_max_data_size: {{ .Values.clickhouse.altinity.asyncInsert.maxDataSize }}
+      default/async_insert_stale_timeout_ms: {{ .Values.clickhouse.altinity.asyncInsert.staleTimeoutMs }}
+      default/wait_for_async_insert: 0
+      {{- end }}
+      default/log_queries: 1
+      default/log_query_threads: 1
+      default/min_insert_block_size_bytes: 1048576
+      default/min_insert_block_size_rows: 1000
+      default/parts_to_delay_insert: 300
+      default/parts_to_throw_insert: 600
+
+    files:
+      config.d/merge_tree_defaults.xml: |
+        <clickhouse>
+          <merge_tree>
+            <allow_nullable_key>1</allow_nullable_key>
+            <max_bytes_to_merge_at_max_space_in_pool>10737418240</max_bytes_to_merge_at_max_space_in_pool>
+          </merge_tree>
+        </clickhouse>
+      config.d/server_settings.xml: |
+        <clickhouse>
+          <background_pool_size>{{ .Values.clickhouse.altinity.backgroundPoolSize }}</background_pool_size>
+          <background_schedule_pool_size>4</background_schedule_pool_size>
+          <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+          <query_log><flush_interval_milliseconds>30000</flush_interval_milliseconds></query_log>
+          <query_thread_log><enabled>0</enabled></query_thread_log>
+          <metric_log><flush_interval_milliseconds>30000</flush_interval_milliseconds></metric_log>
+          <asynchronous_metric_log><flush_interval_milliseconds>30000</flush_interval_milliseconds></asynchronous_metric_log>
+          <trace_log><enabled>0</enabled></trace_log>
+        </clickhouse>
+
+    settings:
+      allow_nullable_key: 1
+
+  templates:
+    {{- with .Values.clickhouse.altinity.bootstrapServiceTemplates }}
+    serviceTemplates:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    podTemplates:
+      - name: clickhouse-pod
+        spec:
+          {{- /* fsGroup: a fresh PVC mounts root-owned and the container runs as
+              uid 101, so without it a new replica cannot create
+              /var/lib/clickhouse/tmp. Defaulted when replicas > 1 rather than left
+              to the caller, because the failure only appears on the new replica. */}}
+          {{- if .Values.clickhouse.altinity.podSecurityContext }}
+          securityContext:
+            {{- toYaml .Values.clickhouse.altinity.podSecurityContext | nindent 12 }}
+          {{- else if and (not .Values.clickhouse.altinity.replicas) (gt (int (.Values.clickhouse.altinity.replicasCount | default 1)) 1) }}
+          securityContext:
+            fsGroup: 101
+            fsGroupChangePolicy: OnRootMismatch
+          {{- end }}
+          {{- with .Values.clickhouse.altinity.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.clickhouse.altinity.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /* Required (not preferred) hostname anti-affinity when replicas > 1:
+              an unspreadable replica should stay Pending, not silently co-locate.
+              Note: Go templates have no `else if` on `with`. */}}
+          {{- if .Values.clickhouse.altinity.affinity }}
+          affinity:
+            {{- toYaml .Values.clickhouse.altinity.affinity | nindent 12 }}
+          {{- else if and (not .Values.clickhouse.altinity.replicas) (gt (int (.Values.clickhouse.altinity.replicasCount | default 1)) 1) }}
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      clickhouse.altinity.com/app: chop
+                      clickhouse.altinity.com/chi: {{ include "flexprice.fullname" . }}
+                      clickhouse.altinity.com/namespace: {{ include "flexprice.clickhouseNamespace" . }}
+                  topologyKey: kubernetes.io/hostname
+          {{- end }}
+          containers:
+            - name: clickhouse
+              image: "{{ .Values.clickhouse.altinity.image.repository }}:{{ .Values.clickhouse.altinity.image.tag }}"
+              imagePullPolicy: {{ .Values.clickhouse.altinity.image.pullPolicy }}
+              {{- with .Values.clickhouse.altinity.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              ports:
+                - containerPort: 8123
+                - containerPort: 9000
+                - containerPort: 9009
+              resources:
+                {{- toYaml .Values.clickhouse.altinity.resources | nindent 16 }}
+              volumeMounts:
+                - name: clickhouse-data
+                  mountPath: /var/lib/clickhouse
+
+      {{- with .Values.clickhouse.altinity.additionalPodTemplates }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+
+    volumeClaimTemplates:
+      - name: clickhouse-data
+        reclaimPolicy: Retain
+        spec:
+          {{- $sc := include "flexprice.componentStorageClass" (dict "ctx" . "override" .Values.clickhouse.altinity.persistence.storageClass) }}
+          {{- if $sc }}
+          storageClassName: {{ $sc | quote }}
+          {{- end }}
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ .Values.clickhouse.altinity.persistence.size }}
+{{- end }}
+{{- /* mode=external: no resources rendered — user points clickhouse.address at their endpoint */}}

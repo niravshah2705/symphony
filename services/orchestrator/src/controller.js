@@ -3,7 +3,7 @@
 const {
   createPipelineStart,
   createStageCommandV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
+} = require('@software-factory/shared-core/pipeline/contracts');
 const { createPipelineGraph } = require('./graph');
 const { SnapshotPreflight } = require('./preflight');
 

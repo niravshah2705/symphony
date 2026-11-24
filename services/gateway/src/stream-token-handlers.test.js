@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 process.env.STREAM_TOKEN_PROXY_URL ||= 'http://127.0.0.1:4030';
 
 const { createStreamTokenHandlers } = require('./stream-token-handlers');
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
+const { WORKSPACE_CHANNEL } = require('@software-factory/shared-core/messaging/events');
 
 function responseRecorder() {
   return {

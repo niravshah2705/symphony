@@ -1,4 +1,4 @@
-# AI Fleet
+# Software Factory
 
 A microservice-decomposed tool for managing Linear projects and running isolated
 planner and coder agent services over a shared library. This glossary is the

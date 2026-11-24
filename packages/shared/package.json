@@ -1,7 +1,7 @@
 {
-  "name": "@ai-fleet/shared",
+  "name": "@software-factory/shared",
   "version": "1.0.0",
-  "description": "Shared AI Fleet library: config, JSON store, Linear client, and the deep-agent runtime (framework, tools, skills, LLM router, planner + coder modules). The single source of truth imported by every service — no code is copied per service.",
+  "description": "Shared Software Factory library: config, JSON store, Linear client, and the deep-agent runtime (framework, tools, skills, LLM router, planner + coder modules). The single source of truth imported by every service — no code is copied per service.",
   "private": true,
   "main": "index.js",
   "exports": {
@@ -33,7 +33,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared-core": "*",
+    "@software-factory/shared-core": "*",
     "@anthropic-ai/claude-agent-sdk": "^0.3.314",
     "@google-cloud/firestore": "^8.7.1",
     "@google-cloud/pubsub": "^6.0.0",

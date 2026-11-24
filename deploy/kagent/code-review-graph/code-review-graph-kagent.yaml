@@ -69,7 +69,7 @@ spec:
     credential into a file, a command you echo, or a trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/code-review-graph-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/code-review-graph-plugin@sha256:20dbc9345e24a497563a2161c573bdacd3088ce802eea101d45d092807ffd945'
     skills:
     - 'build-graph'
     - 'debug-issue'

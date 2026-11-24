@@ -13,9 +13,9 @@ delete process.env.INTERNAL_API_TOKEN;
 delete process.env.FLEET_ORG_ID;
 delete process.env.PROXY_ORG_ID;
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-billing-access-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
 const { resolveCallerOrg, requireBillingCaller, billingTrustedHeaders } = require('./billing-access');
 
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });

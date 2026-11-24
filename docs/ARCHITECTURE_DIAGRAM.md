@@ -1,4 +1,4 @@
-# AI Fleet Architecture Diagram
+# Software Factory Architecture Diagram
 
 This diagram shows the preset-routed agent architecture. The browser-facing,
 SDK-free **gateway** retains browser/domain APIs and proxies the isolated agent
@@ -10,7 +10,7 @@ after test.
 Every agent run itself executes in an **Agent Substrate actor** — an ephemeral
 gVisor sandbox per run, not a service. Linear is the ticket system, Ollama/LM Studio/OMLX provide
 the local route, OpenAI/Claude provide the hosted route, and the DeepAgent runtime
-(shipped once in `@ai-fleet/shared`) uses skills plus Linear/GitHub tools to plan
+(shipped once in `@software-factory/shared`) uses skills plus Linear/GitHub tools to plan
 and execute work.
 
 The browser-local workflow canvas is deliberately not executable. The one
@@ -20,7 +20,7 @@ of truth. Linear terminal labels are projections, not the control bus.
 
 ```mermaid
 flowchart LR
-  User["User / operator"] --> Browser["AI Fleet SPA<br/>Business, Projects, Board, Agent, Settings"]
+  User["User / operator"] --> Browser["Software Factory SPA<br/>Business, Projects, Board, Agent, Settings"]
   Browser -->|same-origin REST| Gateway["Gateway service :4000<br/>services/gateway<br/>SPA + user API + OAuth"]
 
   Gateway -->|proxy /api/agent| AgentSvc["Orchestrator agent surface :4010<br/>services/orchestrator<br/>scheduler + /api/agent + /api/coder"]
@@ -30,12 +30,12 @@ flowchart LR
   Gateway --> StreamProxy["Stream-token proxy sidecar<br/>loopback mint / verify<br/>only holder of signing secret"]
   AgentSvc --> EgressProxy["Egress proxy sidecar<br/>fixed allow-listed routes<br/>credential injection"]
   SettingsSvc["Settings service<br/>KMS-encrypted org/project vault<br/>managed + customer resolver"] --> EgressProxy
-  Shared["@ai-fleet/shared<br/>config · store · linear · logger/util<br/>+ DeepAgent runtime (one copy)"] -.->|imported by| Gateway
+  Shared["@software-factory/shared<br/>config · store · linear · logger/util<br/>+ DeepAgent runtime (one copy)"] -.->|imported by| Gateway
   Shared -.->|imported by| AgentSvc
   Catalog["LLM preset catalog<br/>agent/llm-presets.json<br/>limits, sampling, reasoning adapters"] --> Shared
   EgressProxy -->|GraphQL with selected scope credential| Linear["Linear<br/>ticket management<br/>projects, milestones, issues, labels"]
 
-  subgraph AgentRuntime["DeepAgent runtime (in @ai-fleet/shared)"]
+  subgraph AgentRuntime["DeepAgent runtime (in @software-factory/shared)"]
     Framework["Workflow framework<br/>agent/framework.js"]
     PlannerAgent["Planning DeepAgent<br/>software-design planner"]
     CoderAgent["Code-writer DeepAgent<br/>Linear ticket to merged PR"]
@@ -89,7 +89,7 @@ flowchart LR
 ```mermaid
 sequenceDiagram
   actor User as User
-  participant UI as AI Fleet SPA
+  participant UI as Software Factory SPA
   participant API as Gateway + agent services
   participant Linear as Linear
   participant Agent as DeepAgent framework

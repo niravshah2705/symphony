@@ -1,12 +1,12 @@
 'use strict';
 
-const log = require('@ai-fleet/shared-core/logger');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const { CONFIG } = require('@software-factory/shared-core/config');
 const {
   HttpStageCommandBus,
   createPubSubStageCommandBus,
-} = require('@ai-fleet/shared-core/pipeline/bus');
-const { createPipelineRepository } = require('@ai-fleet/shared-core/pipeline/repository');
+} = require('@software-factory/shared-core/pipeline/bus');
+const { createPipelineRepository } = require('@software-factory/shared-core/pipeline/repository');
 const { PipelineOrchestrator } = require('./controller');
 const { SnapshotPreflight } = require('./preflight');
 const { createPipelineCheckpointer } = require('./checkpointer');
@@ -78,7 +78,7 @@ function start(options = {}) {
     });
   }
   const server = service.app.listen(service.config.port, () => {
-    log.info(`AI Fleet orchestrator listening on :${service.config.port} (${service.config.storeBackend}/${service.config.messagingMode})`);
+    log.info(`Software Factory orchestrator listening on :${service.config.port} (${service.config.storeBackend}/${service.config.messagingMode})`);
   });
   const shutdown = () => server.close();
   process.once('SIGTERM', shutdown);

@@ -1,7 +1,7 @@
 {
-  "name": "@ai-fleet/gateway",
+  "name": "@software-factory/gateway",
   "version": "1.0.0",
-  "description": "Agent-free AI Fleet API gateway — browser auth, billing, EULA, SSE, publishing, and authorized reverse proxies.",
+  "description": "Agent-free Software Factory API gateway — browser auth, billing, EULA, SSE, publishing, and authorized reverse proxies.",
   "private": true,
   "main": "src/index.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@ai-fleet/shared-core": "*",
+    "@software-factory/shared-core": "*",
     "express": "^5.2.1",
     "firebase-admin": "^14.2.0",
     "google-auth-library": "^11.0.1",

@@ -1,8 +1,60 @@
 # Changelog
 
-All notable changes to AI Fleet (tech-symphony). Format follows
+All notable changes to Software Factory (tech-symphony). Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The project is not yet
 tagged by semver, so entries are grouped by the date they landed on `main`.
+
+## 2026-11-20
+
+### Added
+
+- **Workflow designer: explicit Save with database confirm.** The `#/workflows`
+  toolbar gains a **Save** button that flushes the draft and waits for the
+  gateway to accept the graph; the status chip now reads "Saved · in database"
+  only after the server write settles. Auto-save stays as a device-local draft
+  safety net.
+- **Global component catalog endpoint** `GET /api/workflows/catalog`
+  (`packages/shared-core/src/agent/global-catalog.js`): current rows of
+  `go/harness/runtime-images.csv` plus the plugin/skill bundle catalogs. The
+  designer's **Harness** dropdown is populated from it (cluster names first,
+  then global runtime images), and the new **Plugins & skills** inspector
+  section binds `kagentSpec.plugins`/`skills` from the catalog, pinned by
+  digest.
+- **Model family & model details populated from the served catalogs.** The
+  family dropdown lists `registry/model-families.json` and the new **Model**
+  dropdown the `llm-presets.json` presets that family claims (via its
+  `providers`). Nodes persist `model`, which `renderAgentCrd` passes to the
+  Agent CR template.
+- **Publish pipeline tags packs with AgentCard types and mirrors them to
+  Firestore.** `registry/agent-card-tags.json` records which agent card kinds
+  surface each pack; `scripts/seed-plugin-catalog.js --store` merges the tags
+  onto every mirrored record, and the `stamp` jobs of
+  `build-plugin-images.yml` / `build-skill-images.yml` now run the mirror
+  against Firestore (Workload Identity) right after the digest-stamp commit.
+
+### Changed
+
+- **Model families are a file the service reads, not a constant in code.**
+  `packages/shared-core/src/agent/registry/model-families.json` is now the
+  single source of truth for a family's id, label, icon, which `llm-presets`
+  providers it claims and its order; `agent/model-families.js` loads it and
+  `GET /api/workflows/catalog` serves it. The four duplicated arrays
+  (`MODEL_FAMILIES` in `workflow/model.js` and its browser mirror,
+  `PRESET_FAMILIES`, `MODEL_FAMILY_ICONS`) are deleted — adding or renaming a
+  family is one JSON row and a deploy. `registry/model-families.test.js` gates
+  the file: unique DNS-shaped ids, every preset provider claimed by exactly one
+  family, icons that exist in `public/js/icons.js`. Validation stays permissive
+  for an unknown-but-well-formed family id, so deleting a row never rewrites
+  `modelFamily` out of the graphs that still use it, and a family marked
+  `enabled: false` leaves new selections while still rendering its label on the
+  nodes that hold it.
+- **The designer opens with the catalog in hand.** `renderWorkflows` awaits the
+  component catalog alongside the graph read, so the first canvas paint already
+  labels a node's model family the way the registry does instead of showing the
+  bare id until the next edit. Picking a family now also redraws the inspector,
+  which is what fills the dependent Model dropdown, and a catalog read that
+  fails says so beside the family field with a **Read the catalog again** button
+  instead of quietly showing an empty list.
 
 ## 2026-11-18
 
@@ -67,19 +119,19 @@ tagged by semver, so entries are grouped by the date they landed on `main`.
     control plane. The remaining gaps (podcert CA + `BackendTLSPolicy`, the
     anonymous `grpc-status` probe that must answer 16) are tracked in
     `docs/SUBSTRATE_STATUS.md` pending 2.
-- **The orchestrator image contains `@ai-fleet/shared`, so it can boot.** #283
+- **The orchestrator image contains `@software-factory/shared`, so it can boot.** #283
   retired the Cloud Run planner and absorbed its HTTP surface into
   `services/orchestrator/src/agent-surface.js`, mounted from `app.js`, and added
-  `"@ai-fleet/shared": "*"` to `services/orchestrator/package.json` — but left
+  `"@software-factory/shared": "*"` to `services/orchestrator/package.json` — but left
   `deploy/gcp/Dockerfile.orchestrator` packaging only `packages/shared-core/`.
   The image therefore built green and died at the first shared require
-  (`Cannot find module '@ai-fleet/shared/agent/pipeline-stage-service'`,
+  (`Cannot find module '@software-factory/shared/agent/pipeline-stage-service'`,
   `agent-surface.js:15`), because `npm ci --workspace=…` never resolves local
   `require()`s and no test boots the image. Cloud Run marked the revision
   `HealthCheckContainerError`, and since Terraform was *creating*
   `pipeline-orchestrator` there was no earlier revision to fall back on: the
   service came up with no URL at all. The build now copies `packages/shared/`
-  and selects `--workspace=@ai-fleet/shared` so the library's own dependencies
+  and selects `--workspace=@software-factory/shared` so the library's own dependencies
   install, not just its symlink.
   - **This is a deliberate change to the image's dependency surface, not an
     incident hotfix.** The old header claimed the orchestrator "must never
@@ -210,18 +262,18 @@ Manager v7 / firebase-admin v14 read-only against real GCP.
 
 - **Node runtime baseline 20 → 22** (#94) — the latest Google Cloud SDK,
   `google-auth-library`, and `firebase-admin` majors all require Node ≥ 22.
-  Raised `engines.node` across root + `@ai-fleet/shared` + every Node service,
+  Raised `engines.node` across root + `@software-factory/shared` + every Node service,
   repinned the `deploy/gcp` Docker base images (`node:20-alpine` →
   `node:22-alpine`, multi-arch digest), CI runners, and the cloudbuild
   SPA-obfuscation step. The `adlc` CLI intentionally stays **Node 18+** (a
   standalone distributable that only bundles `shared/config`).
-- **Google Cloud SDK + auth majors** (#96) — in `@ai-fleet/shared`:
+- **Google Cloud SDK + auth majors** (#96) — in `@software-factory/shared`:
   `@google-cloud/run` 1→4, `@google-cloud/pubsub` 4→6, `@google-cloud/scheduler`
   4→6, and `google-auth-library` 9→11. Also **declared `google-auth-library`
   explicitly** in gateway/proxy/provisioner, which had been requiring it as a
   phantom transitive dep (they were resolving an old v9 while shared used v11).
 - **Firestore data layer** (#97) — `@google-cloud/firestore` 7→8
-  (`@ai-fleet/shared`) and `firebase-admin` 13→14 (`@ai-fleet/gateway`), bumped
+  (`@software-factory/shared`) and `firebase-admin` 13→14 (`@software-factory/gateway`), bumped
   together since `firebase-admin` bundles Firestore, so the tree carries a single
   Firestore major. No code changes (stable core Firestore + modular
   `firebase-admin/app`+`/auth` APIs).
@@ -261,7 +313,7 @@ Manager v7 / firebase-admin v14 read-only against real GCP.
 ### Removed
 
 - **Unused `@google-cloud/secret-manager`** (#102) — declared in
-  `@ai-fleet/shared` but never imported anywhere (secret resolution flows through
+  `@software-factory/shared` but never imported anywhere (secret resolution flows through
   the settings service + KMS-encrypted vault + egress proxy, not this client).
   Dropped it plus 3 orphaned transitives; zero code impact.
 
@@ -357,7 +409,7 @@ supporting CI/infra. Delivered as focused PRs (numbers in parentheses).
 
 ### Fixed
 
-- npm lockfile out of sync with the `@ai-fleet/cli` workspace, which broke every
+- npm lockfile out of sync with the `@software-factory/cli` workspace, which broke every
   Docker image build (#51).
 - org service `Dockerfile` ran `pip install .` before copying the source (#53).
 - Terraform-managed seeding of `org-jwt-secret` and the One Tap client id (#52);

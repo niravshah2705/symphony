@@ -40,7 +40,7 @@ test('a signed-in viewer with workspace read can access Agent and Agent Jobs', (
 
 test('legal routes remain public and organization-independent', () => {
   const noSession = { authenticated: false, permissions: {} };
-  for (const route of ['privacy', 'terms']) {
+  for (const route of ['privacy', 'terms', 'refund', 'shipping']) {
     assert.equal(canAccessRoute(noSession, route), true);
     assert.equal(canAccessRoute(publicSession, route), true);
     assert.equal(canAccessRoute(viewerSession, route), true);

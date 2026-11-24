@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# LiteLLM proxy config for the AI Fleet platform gateway (PoC).
+# LiteLLM proxy config for the Software Factory platform gateway (PoC).
 # -----------------------------------------------------------------------------
 # Mirrored/baked into the gateway image (see .github/workflows/deploy.yml and
 # deploy/gcp/Dockerfile.litellm-app). Retarget with CONFIG_FILE_PATH without a

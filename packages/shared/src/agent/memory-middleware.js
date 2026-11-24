@@ -5,7 +5,7 @@
  * (github.com/thedotmack/claude-mem): capture what an agent did → AI-compress it
  * → persist it → inject relevant memory into future sessions.
  *
- * claude-mem hooks Claude Code's 6 native lifecycle hooks. AI Fleet has no such
+ * claude-mem hooks Claude Code's 6 native lifecycle hooks. Software Factory has no such
  * hook system and runs FOUR SDK harnesses (deepagent / codex / claude / anti-
  * gravity), so — exactly like the RubricMiddleware — this hooks in one layer up,
  * at `executeAgentRuntime`, the single choke point every runtime passes through.
@@ -32,7 +32,7 @@
 const crypto = require('crypto');
 const memoryStore = require('./memory-store');
 const { normalizeMemory, detectMemoryScope, MEMORY_SCOPES } = require('./memory');
-const { currentWorkspaceContext } = require('@ai-fleet/shared-core/store/workspace-context');
+const { currentWorkspaceContext } = require('@software-factory/shared-core/store/workspace-context');
 
 const CAPTURE_ROLE = 'testing'; // cheap purpose-role, like the rubric grader
 const CAPTURE_TIMEOUT_MS = 60_000;
@@ -72,7 +72,7 @@ function redactSecrets(text) {
 
 function safeSettings() {
   try {
-    return require('@ai-fleet/shared-core/store').getSettings() || {};
+    return require('@software-factory/shared-core/store').getSettings() || {};
   } catch (_) {
     return {};
   }
@@ -98,7 +98,7 @@ function isEnabled(options = {}) {
 /* -------------------------------- embedding -------------------------------- */
 
 async function defaultEmbed(texts) {
-  const { embedTexts } = require('@ai-fleet/shared-core/attachments/embed');
+  const { embedTexts } = require('@software-factory/shared-core/attachments/embed');
   return embedTexts(texts, { workspaceContext: currentWorkspaceContext() });
 }
 

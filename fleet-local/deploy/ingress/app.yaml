@@ -1,0 +1,47 @@
+# app.fleet.dev → fleet-oauth2-proxy (upstream mode) → fleet-bff (SPA + API).
+# The configuration-snippet strips every client-supplied identity/fleet header
+# BEFORE the request reaches oauth2-proxy; oauth2-proxy then re-stamps authentic
+# X-Auth-Request-* + Authorization from the verified Google session. Requires
+# allow-snippet-annotations=true on the ingress-nginx controller (set by
+# scripts/10-ingress-oauth.sh). TLS cert is mkcert-issued (scripts/00-prereqs.sh).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fleet-app
+  namespace: fleet-system
+  annotations:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Auth-Request-Email "";
+      proxy_set_header X-Auth-Request-User "";
+      proxy_set_header X-Auth-Request-Preferred-Username "";
+      proxy_set_header X-Auth-Request-Access-Token "";
+      proxy_set_header X-Forwarded-User "";
+      proxy_set_header X-Forwarded-Email "";
+      proxy_set_header X-Forwarded-Groups "";
+      proxy_set_header X-Forwarded-Preferred-Username "";
+      proxy_set_header X-Fleet-Org-Id "";
+      proxy_set_header X-Fleet-Project-Id "";
+      proxy_set_header X-Fleet-User-Id "";
+      proxy_set_header X-User-Id "";
+      proxy_set_header X-Agent-Name "";
+    # Long-running agent streams: do not buffer or time out SSE.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.fleet.dev
+      secretName: fleet-local-tls
+  rules:
+    - host: app.fleet.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fleet-oauth2-proxy
+                port:
+                  number: 4180

@@ -24,10 +24,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-sandbox-e2e-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
-const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
-const ledger = require('@ai-fleet/shared-core/billing/ledger');
+const cashfreeClient = require('@software-factory/shared-core/billing/cashfree-client');
+const ledger = require('@software-factory/shared-core/billing/ledger');
 const job = require('./auto-recharge-job');
 
 const DATASET = JSON.parse(
@@ -53,7 +53,7 @@ test('the sandbox credentials reach Cashfree and return a parseable order', { sk
     customerName: spec.name,
     customerEmail: spec.admins[0].email,
     customerPhone: '9999999999',
-    orderNote: 'AI Fleet auto-recharge sandbox verification (no payment expected)',
+    orderNote: 'Software Factory auto-recharge sandbox verification (no payment expected)',
   });
 
   assert.equal(order.order_id, orderId);

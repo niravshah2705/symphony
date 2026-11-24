@@ -23,7 +23,7 @@ function contextId(value) {
   return id && id.length <= 160 && /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
 }
 
-/** Set the validated native AI Fleet org/project context applied to API calls. */
+/** Set the validated native Software Factory org/project context applied to API calls. */
 export function setRequestContext(value) {
   requestContext = Object.freeze({
     organizationId: contextId(value && value.organizationId),
@@ -142,7 +142,7 @@ export function uploadToSignedUrl(url, file, { onProgress } = {}) {
 }
 
 function notifyAuthenticationRequired(error) {
-  window.dispatchEvent(new CustomEvent('ai-fleet:auth-required', {
+  window.dispatchEvent(new CustomEvent('software-factory:auth-required', {
     detail: { message: error?.message || 'Authentication required' },
   }));
 }
@@ -372,6 +372,9 @@ export const api = {
   // Which Harness / ModelConfig / RemoteMCPServer names the kagent namespace
   // actually holds. Read-only, and answered even when kagent is off.
   kagentCapabilities: () => request('/workflows/kagent/capabilities'),
+  // Platform-wide component list: current harness runtime images plus the
+  // published plugin/skill bundle catalogs. Read-only.
+  getWorkflowCatalog: () => request('/workflows/catalog'),
   publishWorkflowNode: (workflowId, nodeId) => request(
     `/workflows/${encodeURIComponent(workflowId)}/nodes/${encodeURIComponent(nodeId)}/publish`,
     { method: 'POST' },

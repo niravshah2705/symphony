@@ -12,14 +12,14 @@
  *
  *   EGRESS_PROXY_URL=http://127.0.0.1:4030 node scripts/models-label-group.js
  *
- * Set FLEET_ORG_ID and AI_FLEET_PROJECT_ID to select a project-vault override;
+ * Set FLEET_ORG_ID and SOFTWARE_FACTORY_PROJECT_ID to select a project-vault override;
  * omit the project id to use the organization-level fallback.
  */
 
-const { CONFIG } = require('@ai-fleet/shared/config');
-const { SENTINEL_TOKEN } = require('@ai-fleet/shared/egress');
-const { getOrCreateGroupedIssueLabel } = require('@ai-fleet/shared/linear');
-const { runWithWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
+const { CONFIG } = require('@software-factory/shared/config');
+const { SENTINEL_TOKEN } = require('@software-factory/shared/egress');
+const { getOrCreateGroupedIssueLabel } = require('@software-factory/shared/linear');
+const { runWithWorkspaceContext } = require('@software-factory/shared/store/workspace-context');
 
 async function groupLabels() {
   if (!String(process.env.EGRESS_PROXY_URL || '').trim()) {
@@ -40,7 +40,7 @@ async function groupLabels() {
 }
 
 const organizationId = String(process.env.FLEET_ORG_ID || process.env.PROXY_ORG_ID || '').trim();
-const projectId = String(process.env.AI_FLEET_PROJECT_ID || '').trim();
+const projectId = String(process.env.SOFTWARE_FACTORY_PROJECT_ID || '').trim();
 
 Promise.resolve(runWithWorkspaceContext({ organizationId, projectId }, groupLabels)).catch((err) => {
   console.error(`Failed: ${err && err.message ? err.message : err}`);

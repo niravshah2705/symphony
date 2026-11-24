@@ -10,13 +10,13 @@
 resource "google_service_account" "gateway" {
   project      = var.project_id
   account_id   = "gateway-sa"
-  display_name = "AI Fleet gateway (public API)"
+  display_name = "Software Factory gateway (public API)"
 }
 
 resource "google_service_account" "stream_token_broker" {
   project      = var.project_id
   account_id   = "stream-token-broker-sa"
-  display_name = "AI Fleet stream-token broker (private signer)"
+  display_name = "Software Factory stream-token broker (private signer)"
 }
 
 # planner-sa / coder-sa are retired with their services: the orchestrator SA
@@ -27,7 +27,7 @@ resource "google_service_account" "stream_token_broker" {
 resource "google_service_account" "pubsub_push" {
   project      = var.project_id
   account_id   = "pubsub-push-sa"
-  display_name = "AI Fleet Pub/Sub push + Scheduler invoker"
+  display_name = "Software Factory Pub/Sub push + Scheduler invoker"
 }
 
 # --- Firestore (Datastore) access — project-scoped role, data-plane only ------

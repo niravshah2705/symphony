@@ -378,6 +378,12 @@ claim that a real gVisor actor ran or that a deployed planner pod was killed.
 Provider and FlexPrice keys are not passed to the child. Local FlexPrice keys are
 read only in the trusted parent from gitignored `deploy/flexprice/.env`.
 
+The run that *does* make that second claim — a real kagent actor on a real Substrate
+worker, 173 measured seconds through the emitter and onto the `actor-compute` meter —
+is [`SUBSTRATE_KAGENT_LOCAL.md`](./SUBSTRATE_KAGENT_LOCAL.md), along with the four
+cluster gates (NetworkPolicy label, kagent DB grants, `bootstrapOwners`, preview
+gates) that stand between "kagent installed" and "agent Ready".
+
 Measured after the recovery fixes: **14/14 checks**, org `org-actor-verify-mwdww2to`:
 live gauge **5s**, last-seen STOP **6s**, a second sweep produces no second usage row,
 final scraped seconds **6**, zero charged paise, and the FlexPrice meter verifies **6 seconds**

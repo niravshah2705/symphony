@@ -2,17 +2,17 @@
 
 const express = require('express');
 const crypto = require('node:crypto');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
-const log = require('@ai-fleet/shared-core/logger');
-const store = require('@ai-fleet/shared-core/store');
-const ledger = require('@ai-fleet/shared-core/billing/ledger');
-const gate = require('@ai-fleet/shared-core/billing/gate');
-const { paiseToInr } = require('@ai-fleet/shared-core/billing/pricing');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
-const cashfreeClient = require('@ai-fleet/shared-core/billing/cashfree-client');
-const gst = require('@ai-fleet/shared-core/billing/gst');
-const moneyWire = require('@ai-fleet/shared-core/billing/money-wire');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const { asyncHandler } = require('@software-factory/shared-core/util');
+const log = require('@software-factory/shared-core/logger');
+const store = require('@software-factory/shared-core/store');
+const ledger = require('@software-factory/shared-core/billing/ledger');
+const gate = require('@software-factory/shared-core/billing/gate');
+const { paiseToInr } = require('@software-factory/shared-core/billing/pricing');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
+const cashfreeClient = require('@software-factory/shared-core/billing/cashfree-client');
+const gst = require('@software-factory/shared-core/billing/gst');
+const moneyWire = require('@software-factory/shared-core/billing/money-wire');
 const providers = require('./payment-providers');
 const { settle, allowsMockPayments } = require('./recharge-settle');
 const { createFlexpriceReadsRouter } = require('./flexprice-reads');
@@ -696,12 +696,12 @@ async function createRechargeOrder(req, res, { provider: providerOverride } = {}
       amountPaise: quote.totalPaise,
       customer: {
         id: `cust_${String(caller.orgId).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
-        name: req.body?.customerName || paymentInfo.billingName || 'AI Fleet Org',
+        name: req.body?.customerName || paymentInfo.billingName || 'Software Factory Org',
         email: req.body?.customerEmail || paymentInfo.billingEmail || 'billing@aifleet.local',
         phone: req.body?.customerPhone || paymentInfo.billingPhone || '',
       },
       returnUrl: req.body?.returnUrl || '',
-      note: `AI Fleet wallet recharge for ${caller.orgId}`,
+      note: `Software Factory wallet recharge for ${caller.orgId}`,
     });
   } else {
     // Local development with the mock flag on: the order is synthesized rather

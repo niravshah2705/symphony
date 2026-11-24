@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { currentWorkspaceContext } = require('@ai-fleet/shared/store/workspace-context');
+const { currentWorkspaceContext } = require('@software-factory/shared/store/workspace-context');
 const { createStoreContextMiddleware, forwardedRequestContext } = require('./store-context');
 
 const pause = () => new Promise((resolve) => setImmediate(resolve));

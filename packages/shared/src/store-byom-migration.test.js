@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 // Isolate the store backend to a throwaway data dir before requiring the module
 // (the real data/store.json holds live secrets and must never be touched).
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'store-byom-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 
 const { normalizeStore, DEFAULT_STORE } = require('./store');
 

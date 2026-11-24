@@ -11,6 +11,15 @@
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="application-name" content="Archagentix" />
     <meta name="theme-color" content="#15181f" />
+    <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
+    <meta property="og:image" content="https://platform.archagentix.com/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Archagentix — the Agentic Development Life Cycle" />
+    <meta name="twitter:image" content="https://platform.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://platform.archagentix.com/" />
     <link rel="sitemap" type="application/xml" href="/sitemap-platform.xml" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
@@ -22,7 +31,7 @@
       property="og:description"
       content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
     />
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Archagentix Platform — ADLC (Agentic Development Life Cycle)" />
     <meta
       name="twitter:description"
@@ -37,8 +46,8 @@
             "@id": "https://platform.archagentix.com/#website",
             "url": "https://platform.archagentix.com/",
             "name": "Archagentix Platform",
-            "alternateName": ["AI Fleet — ADLC Workspace", "Agentic Development Life Cycle Workspace"],
-            "description": "The Archagentix platform runs AI Fleet, a human-governed workspace for ADLC, the Agentic Development Life Cycle.",
+            "alternateName": ["Software Factory — ADLC Workspace", "Agentic Development Life Cycle Workspace"],
+            "description": "The Archagentix platform runs Software Factory, a human-governed workspace for ADLC, the Agentic Development Life Cycle.",
             "inLanguage": "en",
             "publisher": { "@id": "https://www.archagentix.com/#organization" },
             "about": { "@id": "https://platform.archagentix.com/#adlc" },
@@ -48,8 +57,8 @@
             "@type": "SoftwareApplication",
             "@id": "https://platform.archagentix.com/#application",
             "url": "https://platform.archagentix.com/",
-            "name": "AI Fleet",
-            "alternateName": "ADLC Workspace",
+            "name": "Software Factory",
+            "alternateName": ["ADLC Workspace", "AI Fleet"],
             "description": "A workspace for human-governed AI planning, isolated implementation, testing, review, delivery, and operational learning.",
             "applicationCategory": "DeveloperApplication",
             "applicationSubCategory": "Agentic software delivery",
@@ -90,12 +99,18 @@
         "@type": "Organization",
         "@id": "https://www.archagentix.com/#organization",
         "name": "Archagentix Private Limited",
+        "identifier": [
+          { "@type": "PropertyValue", "propertyID": "CIN", "value": "U62011PN2026PTC260563" },
+          { "@type": "PropertyValue", "propertyID": "GSTIN", "value": "27ABGCA7851D1ZN" }
+        ],
         "alternateName": ["Archagentix", "ADLC"],
         "url": "https://www.archagentix.com/",
-        "email": "archagentix@gmail.com",
-        "sameAs": ["https://github.com/niravshah2705/symphony"],
+        "logo": "https://www.archagentix.com/brand/icon-512.png",
+        "email": "support@archagentix.com",
+        "telephone": "+91-9370580836",
         "address": {
           "@type": "PostalAddress",
+          "streetAddress": "Hinjewadi IT Park",
           "addressLocality": "Pune",
           "addressRegion": "Maharashtra",
           "postalCode": "411057",
@@ -135,9 +150,12 @@
       .topbar { height: var(--topbar-height); display: grid; grid-template-columns: var(--sidebar-width) minmax(180px,1fr) auto; align-items: center; padding: 0 18px; position: relative; z-index: 50; border-bottom: 1px solid var(--border-strong); background: var(--topbar); }
       .brand-area, .brand, .topbar-actions, .topbar-context, .conn { min-width: 0; display: flex; align-items: center; }
       .brand { gap: 10px; font-size: 15px; font-weight: 680; }
-      .brand-mark { width: 27px; height: 27px; display: flex; align-items: flex-end; gap: 2px; padding: 6px 5px; border-radius: 7px; background: var(--text); }
-      .brand-mark span { width: 4px; display: block; border-radius: 3px; background: var(--panel); }
-      .brand-mark span:nth-child(1) { height: 8px; } .brand-mark span:nth-child(2) { height: 14px; } .brand-mark span:nth-child(3) { height: 11px; }
+      .brand-mark {
+        width: 27px; height: 22px; display: block; flex: 0 0 auto;
+        background: var(--text);
+        -webkit-mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
+                mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
+      }
       .topbar-context { justify-self: center; gap: 8px; color: var(--muted); font-size: 11px; }
       .topbar-context > span { font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
       .topbar-context > span::after { content: '/'; margin-left: 8px; color: var(--border-strong); }
@@ -171,6 +189,9 @@
       .app-footer { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px 18px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border-strong); background: var(--topbar); color: var(--muted); }
       .footer-legal { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; font-size: 10px; }
       .footer-legal p { margin: 0; white-space: nowrap; }
+      /* The registered-office line is long enough to push the footer's scrollWidth
+         past the viewport at 320px if it stays on one line. */
+      .footer-legal p.footer-wrap { white-space: normal; }
       .footer-legal nav { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; }
       .footer-link { min-height: 34px; display: inline-flex; align-items: center; padding: 4px 0; border: 0; background: transparent; color: var(--muted); font-size: 10px; font-weight: 600; }
       .adlc-ai-links { width: fit-content; max-width: 100%; margin: 0; padding: 3px 4px 3px 10px; display: flex; flex-wrap: wrap; justify-self: end; justify-content: center; align-items: center; gap: 5px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-subtle); }
@@ -196,10 +217,6 @@
     <link rel="preload" href="/styles.css" as="style" />
     <link rel="stylesheet" href="/styles.css" media="print" data-shared-style onload="this.media='all';this.dataset.loaded='true'" />
     <noscript><link rel="stylesheet" href="/styles.css" /></noscript>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>"
-    />
     <!-- Apply the saved theme before first paint to avoid a flash of the wrong theme. -->
     <script>
       (function () {
@@ -246,9 +263,9 @@
         >
           <span data-icon="menu"></span>
         </button>
-        <a class="brand" href="#/agent" aria-label="AI Fleet agent workspace" data-i18n-skip>
-          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-          <span>AI Fleet</span>
+        <a class="brand" href="#/agent" aria-label="Software Factory agent workspace" data-i18n-skip>
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Software Factory</span>
         </a>
       </div>
 
@@ -424,7 +441,7 @@
               <div class="conversation-stream" aria-live="polite"></div>
               <div class="chat-composer omnibox-composer" data-agent-composer>
                 <div class="composer-surface">
-                  <textarea disabled aria-label="Loading agent workspace" placeholder="Ask AI Fleet to move work forward…"></textarea>
+                  <textarea disabled aria-label="Loading agent workspace" placeholder="Ask Software Factory to move work forward…"></textarea>
                   <div class="composer-actions"><span class="privacy-chip">Workspace private</span><span>Preparing your workspace…</span></div>
                 </div>
               </div>
@@ -443,14 +460,19 @@
 
       <footer class="app-footer" id="app-footer" aria-label="Site footer" lang="en" dir="ltr" data-i18n-skip>
         <div class="footer-legal" lang="en">
-          <p>© 2026 Nirav Shah. All rights reserved.</p>
+          <p>© 2026 Archagentix Private Limited. All rights reserved.</p>
+          <p class="footer-wrap">Archagentix Private Limited · Hinjewadi IT Park, Pune 411057, Maharashtra, India</p>
+          <p class="footer-wrap"><a class="footer-link" href="tel:+919370580836">+91 93705 80836</a> · <a class="footer-link" href="mailto:support@archagentix.com">support@archagentix.com</a></p>
           <nav aria-label="Legal">
-            <a class="footer-link" href="#/privacy">Privacy</a>
             <a class="footer-link" href="#/terms">Terms</a>
+            <a class="footer-link" href="#/privacy">Privacy</a>
+            <a class="footer-link" href="#/refund">Refund &amp; Cancellation</a>
+            <a class="footer-link" href="#/shipping">Delivery</a>
             <button class="footer-link" id="cookie-preferences-trigger" type="button">Cookie Preferences</button>
           </nav>
           <nav aria-label="Company">
             <a class="footer-link" href="https://www.archagentix.com/about/">About Company</a>
+            <a class="footer-link" href="https://www.archagentix.com/pricing/">Pricing</a>
             <a class="footer-link" href="https://www.archagentix.com/careers/">Careers</a>
             <a class="footer-link" href="https://www.archagentix.com/newsroom/">Newsroom</a>
             <a class="footer-link" href="https://www.archagentix.com/contact/">Contact Us</a>

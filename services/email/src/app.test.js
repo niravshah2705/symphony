@@ -47,7 +47,7 @@ function billingAlert(overrides = {}) {
 function testConfig() {
   return loadConfig({
     EMAIL_SMTP_HOST: 'smtp.example.com',
-    EMAIL_FROM: 'AI Fleet <noreply@example.com>',
+    EMAIL_FROM: 'Software Factory <noreply@example.com>',
     PUBLIC_APP_URL: 'https://fleet.example.com',
   });
 }

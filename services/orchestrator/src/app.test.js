@@ -8,10 +8,10 @@ const { createApp } = require('./app');
 const {
   PipelineContractError,
   createStageResultV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
-const { MemoryPipelineStore } = require('@ai-fleet/shared-core/pipeline/storage');
-const { PipelineRunRepository } = require('@ai-fleet/shared-core/pipeline/repository');
-const { toPipelinePushEnvelope } = require('@ai-fleet/shared-core/pipeline/bus');
+} = require('@software-factory/shared-core/pipeline/contracts');
+const { MemoryPipelineStore } = require('@software-factory/shared-core/pipeline/storage');
+const { PipelineRunRepository } = require('@software-factory/shared-core/pipeline/repository');
+const { toPipelinePushEnvelope } = require('@software-factory/shared-core/pipeline/bus');
 const { PipelineOrchestrator } = require('./controller');
 const { SnapshotPreflight } = require('./preflight');
 const { fakeLangGraph } = require('./fake-langgraph.test-helper');

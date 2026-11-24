@@ -1,9 +1,9 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const store = require('@ai-fleet/shared-core/store');
-const { publishRequest } = require('@ai-fleet/shared-core/messaging/publisher');
-const { asyncHandler } = require('@ai-fleet/shared-core/util');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const store = require('@software-factory/shared-core/store');
+const { publishRequest } = require('@software-factory/shared-core/messaging/publisher');
+const { asyncHandler } = require('@software-factory/shared-core/util');
 const { PipelineAdmissionError, createPipelineAdmission } = require('./pipeline-admission');
 const { requestContext } = require('./request-context');
 

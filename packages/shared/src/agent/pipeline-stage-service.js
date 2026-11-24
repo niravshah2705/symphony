@@ -7,12 +7,12 @@ const {
   createStageResultV1,
   validateStageCommandV1,
   validateStageResultV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
+} = require('@software-factory/shared-core/pipeline/contracts');
 const {
   MAX_STAGE_COMMAND_PUSH_BODY_BYTES,
   decodePipelinePushMessage,
   toPipelinePushEnvelope,
-} = require('@ai-fleet/shared-core/pipeline/bus');
+} = require('@software-factory/shared-core/pipeline/bus');
 const { redactSecrets } = require('./tools/exec');
 const {
   MemoryStageExecutionStore,

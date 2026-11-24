@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'billing-usage-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.USD_TO_INR = '100';
 process.env.FLEET_ORG_ID = 'org-usage';
 

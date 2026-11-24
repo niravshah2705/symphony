@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 
 const SERVICE_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(SERVICE_ROOT, '..', '..');
-const heavyWorkspace = ['@ai-fleet', 'shared'].join('/');
+const heavyWorkspace = ['@software-factory', 'shared'].join('/');
 const coreWorkspace = `${heavyWorkspace}-core`;
 
 function javascriptFiles(directory) {
@@ -51,8 +51,8 @@ test('identity verification image copies only its service and shared-core worksp
   const dockerfile = fs.readFileSync(path.join(REPO_ROOT, 'deploy/gcp/Dockerfile.identity-verification'), 'utf8');
   assert.match(dockerfile, /^COPY packages\/shared-core\/ \.\/packages\/shared-core\/$/m);
   assert.match(dockerfile, /^COPY services\/identity-verification\/ \.\/services\/identity-verification\/$/m);
-  assert.match(dockerfile, /--workspace=@ai-fleet\/shared-core/);
-  assert.match(dockerfile, /--workspace=@ai-fleet\/identity-verification/);
+  assert.match(dockerfile, /--workspace=@software-factory\/shared-core/);
+  assert.match(dockerfile, /--workspace=@software-factory\/identity-verification/);
   assert.match(dockerfile, /--include-workspace-root=false/);
   assert.doesNotMatch(dockerfile, /^COPY packages\/ \.\/packages\/$/m);
   assert.doesNotMatch(dockerfile, /^COPY services\/ \.\/services\/$/m);

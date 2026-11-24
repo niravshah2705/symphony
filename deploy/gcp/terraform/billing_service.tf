@@ -6,7 +6,7 @@
 resource "google_service_account" "billing" {
   project      = var.project_id
   account_id   = "billing-sa"
-  display_name = "AI Fleet Billing Service"
+  display_name = "Software Factory Billing Service"
 }
 
 resource "google_project_iam_member" "billing_datastore" {

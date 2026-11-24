@@ -1,6 +1,6 @@
 'use strict';
 
-const { decimalFromPaise } = require('@ai-fleet/shared-core/billing/money-wire');
+const { decimalFromPaise } = require('@software-factory/shared-core/billing/money-wire');
 
 /** Rupees for display, or an em-dash when this process does not know the number. */
 function inr(paise) {
@@ -47,7 +47,7 @@ function renderDashboardHtml(data = {}) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Fleet Billing Control Center</title>
+  <title>Software Factory Billing Control Center</title>
   <style>
     :root {
       --bg: #0b0f19;
@@ -203,7 +203,7 @@ function renderDashboardHtml(data = {}) {
   <div class="container">
     <header>
       <div>
-        <h1>AI Fleet · Billing Control Center</h1>
+        <h1>Software Factory · Billing Control Center</h1>
         <p style="color: var(--text-muted); font-size: 0.875rem;">Dedicated Cloud Run Microservice for Usage Metering & Auto-Renew</p>
       </div>
       <div style="display:flex; gap: 0.5rem;">

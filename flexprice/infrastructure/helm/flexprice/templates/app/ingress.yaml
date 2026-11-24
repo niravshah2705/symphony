@@ -1,0 +1,91 @@
+{{- if and .Values.ingress.enabled .Values.api.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "flexprice.fullname" . }}-api
+  labels:
+    {{- include "flexprice.componentLabels" (dict "ctx" . "component" "api") | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                {{- /*
+                  Backend defaults to the api Service, so every existing values
+                  file renders unchanged. Set `service` and `port` on a path to
+                  route it elsewhere — needed to serve the UI and the API from a
+                  SINGLE Ingress.
+
+                  That is not a stylistic choice: two Ingress objects cannot
+                  share one static IP. Each provisions its own load balancer and
+                  forwarding rule, and the second fails with
+                    Invalid value for field 'resource.IPAddress': Specified IP
+                    address is in-use and would result in a conflict
+                  One Ingress with per-host rules is the only way to put both
+                  hostnames on one address.
+                */}}
+                name: {{ .service | default (printf "%s-api" (include "flexprice.fullname" $)) }}
+                port:
+                  number: {{ .port | default $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+---
+{{- if and .Values.frontendIngress.enabled .Values.frontend.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "flexprice.fullname" . }}-frontend
+  labels:
+    {{- include "flexprice.componentLabels" (dict "ctx" . "component" "frontend") | nindent 4 }}
+  {{- with .Values.frontendIngress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.frontendIngress.className }}
+  ingressClassName: {{ .Values.frontendIngress.className }}
+  {{- end }}
+  {{- if .Values.frontendIngress.tls }}
+  tls:
+    {{- range .Values.frontendIngress.tls }}
+    - hosts:
+        - {{ $.Values.frontendIngress.host | quote }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.frontendIngress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "flexprice.fullname" . }}-frontend
+                port:
+                  number: 3000
+{{- end }}

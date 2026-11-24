@@ -9,7 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-fleet-store-'));
-process.env.AI_FLEET_DATA_DIR = tmpDir;
+process.env.SOFTWARE_FACTORY_DATA_DIR = tmpDir;
 
 const { CONFIG } = require('../config');
 const { readStore } = require('../store');

@@ -1,0 +1,45 @@
+# kagent.fleet.dev → kagent-oauth2-proxy (upstream mode) → kagent-ui.kagent.svc:8080.
+# The Ingress backend must live in this namespace, so it points at the oauth2-proxy
+# Service here; oauth2-proxy crosses namespaces to the kagent UI via cluster DNS.
+# Same header-sanitize contract as app.fleet.dev. The UI forwards the verified
+# Authorization + X-Auth-Request-* to the controller (trusted-proxy, task #9).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fleet-kagent
+  namespace: fleet-system
+  annotations:
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Auth-Request-Email "";
+      proxy_set_header X-Auth-Request-User "";
+      proxy_set_header X-Auth-Request-Preferred-Username "";
+      proxy_set_header X-Auth-Request-Access-Token "";
+      proxy_set_header X-Forwarded-User "";
+      proxy_set_header X-Forwarded-Email "";
+      proxy_set_header X-Forwarded-Groups "";
+      proxy_set_header X-Forwarded-Preferred-Username "";
+      proxy_set_header X-Fleet-Org-Id "";
+      proxy_set_header X-Fleet-Project-Id "";
+      proxy_set_header X-Fleet-User-Id "";
+      proxy_set_header X-User-Id "";
+      proxy_set_header X-Agent-Name "";
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - kagent.fleet.dev
+      secretName: fleet-local-tls
+  rules:
+    - host: kagent.fleet.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kagent-oauth2-proxy
+                port:
+                  number: 4180

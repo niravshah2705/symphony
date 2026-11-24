@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { FirestorePipelineStore } = require('@ai-fleet/shared-core/pipeline/storage');
+const { FirestorePipelineStore } = require('@software-factory/shared-core/pipeline/storage');
 const { createService, createStageBus } = require('./index');
 const { FirestoreCheckpointBackend } = require('./checkpointer');
 

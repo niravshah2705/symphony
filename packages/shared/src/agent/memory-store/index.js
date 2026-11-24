@@ -20,7 +20,7 @@ const postgres = require('./postgres-backend');
 const { scoredRecallMemories } = require('./recall');
 
 function storeBackend() {
-  return require('@ai-fleet/shared-core/store');
+  return require('@software-factory/shared-core/store');
 }
 
 function isPostgresActive(env = process.env) {

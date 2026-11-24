@@ -100,7 +100,7 @@ locals {
     PUBSUB_PIPELINE_CODE_TOPIC    = var.pipeline_code_topic
     PUBSUB_PIPELINE_TEST_TOPIC    = var.pipeline_test_topic
     PIPELINE_ORCHESTRATOR_ENABLED = tostring(var.pipeline_orchestrator_enabled)
-    AI_FLEET_DATA_DIR             = "/tmp"
+    SOFTWARE_FACTORY_DATA_DIR     = "/tmp"
     # One JSON object per stdout line (packages/shared-core/src/logger.js). This is
     # NOT cosmetic and not optional: Cloud Logging only builds `jsonPayload` from a
     # line it can parse as JSON, so every log-based metric filter in

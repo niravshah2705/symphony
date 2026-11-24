@@ -71,11 +71,20 @@ Notes:
 - Every `❓` for the 6 new runtimes means: the scaffold's driver maps **stdout text only** and does
   **not** claim a tool/subagent/MCP event contract. That is a deliberate honesty stance — the real
   event protocol must be confirmed per CLI before any of these cells become `✅`/`⛔`.
+- The `Subagents` `◑` cells are load-bearing for the pack track, not cosmetic:
+  [`egm`](../deploy/kagent/egm) is the first pack whose core workflow *is* a
+  fresh-eyes child session (`agents/comprehension.md` etc. mounted at the plugin
+  root), so on both Claude and Codex it degrades to the parent role-playing the
+  reviewer prompt. That is why its matrix cells are `declared` with a
+  `limitations` entry rather than `unsupported` — see
+  [PLUGIN_SUPPORT_MATRIX.md](./PLUGIN_SUPPORT_MATRIX.md#a-packs-skills-are-not-always-the-whole-pack).
 
 ## 2. Model-family & provider compatibility
 
-Model families: `MODEL_FAMILIES = ['anthropic','openai','bedrock','vertexai','gemini','byok']`
-(`workflow/model.js:12`).
+Model families are data, not a constant: `agent/registry/model-families.json`
+(lists `anthropic`, `openai`, `bedrock`, `vertexai`, `gemini`, `qoder`, `byok`)
+loaded by `agent/model-families.js` and served to the designer through
+`GET /api/workflows/catalog`.
 
 | Harness | Native model family(s) | Managed-provider notes |
 |---|---|---|

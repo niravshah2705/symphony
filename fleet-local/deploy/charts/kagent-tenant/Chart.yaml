@@ -1,0 +1,11 @@
+apiVersion: v2
+name: kagent-tenant
+description: Per-tenant kagent execution surface (ModelConfig, Harness, AgentTemplate, Agent) for an Agent Substrate install.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - kagent
+  - substrate
+  - agent
+  - multi-tenant

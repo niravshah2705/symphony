@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "note": "Model families the ADLC workflow designer offers. This file is the source of truth: the gateway serves it through GET /api/workflows/catalog (modelFamilies), the designer populates Model family from it and filters the Model list by each family's providers, and the graph validator accepts exactly these ids (an unknown-but-well-formed id survives a save so removing a row never rewrites stored graphs). Add a row to add a family; set enabled:false to hide one from new selections. Every provider in agent/llm-presets.json must appear in exactly one family's providers (pinned by registry/model-families.test.js), except a provider listed in unassignedProviders below.",
+  "unassignedProviders": [],
+  "families": [
+    {
+      "id": "anthropic",
+      "label": "Anthropic Claude",
+      "icon": "anthropic",
+      "providers": ["claude"],
+      "order": 10
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "icon": "openai",
+      "providers": ["codex"],
+      "order": 20
+    },
+    {
+      "id": "bedrock",
+      "label": "AWS Bedrock",
+      "icon": "graph",
+      "providers": [],
+      "order": 30
+    },
+    {
+      "id": "vertexai",
+      "label": "Google Vertex AI",
+      "icon": "chart",
+      "providers": [],
+      "order": 40
+    },
+    {
+      "id": "gemini",
+      "label": "Google Gemini",
+      "icon": "gemini",
+      "providers": ["antigravity"],
+      "order": 50
+    },
+    {
+      "id": "qoder",
+      "label": "Qoder",
+      "icon": "byom",
+      "providers": ["qoder"],
+      "order": 60
+    },
+    {
+      "id": "byok",
+      "label": "Bring your own model",
+      "icon": "byom",
+      "providers": ["ollama", "lmstudio", "omlx", "huggingface"],
+      "order": 70
+    }
+  ]
+}

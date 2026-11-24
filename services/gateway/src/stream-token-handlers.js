@@ -1,6 +1,6 @@
 'use strict';
 
-const { WORKSPACE_CHANNEL } = require('@ai-fleet/shared-core/messaging/events');
+const { WORKSPACE_CHANNEL } = require('@software-factory/shared-core/messaging/events');
 
 function sendUnavailable(res) {
   return res.status(503).json({

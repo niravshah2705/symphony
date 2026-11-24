@@ -26,7 +26,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:fa2b15cb3bf18dfc1e20939a347c8b695f8b2beb52f9488824be7611ab4ceacb"
       },
       "versions": [
         { "version": "2.2.3", "releasedAt": "2026-11-17", "commit": "3f14a103a8694e51c1df9a806217a6d0b5f7a6f7" }
@@ -112,7 +112,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:78edcf2d298e9990820a46688326fb21015b6b8772db803a6f46aac881125b5a"
       },
       "versions": [
         { "version": "0.6.16", "releasedAt": "2026-11-14", "commit": "39b723ceebf81474d0557c1fecd01eddab585563" }
@@ -198,7 +198,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:bb87d9e8c29a1a3d572856722916d6352dec947676a40189540ad6807eafd511"
       },
       "versions": [
         { "version": "7.0.2", "releasedAt": "2026-11-03", "commit": "22f0b463e7a5e579904dd6211a520321035526f7" }
@@ -274,7 +274,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null,
+        "digest": "sha256:b6086276b2404cdade0970fa530c3758dba3d193157f2feebc4ab28ced44b301",
         "synthesized": true
       },
       "versions": [
@@ -346,7 +346,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": true,
-        "digest": null,
+        "digest": "sha256:bfb96a7ad556da7d0a0337509bd2a122f2934c58fae269b9810799df3a268333",
         "synthesized": true
       },
       "versions": [
@@ -425,7 +425,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": true,
-        "digest": null
+        "digest": "sha256:20dbc9345e24a497563a2161c573bdacd3088ce802eea101d45d092807ffd945"
       },
       "versions": [
         { "version": "2.4.0", "releasedAt": "2026-11-11", "commit": "b3f1285965a1337b3821e4423da03b65d70ee423" }
@@ -522,7 +522,7 @@
         },
         "skillsDir": "./skills/",
         "mcp": false,
-        "digest": null
+        "digest": "sha256:5c1f08d40380897262635e7755f43d4eb5e54005c88513de2946a3ff63d40718"
       },
       "versions": [
         { "version": "2.0.0", "releasedAt": "2026-11-11", "commit": "04977e15f3dfd6ee4b74c887dac3eb52665d6c92" }
@@ -567,6 +567,102 @@
           "blockedOn": "go/harness/opencode/Dockerfile",
           "limitations": [
             "Hallmark declares opencode support upstream, but the kagent engine enum has no opencode, so it needs a byo runtime image."
+          ]
+        }
+      }
+    },
+    {
+      "id": "egm",
+      "label": "Elephant-Goldfish Model",
+      "upstream": {
+        "repository": "google/elephant-goldfish-model",
+        "url": "https://github.com/google/elephant-goldfish-model.git",
+        "release": "0.1.1",
+        "releasedAt": "2026-11-06",
+        "commit": "dea7761de06ce5b51c177ebb9bba0469f24af5a4",
+        "license": "Apache-2.0",
+        "versionSource": "plugin.json"
+      },
+      "bundle": {
+        "version": "0.1.1",
+        "image": "ghcr.io/niravshah2705/symphony/egm-plugin",
+        "dockerfile": "deploy/kagent/egm/Dockerfile.egm-plugin",
+        "compose": "deploy/kagent/ecc-plugin/compose-bundle.sh",
+        "manifests": {
+          "codex": "deploy/kagent/egm/egm-codex.yaml",
+          "claude": "deploy/kagent/egm/egm-claude.yaml"
+        },
+        "skillsDir": "./skills/",
+        "mcp": false,
+        "digest": "sha256:4c5eb571b42b543e8f5fc7fee73266035b1f4aacb4a8c587335458debdbb8e75"
+      },
+      "versions": [
+        { "version": "0.1.1", "releasedAt": "2026-11-06", "commit": "dea7761de06ce5b51c177ebb9bba0469f24af5a4" }
+      ],
+      "icon": {
+        "file": "public/icons/plugins/egm.svg",
+        "href": "/icons/plugins/egm.svg"
+      },
+      "skills": [
+        { "name": "egm-bootstrap", "enabled": true },
+        { "name": "egm-brainstorm", "enabled": true },
+        { "name": "egm-draft", "enabled": true },
+        { "name": "egm-drift-report", "enabled": true },
+        { "name": "egm-resolve", "enabled": true },
+        { "name": "egm-review", "enabled": true },
+        { "name": "egm-review-loop", "enabled": true }
+      ],
+      "requirements": {
+        "packages": ["git"],
+        "dockerfile": [
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "writablePaths": [],
+        "appliedTo": "go/harness/codex-sdk/Dockerfile",
+        "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
+      },
+      "promptAppend": "Route design work by stage: egm-brainstorm for a concepts brief, egm-draft to turn it into a specification, egm-review or egm-review-loop on a document that already exists, egm-drift-report to check documents against the code. The pack's reviewer prompts and scoring standards mount beside skills/ at agents/ and resources/document_standards/ — read the named reviewer's prompt and the standard it applies before dispatching it. When the session cannot start an isolated child agent, run the review in this context, say so in the findings, and label it single-context rather than fresh eyes.",
+      "harnesses": {
+        "codex": {
+          "status": "declared",
+          "engine": "codex",
+          "version": "0.1.1",
+          "cliKey": "codex",
+          "mcp": false,
+          "limitations": [
+            "EGM's method is a reviewer that never saw the draft. The bundle ships those prompts as data under agents/, but the root manifest we author carries a skills entry only and codex advertises shared agents with no child approval and no dedicated agents, so a review runs in the parent context until an isolated child session exists.",
+            "docs/claude.md, docs/codex.md and docs/harnesses.md are the pack's own CLI adaptation guides: they describe upstream CLI features, not this sandbox, and mount as reference text."
+          ]
+        },
+        "claude": {
+          "status": "declared",
+          "engine": "claude",
+          "version": "0.1.1",
+          "cliKey": "claude",
+          "mcp": false,
+          "limitations": [
+            "EGM's method is a reviewer that never saw the draft. The bundle ships those prompts as data under agents/, but the root manifest we author carries a skills entry only, and claude runs shared local subagents with dedicated and nested subagents still listed as not yet supported, so a review runs in the parent context.",
+            "docs/claude.md, docs/codex.md and docs/harnesses.md are the pack's own CLI adaptation guides: they describe upstream CLI features, not this sandbox, and mount as reference text."
+          ]
+        },
+        "opencode": {
+          "status": "unsupported",
+          "engine": "byo",
+          "cliKey": "opencode",
+          "mcp": false,
+          "blockedOn": "go/harness/opencode/Dockerfile",
+          "limitations": [
+            "EGM ships an opencode adapter upstream, but the kagent engine enum has no opencode, so the cell needs a byo runtime image that also runs in-cluster."
+          ]
+        },
+        "antigravity": {
+          "status": "unsupported",
+          "engine": "byo",
+          "cliKey": "antigravity",
+          "mcp": false,
+          "blockedOn": "go/harness/antigravity/Dockerfile",
+          "limitations": [
+            "Antigravity is EGM's first-party target (`agy plugin install`), but the kagent engine enum has no antigravity, so it needs a byo runtime image before it can hold a cell."
           ]
         }
       }

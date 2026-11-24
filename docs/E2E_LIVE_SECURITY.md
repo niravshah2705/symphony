@@ -58,7 +58,7 @@ E2E_APPROVER_SERVICE_ACCOUNT="ai-fleet-e2e-approver@${PROJECT_ID}.iam.gserviceac
 
 gcloud iam service-accounts create ai-fleet-e2e-approver \
   --project "$PROJECT_ID" \
-  --display-name "AI Fleet protected QA E2E approver"
+  --display-name "Software Factory protected QA E2E approver"
 ```
 
 The existing GitHub OIDC provider must map

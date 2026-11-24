@@ -1,12 +1,12 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const store = require('@ai-fleet/shared-core/store');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const store = require('@software-factory/shared-core/store');
 const {
   createFlexpriceClient,
   rowsOf,
-} = require('@ai-fleet/shared-core/billing/flexprice-client');
+} = require('@software-factory/shared-core/billing/flexprice-client');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_GRACE_MS = 3 * 60 * 60 * 1000;

@@ -47,7 +47,7 @@ WORKDIR /data
 EXPOSE 80 8081
 
 LABEL org.opencontainers.image.source="https://github.com/niravshah2705/symphony"
-LABEL org.opencontainers.image.description="AI Fleet DeepSeek (dsh) native harness runtime"
+LABEL org.opencontainers.image.description="Software Factory DeepSeek (dsh) native harness runtime"
 LABEL org.opencontainers.image.version="${RUNTIME_VERSION}"
 
 ENTRYPOINT ["/usr/local/bin/deepseek-runtime"]

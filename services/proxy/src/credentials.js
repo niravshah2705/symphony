@@ -1,6 +1,6 @@
 'use strict';
 
-const { LLM_GATEWAY_ORG_HEADER } = require('@ai-fleet/shared-core/egress');
+const { LLM_GATEWAY_ORG_HEADER } = require('@software-factory/shared-core/egress');
 const {
   fetchOrgSecrets,
   fetchManagedSecrets,

@@ -108,17 +108,25 @@ export function createCapabilitiesReader({ read } = {}) {
 }
 
 /**
- * Cluster names first, then the platform's own list underneath: a harness that
- * exists in the namespace is the one a publish will accept, while the platform
- * list is what an operator is about to install. Marked so the card can say which
- * is which rather than presenting an unlabelled union.
+ * Cluster names first, then the platform's current runtime images, then the
+ * platform's own static list underneath: a harness that exists in the
+ * namespace is the one a publish will accept, the global image registry says
+ * what the platform ships, while the static list is what an operator is about
+ * to install. Marked so the card can say which is which rather than
+ * presenting an unlabelled union.
  */
-export function harnessChoices(caps, platformHarnesses = []) {
+export function harnessChoices(caps, platformHarnesses = [], globalImages = []) {
   const cluster = nameList(caps && caps.harnesses);
+  const globalNames = (Array.isArray(globalImages) ? globalImages : [])
+    .map((row) => String((row && row.runtime) || '').trim())
+    .filter(Boolean);
   return [
     ...cluster.map((value) => ({ value, label: value, source: 'cluster' })),
-    ...nameList(platformHarnesses)
+    ...globalNames
       .filter((value) => !cluster.includes(value))
+      .map((value) => ({ value, label: value, source: 'global' })),
+    ...nameList(platformHarnesses)
+      .filter((value) => !cluster.includes(value) && !globalNames.includes(value))
       .map((value) => ({ value, label: value, source: 'platform' })),
   ];
 }
@@ -158,3 +166,106 @@ export function capabilitiesSummary(caps) {
 }
 
 export const EMPTY_CAPABILITIES = EMPTY;
+
+/**
+ * The platform-wide component catalog (runtime images, model families, plugin
+ * and skill bundles) is identical for every organization, so one session-level
+ * read covers the whole designer. A failed read is remembered like a refused
+ * capabilities read — the inspector re-renders on every keystroke and must
+ * not turn a dead endpoint into a request loop — and `force` retries it.
+ */
+export function createCatalogReader({ read } = {}) {
+  let settled = null;
+  let pending = null;
+
+  function load({ force = false } = {}) {
+    if (force) settled = null;
+    if (settled) return Promise.resolve(settled);
+    if (pending) return pending;
+    const request = (async () => {
+      const list = (payload, key) => (Array.isArray(payload && payload[key]) ? payload[key] : []);
+      try {
+        const payload = await read();
+        settled = {
+          ok: true,
+          harnesses: list(payload, 'harnesses'),
+          modelFamilies: list(payload, 'modelFamilies'),
+          modelFamilyProblems: list(payload, 'modelFamilyProblems'),
+          plugins: list(payload, 'plugins'),
+          skills: list(payload, 'skills'),
+        };
+      } catch (cause) {
+        settled = {
+          ok: false,
+          error: String((cause && cause.message) || cause),
+          harnesses: [],
+          modelFamilies: [],
+          modelFamilyProblems: [],
+          plugins: [],
+          skills: [],
+        };
+      } finally {
+        pending = null;
+      }
+      return settled;
+    })();
+    pending = request;
+    return request;
+  }
+
+  return {
+    load,
+    peek: () => settled,
+    forget: () => { settled = null; },
+  };
+}
+
+/**
+ * Model families, straight from the served registry
+ * (packages/shared-core/src/agent/registry/model-families.json): the file owns
+ * the id, the display label, the card icon, which LLM-preset providers belong
+ * to the family, and the order. There is no fallback list in the browser — an
+ * empty input means the catalog has not been read, which the inspector shows as
+ * such rather than inventing a vocabulary.
+ *
+ * A family marked `enabled: false` disappears from new selections but stays
+ * visible on the node that already uses it, so hiding a family never erases the
+ * value an operator saved.
+ */
+export function modelFamilyChoices(families, current = '') {
+  const items = [];
+  for (const family of Array.isArray(families) ? families : []) {
+    if (!family || !family.id) continue;
+    if (family.enabled === false && family.id !== current) continue;
+    items.push({
+      value: String(family.id),
+      label: String(family.label || family.id),
+      icon: String(family.icon || ''),
+      source: 'global',
+    });
+  }
+  const saved = String(current || '');
+  if (saved && !items.some((item) => item.value === saved)) {
+    items.push({ value: saved, label: saved, icon: '', source: 'saved' });
+  }
+  return items;
+}
+
+/** The preset providers one family claims; empty when the family is unknown. */
+export function familyProviders(families, family) {
+  const record = (Array.isArray(families) ? families : []).find((item) => item && item.id === family);
+  return Array.isArray(record && record.providers) ? record.providers : [];
+}
+
+/** The concrete models behind one family: the presets whose provider it claims. */
+export function modelChoices(presets, family, families = []) {
+  const providers = familyProviders(families, family);
+  if (!providers.length) return [];
+  return (Array.isArray(presets) ? presets : [])
+    .filter((preset) => providers.includes(String((preset && preset.provider) || '').toLowerCase()))
+    .map((preset) => ({
+      value: String(preset.id),
+      label: `${preset.label || preset.id} · ${preset.model}`,
+      source: 'global',
+    }));
+}

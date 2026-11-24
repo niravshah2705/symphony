@@ -1,4 +1,4 @@
-# CLAUDE.md — AI agent guide for AI Fleet
+# CLAUDE.md — AI agent guide for Software Factory
 
 This file orients an AI coding agent working in this monorepo. Read it before
 making changes.
@@ -135,7 +135,7 @@ The human-readable CRG map is `docs/code-graph/index.md` (generated locally by
 
 ## What this is
 
-**AI Fleet** — a microservice-decomposed tool to manage Linear projects and run
+**Software Factory** — a microservice-decomposed tool to manage Linear projects and run
 isolated planner + coder deep agents as Agent Substrate actors (gVisor on GKE)
 over a shared library. npm
 workspaces: `packages/*` (shared libs, CLI) and `services/*` (gateway,

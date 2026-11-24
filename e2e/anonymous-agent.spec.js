@@ -116,7 +116,7 @@ async function installSignedOutHarness(page, { firstPrivateRequestIs401 = false 
     localStorage.setItem('ai-fleet.locale', 'en');
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
     window.__anonymousAuthRequiredEvents = 0;
-    window.addEventListener('ai-fleet:auth-required', () => {
+    window.addEventListener('software-factory:auth-required', () => {
       window.__anonymousAuthRequiredEvents += 1;
     });
   });
@@ -283,7 +283,7 @@ async function installExpiringSessionHarness(page) {
     localStorage.setItem('lm.lastWorkspaceRoute', 'agent');
     window.__forcedTokenRefreshes = 0;
     window.__authRequiredTransitions = 0;
-    window.addEventListener('ai-fleet:auth-required', () => {
+    window.addEventListener('software-factory:auth-required', () => {
       window.__authRequiredTransitions += 1;
     });
   });

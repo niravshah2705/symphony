@@ -5,7 +5,7 @@
 # the same immutable image with a broker-only entrypoint for stream-token
 # signing; that service has its own identity and exposes no egress relay.
 #
-# Build from the MONOREPO ROOT so npm workspaces can resolve @ai-fleet/shared-core:
+# Build from the MONOREPO ROOT so npm workspaces can resolve @software-factory/shared-core:
 #   docker build -f deploy/gcp/Dockerfile.proxy -t <tag> .
 #
 # Base image is pinned by DIGEST (infrastructure-misconfig checklist) — the
@@ -20,8 +20,8 @@ FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 
-# The proxy depends ONLY on @ai-fleet/shared-core (lightweight primitives —
-# config, egress, logger, OAuth-token plumbing, store), NOT on @ai-fleet/shared
+# The proxy depends ONLY on @software-factory/shared-core (lightweight primitives —
+# config, egress, logger, OAuth-token plumbing, store), NOT on @software-factory/shared
 # (which drags in the ~600 MB LLM / agent-SDK tree). Copy just those two
 # workspaces + the root manifests: `npm ci` then installs only this closure and
 # simply skips the absent coder/planner/gateway/shared workspaces, so the heavy
@@ -40,7 +40,7 @@ FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    AI_FLEET_DATA_DIR=/tmp
+    SOFTWARE_FACTORY_DATA_DIR=/tmp
 
 COPY --from=builder --chown=node:node /app /app
 

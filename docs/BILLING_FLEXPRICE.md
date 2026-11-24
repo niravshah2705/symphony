@@ -844,7 +844,7 @@ FlexPrice env map (`BILLING_GATE_POLICY=enforced`, `FLEXPRICE_DEPLOYMENT_MODE=pr
 Cloud Scheduler calls `jobs/<name>:run` directly as `billing-scheduler-sa`
 (`run.invoker` on each Job only). `/pubsub/billing-tick` now runs only the usage
 sweep, actor-session sweep and outbox drain. Locally, run a Job with
-`npm run job:<recharge|platform-charge|credit-expiry|reconcile> -w @ai-fleet/billing`.
+`npm run job:<recharge|platform-charge|credit-expiry|reconcile> -w @software-factory/billing`.
 
 1. Add each key: `printf '%s' "$KEY" | gcloud secrets versions add flexprice-api-key-ingest --data-file=-`
    (same for `-money`). The deploy fails closed until both have an enabled version.

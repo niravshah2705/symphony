@@ -1,0 +1,6 @@
+# metrics-server on kind — the kubelet serves a self-signed cert and the node
+# address is the docker IP, so without these two args the API never gets
+# metrics (x509 + DNS lookup failures). Matches the live release (chart 3.14.0).
+args:
+  - --kubelet-insecure-tls
+  - --kubelet-preferred-address-types=InternalIP

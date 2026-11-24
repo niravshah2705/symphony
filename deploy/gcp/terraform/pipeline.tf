@@ -58,7 +58,7 @@ check "pipeline_agent_egress_is_brokered" {
 resource "google_service_account" "orchestrator" {
   project      = var.project_id
   account_id   = "pipeline-orchestrator-sa"
-  display_name = "AI Fleet orchestrator + agent surface"
+  display_name = "Software Factory orchestrator + agent surface"
 }
 
 resource "google_project_iam_member" "orchestrator_datastore" {

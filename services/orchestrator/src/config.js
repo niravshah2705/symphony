@@ -1,6 +1,6 @@
 'use strict';
 
-const { CONFIG } = require('@ai-fleet/shared-core/config');
+const { CONFIG } = require('@software-factory/shared-core/config');
 
 function bool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;

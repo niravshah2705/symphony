@@ -9,7 +9,7 @@ const {
   createPreflightSnapshot,
   createStageCommandV1,
   createStageResultV1,
-} = require('@ai-fleet/shared-core/pipeline/contracts');
+} = require('@software-factory/shared-core/pipeline/contracts');
 const {
   MemoryStageExecutionStore,
   JsonFileStageExecutionStore,

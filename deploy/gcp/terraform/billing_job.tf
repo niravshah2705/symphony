@@ -192,7 +192,7 @@ resource "google_secret_manager_secret_iam_member" "billing_internal_token" {
 resource "google_service_account" "billing_scheduler" {
   project      = var.project_id
   account_id   = "billing-scheduler-sa"
-  display_name = "AI Fleet Billing Job Scheduler"
+  display_name = "Software Factory Billing Job Scheduler"
 }
 
 resource "google_cloud_run_v2_job_iam_member" "billing_scheduler_runs_job" {

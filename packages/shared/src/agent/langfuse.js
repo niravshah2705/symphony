@@ -30,7 +30,7 @@
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { CONFIG } = require('../config');
 const { SENTINEL_TOKEN } = require('../egress');
-const { TRACEPARENT_HEADER, cleanTraceparent } = require('@ai-fleet/shared-core/traceparent');
+const { TRACEPARENT_HEADER, cleanTraceparent } = require('@software-factory/shared-core/traceparent');
 const log = require('../logger');
 const { isLocalInference } = require('./model-presets');
 

@@ -72,7 +72,7 @@ spec:
     trace you export.
   plugins:
   - source:
-      oci: 'ghcr.io/niravshah2705/symphony/ecc-plugin@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      oci: 'ghcr.io/niravshah2705/symphony/ecc-plugin@sha256:fa2b15cb3bf18dfc1e20939a347c8b695f8b2beb52f9488824be7611ab4ceacb'
     skills:
     - 'configure-ecc'
     - 'agentic-engineering'

@@ -1,14 +1,14 @@
 'use strict';
 
 // Isolate the store on a throwaway data dir BEFORE requiring it: the backend is
-// bound at module load from CONFIG (file backend + AI_FLEET_DATA_DIR). Each test
+// bound at module load from CONFIG (file backend + SOFTWARE_FACTORY_DATA_DIR). Each test
 // runs inside its own organization context so seeding has a fresh tenant to
 // reason about, the way the gateway routes every request.
 const os = require('node:os');
 const fs = require('node:fs');
 
 process.env.STORE_BACKEND = 'file';
-process.env.AI_FLEET_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'wf-seed-'));
+process.env.SOFTWARE_FACTORY_DATA_DIR = fs.mkdtempSync(require('node:path').join(os.tmpdir(), 'wf-seed-'));
 
 const test = require('node:test');
 const assert = require('node:assert/strict');

@@ -1,8 +1,8 @@
 'use strict';
 
 const express = require('express');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const { recordEulaDecision } = require('@ai-fleet/shared-core/store');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const { recordEulaDecision } = require('@software-factory/shared-core/store');
 const { requireAuthenticated } = require('../auth');
 const { eulaUserKey, resolveEulaStatus } = require('../eula');
 

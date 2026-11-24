@@ -18,7 +18,7 @@
  *     silently resurrect it.
  */
 
-const DEFAULT_BANK = require('@ai-fleet/shared-core/global-questions-defaults.json');
+const DEFAULT_BANK = require('@software-factory/shared-core/global-questions-defaults.json');
 
 const CATEGORIES = Object.freeze(['organisation', 'person', 'project_business']);
 const ANSWER_TYPES = Object.freeze(['free_text', 'choice', 'multi_choice', 'number', 'boolean']);
