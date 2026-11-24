@@ -180,6 +180,24 @@ test('isOutcome guards the text column on the way back in', () => {
 });
 
 test('errors are shaped the way the A2A client reads them', () => {
+  // The refusal a disabled organisation gets (lifecycle.refuse) has to survive the
+  // envelope: the SPA keys its human sentence off this reason, and a body that
+  // loses it renders as "A2A request failed: 409".
+  const suspended = toA2AErrorBody(409, 'organisation is disabled — agent calls are turned off', {
+    reason: 'org_disabled',
+  });
+  assert.equal(suspended.error.status, 'FAILED_PRECONDITION');
+  assert.equal(suspended.error.code, 409);
+  assert.deepEqual(suspended.error.details, [
+    {
+      '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+      reason: 'org_disabled',
+      domain: 'fleet.dev',
+    },
+  ]);
+  // A deleted org is not "disabled": the row is gone, and that is a 404.
+  assert.equal(toA2AErrorBody(404, 'organisation not found', { reason: 'org_not_found' }).error.status, 'NOT_FOUND');
+
   const body = toA2AErrorBody(409, 'project onboarding incomplete', { reason: 'onboarding_incomplete' });
   assert.equal(body.error.status, 'FAILED_PRECONDITION');
   assert.equal(body.error.code, 409);

@@ -43,3 +43,14 @@ export async function attachAgent(projectId: string, agentName: string, agentNam
     agentNamespace,
   ]);
 }
+
+// The inverse of attach, and the inverse of a delete that cannot be left to
+// ON DELETE CASCADE: the project row is history, but a stale agent_name is a
+// pointer into a namespace that no longer exists, which the facade would dial.
+export async function detachAgents(orgId: string): Promise<number> {
+  const res = await query(
+    'UPDATE projects SET agent_name = NULL, agent_namespace = NULL WHERE org_id = $1',
+    [orgId],
+  );
+  return res.rowCount ?? 0;
+}

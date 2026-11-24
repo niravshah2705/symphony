@@ -1,7 +1,10 @@
 import type {
   LangfuseTrace,
   ModelOption,
+  OffboardStates,
   Org,
+  OrgRow,
+  OrgStatus,
   Project,
   ReconciledCosts,
   Session,
@@ -27,7 +30,7 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-// The one POST endpoint that streams SSE left in the app: onboarding. The chat
+// The POST endpoints that stream SSE: onboarding and offboarding. The chat
 // streams through the AG-UI runtime instead, which owns its own transport.
 // EventSource is GET-only, so we read the fetch body and split blocks ourselves.
 export async function postSSE(
@@ -77,14 +80,26 @@ export const api = {
   logout: () => json<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
   listOrgs: () => json<{ orgs: Org[] }>('/api/orgs'),
   createOrg: (slug: string, name: string) =>
-    json<{ org: Org }>('/api/orgs', {
+    json<{ org: OrgRow }>('/api/orgs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug, name }),
     }),
+  // Owner-only. Disable is a pure status write, so nothing in the cluster moves and
+  // re-enabling needs no re-onboarding.
+  setOrgStatus: (orgId: string, status: Extract<OrgStatus, 'active' | 'disabled'>) =>
+    json<{ org: OrgRow }>(`/api/orgs/${orgId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    }),
   getOnboard: (orgId: string) => json<{ states: States }>(`/api/orgs/${orgId}/onboard`),
   runOnboard: (orgId: string, onEvent: (e: string, d: string) => void, signal?: AbortSignal) =>
     postSSE(`/api/orgs/${orgId}/onboard`, {}, onEvent, signal),
+  getOffboard: (orgId: string) =>
+    json<{ status: OrgStatus; states: OffboardStates }>(`/api/orgs/${orgId}/offboard`),
+  runOffboard: (orgId: string, onEvent: (e: string, d: string) => void, signal?: AbortSignal) =>
+    postSSE(`/api/orgs/${orgId}/offboard`, {}, onEvent, signal),
   listProjects: (orgId: string) => json<{ projects: Project[] }>(`/api/orgs/${orgId}/projects`),
   listSessions: (orgId: string, projectId?: string) =>
     json<{ sessions: Session[] }>(

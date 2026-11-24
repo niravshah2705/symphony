@@ -71,6 +71,29 @@ export const litellm = {
       body: { key, ...budget },
     });
   },
+  // --- teardown ---
+  //
+  // A virtual key whose Secret is gone has no other address: `key` is the raw
+  // sk-... token, never stored in the BFF DB. deleteKey therefore takes the token
+  // when the caller still has it and falls back to the alias lookup below, which is
+  // the only way to find a key the namespace deletion orphaned.
+  deleteKey(keys: string[]) {
+    return fetchJson(url('/key/delete'), { headers: headers(), body: { keys } });
+  },
+  async listKeysByAlias(alias: string): Promise<string[]> {
+    const res = await fetchJson<{ keys?: (string | { token?: string; key?: string })[] }>(
+      url(`/key/list?key_alias=${encodeURIComponent(alias)}`),
+      { headers: headers() },
+    );
+    return (res.keys ?? [])
+      .map((entry) => (typeof entry === 'string' ? entry : (entry.token ?? entry.key ?? '')))
+      .filter((value) => value !== '');
+  },
+  // Deleting the team is the backstop for any key this org minted under it, and it
+  // is the inverse of the project step's newTeam (not the key step's).
+  deleteTeam(teamIds: string[]) {
+    return fetchJson(url('/team/delete'), { headers: headers(), body: { team_ids: teamIds } });
+  },
   // Global daily spend (GET). OSS does not break this down per org; it is a sanity
   // cross-check against Flexprice, which is the per-org/project/user source of truth.
   globalSpendLogs() {

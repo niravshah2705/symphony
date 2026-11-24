@@ -3,6 +3,7 @@ import { a2aFacadeBase } from '@fleet-local/shared';
 import { config } from '../config.ts';
 import { requireAuth } from '../auth/plugin.ts';
 import { assertMember } from '../db/users.ts';
+import { assertOrgActive } from '../lifecycle.ts';
 import { A2ARequestError, type ErrorInfo } from '../a2a/contract.ts';
 import type { FacadeContext } from '../a2a/facade.ts';
 import { aguiRun } from '../agui/server.ts';
@@ -40,6 +41,10 @@ export async function aguiRoutes(app: FastifyInstance): Promise<void> {
       await requireAuth(request, reply);
       const { orgId } = request.params as { orgId: string };
       await assertMember(orgId, request.fleetUser!.id);
+      // Every POST here begins a turn, so the whole endpoint is a new-turn gate. The
+      // refusal is a plain 409 rather than a RUN_ERROR because no run ever began —
+      // this is the route's own "refuse before the head" rule, applied one layer up.
+      await assertOrgActive(orgId);
     },
     handler: async (request, reply) => {
       const { orgId, projectId } = request.params as { orgId: string; projectId: string };

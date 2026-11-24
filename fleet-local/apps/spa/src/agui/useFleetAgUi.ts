@@ -20,6 +20,22 @@ export function newThreadId(): string {
   return globalThis.crypto.randomUUID();
 }
 
+// A run refused before it began arrives as the endpoint's JSON body, which
+// HttpAgent drops straight into the error message — so the chat's error span would
+// read `HTTP error 409: {"error":{"message":"organisation is disabled…`. The
+// reason codes are stamped by apps/control-plane/src/lifecycle.ts.
+const REFUSAL: Record<string, string> = {
+  org_disabled: 'This organisation is disabled — agent calls are turned off until its owner enables it.',
+  org_not_found: 'This organisation has been deleted.',
+};
+
+function explain(error: Error): Error {
+  for (const [reason, message] of Object.entries(REFUSAL)) {
+    if (error.message.includes(reason)) return new Error(message, { cause: error });
+  }
+  return error;
+}
+
 // The runtime is built for ONE conversation. useAgUiRuntime creates its thread
 // controller on the first render and never rebuilds it: changing the `agent`
 // option rebinds the agent but leaves the transcript in place. So the caller
@@ -44,7 +60,8 @@ export function useFleetAgUi(options: FleetAgUiOptions): AgUiAssistantRuntime {
   return useAgUiRuntime({
     agent,
     // What the run endpoint said before it sent a single event: an expired
-    // session, an unknown model, a run input it refused to parse.
-    onError: (error) => onErrorRef.current(error),
+    // session, an unknown model, a run input it refused to parse, a suspended
+    // organisation.
+    onError: (error) => onErrorRef.current(explain(error)),
   });
 }

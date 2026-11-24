@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS orgs (
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 
+-- Organisation lifecycle: active -> disabled -> active, or active|disabled ->
+-- offboarding -> deleted. deleted is terminal: the row is kept (slug, projects,
+-- sessions and onboarding_runs are the cost audit trail) but its infrastructure
+-- and its membership are gone, so there is nothing to hand back.
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS status_updated_at timestamptz NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS users (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email       text NOT NULL UNIQUE,
@@ -37,6 +44,24 @@ CREATE TABLE IF NOT EXISTS projects (
 
 -- One row per (org, step): the onboarding machine's durable state.
 CREATE TABLE IF NOT EXISTS onboarding_runs (
+  org_id          uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  step            text NOT NULL,
+  status          text NOT NULL DEFAULT 'pending',
+  attempt         integer NOT NULL DEFAULT 0,
+  idempotency_key text NOT NULL,
+  result_json     jsonb,
+  error           text,
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, step)
+);
+
+-- The offboarding machine's durable state, in its own table rather than shared
+-- with onboarding_runs: several teardown ids (key, namespace, flexprice) are also
+-- onboarding ids, and one PK would make a teardown's progress render as
+-- "onboarding complete" and — worse — make a later re-onboarding skip the steps it
+-- marks done, so a re-enabled org could get no LiteLLM Secret. Separate also keeps
+-- the create history intact as the audit trail a delete is required to preserve.
+CREATE TABLE IF NOT EXISTS offboarding_runs (
   org_id          uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   step            text NOT NULL,
   status          text NOT NULL DEFAULT 'pending',
