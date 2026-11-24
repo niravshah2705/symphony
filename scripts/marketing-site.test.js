@@ -293,7 +293,56 @@ test('the secrets CSP stays tight because that app has no inline scripts', () =>
     0,
     'a new inline <script> in secrets/ must move to a file or be reported here'
   );
-  assert.deepEqual(directives['script-src'], ["'self'"], 'secrets loads only local scripts, so no widening');
+  assert.deepEqual(
+    directives['script-src'],
+    ["'self'", 'https://apis.google.com'],
+    'secrets serves only local code, plus the gapi bundle Firebase auth loads'
+  );
+});
+
+// The Firebase auth bundles load code that no page markup references, so the
+// markup scan above cannot see it: gapi at apis.google.com, and reCAPTCHA at
+// www.google.com. This asserts the reachable one is allowed and pins that the
+// unreachable one is not, because a session-token page should not grant Google
+// open-ended script execution for a code path this product never enters.
+test('the vendored Firebase auth bundles are inside their host CSP', () => {
+  const REACHABLE = 'apis.google.com';
+  const RECAPTCHA = 'www.google.com';
+
+  for (const [target, bundle] of [
+    ['app', 'public/vendor/firebase/firebase-auth.js'],
+    ['secrets', 'secrets/vendor/firebase-auth-compat.js']
+  ]) {
+    const directives = cspDirectives(target);
+    const scripts = [
+      ...fs.readFileSync(path.join(ROOT, bundle), 'utf8').matchAll(/https:\/\/([a-z0-9.-]+)\/[^\s"'`]*\.js/g)
+    ].map((m) => m[1]);
+
+    assert.ok(scripts.includes(REACHABLE), `${bundle} should still load gapi from ${REACHABLE}`);
+    assert.ok(
+      hostAllowed(REACHABLE, directives['script-src']),
+      `${bundle} loads gapi on sign-in, but ${target} script-src blocks it`
+    );
+    assert.ok(
+      hostAllowed(REACHABLE, directives['frame-src']),
+      `${target} frame-src must allow the gapi iframe ${REACHABLE} creates`
+    );
+
+    if (scripts.includes(RECAPTCHA)) {
+      const appUsesRecaptcha = sourceTexts('public')
+        .concat(target === 'secrets' ? sourceTexts('secrets') : [])
+        .some((t) => /RecaptchaVerifier/i.test(t));
+      assert.equal(
+        appUsesRecaptcha,
+        false,
+        `a RecaptchaVerifier now exists: add ${RECAPTCHA} to ${target} script-src and frame-src`
+      );
+      assert.ok(
+        !hostAllowed(RECAPTCHA, directives['script-src']),
+        `${RECAPTCHA} is only needed for reCAPTCHA, which this product does not use`
+      );
+    }
+  }
 });
 
 test('deploy-www builds the marketing tree before publishing it', () => {
