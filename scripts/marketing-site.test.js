@@ -149,6 +149,48 @@ test('firebase publishes the generated tree as the www root and rewrites every l
   assert.equal(cacheFor['/adlc/**'], cacheFor['/'], 'rewritten pages must not be cached at the old url');
 });
 
+test('the CSP matches what the published pages actually load', () => {
+  const firebase = JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));
+  const www = firebase.hosting.find((site) => site.target === 'www');
+  const block = www.headers.find((rule) => rule.source === '/**');
+  const csp = block.headers.find((h) => h.key === 'Content-Security-Policy').value;
+  const directives = Object.fromEntries(
+    csp.split(';').map((d) => d.trim()).filter(Boolean).map((d) => {
+      const [name, ...sources] = d.split(/\s+/);
+      return [name, sources];
+    })
+  );
+
+  for (const name of ['default-src', 'object-src', 'base-uri', 'form-action', 'frame-ancestors']) {
+    assert.ok(directives[name], `${name} must be set`);
+  }
+  assert.deepEqual(directives['default-src'], ["'self'"]);
+  assert.deepEqual(directives['object-src'], ["'none'"]);
+
+  // The landing page ships inline <script>/<style> blocks, so a stricter policy
+  // would break it; the external origin is the xterm terminal assets on unpkg.
+  const html = [...built.files].filter((rel) => rel.endsWith('.html'));
+  const inlines = html.filter((rel) => /<script>|<style>/.test(read(rel)));
+  assert.ok(inlines.length, 'expected inline script/style blocks in the published tree');
+  if (inlines.length) {
+    assert.ok(directives['script-src'].includes("'unsafe-inline'"), 'inline scripts need unsafe-inline');
+    assert.ok(directives['style-src'].includes("'unsafe-inline'"), 'inline styles need unsafe-inline');
+  }
+
+  const externalOrigins = new Set();
+  for (const rel of html) {
+    const text = read(rel);
+    for (const m of text.matchAll(/<script[^>]+\bsrc="(https?:)?\/\/([^/"]+)/g)) externalOrigins.add(m[2]);
+    for (const m of text.matchAll(/<link[^>]+rel="stylesheet"[^>]+\bhref="(https?:)?\/\/([^/"]+)/g)) {
+      externalOrigins.add(m[2]);
+    }
+  }
+  const allowed = new Set([...directives['script-src'], ...directives['style-src']].filter((s) => !s.startsWith("'")));
+  for (const origin of externalOrigins) {
+    assert.ok(allowed.has(origin), `${origin} is loaded by a published page but absent from the CSP`);
+  }
+});
+
 test('deploy-www builds the marketing tree before publishing it', () => {
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deploy-www.yml'), 'utf8');
   const build = workflow.indexOf('node scripts/build-marketing-site.js');

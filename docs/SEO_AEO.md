@@ -319,19 +319,27 @@ engines describe one entity rather than three.
 | Sitelink anchors | Footer Explore link relabelled `Try now` → `Archagentix Platform` on all 14 marketing pages. Header/body CTAs keep "Try now" (conversion copy); brand anchor text is what Google uses for brand sitelinks. |
 | AEO | `llms.txt` / `llms-full.txt` retitled to lead with Archagentix, add an entity section naming both hosts by role, and a "How to cite Archagentix" instruction telling answer engines not to treat Archagentix / ADLC / Software Factory as three products. |
 
-## Known issue, deliberately out of scope: the apex domain
+## Resolved (2026-11-24): the apex domain
 
-`https://archagentix.com` (no `www`) still answers `200` from **Hostinger Apache**
-(`server: Apache`, ~8.5 KB of the pre-GCP static tree) — old content, outside this
-repo, served by a second host. Google therefore sees two competing copies of the
-bare brand domain, and the bare domain is exactly what people type. No change in
-this repo fixes it:
+`https://archagentix.com` answered `200` for every path from **Hostinger Apache**
+(`server: Apache`, the pre-GCP static tree) — old content, outside this repo, served
+by a second host, while only its `/` redirected. Google therefore saw two competing
+copies of the bare brand domain, which is exactly what people type.
 
-1. Point the apex at Firebase or issue a registrar-level 301 `archagentix.com` →
-   `https://www.archagentix.com` (the `www` CNAME cutover above already moves the
-   `www` host; the apex A/AAAA records are the remaining part).
-2. Until then, treat any apex appearance in the SERP as expected leakage, not a
-   regression in the on-page work.
+Closed at the host, not in this repo: every apex path now issues a single-hop
+path-preserving `301` to `https://www.archagentix.com` — including `/robots.txt`
+and `/sitemap.xml`, so both hosts advertise the same policy — and unknown paths
+redirect and then `404` on `www` rather than returning the old Apache parking page
+(which injected a plain-`http` third-party script). `www` canonicals are
+self-referencing, so no canonical chain survives the cutover.
+
+Remaining, and still out of reach from this repo: the Apache `301` responses carry
+no `Strict-Transport-Security`, and `www`'s HSTS omits `includeSubDomains; preload`.
+Browsers do not apply HSTS from a redirect response, so the apex and its
+subdomains stay uncovered until the header is set at Hostinger (or the apex moves
+behind Firebase Hosting, which would need a new hosting target here —
+`scripts/marketing-site.test.js` currently pins that the `www` target has no
+`redirects` block).
 
 ## Verification
 
