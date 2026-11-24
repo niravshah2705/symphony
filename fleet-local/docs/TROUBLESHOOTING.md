@@ -991,6 +991,88 @@ script now waits for `/healthz` (bounded by `READY_WAIT`) instead of a fixed
 
 ---
 
+## T-20 LiteLLM says "Hosted Langfuse tracing is disabled" and no trace lands
+
+**Symptom.** The LiteLLM admin UI reports Langfuse tracing disabled, the Langfuse
+traces list is empty (or frozen at some old date), and the app's Costs → Traces
+panel shows nothing. Nothing else complains: chat answers, Flexprice still bills,
+LiteLLM still meters. So the failure is invisible everywhere except the trace
+store.
+
+**Read it back in this order** (all three are independent, and the drift breaks
+only the last two):
+
+```bash
+kubectl -n litellm get deploy litellm \
+  -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}'; echo
+kubectl -n litellm get cm litellm-config -o jsonpath='{.data.config\.yaml}' | sed -n '/callbacks:/,$p'
+kubectl -n litellm exec deploy/litellm -c litellm -- sh -c 'env | grep -c "^LANGFUSE_"'   # 3, never print the values
+```
+
+**Mechanism — one helm list merge, not a credential problem.** The Langfuse
+callback is configured in exactly two places: `deploy/litellm/values-base.yaml`
+(fresh install, applied by `scripts/setup/s03-litellm.sh`) deliberately carries
+only the Flexprice half — `- flexprice_callback.flexprice_logger` +
+`- fleet_metadata.fleet_hook` and `environmentSecrets: [litellm-fleet-secrets]` —
+because Langfuse itself needs the RustFS bucket that arrives with substrate.
+`scripts/30-litellm.sh` then adds the third callback and
+`litellm-langfuse-keys` with `helm upgrade --reuse-values -f
+deploy/litellm/values-patch.yaml`. `values-base.yaml` is a **full** values set, so
+any step-3 re-run replaces the release's user values with it and the langfuse half
+falls off with it: `envFrom` loses the secret that supplies `LANGFUSE_PUBLIC_KEY`,
+`LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`, and the rendered `config.yaml` loses
+`- langfuse`. The two halves are the same list-merge, so an operator who restores
+only the env (a `kubectl patch` of the deployment, or a `--reuse-values` that omits
+`litellm-fleet-secrets`) gets a crashloop ("FLEXPRICE_API_URL and
+FLEXPRICE_API_KEY are required", T-15.18) or env vars with no callback wired to
+read them — either way tracing stays off.
+
+The guard that was supposed to catch this read `helm get values` **after** the
+upgrade, i.e. the values it had just replaced, so it never fired — and it only
+warned. That is the actual defect: a silent, self-reinstalling off-switch.
+
+**Fix (live, one command, no secret handling).** `bash scripts/30-litellm.sh` — it
+mints `litellm-langfuse-keys` from `langfuse-stores` inline and re-applies
+`values-patch.yaml`. Observed on 2026-11-24: helm revision 10, `envFrom` back to
+`[litellm-fleet-secrets litellm-langfuse-keys]`, `config.yaml` callbacks
+`flexprice_callback.flexprice_logger, fleet_metadata.fleet_hook, langfuse`, pod env
+3/3 `LANGFUSE_*`; a facade run then produced four traces (`03:00:56Z–03:01:35Z`,
+after the newest one had been sitting at 2026-11-21) and the proxy logged
+`langfuse.py:530 - Langfuse Layer Logging - logging success` for each.
+
+**Baked into the scripts.** `scripts/setup/s03-litellm.sh` now re-applies
+`values-patch.yaml` itself whenever `litellm-langfuse-keys` exists in the cluster
+(that existence is the signal that Langfuse was wired once; on a genuinely fresh
+cluster the secret does not exist yet and step 5/5b does the full wiring), and
+`scripts/verify-e2e.sh` §14 fails loudly on the two read-backs above — the same
+reason §10 asserts `--upstream-timeout`: a class of failure whose only symptom is
+an empty panel must not depend on someone opening the panel.
+
+**Still open, and NOT this bug: traces carry no `userId`.** Every trace — including
+the pre-drift ones — has `userId: null` while `sessionId`, `fleet_org_id` and
+`fleet_project_id` arrive. Look at one trace's `requester_metadata.headers` and the
+shape of the problem is visible: the actor's call reaches LiteLLM with baggage
+`gen_ai.agent.name,gen_ai.conversation.id,a2a.task.id` and the headers
+`x-fleet-org-id`, `x-fleet-project-id`. Those two headers are not propagated — they
+are **literal per-tenant values** in the ModelConfig `defaultHeaders`
+(`deploy/charts/kagent-tenant/templates/modelconfig.yaml`, fed by
+`ci/values-fleet.yaml`), so no caller identity can ever ride that path. The channel
+that could is the W3C baggage the Harness turns on with `OTEL_PROPAGATORS=
+tracecontext,baggage` (`kagent-tenant/values.yaml` `harness.env`, the
+`fleet_user_id` key defined in `packages/shared`), but the observed baggage out of
+the actor contains only kagent's own `gen_ai.*`/`a2a.task.id` keys — the
+`fleet_user_id` the BFF stamps on the controller request (`src/kagent/a2a.ts`
+`a2aHeaders`) is not carried through to the LLM call, and
+`deploy/litellm/fleet_identity.py` then has nothing to lift. Consequence: the app's
+Costs → Traces panel, which queries `GET /api/public/traces?userId=<email>`
+(`src/routes/orgs.ts`), returns empty even with tracing on; the Langfuse UI
+(port-forward `svc/langfuse-web 3000`) shows the traces. Closing it is a propagation
+change on the actor→proxy hop, not an environment variable, and §7's read-back now
+reports the missing userId as an unmet item rather than letting an empty panel pass
+as "no traces yet".
+
+---
+
 ```bash
 # Flexprice admin calls (keys fetched inline, never printed; fresh-cluster
 # shape = litellm-fleet-secrets; the deploy-env literal only exists on old clusters)
