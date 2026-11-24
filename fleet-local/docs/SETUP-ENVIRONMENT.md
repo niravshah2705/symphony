@@ -59,9 +59,11 @@ Effects of an entry (all derived, nothing hardcoded per model):
   `<id>-coding` and Agent `<slug>-agent-<id>-worker` via the vendored chart;
 - LiteLLM org/team/key `models` get every catalog `model` **plus the `openrouter/*`
   wildcard** (`litellmModelList`), so new OpenRouter models need no key re-mint;
-- `GET /api/orgs/:o/projects/:p/models` feeds the SPA dropdown; `POST .../chat`
-  takes `model` (catalog id) — a NEW session binds to that model's agent, an
-  EXISTING session stays on the agent it started with (checkpointed actor).
+- `GET /api/orgs/:o/projects/:p/models` feeds the SPA dropdown; the browser's run
+  (`POST /api/agui/orgs/:o/projects/:p/agent`) carries the catalog id on
+  `forwardedProps["fleet.dev/model"]` and the A2A wire on
+  `message.metadata["fleet.dev/model"]` — a NEW conversation binds to that model's
+  agent, an EXISTING one stays on the agent it started with (checkpointed actor).
 
 Entries may set `"runtime":"claude"` (P7): the agent compiles on the kagent
 `claude` Harness (claude-harness image, digest-pinned) and gets an

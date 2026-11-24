@@ -92,7 +92,8 @@ billing blind spot). Four PRs, one seam:
   as an ordinary `TASK_STATE_FAILED` with the provider's text, so
   `isPlatformFault` re-labels it `upstream_error` (never billed) while any
   failure it cannot name stays billable; and a task can complete with **no
-  artifact at all** (the mock worker does), which is now recorded as
+  artifact at all** (the offline mock stub did until it learned to stream), which
+  is now recorded as
   `the agent completed the turn without producing any output` instead of an
   unexplained empty bubble. Rotating the key then exposed a THIRD member of the
   same class, and it was being billed: a **retired model id** (`404 … is no
@@ -103,19 +104,27 @@ billing blind spot). Four PRs, one seam:
   bare `404` is deliberately not matched, because an agent's own tool can hit
   one and that compute is real. The card GET needs the identity headers too — the
   controller 401s a bare one, which is how `agentCard()` lost discovery.
-  Legacy `/chat` still works — `kagent/proxy.ts` now shares the same pump.
+  Legacy `/chat` was still working here — the relay shared the same pump — and PR
+  3 deleted it once nothing on the browser side called it.
   Gate: `scripts/fixes/t31-a2a-facade-check.sh` (read-only; `REBUILD=1` to roll;
   waits for `/healthz` because a 1-replica rolling update can leave zero ready
   endpoints for minutes and every curl then answers `000`).
-- **PR 2 — SPA switch (landed).** `apps/spa` now runs the real library runtime
-  (`@assistant-ui/react@0.15.37` + `@assistant-ui/react-a2a@0.2.54`, headless
+- **PR 2 — SPA switch (landed, then re-spoken by PR 3).** `apps/spa` now runs the
+  real library runtime (`@assistant-ui/react@0.15.37` + `@assistant-ui/react-a2a@0.2.54`, headless
   primitives on our own `styles.css` — no Tailwind/shadcn):
-  `src/a2a/{FleetA2AClient,useFleetA2A}.ts` and
-  `src/assistant-ui/{Thread,TaskStatusBar,FailureNotice,ThoughtPanel}.tsx`,
-  mounted in place of `Chat.tsx` by `Shell.tsx`. A provider 401 is now an
-  `incomplete (error)` bubble carrying the controller's own words plus Retry,
-  never `(no output)`. What the library forced into the open, all of it verified
-  against shipped source and the live facade:
+  **Everything below about the A2A *client* is history**: PR 3 moved the browser
+  leg to `@assistant-ui/react-ag-ui`, so `src/a2a/useFleetA2A.ts`,
+  `src/a2a/artifacts.ts` and `ThoughtPanel.tsx` are deleted and
+  `src/a2a/FleetA2AClient.ts` moved to `scripts/fixes/` (the live gate still
+  drives it, and the A2A wire it proves is unchanged). What the library forced
+  into the open still holds — it is the reason the facade reads the model from
+  the message and refuses a run input with no thread handle.
+  What runs today: `src/agui/{FleetAgUiAgent.ts,useFleetAgUi.ts}` inside
+  `src/assistant-ui/{Thread,ui/ThreadView,TaskStatusBar,FailureNotice}.tsx`
+  (library-styled markup + the vendored `.aui` stylesheet, mounted by `Shell.tsx`).
+  A provider 401 is still an `incomplete (error)` bubble carrying the
+  controller's own words plus Retry, never `(no output)`. What the library forced
+  into the open, all of it verified against shipped source and the live facade:
   * it calls `streamMessage(message, configuration, void 0, signal)`, so
     per-message **metadata** is the only place the model choice can ride — and
     that is now proven end-to-end (gate 8), so the `x-fleet-model` header
@@ -132,11 +141,16 @@ billing blind spot). Four PRs, one seam:
     pinned per conversation and switching sessions means a new client — not a
     new option on a stale one;
   * artifacts are NOT merged into message content (they live on
-    `message.metadata.custom.a2a.artifacts`), so `ThoughtPanel` reads
-    `useA2AArtifacts()` and cannot duplicate the answer. Still contract +
+    `message.metadata.custom.a2a.artifacts`), which is why PR 2 needed a
+    `ThoughtPanel` reading `useA2AArtifacts()` and an interim artifact bridge at
+    all. AG-UI removed the need: the encoder turns answer text and thoughts into
+    `TEXT_MESSAGE_*` / `REASONING_*` events server-side, so both bridge files are
+    gone and the library renders the parts. Still contract +
     plumbing: nothing emits a thought part yet (PR 4).
   Cost of the switch: the SPA bundle went 240 kB → 698 kB (211 kB gzip) and now
-  trips Vite's 500 kB chunk warning. Not yet rewritten: the card's
+  trips Vite's 500 kB chunk warning; the AG-UI leg costs more again — `@ag-ui/client`
+  brings rxjs, and `@assistant-ui/react-ag-ui` peers on zod v4 — for
+  1 334 kB (378 kB gzip). Chunking it is open work, not a gate. Not yet rewritten: the card's
   `capabilities`, which advertises `pushNotifications` / `extendedAgentCard`
   while the facade answers both with `501`. `message:send` exists server-side
   and the SPA never uses it (it streams). Browser click-through is still manual:
@@ -145,11 +159,41 @@ billing blind spot). Four PRs, one seam:
   actually generates, and the gate's own assertion passes for each of the three
   healthy catalog entries — `nemotron`, `nemotron-claude` and `nemotron-codex`
   (the claude harness delivers its text in `artifactUpdate` frames, the other two
-  in the task's status message; all three reach the client). `mock` still
-  completes with no text at all, which is the silent-completion case the notice
-  exists for.
-- **PR 3 — delete the bespoke relay:** `/chat`, `Chat.tsx`, `api.chat`, the
-  private `event: session` frame, `verify-e2e.sh` §4 wording.
+  in the task's status message; all three reach the client). `mock` streams two
+  SSE deltas through LiteLLM now, so it reaches the client as artifact text too;
+  the silent-completion case the notice exists for is left to a model that
+  settles a turn without parts, which unit tests cover rather than the stub.
+- **PR 3 — the browser leg is AG-UI, and the bespoke relay is gone (landed).**
+  Northbound stays A2A; only the southbound protocol changed.
+  *server*: `apps/control-plane/src/agui/{encode,runinput,server}.ts` +
+  `routes/agui.ts` — `POST /api/agui/orgs/{orgId}/projects/{projectId}/agent`, its
+  own Fastify scope so a refusal is plain `{error:{message,code,reason}}` JSON
+  instead of an `A2AError` body an AG-UI client would report as a transport
+  failure. `encode.ts` is pure (A2A frames in, `RUN_STARTED` / `TEXT_MESSAGE_*` /
+  `REASONING_*` / one terminal event out) and unit-tested without a cluster;
+  `runinput.ts` reads the `RunAgentInput` and hands `openTurn` the SAME `RestTurn`
+  the A2A leg builds, so conversation resolution, model selection, ownership and
+  metering cannot drift into two ideas of a turn. A pause becomes
+  `RUN_FINISHED{outcome:interrupt}` whose `interrupt.id` IS the paused A2A task,
+  and a `resume` entry answers it.
+  *browser*: `apps/spa/src/agui/{FleetAgUiAgent.ts,useFleetAgUi.ts}`. The thread
+  handle is the client's own (`crypto.randomUUID()` per conversation, stored as
+  `sessions.thread_id`) because the app must never name kagent's context id;
+  `FleetAgUiAgent` overrides `prepareRunAgentInput` to put the model on
+  `forwardedProps`, the one channel `UseAgUiRuntimeOptions` does not expose. A
+  conversation switch is a React remount (`key={projectId:threadId}`), not an
+  agent option — `useAgUiRuntime` builds its controller once and `updateOptions`
+  never clears the transcript.
+  *deleted*: `/chat` + `kagent/proxy.ts` + `Chat.tsx` + `api.chat`/`api.agentCard`
+  + the private `event: session` frame + the chat's bespoke CSS (`.bubble`,
+  `.composer`, `.messages`, `.thought`). `verify-e2e.sh` §4 wording followed.
+  Gates: 6 asserts `POST /chat → 404` (a route that comes back, or an SPA fallback
+  swallowing `/api`, both fail it); 9 drives the AG-UI run end-to-end and reads
+  `sessions.thread_id` + `outcome` back off the row.
+  Gates 6 and 9 pass live against `kind-flexprice-local` (BFF rebuilt from this
+  tree, 2026-11-24). Still manual: the browser click-through — a normal answer, an
+  inline 401 with Retry, a >60 s turn, an `input-required` pause answered by
+  typing into the composer.
 - **PR 4 — make the unreachable features real:** `mcp_require_approval` in the
   tenant chart (no Agent CR sets `requireApproval` today), HITL extension
   declaration + approval payload, and thought-part emission. The card already

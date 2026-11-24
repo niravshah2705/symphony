@@ -207,6 +207,8 @@ export interface RestTurn {
   message: A2AMessage;
   /** The chat model the SPA asked for; consumed here, never forwarded upstream. */
   modelId?: string;
+  /** The AG-UI client's own conversation handle; never set on the A2A leg. */
+  threadId?: string;
   pushConfigRequested: boolean;
 }
 

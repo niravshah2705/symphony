@@ -1,6 +1,8 @@
-// The BFF as an A2A server: a facade over the kagent controller. The browser
-// speaks standard A2A (REST bindings) here and @assistant-ui/react-a2a drives it,
-// so nothing about this conversation is a private protocol.
+// The BFF as an A2A server: a facade over the kagent controller. Any standard
+// A2A client (REST bindings) speaks it — the live gate drives it with
+// @assistant-ui/react-a2a, and the browser through src/agui, which re-spokes THIS
+// facade's turn as AG-UI run events — so nothing about a conversation is a
+// private protocol.
 //
 // Two rules shape everything below.
 //
@@ -25,6 +27,7 @@ import {
   createSession,
   findSessionByContext,
   findSessionByTask,
+  findSessionByThread,
   listContextIds,
   pauseTurn,
   setKagentIds,
@@ -57,6 +60,7 @@ import {
   rewriteAgentCard,
   turnFromRestBody,
   type RestTurn,
+  type WireFrame,
 } from './translate.ts';
 
 export interface FacadeContext {
@@ -103,7 +107,7 @@ function defaultEntry(catalog: readonly ModelCatalogEntry[] = config.modelCatalo
   return entry;
 }
 
-function identityHeaders(ctx: FacadeContext, conversationId?: string): Record<string, string> {
+export function identityHeaders(ctx: FacadeContext, conversationId?: string): Record<string, string> {
   return a2aHeaders(
     { orgId: ctx.orgId, projectId: ctx.projectId, userEmail: ctx.email, conversationId },
     ctx.bearer,
@@ -125,7 +129,7 @@ export async function facadeAgentCard(ctx: FacadeContext): Promise<Record<string
 }
 
 // Resolve (or start) the conversation a client turn belongs to.
-async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ session: SessionRow; message: A2AMessage; agent: ProjectAgent }> {
+export async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ session: SessionRow; message: A2AMessage; agent: ProjectAgent }> {
   if (turn.pushConfigRequested) {
     throw new A2ARequestError(501, 'this agent does not deliver updates by webhook — stream the response instead', {
       reason: 'push_notifications_unsupported',
@@ -153,7 +157,8 @@ async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ session: 
   // back to the conversation id for a fresh turn in an existing conversation.
   const found =
     (turn.message.taskId ? await findSessionByTask(ctx.orgId, ctx.projectId, turn.message.taskId) : undefined) ??
-    (turn.message.contextId ? await findSessionByContext(ctx.orgId, ctx.projectId, turn.message.contextId) : undefined);
+    (turn.message.contextId ? await findSessionByContext(ctx.orgId, ctx.projectId, turn.message.contextId) : undefined) ??
+    (turn.threadId ? await findSessionByThread(ctx.orgId, ctx.projectId, turn.threadId) : undefined);
 
   if (found && turn.message.contextId && found.kagent_session_id && found.kagent_session_id !== turn.message.contextId) {
     throw new A2ARequestError(409, 'the task and the conversation id do not belong to the same conversation', {
@@ -163,7 +168,10 @@ async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ session: 
   // Not found is not a new conversation: every conversation this facade knows was
   // created here, so an id we have no row for belongs to someone else (or to a
   // database that no longer exists). Starting it silently is how one project ends
-  // up appending to another's context on a shared org-level agent.
+  // up appending to another's context on a shared org-level agent. A thread
+  // handle is exempt: the AG-UI client mints it, so an unknown one genuinely is a
+  // new conversation, and the (org, project) scope of the lookups above is what
+  // keeps it from reaching anyone else's row.
   if (!found && (turn.message.contextId || turn.message.taskId)) {
     throw new A2ARequestError(404, 'unknown conversation — start a new one without a context id', { reason: 'unknown_conversation' });
   }
@@ -184,26 +192,39 @@ async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ session: 
       agentName: agent.agent,
       agentNamespace: agent.namespace,
       model: entry.id,
+      threadId: turn.threadId,
     }));
 
   // Re-arm a settled or paused row so this turn is billable on its own merits.
   if (session.status !== 'running') await beginTurn(session.id);
 
+  // A turn that paused on a human left its task resumable, and the AG-UI client
+  // has no task id to send back: it knows only its thread. Naming the paused task
+  // here is what makes the next message RESUME it instead of starting a second
+  // task whose answer the first one never sees.
+  const taskId = turn.message.taskId ?? (found?.status === 'awaiting_input' ? found.kagent_task_id ?? undefined : undefined);
+
   const message = userMessage(
     turn.message.parts.map((part) => part.text).join('\n'),
     session.kagent_session_id ?? turn.message.contextId,
-    turn.message.taskId,
+    taskId,
   );
   if (turn.message.metadata) message.metadata = turn.message.metadata;
   return { session, message, agent };
 }
 
-interface Pump {
+export interface Pump {
   upstream: Response;
-  write: (chunk: string) => void;
+  /**
+   * Relay a frame's bytes verbatim. Absent on the AG-UI leg, which re-emits the
+   * turn as AG-UI events through `onFrame` instead of forwarding kagent's wire.
+   */
+  write?: (chunk: string) => void;
   session: SessionRow;
   /** Inject the synthetic reasoning artifact (only for the browser-facing facade). */
   thoughts: boolean;
+  /** Called for every frame the pump could parse, before anything is relayed. */
+  onFrame?: (frame: WireFrame) => void;
   aborted?: () => boolean;
   log?: (message: string, extra?: Record<string, unknown>) => void;
 }
@@ -242,7 +263,8 @@ export async function pumpTurn(pump: Pump): Promise<Settlement> {
     if (frame.producesOutput) answered = true;
     if (frame.statusMessage) failureMessage = frame.statusMessage;
     if (frame.rpcError) rpcError = truncate(String(frame.rpcError.message ?? 'the agent returned an error'));
-    if (pump.thoughts && frame.thought) {
+    pump.onFrame?.(frame);
+    if (pump.thoughts && frame.thought && pump.write) {
       const artifact = buildThoughtArtifact({ text: frame.thought, taskId, contextId, append: thoughtOpen });
       if (artifact) {
         thoughtOpen = true;
@@ -255,7 +277,7 @@ export async function pumpTurn(pump: Pump): Promise<Settlement> {
   try {
     for await (const chunk of Readable.fromWeb(pump.upstream.body as never)) {
       const text = (chunk as Buffer).toString('utf8');
-      pump.write(text);
+      pump.write?.(text);
       // Only the unparsed tail is carried, so re-normalising it each round is
       // cheap and survives a CRLF pair split across chunks.
       buffer = `${buffer}${text}`.replace(/\r\n/g, '\n').replace(/^\n+/, '');
@@ -300,7 +322,7 @@ export async function pumpTurn(pump: Pump): Promise<Settlement> {
   return settlement;
 }
 
-function sseHead(reply: FastifyReply): void {
+export function sseHead(reply: FastifyReply): void {
   reply.hijack();
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -310,7 +332,7 @@ function sseHead(reply: FastifyReply): void {
   });
 }
 
-function watchAbort(request: FastifyRequest, reply: FastifyReply): () => boolean {
+export function watchAbort(request: FastifyRequest, reply: FastifyReply): () => boolean {
   let aborted = false;
   request.raw.once('aborted', () => {
     aborted = true;

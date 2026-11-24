@@ -27,8 +27,9 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-// POST endpoints that stream SSE (onboarding, chat). EventSource is GET-only, so
-// we read the fetch body and split event/data blocks ourselves.
+// The one POST endpoint that streams SSE left in the app: onboarding. The chat
+// streams through the AG-UI runtime instead, which owns its own transport.
+// EventSource is GET-only, so we read the fetch body and split blocks ourselves.
 export async function postSSE(
   url: string,
   body: unknown,
@@ -95,17 +96,6 @@ export const api = {
     json<{ traces: LangfuseTrace[] }>(
       `/api/orgs/${orgId}/traces${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`,
     ),
-  chat: (
-    orgId: string,
-    projectId: string,
-    text: string,
-    sessionId: string | undefined,
-    model: string | undefined,
-    onEvent: (e: string, d: string) => void,
-    signal?: AbortSignal,
-  ) => postSSE(`/api/orgs/${orgId}/projects/${projectId}/chat`, { text, sessionId, model }, onEvent, signal),
   closeSession: (orgId: string, sessionId: string) =>
     json<{ session: Session }>(`/api/orgs/${orgId}/sessions/${sessionId}/close`, { method: 'POST' }),
-  agentCard: (orgId: string, projectId: string) =>
-    json<Record<string, unknown>>(`/api/orgs/${orgId}/projects/${projectId}/agent-card`),
 };

@@ -34,7 +34,8 @@ at 30s, which is exactly what a cold actor wake overruns.
 * Two proxies (ns `fleet-system`), host-only cookies `_fleet_oauth` /
   `_kagent_oauth` so the two apps never clobber each other's session.
   `--cookie-refresh=55m`, `--skip-provider-button=true`,
-  `--upstream-timeout=1800s` (T-18: the 30s default `502`s `POST /chat`).
+  `--upstream-timeout=1800s` (T-18: the 30s default `502`s the chat's long POST —
+  `…/api/agui/…` today, `…/chat` before PR 3 replaced it).
 * **The two flags that make trusted-proxy work**: `--set-authorization-header`
   (delivers the Google **ID token** as `Authorization: Bearer …` downstream) and
   `--set-xauthrequest` (adds `X-Auth-Request-Email/User/Preferred-Username`).
