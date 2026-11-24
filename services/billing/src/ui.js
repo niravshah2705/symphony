@@ -1,12 +1,20 @@
 'use strict';
 
-const { decimalFromPaise } = require('@software-factory/shared-core/billing/money-wire');
+const { creditsFromTokenCredits } = require('@software-factory/shared-core/billing/money-wire');
 
-/** Rupees for display, or an em-dash when this process does not know the number. */
-function inr(paise) {
-  const raw = Number(paise);
-  if (paise === null || paise === undefined || !Number.isFinite(raw)) return '—';
-  return `₹${decimalFromPaise(raw)}`;
+/**
+ * Credits for display, or an em-dash when this process does not know the number.
+ *
+ * This dashboard used to print ₹ next to a wallet balance, which was a different
+ * quantity from the one the gate enforces: ₹2,360 bought 3,500 credits and the balance
+ * is what is left of the 3,500. An operator page and a customer page now state the same
+ * number in the same unit, and rupees stay where money actually moves — the order and
+ * the invoice, both built from the recharge intent.
+ */
+function credits(tokenCredits) {
+  const raw = Number(tokenCredits);
+  if (tokenCredits === null || tokenCredits === undefined || !Number.isFinite(raw)) return '—';
+  return creditsFromTokenCredits(Math.round(raw));
 }
 
 function renderDashboardHtml(data = {}) {
@@ -20,22 +28,22 @@ function renderDashboardHtml(data = {}) {
 
   // The wallet's balance, never a locally maintained one: the balance card shows
   // "—" when the gate could not read it, because an unread number is not zero.
-  const balanceInr = inr(fund.balanceTokenCredits);
+  const balanceCredits = credits(fund.balanceTokenCredits);
   const fundNote = fund.balanceTokenCredits === null || fund.balanceTokenCredits === undefined
     ? (fund.gatePolicy === 'off'
       ? 'No wallet read: the billing gate is off'
       : `Balance unavailable${fund.reason ? ` (${fund.reason})` : ''}`)
     : `${fund.state}${fund.stale ? ' (cached, last read failed)' : ''} · gate ${fund.gatePolicy}`;
-  const initialCreditInr = inr(account.initialCreditTokenCredits);
+  const initialCreditCredits = credits(account.initialCreditTokenCredits);
   const autoRecharge = account.autoRecharge || {};
   const isAutoEnabled = Boolean(autoRecharge.enabled);
   const mode = autoRecharge.mode || 'amount';
   // Configured thresholds are inputs, so they stay bare numbers; only the wallet
   // balance is allowed to be unknown.
-  const rupees = (paise) => decimalFromPaise(Number(paise) || 0);
-  const thresholdInr = rupees(autoRecharge.thresholdTokenCredits);
+  const fieldValue = (tokenCredits) => credits(Number(tokenCredits) || 0);
+  const thresholdCredits = fieldValue(autoRecharge.thresholdTokenCredits);
   const thresholdPercent = Number(autoRecharge.thresholdPercent) || 20;
-  const rechargeAmountInr = rupees(autoRecharge.amountPaise);
+  const rechargeAmountCredits = fieldValue(autoRecharge.amountPaise);
   const subscriptionId = autoRecharge.cashfreeSubscriptionId || '';
   const paymentInfo = account.paymentInfo || {};
   const billingName = paymentInfo.billingName || 'Not configured';
@@ -217,8 +225,8 @@ function renderDashboardHtml(data = {}) {
     <div class="grid">
       <div class="card">
         <div class="card-title">Wallet Balance</div>
-        <div class="metric">${balanceInr}</div>
-        <div class="metric-sub">${fundNote} · opening credit ${initialCreditInr}</div>
+        <div class="metric">${balanceCredits} credits</div>
+        <div class="metric-sub">${fundNote} · opening credit ${initialCreditCredits} credits</div>
       </div>
       <div class="card">
         <div class="card-title">Auto-Reload Status</div>
@@ -226,7 +234,7 @@ function renderDashboardHtml(data = {}) {
           ${isAutoEnabled ? 'Active' : 'Disabled'}
         </div>
         <div class="metric-sub">
-          ${isAutoEnabled ? (mode === 'percentage' ? `Reload at ${thresholdPercent}% of credit` : `Reload below ₹${thresholdInr}`) : 'No automatic trigger configured'}
+          ${isAutoEnabled ? (mode === 'percentage' ? `Reload at ${thresholdPercent}% of credit` : `Reload below ${thresholdCredits} credits`) : 'No automatic trigger configured'}
         </div>
       </div>
       <div class="card">
@@ -260,7 +268,7 @@ function renderDashboardHtml(data = {}) {
           <div class="radio-row">
             <label class="radio-label">
               <input type="radio" name="threshold-mode" value="amount" ${mode === 'amount' ? 'checked' : ''}>
-              <span>Fixed Amount (₹)</span>
+              <span>Fixed Amount (credits)</span>
             </label>
             <label class="radio-label">
               <input type="radio" name="threshold-mode" value="percentage" ${mode === 'percentage' ? 'checked' : ''}>
@@ -270,9 +278,9 @@ function renderDashboardHtml(data = {}) {
         </div>
 
         <div class="form-group" id="group-amount" style="${mode === 'amount' ? 'display: flex;' : 'display: none;'}">
-          <label for="threshold-amount">Trigger Threshold (₹)</label>
-          <input type="number" id="threshold-amount" value="${thresholdInr}" min="0" step="10">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Recharge triggers when balance falls below this amount.</span>
+          <label for="threshold-amount">Trigger Threshold (credits)</label>
+          <input type="number" id="threshold-amount" value="${thresholdCredits}" min="0" step="10">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Recharge triggers when the credit balance falls below this figure.</span>
         </div>
 
         <div class="form-group" id="group-percentage" style="${mode === 'percentage' ? 'display: flex;' : 'display: none;'}">
@@ -282,8 +290,8 @@ function renderDashboardHtml(data = {}) {
         </div>
 
         <div class="form-group">
-          <label for="recharge-amount">Auto-Reload Amount (₹)</label>
-          <input type="number" id="recharge-amount" value="${rechargeAmountInr}" min="100" step="100">
+          <label for="recharge-amount">Auto-Reload Amount (credits)</label>
+          <input type="number" id="recharge-amount" value="${rechargeAmountCredits}" min="100" step="100">
         </div>
 
         <div class="actions">
@@ -319,9 +327,9 @@ function renderDashboardHtml(data = {}) {
       e.preventDefault();
       const enabled = document.getElementById('auto-enabled').checked;
       const isPercent = Array.from(modeRadios).find(r => r.checked)?.value === 'percentage';
-      const thresholdInr = Number(document.getElementById('threshold-amount').value) || 0;
+      const thresholdCredits = Number(document.getElementById('threshold-amount').value) || 0;
       const thresholdPercent = Number(document.getElementById('threshold-percent').value) || 20;
-      const amountInr = Number(document.getElementById('recharge-amount').value) || 0;
+      const amountCredits = Number(document.getElementById('recharge-amount').value) || 0;
 
       try {
         const res = await fetch('/api/billing/config', {
@@ -331,9 +339,9 @@ function renderDashboardHtml(data = {}) {
             autoRecharge: {
               enabled,
               mode: isPercent ? 'percentage' : 'amount',
-              thresholdInr,
+              thresholdCredits,
               thresholdPercent,
-              amountInr,
+              amountCredits,
             }
           })
         });

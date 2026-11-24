@@ -622,9 +622,10 @@ export const api = {
     getTaskUsage: (taskId) => request(`/billing/usage/task/${encodeURIComponent(taskId)}`),
     // POST /billing/recharge is a QUOTE: it returns the GST breakdown and credits
     // nothing. Credit only arrives from a settle of an order the gateway confirms,
-    // so nothing here may be labelled "add credits".
-    rechargeQuote: (amountInr, couponBps) =>
-      request('/billing/recharge', { method: 'POST', body: JSON.stringify({ amountInr, ...(couponBps ? { couponBps } : {}) }) }),
+    // so nothing here may be labelled "add credits". A quote names a package — the
+    // rate card authors the price, and an `amountInr` in this body is a 400.
+    rechargeQuote: (packageId) =>
+      request('/billing/recharge', { method: 'POST', body: JSON.stringify({ packageId }) }),
     createRechargeOrder: (payload = {}) => request('/billing/recharge/create-order', { method: 'POST', body: JSON.stringify(payload) }),
     settleRecharge: (orderId) => request('/billing/recharge/settle', { method: 'POST', body: JSON.stringify({ orderId }) }),
     updateConfig: (payload) => request('/billing/config', { method: 'PUT', body: JSON.stringify(payload) }),

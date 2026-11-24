@@ -160,7 +160,7 @@ async function auditTenantReadiness(session, config) {
   // asserting a positive balance there would fail for a reason no tenant controls.
   assert(billing.data?.fundsAvailable !== false,
     `Tenant A is blocked from spending: ${billing.data?.fundStatus || 'fund status unknown'}.`);
-  assert(billing.data?.gatePolicy !== 'enforced' || Number(billing.data?.balancePaise) > 0,
+  assert(billing.data?.gatePolicy !== 'enforced' || Number(billing.data?.balanceTokenCredits) > 0,
     'Tenant A must have a positive FlexPrice wallet balance while the billing gate is enforced.');
 
   const businesses = await requestJson(session.apiBaseUrl, '/api/businesses', { headers });

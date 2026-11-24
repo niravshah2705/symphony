@@ -32,11 +32,11 @@ Headline invariant, enforced end to end: **a ₹500 recharge charges ₹590 (CGS
 | D3 | Zoho | **Their first-class connector only; no Zoho code of ours.** To make that correct, GST lines become **priced** price objects so invoice `total` = ₹590 (price-less lines are measured to be excluded from `total`) |
 | D3a | D3 mechanism, corrected by probe C | The connector choice **stands**; the reason changed. `invoice.total` is copied from the sent `subtotal` — `price_id` on a line is decoration, and priced and labelled lines came out byte-identical. So the shape is `subtotal == total == amount_due ==` gross ₹590, the CGST/SGST lines carry ₹45 each as Zoho's disclosure, and `total_tax` is always `0` and must never be read as the GST. GST is rendered from **our** header, not from FlexPrice's line arithmetic. |
 | D4 | Actor price | **Meter `duration_seconds`, price 0.** Item 27 stays an operator number; nothing bills actor compute yet |
-| D5 | First-party money paths | **Deleted outright, inside the phase that replaces them.** No shadow, no dual-write, no migration, no held-back deletion phase |
-| D6 | Credit unit | **1 credit = ₹1 = 100 paise.** `credits.js:22 PAISE_PER_CREDIT` flips 1 → 100. All internal arithmetic stays integer paise; conversion happens only in `money-wire.js` |
+| D5 | First-party money paths | **Deleted outright, inside the phase that replaces them.** No shadow, no dual-write, no migration, no held-back deletion phase. The deletion is held by a source scan, not a habit: `services/billing/src/balance-authority.test.js` fails on an account-shaped `.balanceTokenCredits`, on a read of `listLedgerEntries`, and on any second credit site |
+| D6 | Credit unit | **1 credit = ₹1 = 100 token credits.** `money-wire.TOKEN_CREDITS_PER_CREDIT` (= 100, renamed 2026-11-22 from `PAISE_PER_CREDIT` and re-exported by `credits.js`); all internal arithmetic stays on that integer and conversion happens only in `money-wire.js`. `paise` **remains the name of rupee money** — `gst.js`, the payment adapters, the recharge intent and the Zoho invoice — because a token credit is a ledger subunit while a paise is a currency unit, and a tax document must state the currency |
 | D7 | Topology | **Keep compose + kind.** FlexPrice :18080 (verified 200), LiteLLM :14000, substrate+Prometheus+OTel+Jaeger in `kind-kind`. Nothing moves into the cluster |
 | D8 | Deployment usage | **Meter defined, no emitter.** No deployment-duration source exists; we do not invent a quantity |
-| D9 | LLM money path | **Node's `pricing.js` owns token→paise; LiteLLM stays an oracle, never an emitter.** `USD_TO_INR` (`config.js:909`) leaves the money path and becomes a dated catalog-generation input |
+| D9 | LLM money path | **`deploy/billing/credit-rates.yaml` owns token→token credits; LiteLLM stays an oracle, never an emitter.** Written as "Node's `pricing.js` owns token→paise", which was true until 2026-11-22: the frozen JS table and `usdToPaise` are deleted, a runtime's self-reported `costUsd` is recorded provenance rather than the invoice, and **no FX multiplication is inside the money path any more** — `fx.usd_to_inr` only stamps an event's provenance and feeds the reconciler. `USD_TO_INR` is therefore not even a catalog-generation input: the `rate-{provider}-{direction}` prices it used to generate are retired (`--retire-rate-rows`), and a rate change is an edit to the YAML plus a redeploy |
 | D10 | OTel | Node's runner is the authoritative START/STOP clock. The OTLP emitter publishes live-accrual gauges only, for the orphan case and the savings panel |
 | D11 | Legal | Local build proceeds on the memo's explicit dev/test clearance for the unmodified image. Nothing production-facing is enabled before `docs/FLEXPRICE_AGPL_MEMO.md` §7 is answered in writing |
 
@@ -52,6 +52,7 @@ Headline invariant, enforced end to end: **a ₹500 recharge charges ₹590 (CGS
 | 5 | Zoho connector, platform charge, expiry assertion, reconciliation | Zoho fixture shows ₹590 + both tax components; double-run of the charge yields one debit |
 | 6 | UI split, security posture, full suite | `npm test` + `npm run test:e2e` green; boots with and without `FLEXPRICE_*` |
 | 7 | Production release plan | `docs/BILLING_PRODUCTION.md` written; no cloud code |
+| 8 | One INR rate card in YAML, fixed packages, credits-only display (2026-11) | A run's debit is `tokens × ₹/1M` from the card; recharge offers packages, not amounts; every credit surface reads `credits` and ₹ survives only on the Cashfree payable and the GST line |
 
 ---
 
@@ -147,7 +148,7 @@ Modified: `billing-api.js` — `/recharge` (`:307`) becomes quote-only (returns 
 
 Deleted in this phase: the `type:'recharge'` ledger path (`billing-api.js:513-525`) and `ledger.js:50-62`'s local ₹500 seed (→ `FREE_CREDIT_GRANT`).
 
-Verification: `BILLING_ALLOW_MOCK_PAYMENTS=true FLEXPRICE_ENABLED=true npm start`, scripted recharge on **both** providers → intent `totalPaise 59000`, `gstPaise 9000`, wallet `real_time_credit_balance` **exactly 500**, credit-row `credits_available` delta 500, `collectedPaise == gstPaise + prepaidCredits×100` (identity corrected 2026-11-23 — the promo term was wrong: it balances only at a zero bonus, and a bonus is granted on top of the money charged rather than collected within it); replay the same order → one credit; a cross-org order id → refused; Razorpay bad signature → refused.
+Verification: `BILLING_ALLOW_MOCK_PAYMENTS=true FLEXPRICE_ENABLED=true npm start`, scripted recharge on **both** providers → intent `totalPaise 59000`, `gstPaise 9000`, wallet `real_time_credit_balance` **exactly 500**, credit-row `credits_available` delta 500, `collectedPaise == gstPaise + prepaidTokenCredits` (identity corrected 2026-11-23 — the promo term was wrong: it balances only at a zero bonus, and a bonus is granted on top of the money charged rather than collected within it); replay the same order → one credit; a cross-org order id → refused; Razorpay bad signature → refused.
 Docs: `BILLING_FLEXPRICE.md` §11 recharge runbook with a payload transcript for both gateways.
 
 ### Phase 2 outcome (recorded here, decisions above left as written)
@@ -408,7 +409,7 @@ Platform charge ₹3000/month as **two ordered calls**: `POST /v1/invoices {invo
 
 `credit-expiry-job.js` becomes an **assertion**, not a scheduler: their read-time filter plus Temporal `WalletCreditExpiryWorkflow` do the work. FlexPrice rejects a grant whose expiry is already past, so the live fixture grants a near-future promo, waits past expiry, and proves it is no longer drawable. Materialization has a measured two-hour settlement grace plus the 15-minute schedule; ours warns only after a three-hour observation grace.
 
-`reconcile-gateway-spend.js` extends from printing one JSON line per org (today, read-only, unscheduled) to a FlexPrice-vs-recorded comparison reusing `MATCH_TOLERANCE_PAISE`, wired to the tick so it is the standing drift alarm. Credit reads use `POST /v1/wallets/transactions/search` (response keyed `items`, not `data`); `credits_available_breakdown` stays banned.
+`reconcile-gateway-spend.js` extends from printing one JSON line per org (read-only) to a FlexPrice-vs-recorded comparison with a per-leg band — the platform leg at basis points of the share its rows never stamped, the FlexPrice leg at zero — wired to the tick so it is the standing drift alarm. Credit reads use `POST /v1/wallets/transactions/search` (response keyed `items`, not `data`); `credits_available_breakdown` stays banned.
 
 Verification: run the charge job twice → exactly one debit; the Zoho fixture shows ₹590 with CGST+SGST disclosed and `invoice.tax == 0`; a promo observed after its expiry → the next debit draws prepaid; a deliberately dropped event → the reconciler reports divergence.
 Docs: `BILLING_FLEXPRICE.md` §12 runbook (charge, Zoho setup, upgrade, two-key rotation).

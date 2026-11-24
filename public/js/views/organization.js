@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { el, clear, loading, toast } from '../dom.js';
-import { payRecharge, isSettled } from '../recharge.js';
+import { payRecharge, isSettled, packageLabel } from '../recharge.js';
 import {
   activeWorkspaceOrganization,
   activeWorkspaceProject,
@@ -610,10 +610,11 @@ async function renderOrgBilling(section, organization, isAdmin) {
     return;
   }
 
+  // Rupees belong on this page in exactly one place: what the card was charged for the
+  // package the admin just bought. Everything else here is a balance, and a balance is
+  // credits — `settlement.payableInr` is a payment, `summary.balanceCredits` is not money.
   const inr = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(val) || 0);
-  // The balance is the wallet's, and the server may report it as null when the
-  // gate could not read it — which is not ₹0.00 and not a pause.
-  const money = (val) => (val === null || val === undefined ? '—' : inr(val));
+  const credits = (val) => (val === null || val === undefined ? '—' : `${new Intl.NumberFormat('en-IN').format(Number(val) || 0)} credits`);
   const fundState = summary.fundState || 'unknown';
   const isBlocked = summary.fundsAvailable === false;
   const statusBadge = el('span', {
@@ -631,10 +632,10 @@ async function renderOrgBilling(section, organization, isAdmin) {
     el('div', { class: 'org-row' }, [
       el('div', { class: 'org-row-copy' }, [
         el('strong', {}, 'Wallet Balance'),
-        el('small', { class: 'muted' }, `Opening credit: ${inr(summary.initialCreditInr)}`),
+        el('small', { class: 'muted' }, `Opening credit: ${credits(summary.initialCreditCredits)}`),
       ]),
       el('div', { class: 'org-row-actions' }, [
-        el('span', { class: 'cost-cell', style: 'font-size: 16px; margin-right: 8px;' }, money(summary.balanceInr)),
+        el('span', { class: 'cost-cell', style: 'font-size: 16px; margin-right: 8px;' }, credits(summary.balanceCredits)),
         statusBadge,
       ]),
     ]),
@@ -648,20 +649,28 @@ async function renderOrgBilling(section, organization, isAdmin) {
   }
 
   if (isAdmin) {
-    // 1. On-demand Reload — the quote, the checkout and the settlement all come
-    // from the server (public/js/recharge.js), because a recharge is ₹500 + ₹90
-    // GST = ₹590 for 500 credits and no number in this file gets to decide that.
-    const reloadInput = el('input', { type: 'number', min: '10', step: '100', value: '500', style: 'width: 120px;' });
+    // 1. On-demand Reload — the offer, the quote, the checkout and the settlement all
+    // come from the server (public/js/recharge.js), because a ₹2,000 package is
+    // ₹2,000 + CGST ₹180 + SGST ₹180 = ₹2,360 for 3,500 credits and no number in this
+    // file gets to decide that. The chooser lists `summary.rechargePackages`; a typed amount
+    // is a 400 on the server, so it is not offered here either.
+    const packages = Array.isArray(summary.rechargePackages) ? summary.rechargePackages : [];
+    const chooser = el('select', { 'aria-label': 'Credit package', style: 'width: 260px;' }, [
+      el('option', { value: '' }, 'Choose a package…'),
+      ...packages.map((pkg) => el('option', { value: pkg.packageId }, packageLabel(pkg))),
+    ]);
     const payCashfreeBtn = el('button', { type: 'button', class: 'primary' }, 'Reload via Cashfree (UPI / Card / Netbanking)');
+    payCashfreeBtn.disabled = !packages.length;
 
     payCashfreeBtn.addEventListener('click', async () => {
-      const val = Number(reloadInput.value);
-      if (!Number.isFinite(val) || val <= 0) return toast('Enter a valid reload amount');
+      const chosen = packages.find((pkg) => pkg.packageId === chooser.value) || null;
+      if (!packages.length) return toast('No credit package is configured on this deployment, so credits cannot be reloaded from here.');
+      if (!chosen) return toast('Choose a credit package');
       payCashfreeBtn.disabled = true;
       try {
         toast('Creating order…');
         const settlement = await payRecharge({
-          amountInr: val,
+          packageId: chosen.packageId,
           provider: (pi.provider === 'razorpay') ? 'razorpay' : 'cashfree',
           customer: {
             customerName: pi.billingName || organization.name || 'Organization Admin',
@@ -672,7 +681,10 @@ async function renderOrgBilling(section, organization, isAdmin) {
           onStatus: (msg) => toast(msg),
         });
         if (isSettled(settlement)) {
-          toast(`Payment successful! ${settlement.creditsAdded} credits added for ${inr(settlement.totalInr)}.`);
+          const skipped = settlement.bonusSkipped === 'expired'
+            ? ' The bonus window had closed, so no bonus credits were added.'
+            : '';
+          toast(`Payment successful! ${settlement.totalCredits} credits added for ${inr(settlement.payableInr)}.${skipped}`);
         } else {
           toast(`The gateway answered, but nothing was credited (${settlement && settlement.status || 'no settlement'}).`, 'warn');
         }
@@ -689,8 +701,9 @@ async function renderOrgBilling(section, organization, isAdmin) {
         el('small', { class: 'muted' }, 'Add funds instantly to this organization via Cashfree (Cards, UPI, Netbanking).'),
       ]),
       el('div', { class: 'org-row-actions', style: 'display: flex; gap: 8px; align-items: center;' }, [
-        el('span', { class: 'muted' }, '₹'),
-        reloadInput,
+        // No currency prefix: each option states its own ₹ price next to the credits
+        // it buys, which is the pair the customer is actually choosing between.
+        chooser,
         payCashfreeBtn,
       ]),
     ]));
@@ -806,12 +819,12 @@ async function renderOrgBilling(section, organization, isAdmin) {
     const modeAmountRadio = el('input', { type: 'radio', name: 'orgArMode', value: 'amount', ...(currentMode === 'amount' ? { checked: 'checked' } : {}) });
     const modePercentRadio = el('input', { type: 'radio', name: 'orgArMode', value: 'percentage', ...(currentMode === 'percentage' ? { checked: 'checked' } : {}) });
 
-    const thresholdAmountInput = el('input', { type: 'number', min: '0', step: '10', value: String(ar.thresholdInr ?? 0) });
+    const thresholdAmountInput = el('input', { type: 'number', min: '0', step: '10', value: String(ar.thresholdCredits ?? 0) });
     const thresholdPercentInput = el('input', { type: 'number', min: '1', max: '100', step: '1', value: String(ar.thresholdPercent ?? 20) });
-    const reloadAmountInput = el('input', { type: 'number', min: '100', step: '100', value: String(ar.amountInr ?? 500) });
+    const reloadAmountInput = el('input', { type: 'number', min: '100', step: '100', value: String(ar.amountCredits ?? 500) });
 
     const amountField = el('label', { class: 'org-inline-field', id: 'org-ar-amount-field' }, [
-      el('span', { class: 'muted' }, 'Threshold Amount (INR)'),
+      el('span', { class: 'muted' }, 'Threshold (credits)'),
       thresholdAmountInput,
     ]);
     const percentField = el('label', { class: 'org-inline-field', id: 'org-ar-percent-field' }, [
@@ -836,7 +849,7 @@ async function renderOrgBilling(section, organization, isAdmin) {
       el('div', { style: 'display: flex; gap: 16px; align-items: center;' }, [
         el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 6px;' }, [
           modeAmountRadio,
-          el('span', {}, 'Fixed Amount (INR)'),
+          el('span', {}, 'Fixed Amount (credits)'),
         ]),
         el('label', { class: 'radio-label', style: 'display: flex; align-items: center; gap: 6px;' }, [
           modePercentRadio,
@@ -847,7 +860,7 @@ async function renderOrgBilling(section, organization, isAdmin) {
         amountField,
         percentField,
         el('label', { class: 'org-inline-field' }, [
-          el('span', { class: 'muted' }, 'Reload Amount (INR)'),
+          el('span', { class: 'muted' }, 'Reload Amount (credits)'),
           reloadAmountInput,
         ]),
         saveConfigBtn,
@@ -862,9 +875,9 @@ async function renderOrgBilling(section, organization, isAdmin) {
           autoRecharge: {
             enabled: arCheckbox.checked,
             mode: modePercentRadio.checked ? 'percentage' : 'amount',
-            thresholdInr: Number(thresholdAmountInput.value) || 0,
+            thresholdCredits: Number(thresholdAmountInput.value) || 0,
             thresholdPercent: Number(thresholdPercentInput.value) || 20,
-            amountInr: Number(reloadAmountInput.value) || 0,
+            amountCredits: Number(reloadAmountInput.value) || 0,
           },
         });
         toast('Organization billing settings saved.');

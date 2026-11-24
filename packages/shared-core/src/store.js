@@ -1372,7 +1372,19 @@ function getRechargeIntent(orderId) {
   return readLegacyStore().rechargeIntents.find((i) => i.orderId === String(orderId)) || null;
 }
 
-/** Merge settlement fields onto the intent for `orderId`; money fields are immutable. */
+/**
+ * Merge settlement fields onto the intent for `orderId`.
+ *
+ * Everything that defines the deal is re-asserted from the stored record, not from
+ * the patch: the money the order was quoted at, and the offer it was quoted under.
+ * The last six are as much part of that as `totalPaise` — `packageId` +
+ * `bonusValidDays` + `promoExpiresAt` decide what the customer was promised for their
+ * money, and `supplierStateCode` / `customerGstin` / `customerStateCode` decide how
+ * the tax splits. That split is the reason the three tax fields are here: an
+ * interstate rewrite leaves `totalPaise` byte-identical, so `quote_drift` in
+ * `recharge-settle.js` cannot see it, and money already collected would be filed
+ * against a CGST/SGST-versus-IGST answer chosen after the payment.
+ */
 function updateRechargeIntent(orderId, patch = {}) {
   const key = String(orderId || '');
   if (!key) throw new Error('updateRechargeIntent requires an orderId');
@@ -1388,12 +1400,18 @@ function updateRechargeIntent(orderId, patch = {}) {
       orderId: i.orderId,
       orgId: i.orgId,
       createdAt: i.createdAt,
+      packageId: i.packageId,
       subtotalPaise: i.subtotalPaise,
       couponBps: i.couponBps,
       bonusTokenCredits: i.bonusTokenCredits,
+      bonusValidDays: i.bonusValidDays,
       gstPaise: i.gstPaise,
       totalPaise: i.totalPaise,
       creditCount: i.creditCount,
+      promoExpiresAt: i.promoExpiresAt,
+      supplierStateCode: i.supplierStateCode,
+      customerGstin: i.customerGstin,
+      customerStateCode: i.customerStateCode,
       settledAt: patch.status === 'SETTLED'
         ? (patch.settledAt || new Date().toISOString())
         : ('settledAt' in patch ? patch.settledAt : i.settledAt),

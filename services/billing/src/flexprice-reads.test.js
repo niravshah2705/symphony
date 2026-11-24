@@ -641,3 +641,56 @@ test('an event provenance property is never a group-by dimension', () => {
     'the filterable set is the id-shaped four it has always been');
   assert.deepEqual(Object.values(DIMENSIONS).filter((p) => provenance.includes(p)), []);
 });
+
+// The unit rule has to survive a view that regresses. If an envelope key still names a
+// currency, some `Intl.NumberFormat` somewhere will format it, and the page will show a
+// ₹ balance the org never had — ₹2,360 was paid, 3,500 credits bought, and the wallet
+// holds the credits. So the read layer carries no rupee key at all, and this gate is what
+// keeps that true: a name scan over every body the browser can ask for, not an assertion
+// on the two fields anyone thought to check.
+const RUPEE_KEY = /(?:_paise|_inr|paise|inr)$|^currency$/i;
+
+function rupeeKeys(node, at = '', found = []) {
+  if (Array.isArray(node)) {
+    for (const [i, item] of node.entries()) rupeeKeys(item, `${at}[${i}]`, found);
+    return found;
+  }
+  if (node && typeof node === 'object') {
+    for (const [key, value] of Object.entries(node)) {
+      const here = at ? `${at}.${key}` : key;
+      if (RUPEE_KEY.test(key) && value !== null && value !== undefined) found.push(here);
+      rupeeKeys(value, here, found);
+    }
+  }
+  return found;
+}
+
+test('no read answers a rupee or currency key, so the browser cannot render money it was not charged', async () => {
+  const orgId = 'org-credits-only';
+  store.upsertBillingAccount(orgId, { flexprice: { walletId: WALLET } });
+  const client = fakeFlexprice({
+    transactions: [
+      creditRow('g1', 'FREE_CREDIT_GRANT', { amount: '5000.00', remaining: '3760.00', expiresAt: '2026-12-14T00:00:00.000Z' }),
+      creditRow('p1', 'PURCHASED_CREDIT_DIRECT', { amount: '2200.00', remaining: '791.00', meta: { fleet_order_id: 'order_org_1', provider: 'cashfree' } }),
+    ],
+  });
+
+  await withRoutes({ orgId, client }, async ({ get }) => {
+    const bodies = {
+      overview: await get('/overview'),
+      heatmap: await get('/heatmap?weeks=13'),
+      trend: await get('/trend?range=30d'),
+      breakdown: await get('/usage-breakdown?dimension=project&range=7d'),
+      log: await get('/log?tab=used'),
+    };
+    for (const [name, body] of Object.entries(bodies)) {
+      assert.equal(body.degraded, false, `${name} must be a real answer: a cold section would hide a key`);
+      assert.deepEqual(rupeeKeys(body), [], `${name} carries a rupee-named field`);
+    }
+    // The one unit word the page may print, on the card that shows a balance.
+    assert.equal(bodies.overview.unit, 'credits');
+    assert.equal(bodies.overview.balance.credits, '3760.00');
+    // And the breakdown names what it summed, since it no longer names a currency.
+    assert.equal(bodies.breakdown.sourceUnit, 'token_credits');
+  });
+});

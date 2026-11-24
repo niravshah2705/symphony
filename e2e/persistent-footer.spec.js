@@ -97,23 +97,25 @@ function disabledApiPayload(request) {
   if (path === '/api/observability/troubleshooting') return { status: 'ok', checks: [] };
   if (path === '/api/billing/summary') {
     return {
-      currency: 'INR',
+      unit: 'credits',
       // The gate-off shape: the balance is the FlexPrice wallet's and there is no
       // wallet here, so it is unknown rather than zero. A 0 would render as an
       // exhausted org and the page would warn about money this test never touched.
+      // Unknown is also why no rupee twin is sent: the summary carries credits, and
+      // the ₹ figures live on the quote and the settlement payloads only.
       balanceTokenCredits: null,
-      balanceInr: null,
+      balanceCredits: null,
       fundsAvailable: true,
       fundState: 'unknown',
       fundStatus: 'available',
       gatePolicy: 'off',
       balanceStale: false,
-      initialCreditInr: 0,
-      fxUsdToInr: 83,
+      initialCreditCredits: '5000.00',
+      alertThresholdsCredits: ['10000.00', '0.00'],
       isAdmin: false,
       spend: {
-        week: { costInr: 0, runs: 0, tokens: 0 },
-        month: { costInr: 0, runs: 0, tokens: 0 },
+        week: { costCredits: '0.00', notionalCredits: '0.00', runs: 0, tokens: 0 },
+        month: { costCredits: '0.00', notionalCredits: '0.00', runs: 0, tokens: 0 },
       },
       autoRecharge: { enabled: false },
     };

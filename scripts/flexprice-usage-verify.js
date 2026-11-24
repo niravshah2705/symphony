@@ -44,6 +44,14 @@ const ENV_FILE = path.join(ROOT, 'deploy', 'flexprice', '.env');
 const SEED_ENVIRONMENT_ID = '00000000-0000-0000-0000-000000000001';
 const SUPPLIER_STATE = '24';
 
+// Funding is one of the card's offers, because that is the only thing a customer can
+// buy: ₹2,000 collects ₹2,360 and credits 3,500 spendable credits (2,000 prepaid +
+// 1,500 expiring bonus). Every balance check below compares against that number.
+const PACKAGE_ID = 'credits-3500';
+const PACKAGE_PRICE_INR = 2000;
+const FUNDED_CREDITS = 3500;
+const FUNDED_TOKEN_CREDITS = FUNDED_CREDITS * 100;
+
 // The fixture, in the two units the money path actually speaks. Every expected figure
 // is tokens × the card's claude rows (₹261 in / ₹1,305 out per 1M), so each one is a
 // multiplication a human can check: 100k in + 20k out = ₹52.20 = 5,220 token credits.
@@ -252,9 +260,10 @@ async function main() {
       .every((name) => meterIds.has(name)), [...meterIds.keys()].join(','));
 
     // 1. Fund the org through the real spine, so there is a customer, a wallet and a
-    //    known credit total. 500 credits is the denominator for everything below.
-    section('1. fund ₹500 (500 credits) through settle()');
-    const order = await call('/recharge/create-order', { amountInr: 500, couponBps: 0 });
+    //    known credit total. The ₹2,000 package's 3,500 credits (2,000 prepaid + 1,500
+    //    bonus) is the denominator for everything below.
+    section(`1. fund ${PACKAGE_ID} (₹${PACKAGE_PRICE_INR} → ${FUNDED_CREDITS} credits) through settle()`);
+    const order = await call('/recharge/create-order', { packageId: PACKAGE_ID });
     check('create-order wrote an intent', order.status === 200 && Boolean(order.body?.orderId),
       `status=${order.status} ${order.text.slice(0, 160)}`);
     const settleRes = await call('/cashfree/verify-order', { orderId: order.body?.orderId });
@@ -262,8 +271,8 @@ async function main() {
     const walletId = intent.flexprice_settlement?.walletId || '';
     check('settled into a wallet', settleRes.status === 200 && Boolean(walletId),
       `status=${settleRes.status} wallet=${walletId || '(none)'}`);
-    const fundedCredits = await until(async () => Number((await client.walletRealTimeBalance(walletId)).realTimeCreditBalance), 500);
-    check('wallet holds exactly 500 credits', fundedCredits.value === 500,
+    const fundedCredits = await until(async () => Number((await client.walletRealTimeBalance(walletId)).realTimeCreditBalance), FUNDED_CREDITS);
+    check(`wallet holds exactly ${FUNDED_CREDITS} credits`, fundedCredits.value === FUNDED_CREDITS,
       `real_time_credit_balance=${fundedCredits.value} after ${fundedCredits.attempts} reads`);
 
     // 2. The fixed event set, recorded through the one function a run calls.
@@ -379,15 +388,15 @@ async function main() {
       Number(projection.currentPeriodUsage || 0) === 0,
       `current_period_usage=${projection.currentPeriodUsage} with ${EXPECTED_TOKEN_CREDITS}tc metered`);
     const afterUsage = Number((await client.walletRealTimeBalance(walletId)).realTimeCreditBalance);
-    check('the credit balance has NOT moved (billing, not finalization)', afterUsage === 500,
+    check('the credit balance has NOT moved (billing, not finalization)', afterUsage === FUNDED_CREDITS,
       `real_time_credit_balance=${afterUsage}`);
     const fund = await gate.ensureFundStatus(orgId);
-    check('the gate reports the wallet in token credits', fund.balanceTokenCredits === 50000 && fund.state === 'available',
+    check('the gate reports the wallet in token credits', fund.balanceTokenCredits === FUNDED_TOKEN_CREDITS && fund.state === 'available',
       `balanceTokenCredits=${fund.balanceTokenCredits} state=${fund.state} wallet=${fund.walletId}`);
     check('and reports money only — no usage figure a caller could read as accrued spend',
       !('currentPeriodUsageTokenCredits' in fund), `view keys=${Object.keys(fund).join(',')}`);
     const sync = gate.getOrgFundStatus(orgId);
-    check('the synchronous accessor serves the cached view', Boolean(sync) && sync.balanceTokenCredits === 50000,
+    check('the synchronous accessor serves the cached view', Boolean(sync) && sync.balanceTokenCredits === FUNDED_TOKEN_CREDITS,
       sync ? `balanceTokenCredits=${sync.balanceTokenCredits} gatePolicy=${sync.gatePolicy}` : 'null — nothing was ever read');
     check('nothing in the store holds a balance any more',
       !Object.keys(store.getBillingAccount(orgId) || {}).includes('balanceTokenCredits'),

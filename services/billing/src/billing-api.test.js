@@ -53,10 +53,10 @@ test('the spend split reports charged and notional as two separate series', () =
   store.addUsageRecord({ orgId, createdAt, usage: { totalTokens: 10 }, costTokenCredits: 60, notionalCostTokenCredits: 0 });
 
   const window = billingApi.bySourceWindow(store.listUsageRecords({ orgId }), 30, now);
-  assert.equal(window.sources.managed.costInr, 9.6, 'the unlabelled legacy run counts as managed spend');
-  assert.equal(window.sources.managed.notionalInr, 0);
-  assert.equal(window.sources.customer.costInr, 0, 'a run on the org key draws nothing from the balance');
-  assert.equal(window.sources.customer.notionalInr, 4);
+  assert.equal(window.sources.managed.costCredits, '9.60', 'the unlabelled legacy run counts as managed spend');
+  assert.equal(window.sources.managed.notionalCredits, '0.00');
+  assert.equal(window.sources.customer.costCredits, '0.00', 'a run on the org key draws nothing from the balance');
+  assert.equal(window.sources.customer.notionalCredits, '4.00');
   assert.equal(window.sources.customer.runs, 1);
   assert.ok(window.retentionDays > 0, 'the caller is told how far back this reaches');
 });

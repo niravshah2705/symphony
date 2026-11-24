@@ -74,6 +74,8 @@ test('the scan actually covers the money code', () => {
     'services/billing/src/billing-api.js',
     'services/billing/src/auto-recharge-job.js',
     'services/billing/src/recharge-settle.js',
+    // It holds the one production exemption below, so the scan has to prove it is in scope.
+    'services/billing/src/reconcile-gateway-spend.js',
     'public/js/views/cost.js',
     'e2e/persistent-footer.spec.js',
     'e2e-live/scripts/audit.js',
@@ -171,20 +173,62 @@ test('nothing claims the deleted ledger route still exists', () => {
 // the boundary (a number the runtime reported). So the name may appear only where the
 // tuple is authored, persisted or checked — never where a figure is read back.
 test('event provenance is written and audited, never read as money', () => {
-  const WRITERS = [
+  const ALLOWED = [
     'packages/shared-core/src/billing/pricing.js', // computes it from the card + the SDK result
     'packages/shared-core/src/billing/usage.js', // puts it on the usage record
     'packages/shared-core/src/store.js', // re-asserts it on an already-queued outbox row
     'packages/shared-core/src/billing/billing-outbox.js', // stamps it onto the event
     'scripts/flexprice-usage-verify.js', // asserts the stamped payload equals the record
+    // The one production READER, and it reads exactly one of the four: the rate a row was
+    // priced at, so a past window is compared at the rate it carried instead of today's
+    // (a rate move between the run and the report would otherwise invent a delta the size of
+    // the move). It never turns the tuple into a number a customer sees: the debit stays
+    // `token_credits`, and `inr_cost`/`provider_cost`/`provider_currency` stay unread here.
+    'services/billing/src/reconcile-gateway-spend.js',
   ];
   const names = ['providerCost', 'providerCurrency', 'fxRateToInr', 'inrCost',
     'provider_cost', 'provider_currency', 'fx_rate_to_inr', 'inr_cost'];
   const violations = matchesPerFile((source, file) => {
     const rel = path.relative(REPO_ROOT, file);
-    if (WRITERS.includes(rel)) return null;
+    if (ALLOWED.includes(rel)) return null;
     const hit = source.match(new RegExp(`\\b(?:${names.join('|')})\\b`));
     return hit ? hit[0] : null;
   });
   assert.deepEqual(violations, []);
+});
+
+// The credit surfaces render credits. ₹ belongs to the two places money is actually
+// denominated: the Cashfree payable and the GST line of the quote/invoice, plus the admin
+// run column the server gates. A view that formats a balance through the rupee formatter is
+// the second balance this gate exists to make impossible, and it is a lie by construction —
+// ₹2,360 bought 3,500 credits, so the ₹ figure beside a credit count is a different
+// quantity that happens to share a name.
+const RUPEE_VIEWS = [
+  'public/js/views/usage.js',
+  'public/js/views/cost.js',
+  'public/js/views/organization.js',
+  'services/billing/src/ui.js',
+];
+// The formatter's own parameter, i.e. the declaration rather than a use of it.
+const FORMATTER_PARAM = /^(?:value|val|amount|tokenCredits|n)$/;
+
+test('a rupee formatter is declared once per credit surface and only ever wraps a rupee-named field', () => {
+  for (const rel of RUPEE_VIEWS) {
+    const file = path.join(REPO_ROOT, rel);
+    assert.ok(FILES.includes(file), `${rel} is not being scanned`);
+    const source = fs.readFileSync(file, 'utf8');
+
+    const formatters = source.match(/style:\s*['"]currency['"]/g) || [];
+    assert.ok(formatters.length <= 1,
+      `${rel} declares ${formatters.length} currency formatters — one ` + "`inr()`" + ' for the payable/GST lines is all a credits page may have');
+
+    for (const [, arg] of source.matchAll(/\binr\(\s*([^()]*)\)/g)) {
+      const trimmed = arg.trim();
+      if (!trimmed || FORMATTER_PARAM.test(trimmed)) continue; // the declaration, not a call
+      // The last name in the expression is the field being formatted: `q.totalInr` and
+      // `c.inr` (a GST component) are rupee money, `summary.balanceCredits` is not.
+      assert.ok(/[A-Za-z0-9_]*(?:inr|paise)$/i.test(trimmed) && !/credits?\b|balance/i.test(trimmed),
+        `${rel}: inr(${trimmed}) formats a credit figure as rupees`);
+    }
+  }
 });

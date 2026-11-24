@@ -22,6 +22,37 @@ delete process.env.FLEXPRICE_API_KEY_INGEST;
 delete process.env.BILLING_ALLOW_MOCK_PAYMENTS;
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
+const creditRates = require('@software-factory/shared-core/billing/credit-rates');
+
+// Recharges are fixed packages, so this suite needs a card that also holds a RETIRED
+// offer — the real card has none, and a retired package is the case that must still
+// settle (risk 6). The fixture is the shipped card plus one disabled row appended to its
+// `packages` block, so every other identity here (₹2000 → 3,500 credits, ₹4000 → 10,000)
+// is the number an operator actually published, not a test-local invention.
+const PACKAGE_ID = 'credits-3500';
+const PACKAGE_PRICE_INR = 2000;
+const PACKAGE_CREDITS = 3500;
+const PACKAGE_BONUS_TOKEN_CREDITS = 150000; // 1,500 credits at 7500 bps on ₹2,000
+const PACKAGE_SUBTOTAL_PAISE = 200000;
+const PACKAGE_GST_PAISE = 36000;            // CGST 18000 + SGST 18000
+const PACKAGE_TOTAL_PAISE = 236000;         // the string the gateway charges: "2360.00"
+const RETIRED_ID = 'credits-retired-fixture';
+
+const CARD_FIXTURE = path.join(TMP_DIR, 'credit-rates.yaml');
+fs.writeFileSync(CARD_FIXTURE, `${fs.readFileSync(creditRates.DEFAULT_CARD_PATH, 'utf8')
+}  - id: ${RETIRED_ID}
+    price_inr: "1000"
+    credits: 1000
+    bonus_valid_days: 30
+    enabled: false
+`);
+process.env.CREDIT_RATES_FILE = CARD_FIXTURE;
+creditRates.resetCard();
+test.after(() => {
+  delete process.env.CREDIT_RATES_FILE;
+  creditRates.resetCard();
+});
+
 const store = require('@software-factory/shared-core/store');
 const { createApp } = require('./app');
 
@@ -137,7 +168,7 @@ test('mutations require the admin role on the trusted header', async () => {
     const denied = await fetch(`${server.url}/api/billing/recharge`, {
       method: 'POST',
       headers: { ...member, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     });
     assert.equal(denied.status, 403);
     assert.equal((await denied.json()).code, 'access_denied');
@@ -145,7 +176,7 @@ test('mutations require the admin role on the trusted header', async () => {
     const allowed = await fetch(`${server.url}/api/billing/recharge`, {
       method: 'POST',
       headers: { ...admin, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     });
     assert.equal(allowed.status, 200);
     const body = await allowed.json();
@@ -168,25 +199,34 @@ test('the quote is the GST breakdown the customer is shown before paying', async
     const body = await (await fetch(`${server.url}/api/billing/recharge`, {
       method: 'POST',
       headers: { ...ADMIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     })).json();
+    assert.deepEqual(body.package, {
+      packageId: PACKAGE_ID,
+      priceInr: PACKAGE_PRICE_INR,
+      credits: PACKAGE_CREDITS,
+      prepaidCredits: PACKAGE_PRICE_INR,
+      bonusCredits: PACKAGE_CREDITS - PACKAGE_PRICE_INR,
+      bonusValidDays: 30,
+    }, 'the panel renders this row, so it must name the offer the card sells');
     assert.deepEqual(body.quote, {
-      subtotalPaise: 50000,
-      subtotalInr: '500.00',
+      subtotalPaise: PACKAGE_SUBTOTAL_PAISE,
+      subtotalInr: '2000.00',
       components: [
-        { name: 'CGST', rateBps: 900, paise: 4500, inr: '45.00' },
-        { name: 'SGST', rateBps: 900, paise: 4500, inr: '45.00' },
+        { name: 'CGST', rateBps: 900, paise: 18000, inr: '180.00' },
+        { name: 'SGST', rateBps: 900, paise: 18000, inr: '180.00' },
       ],
-      gstPaise: 9000,
-      gstInr: '90.00',
-      totalPaise: 59000,
-      totalInr: '590.00',
-      bonusTokenCredits: 0,
-      bonusInr: '0.00',
-      credits: 500,
+      gstPaise: PACKAGE_GST_PAISE,
+      gstInr: '360.00',
+      totalPaise: PACKAGE_TOTAL_PAISE,
+      totalInr: '2360.00',
+      bonusTokenCredits: PACKAGE_BONUS_TOKEN_CREDITS,
+      bonusCredits: '1500.00',
+      prepaidCredits: 2000,
       placeOfSupply: body.quote.placeOfSupply,
-    }, '₹500 + ₹45 + ₹45 = ₹590 for 500 credits — every number on one screen');
-    assert.equal(body.quote.credits, 500, 'credits follow the subtotal, never the ₹590');
+    }, '₹2,000 + ₹180 + ₹180 = ₹2,360 for 3,500 credits — every number on one screen');
+    assert.equal(body.quote.prepaidCredits, 2000, 'credits follow the ₹2,000 subtotal, never the ₹2,360 charged');
+    assert.equal(2000 + Number(body.quote.bonusCredits), PACKAGE_CREDITS, 'the two credit columns are the advertised total');
     assert.equal(body.quote.placeOfSupply.stateCode, '24');
     assert.equal(body.quote.placeOfSupply.assumed, true, 'with no GSTIN the split is assumed, and the UI has to say so');
     assert.equal(body.warnings, undefined);
@@ -195,24 +235,63 @@ test('the quote is the GST breakdown the customer is shown before paying', async
   }
 });
 
-test('an amount that is not a whole number of rupees is refused on the way in', async () => {
+test('the summary lists the card offers, and only the card offers', async () => {
   const server = await listen(createApp());
   try {
-    for (const amountInr of [500.5, '500.50', 0, -500, 'abc', null]) {
-      const res = await fetch(`${server.url}/api/billing/recharge`, {
-        method: 'POST',
-        headers: { ...ADMIN, 'content-type': 'application/json' },
-        body: JSON.stringify({ amountInr }),
-      });
-      assert.equal(res.status, 400, `${amountInr} must not be quotable`);
-      assert.equal((await res.json()).code, 'invalid_amount');
-    }
-    const exact = await fetch(`${server.url}/api/billing/recharge`, {
-      method: 'POST',
-      headers: { ...ADMIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: '500.00' }),
+    const body = await (await fetch(`${server.url}/api/billing/summary`, { headers: ADMIN })).json();
+    assert.deepEqual(body.rechargePackages.map((p) => p.packageId), ['credits-3500', 'credits-10000'],
+      'a retired package is not offered for a NEW order, though settle() still honors it');
+    assert.deepEqual(body.rechargePackages[0], {
+      packageId: PACKAGE_ID, priceInr: PACKAGE_PRICE_INR, credits: PACKAGE_CREDITS,
+      prepaidCredits: PACKAGE_PRICE_INR, bonusCredits: 1500, bonusValidDays: 30,
     });
-    assert.equal(exact.status, 200, 'a decimal string that lands on whole rupees is fine');
+    assert.equal(JSON.stringify(body.rechargePackages).includes('amountInr'), false,
+      'the browser composes no amount, so nothing in the offer list reads like one');
+  } finally {
+    await server.close();
+  }
+});
+
+test('a client-composed price is refused on the way in, not ignored', async () => {
+  const server = await listen(createApp());
+  const post = (route, body) => fetch(`${server.url}${route}`, {
+    method: 'POST',
+    headers: { ...ADMIN, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  try {
+    // Each of these used to be a price the caller chose. Now they are a 400 naming the
+    // field: a stale SPA bundle that still posts `amountInr` must fail loudly rather
+    // than quietly buy something else.
+    for (const sent of [
+      { amountInr: 500 },
+      { amountInr: 500.5 },
+      { couponBps: 0 },
+      { bonusExpiresAt: '2027-01-01T00:00:00.000Z' },
+      { packageId: PACKAGE_ID, amountInr: PACKAGE_PRICE_INR },
+    ]) {
+      for (const route of ['/api/billing/recharge', '/api/billing/cashfree/create-order']) {
+        const res = await post(route, sent);
+        assert.equal(res.status, 400, `${JSON.stringify(sent)} on ${route} must not be orderable`);
+        assert.equal((await res.json()).code, 'amount_not_accepted', route);
+      }
+    }
+
+    const omitted = await post('/api/billing/recharge', {});
+    assert.equal(omitted.status, 400);
+    assert.equal((await omitted.json()).code, 'missing_package_id');
+
+    const unknown = await post('/api/billing/recharge', { packageId: 'credits-999999' });
+    assert.equal(unknown.status, 400);
+    assert.equal((await unknown.json()).code, 'unknown_package');
+
+    // Retirement refuses a NEW order only. The same id still settles below.
+    const retired = await post('/api/billing/cashfree/create-order', { packageId: RETIRED_ID });
+    assert.equal(retired.status, 400);
+    assert.equal((await retired.json()).code, 'package_retired');
+
+    const padded = await post('/api/billing/recharge', { packageId: `  ${PACKAGE_ID}  ` });
+    assert.equal(padded.status, 200, 'surrounding whitespace is not a bad request');
   } finally {
     await server.close();
   }
@@ -227,7 +306,7 @@ test('config update with percentage mode keeps Cashfree mandate fields', async (
     const res = await fetch(`${server.url}/api/billing/config`, {
       method: 'PUT',
       headers: { ...ADMIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 25, amountInr: 1500 } }),
+      body: JSON.stringify({ autoRecharge: { enabled: true, mode: 'percentage', thresholdPercent: 25, amountCredits: 1500 } }),
     });
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -235,6 +314,78 @@ test('config update with percentage mode keeps Cashfree mandate fields', async (
     assert.equal(body.autoRecharge.thresholdPercent, 25);
     assert.equal(body.autoRecharge.cashfreeSubscriptionId, 'sub_keep_me');
     assert.equal(store.getBillingAccount(ORG).autoRecharge.cashfreeSubscriptionId, 'sub_keep_me');
+  } finally {
+    await server.close();
+  }
+});
+
+test('auto-recharge stores a package preference and refuses one that does not exist', async () => {
+  const AR_ORG = 'org-auto-recharge-pref';
+  const arAdmin = { 'x-ai-fleet-billing-org-id': AR_ORG, 'x-ai-fleet-billing-org-role': 'ORG_ADMIN' };
+  const putConfig = (body) => fetch(`${server.url}/api/billing/config`, {
+    method: 'PUT', headers: { ...arAdmin, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const server = await listen(createApp());
+  try {
+    const saved = await (await putConfig({ autoRecharge: { enabled: true, thresholdCredits: 40, amountCredits: 500, packageId: 'credits-10000' } })).json();
+    assert.equal(saved.autoRecharge.packageId, 'credits-10000');
+    assert.equal(saved.unit, 'credits');
+    assert.equal(saved.autoRecharge.thresholdCredits, '40.00', 'the wire speaks credits');
+    assert.equal(store.getBillingAccount(AR_ORG).autoRecharge.thresholdTokenCredits, 4000,
+      'the store keeps the integer subunit, which is the same number two decimals to the right');
+    assert.equal(store.getBillingAccount(AR_ORG).autoRecharge.amountPaise, 50000,
+      'and the reload amount keeps its rupee name, because it is what the card is charged');
+    assert.equal(store.getBillingAccount(AR_ORG).autoRecharge.packageId, 'credits-10000',
+      'the reload offer the org picked is stored; nothing settles it yet');
+
+    const kept = await (await putConfig({ autoRecharge: { enabled: false } })).json();
+    assert.equal(kept.autoRecharge.packageId, 'credits-10000', 'an unrelated edit keeps the preference');
+
+    const unknown = await putConfig({ autoRecharge: { packageId: 'credits-999999' } });
+    assert.equal(unknown.status, 400);
+    assert.equal((await unknown.json()).code, 'unknown_package');
+
+    const retired = await putConfig({ autoRecharge: { packageId: RETIRED_ID } });
+    assert.equal(retired.status, 400);
+    assert.equal((await retired.json()).code, 'package_retired');
+
+    const cleared = await (await putConfig({ autoRecharge: { packageId: '' } })).json();
+    assert.equal(cleared.autoRecharge.packageId, null, 'clearing is allowed; an invented id is not');
+  } finally {
+    await server.close();
+  }
+});
+
+// `autoRecharge` is rewritten wholesale from the request, so a threshold that arrives under
+// the old rupee name is a threshold that arrives as 0. On the order path a wrong field is a
+// wrong price; here it is an alert that never fires and an auto-reload that never runs, on a
+// balance that is falling. So the stale name is refused by name, and nothing is written.
+test('a config posted in rupees is refused, not filed as zero', async () => {
+  const RUPEE_ORG = 'org-config-rupees';
+  const arAdmin = { 'x-ai-fleet-billing-org-id': RUPEE_ORG, 'x-ai-fleet-billing-org-role': 'ORG_ADMIN' };
+  const server = await listen(createApp());
+  try {
+    const put = (body) => fetch(`${server.url}/api/billing/config`, {
+      method: 'PUT', headers: { ...arAdmin, 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const good = await (await put({ autoRecharge: { enabled: true, thresholdCredits: 80, amountCredits: 500 } })).json();
+    assert.equal(good.autoRecharge.thresholdCredits, '80.00');
+
+    for (const [sent, named] of [
+      [{ autoRecharge: { enabled: true, thresholdInr: 40 } }, 'autoRecharge.thresholdInr'],
+      [{ autoRecharge: { enabled: true, amountInr: 500 } }, 'autoRecharge.amountInr'],
+      [{ alertThresholdsInr: [100, 0] }, 'alertThresholdsInr'],
+    ]) {
+      const res = await put(sent);
+      assert.equal(res.status, 400, JSON.stringify(sent));
+      const body = await res.json();
+      assert.equal(body.code, 'unit_not_accepted');
+      assert.ok(body.error.includes(named), `${named} is named in the refusal: ${body.error}`);
+    }
+
+    const after = store.getBillingAccount(RUPEE_ORG).autoRecharge;
+    assert.equal(after.thresholdTokenCredits, 8000, 'the refused write left the stored threshold alone');
+    assert.equal(after.amountPaise, 50000);
   } finally {
     await server.close();
   }
@@ -296,29 +447,39 @@ test('create-order persists the quote as an intent, and verify-order settles it 
     const created = await (await fetch(`${server.url}/api/billing/cashfree/create-order`, {
       method: 'POST',
       headers: { ...orderAdmin, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     })).json();
     assert.match(created.orderId, new RegExp(`^order_${ORDER_ORG}_`));
     assert.equal(created.provider, 'cashfree');
     assert.equal(created.checkout.mode, 'mock');
     assert.equal(created.paymentSessionId, null, 'no keys means no session to hand the browser');
-    assert.equal(created.quote.totalInr, '590.00');
+    assert.equal(created.package.packageId, PACKAGE_ID);
+    assert.equal(created.payableInr, '2360.00', 'the gross the gateway will charge');
+    assert.equal(created.quote.totalInr, '2360.00');
 
     const intent = store.getRechargeIntent(created.orderId);
     assert.deepEqual(
       {
         org: intent.orgId, provider: intent.provider, status: intent.status,
+        package: intent.packageId,
         subtotal: intent.subtotalPaise, coupon: intent.couponBps, bonus: intent.bonusTokenCredits,
         gst: intent.gstPaise, total: intent.totalPaise, credits: intent.creditCount,
+        validDays: intent.bonusValidDays,
         supplierState: intent.supplierStateCode,
+        customerGstin: intent.customerGstin ?? null,
+        customerState: intent.customerStateCode ?? null,
       },
       {
-        org: ORDER_ORG, provider: 'cashfree', status: 'QUOTED',
-        subtotal: 50000, coupon: 0, bonus: 0, gst: 9000, total: 59000, credits: 500,
-        supplierState: '24',
+        org: ORDER_ORG, provider: 'cashfree', status: 'QUOTED', package: PACKAGE_ID,
+        subtotal: PACKAGE_SUBTOTAL_PAISE, coupon: 7500, bonus: PACKAGE_BONUS_TOKEN_CREDITS,
+        gst: PACKAGE_GST_PAISE, total: PACKAGE_TOTAL_PAISE, credits: 2000,
+        validDays: 30, supplierState: '24', customerGstin: null, customerState: null,
       },
-      'the settlement authority is the record, so it has to carry the whole quote',
+      'the settlement authority is the record, so it has to carry the whole offer',
     );
+    assert.ok(Math.abs((Date.parse(intent.promoExpiresAt) - Date.parse(intent.createdAt)) - 30 * 86400000) < 5000,
+      'the bonus clock starts at the order, from the package window — not from anything the browser sent');
+    assert.equal(intent.placeOfSupply.assumed, true);
 
     // FLEXPRICE_ENABLED is off for this suite, which is the state a deployment
     // without a wallet is in. The refusal must be the typed one and must leave the
@@ -375,7 +536,7 @@ test('the Razorpay path picks its gateway, proves its signature, and settles not
     const created = await (await fetch(`${server.url}/api/billing/razorpay/create-order`, {
       method: 'POST',
       headers: { ...rzpAdmin, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     })).json();
     assert.equal(created.provider, 'razorpay');
     assert.equal(store.getRechargeIntent(created.orderId).provider, 'razorpay', 'settle() asks Razorpay, not whoever the browser claims');
@@ -397,7 +558,7 @@ test('the Razorpay path picks its gateway, proves its signature, and settles not
     const unknown = await fetch(`${server.url}/api/billing/recharge/create-order`, {
       method: 'POST',
       headers: { ...rzpAdmin, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500, provider: 'paypal' }),
+      body: JSON.stringify({ packageId: PACKAGE_ID, provider: 'paypal' }),
     });
     assert.equal(unknown.status, 400);
     assert.equal((await unknown.json()).code, 'unknown_provider');
@@ -419,7 +580,7 @@ test('a gateway with no keys creates no order unless the dev mock flag is on', a
     const res = await fetch(`${server.url}/api/billing/cashfree/create-order`, {
       method: 'POST',
       headers: { ...ADMIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     });
     assert.equal(res.status, 400);
     assert.equal((await res.json()).code, 'provider_not_configured');
@@ -509,11 +670,11 @@ test('the Cashfree webhook is signature-gated everywhere and never prices an ord
     const created = await (await fetch(`${server.url}/api/billing/cashfree/create-order`, {
       method: 'POST',
       headers: { ...whAdmin, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     })).json();
     const paid = JSON.stringify({
       type: 'ORDER_PAID_SUCCESS',
-      data: { order: { order_id: created.orderId, order_amount: '590.00' } },
+      data: { order: { order_id: created.orderId, order_amount: '2360.00' } },
     });
     const retry = await signed(server, paid);
     assert.equal(retry.status, 503, 'any 5xx makes the gateway retry the event');
@@ -584,7 +745,7 @@ test('a saved GSTIN is validated on the way in and decides the tax split on the 
     method: 'PUT', headers: { ...gstAdmin, 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   const recharge = () => fetch(`${server.url}/api/billing/recharge`, {
-    method: 'POST', headers: { ...gstAdmin, 'content-type': 'application/json' }, body: JSON.stringify({ amountInr: 500 }),
+    method: 'POST', headers: { ...gstAdmin, 'content-type': 'application/json' }, body: JSON.stringify({ packageId: PACKAGE_ID }),
   });
   try {
     const garbage = await putConfig({ paymentInfo: { taxId: 'not-a-gstin' } });
@@ -598,11 +759,11 @@ test('a saved GSTIN is validated on the way in and decides the tax split on the 
     assert.equal(saved.provider, 'razorpay', 'the provider preference is normalized and persisted');
 
     const quote = await (await recharge()).json();
-    assert.deepEqual(quote.quote.components.map((c) => [c.name, c.paise]), [['IGST', 9000]]);
+    assert.deepEqual(quote.quote.components.map((c) => [c.name, c.paise]), [['IGST', PACKAGE_GST_PAISE]]);
     assert.equal(quote.quote.placeOfSupply.type, 'interstate');
     assert.equal(quote.quote.placeOfSupply.stateCode, '29');
     assert.equal(quote.quote.placeOfSupply.assumed, false);
-    assert.equal(quote.quote.totalInr, '590.00', 'same total, different split — 18% either way');
+    assert.equal(quote.quote.totalInr, '2360.00', 'same total, different split — 18% either way');
 
     const blank = await putConfig({ paymentInfo: { taxId: '' } });
     assert.equal(blank.status, 200);
@@ -653,7 +814,7 @@ test('a Cashfree credential rejection surfaces as a typed 502, not an opaque 500
     const res = await fetch(`${server.url}/api/billing/cashfree/create-order`, {
       method: 'POST',
       headers: { ...ADMIN, 'content-type': 'application/json' },
-      body: JSON.stringify({ amountInr: 500 }),
+      body: JSON.stringify({ packageId: PACKAGE_ID }),
     });
     assert.equal(res.status, 502);
     assert.match(res.headers.get('content-type'), /application\/json/);

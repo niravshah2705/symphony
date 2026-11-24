@@ -27,7 +27,10 @@ const REPO = path.resolve(__dirname, '../../../..');
 // below to contain no rupee-side key, which is what keeps the exemption honest.
 const EXEMPT = new Set(['billing/token-credit-migration.js']);
 const SELF = 'token-credit-naming.test.js';
-const SCAN_DIRS = ['packages', 'services', 'public', 'scripts', 'deploy'];
+// e2e and e2e-live too: a stub or a readiness assertion that still names the old unit is
+// a stale contract claim, and the live audit reads `balance…` from a real wallet, so a
+// name that resolves to `undefined` there fails an assertion nobody can see coming.
+const SCAN_DIRS = ['packages', 'services', 'public', 'scripts', 'deploy', 'e2e', 'e2e-live'];
 const CODE_EXT = new Set(['.js', '.mjs', '.cjs', '.json', '.tf']);
 
 /** Every code file, minus node_modules, coverage output and this gate itself. */
@@ -88,7 +91,7 @@ const RUPEE_SIDE = [
   ['services/billing/src/payment-providers.js', ['decimalFromPaise']],
   ['packages/shared-core/src/billing/money-wire.js', ['paiseFromDecimal', 'decimalFromPaise', 'wholePaise']],
   ['packages/shared-core/src/billing/pricing.js', ['paiseToInr']],
-  ['services/billing/src/billing-api.js', ['subtotalPaise', 'MAX_RECHARGE_PAISE']],
+  ['services/billing/src/billing-api.js', ['subtotalPaise', 'MAX_AUTO_RECHARGE_PAISE']],
   ['packages/shared-core/src/store.js', ['subtotalPaise', 'gstPaise', 'totalPaise']],
   ['services/billing/src/recharge-settle.js', ['subtotal_paise', 'gst_paise', 'collected_paise']],
   ['packages/shared-core/src/billing/ledger.js', ['amountPaise']],

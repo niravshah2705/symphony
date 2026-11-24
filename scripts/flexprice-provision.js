@@ -14,6 +14,7 @@
 //   node scripts/flexprice-provision.js --org acme --org-name "Acme Analytics" --state 27
 //   node scripts/flexprice-provision.js --org acme --free-credit   # opening credit for a non-free-tier org
 //   node scripts/flexprice-provision.js --rotate-keys   # revoke and re-mint both planes
+//   node scripts/flexprice-provision.js --retire-rate-rows   # park the old published rate card
 //   FLEET_ORG_ID=acme node scripts/flexprice-provision.js
 //
 // Order matters. Keys are minted with the admin key, so that step precedes the
@@ -36,7 +37,10 @@ const CONFIG = require('../packages/shared-core/src/config').CONFIG;
 const { fetchBillingContext } = require('../services/billing/src/auto-recharge-job');
 
 const ROOT = path.resolve(__dirname, '..');
-const ENV_FILE = path.join(ROOT, 'deploy', 'flexprice', '.env');
+// Overridable, because the script WRITES here: a minted plane key replaces the line it
+// matches. The contract test runs a full provisioning against a stub stack, and without
+// this knob it would file stub credentials into the operator's real deploy/flexprice/.env.
+const ENV_FILE = process.env.FLEXPRICE_ENV_FILE || path.join(ROOT, 'deploy', 'flexprice', '.env');
 
 // The seeded Production environment (migrations/postgres/V1__seed.sql). Same
 // constant the bootstrap and the spike use; it is seeded, not chosen.
@@ -94,6 +98,12 @@ const FREE_CREDIT_OVERRIDE = has('--free-credit');
 // step looks like a permissions bug. `--rotate-keys` discards the stored values
 // and mints fresh ones.
 const ROTATE_KEYS = has('--rotate-keys');
+// The 14 `rate-{provider}-{direction}` prices this script used to publish were a copy of
+// a table nothing read. They are no longer created, but a stack provisioned before Stage 4
+// still carries them and `ensurePrice` never deletes, so a flag is the only way to clear
+// them. Opt-in rather than part of every run: it writes rows this script no longer owns,
+// and an operator should decide when the audit catalog changes shape.
+const RETIRE_RATE_ROWS = has('--retire-rate-rows');
 
 function readEnvFile() {
   const out = {};
@@ -298,13 +308,23 @@ async function ensurePrice(client, planId, spec) {
       // lookup_key would have reported "existing" forever and billed 100x tax.
       const stored = paiseFromDecimal(String(hit.amount ?? '0'));
       const want = paiseFromDecimal(spec.amount);
-      if (stored !== want) {
+      // Metadata converges alongside the amount, and MERGED: `PUT /v1/prices/:id`
+      // takes the whole document, so a body that carried only the fields of a fresh
+      // catalog spec would drop `fleet_meter` from a row that had it. That key is how
+      // anyone reading the FlexPrice UI knows which meter the line bills.
+      const storedMeta = hit.metadata && typeof hit.metadata === 'object' ? hit.metadata : {};
+      const metadata = { ...storedMeta, ...(spec.metadata || {}) };
+      const drifted = Object.keys(metadata).filter((key) => String(storedMeta[key] ?? '') !== String(metadata[key] ?? ''));
+      const changes = [];
+      if (stored !== want) changes.push(`amount ${hit.amount} -> ${spec.amount}`);
+      if (drifted.length) changes.push(`metadata ${drifted.join(',')}`);
+      if (changes.length) {
         if (DRY) {
-          report('price', spec.lookupKey, 'dry-run', `amount ${hit.amount} -> ${spec.amount}`);
+          report('price', spec.lookupKey, 'dry-run', changes.join(', '));
           return hit.id;
         }
-        await client.request({ plane: 'money', method: 'PUT', route: `/v1/prices/${encodeURIComponent(hit.id)}`, body: { amount: spec.amount } });
-        report('price', spec.lookupKey, 'updated', `${hit.amount} -> ${spec.amount} (${hit.id})`);
+        await client.request({ plane: 'money', method: 'PUT', route: `/v1/prices/${encodeURIComponent(hit.id)}`, body: { amount: spec.amount, metadata } });
+        report('price', spec.lookupKey, 'updated', `${changes.join(', ')} (${hit.id})`);
       } else {
         report('price', spec.lookupKey, 'existing', hit.id);
       }
@@ -312,6 +332,13 @@ async function ensurePrice(client, planId, spec) {
     }
   } catch (err) {
     if (err.status !== 404) throw err;
+  }
+  // A row that only ever existed on a stack that ran the old events. Creating it here
+  // would put the line back on a stack that never had it, which is the opposite of what
+  // `retired` means: on a fresh stack there is nothing to converge.
+  if (spec.existingOnly) {
+    report('price', spec.lookupKey, 'absent', 'retired row, and this stack never had it');
+    return null;
   }
   if (DRY) {
     report('price', spec.lookupKey, 'dry-run', `amount ${spec.amount}`);
@@ -363,13 +390,21 @@ async function ensurePrices(client, planId, meterIds) {
     // the usage record — so a live price here would charge the same usage twice for
     // any tenant ever attached to a subscription. The meter exists to be aggregated.
     'llm-token-credits': { unit_paise: 0, note: 'the rate card prices the run; this meter only aggregates it' },
+    // The retired meter's price is converged too rather than left as first minted:
+    // early runs published it at ₹0.01 per token credit, and a live 0.01 line on any
+    // subscription would bill the same usage a second time on top of the debit the rate
+    // card already made. `existing_only` because a fresh stack never creates this meter,
+    // so there is no row to zero — and writing one would resurrect a line nothing emits.
+    'llm-cost': {
+      unit_paise: 0,
+      existing_only: true,
+      note: 'retired meter: kept readable for the history it holds; the debit comes from the usage records priced by deploy/billing/credit-rates.yaml',
+    },
     'actor-compute': { unit_paise: 0, note: 'D4: actor compute is metered and priced at zero for now' },
     'deployment-minutes': { unit_paise: 0, note: 'D8: no emitter; price exists so the meter is not orphaned' },
   };
   for (const meter of METERS) {
     const spec = meterPrice[meter.name];
-    // The retired meter keeps whatever price it already had; a fresh stack has nothing
-    // to bill through it, so there is nothing to write.
     if (!spec) continue;
     ids[`meter:${meter.name}`] = await ensurePrice(client, planId, {
       lookupKey: `meter-${meter.name}`,
@@ -381,7 +416,13 @@ async function ensurePrices(client, planId, meterIds) {
       transformQuantity: { divideBy: 1, round: 'down' },
       billingPeriod: 'MONTHLY',
       amount: decimalFromPaise(spec.unit_paise),
-      metadata: { fleet_meter: meter.name, fleet_meter_id: String(meterIds[meter.name] || ''), fleet_note: spec.note },
+      existingOnly: spec.existing_only,
+      metadata: {
+        fleet_meter: meter.name,
+        fleet_meter_id: String(meterIds[meter.name] || ''),
+        fleet_note: spec.note,
+        ...(meter.retired ? { fleet_retired: 'true' } : {}),
+      },
     });
   }
 
@@ -393,6 +434,62 @@ async function ensurePrices(client, planId, meterIds) {
   // (Any rows a live stack still carries are retired by name in Stage 8's
   // `--retire-rate-rows`, not silently left behind.)
   return ids;
+}
+
+// The old published rate card, by the name this script gave it. Nothing else in the
+// catalog matches: flat lines are `recharge-principal`/`gst-*`, meter lines are `meter-*`.
+const RATE_ROW = /^rate-[a-z]+-(input|output)$/;
+const PRICE_PAGE = 200;
+// A ceiling on how many prices the scan will read, not a page count: `POST
+// /v1/prices/search` is unverified for a server-side filter on this build, so the retire
+// step pages the whole catalog and matches by name. If a stack ever exceeds this, the run
+// says so instead of reporting "no rows to retire".
+const PRICE_SCAN_CAP = 5000;
+
+/**
+ * Park the old rate rows: `fleet_retired=true`, and the FX pair that went stale with
+ * Stage 4 (the rate now lives in `credit-rates.yaml` with its own `as_of`).
+ *
+ * `PUT`, never `DELETE`. The façade exposes no price delete and no probe has established
+ * what one does to a price attached to `fleet-catalog`; a row in a catalog an invoice line
+ * may still point at is not mine to destroy. Retiring is reversible, assuming is not.
+ */
+async function retireRatePrices(client) {
+  const found = [];
+  let scanned = 0;
+  for (let offset = 0; offset < PRICE_SCAN_CAP; offset += PRICE_PAGE) {
+    const page = await client.searchPrices({ limit: PRICE_PAGE, offset });
+    const items = page.items || [];
+    scanned += items.length;
+    found.push(...items.filter((price) => RATE_ROW.test(String(price.lookupKey || ''))));
+    if (items.length < PRICE_PAGE) break;
+  }
+  if (!found.length) {
+    report('price', 'rate-*', scanned >= PRICE_SCAN_CAP ? 'failed' : 'existing',
+      scanned >= PRICE_SCAN_CAP
+        ? `scan hit the ${PRICE_SCAN_CAP}-price cap without matching a rate row; raise PRICE_SCAN_CAP`
+        : `no rate rows among the ${scanned} prices on this stack`);
+    return;
+  }
+  for (const price of found) {
+    if (price.metadata && price.metadata.fleet_retired === 'true') {
+      report('price', price.lookupKey, 'existing (retired)', price.id);
+      continue;
+    }
+    if (DRY) {
+      report('price', price.lookupKey, 'dry-run', 'metadata fleet_retired=true, drop fx_usd_inr/fx_captured_on');
+      continue;
+    }
+    const metadata = { ...(price.metadata || {}) };
+    delete metadata.fx_usd_inr;
+    delete metadata.fx_captured_on;
+    metadata.fleet_retired = 'true';
+    metadata.fleet_retired_on = new Date().toISOString().slice(0, 10);
+    await client.request({
+      plane: 'money', method: 'PUT', route: `/v1/prices/${encodeURIComponent(price.id)}`, body: { metadata },
+    });
+    report('price', price.lookupKey, 'retired', `${price.id} (kept, not deleted)`);
+  }
 }
 
 /**
@@ -568,6 +665,10 @@ async function main() {
   section('prices');
   const planId = await ensurePlan(client);
   const priceIds = await ensurePrices(client, planId, meterIds);
+  if (RETIRE_RATE_ROWS) {
+    section('retiring the old rate card rows');
+    await retireRatePrices(client);
+  }
 
   const orgIds = all('org');
   if (!orgIds.length && CONFIG.BILLING.orgId) orgIds.push(CONFIG.BILLING.orgId);

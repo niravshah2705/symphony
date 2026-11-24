@@ -11,23 +11,51 @@ function json(route, body, status = 200) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
-const money = (credits) => ({ tokenCredits: Math.round(credits * 100), credits: credits.toFixed(2), inr: credits.toFixed(2) });
+// The read envelope's money view: an integer subunit plus the decimal credits the page
+// prints. No third field — the reads carry no rupee figure for a balance, so a stub that
+// invented one would be testing a payload the server cannot send.
+const money = (credits) => ({ tokenCredits: Math.round(credits * 100), credits: credits.toFixed(2) });
+
+const PACKAGE = {
+  packageId: 'credits-3500', priceInr: 2000, credits: 3500,
+  prepaidCredits: 2000, bonusCredits: '1500.00', bonusValidDays: 30,
+};
+// POST /api/billing/recharge is a quote, and this is the ₹ side of the product: the
+// checkout total and its GST split, which stay rupees because that is what the card pays.
+const QUOTE = {
+  quote: {
+    subtotalPaise: 200000, subtotalInr: '2000.00',
+    components: [
+      { name: 'CGST', rateBps: 900, paise: 18000, inr: '180.00' },
+      { name: 'SGST', rateBps: 900, paise: 18000, inr: '180.00' },
+    ],
+    gstPaise: 36000, gstInr: '360.00',
+    totalPaise: 236000, totalInr: '2360.00',
+    prepaidCredits: 2000, bonusTokenCredits: 150000, bonusCredits: '1500.00',
+    placeOfSupply: { stateCode: '27', assumed: false },
+  },
+};
 
 const SUMMARY = {
-  currency: 'INR',
-  balanceInr: 3760,
+  unit: 'credits',
+  balanceCredits: '3760.00',
+  balanceTokenCredits: 376000,
+  initialCreditCredits: '5000.00',
   fundsAvailable: true,
   fundState: 'available',
   gatePolicy: 'enforce',
   sweepEnabled: true,
   isAdmin: true,
+  alertThresholdsCredits: ['10000.00', '0.00'],
+  autoRecharge: { enabled: false, mode: 'amount', thresholdCredits: '40.00', amountCredits: '500.00' },
   paymentInfo: { billingName: 'Max Operator', billingEmail: 'max@example.com', billingPhone: '9999999999', provider: 'cashfree' },
-  spend: { week: { runs: 12, tokens: 4000, costInr: 90 } },
+  rechargePackages: [PACKAGE],
+  spend: { week: { runs: 12, tokens: 4000, costCredits: '90.00', notionalCredits: '0.00' } },
 };
 
 const OVERVIEW = {
   degraded: false,
-  currency: 'INR',
+  unit: 'credits',
   balance: money(3760),
   fundState: 'available',
   gatePolicy: 'enforce',
@@ -110,6 +138,7 @@ async function stubBilling(page, overrides = {}) {
   const bodies = {
     summary: SUMMARY,
     overview: OVERVIEW,
+    recharge: QUOTE,
     heatmap: HEATMAP,
     trend: TREND,
     breakdown: BREAKDOWN,
@@ -163,6 +192,36 @@ test('the usage page draws the FlexPrice reads, and never FlexPrice itself', asy
   expect(browserErrors).toEqual([]);
 });
 
+// The unit rule, tested where a customer reads it: the wallet is credits, and ₹ survives only
+// on the two figures that are money — the Cashfree payable and the GST on top of it. A page
+// that prints both invites the reading that ₹3,760 is spendable money, when ₹2,360 was paid
+// and 3,500 credits were bought.
+test('the wallet reads as credits, and rupees appear only where money is charged', async ({ page }) => {
+  const rupeesIn = (loc) => loc.evaluate((node) => ((node.textContent || '').match(/\u20b9|INR/g) || []).length);
+  await stubBilling(page);
+  await page.goto('/#/usage', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#view')).toHaveAttribute('aria-busy', 'false');
+
+  const balance = page.locator('.metric-card').first();
+  await expect(balance.locator('.metric-value')).toHaveText('3,760');
+  await expect(balance.locator('.metric-note')).toHaveText('credits');
+
+  for (const selector of ['.metric-grid', '.usage-credit-grid', '.usage-section']) {
+    await expect(rupeesIn(page.locator(selector).first())).resolves.toBe(0, `${selector} renders a rupee figure`);
+  }
+
+  const purchase = page.locator('.usage-purchase');
+  await purchase.getByRole('button', { name: 'Purchase Credits' }).click();
+  await purchase.locator('select').selectOption('credits-3500');
+  const quote = purchase.locator('.usage-quote');
+  await expect(quote).toContainText('Pay \u20b92,360.00 incl. GST \u20b9360.00');
+  await expect(quote).toContainText('2,000 credits added');
+  await expect(quote).toContainText('1,500 bonus credits');
+
+  // Nothing outside the panel gained a ₹ from the quote being open.
+  await expect(rupeesIn(page.locator('#view'))).resolves.toBe(await rupeesIn(purchase));
+});
+
 test('the credits log switches tabs by refetching, and keeps the debit explanation', async ({ page }) => {
   const seen = await stubBilling(page);
   await page.goto('/#/usage', { waitUntil: 'domcontentloaded' });
@@ -180,9 +239,9 @@ test('the credits log switches tabs by refetching, and keeps the debit explanati
 test('a degraded read shows why, and never a zero balance', async ({ page }) => {
   const degraded = { degraded: true, reason: 'read_failed', reasonDetail: 'FlexPrice refused the read', asOf: '2026-11-20T12:00:00.000Z' };
   await stubBilling(page, {
-    overview: { ...degraded, currency: 'INR', balance: { tokenCredits: null, credits: null, inr: null }, planCredits: null, addOnCredits: null, creditPacks: [], packages: [], walletResolved: false },
-    heatmap: { ...degraded, weeks: 13, total: { tokenCredits: null, credits: null, inr: null }, days: [] },
-    trend: { ...degraded, points: [], total: { tokenCredits: null, credits: null, inr: null }, bucketed: false, filters: {} },
+    overview: { ...degraded, unit: 'credits', balance: { tokenCredits: null, credits: null }, planCredits: null, addOnCredits: null, creditPacks: [], packages: [], walletResolved: false },
+    heatmap: { ...degraded, weeks: 13, total: { tokenCredits: null, credits: null }, days: [] },
+    trend: { ...degraded, points: [], total: { tokenCredits: null, credits: null }, bucketed: false, filters: {} },
     breakdown: { ...degraded, dimension: 'project', values: [] },
     earned: { ...degraded, tab: 'earned', rows: [], total: null, nextOffset: null },
   });
