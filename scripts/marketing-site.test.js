@@ -25,6 +25,87 @@ function fileFor(urlPath) {
   return [urlPath.slice(1)];
 }
 
+const firebaseConfig = () => JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));
+
+function cspDirectives(target) {
+  const site = firebaseConfig().hosting.find((s) => s.target === target);
+  const block = site.headers.find((rule) => rule.source === '/**');
+  const header = block.headers.find((h) => h.key === 'Content-Security-Policy');
+  assert.ok(header, `the ${target} target must publish a Content-Security-Policy`);
+  return Object.fromEntries(
+    header.value
+      .split(';')
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .map((d) => {
+        const [name, ...sources] = d.split(/\s+/);
+        return [name, sources];
+      })
+  );
+}
+
+// Every file a hosting target actually serves, minus vendored SDKs (same origin)
+// and the test files that quote third-party URLs without loading them.
+function sourceTexts(dir) {
+  const out = [];
+  const walk = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === 'vendor' || entry.name === '.git') continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(html|js|mjs)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+        out.push(fs.readFileSync(full, 'utf8'));
+      }
+    }
+  };
+  walk(path.join(ROOT, dir));
+  return out;
+}
+
+// Origins each tree pulls in from elsewhere, keyed by the directive that has to
+// allow them. The payment SDKs and Google sign-in are injected at runtime by JS,
+// so a markup-only scan would miss them entirely.
+function loadedHosts(texts) {
+  const hosts = { script: new Set(), style: new Set(), img: new Set() };
+  for (const text of texts) {
+    for (const m of text.matchAll(/<script[^>]+\bsrc="(https?:)?\/\/([^/"]+)/g)) hosts.script.add(m[2]);
+    for (const m of text.matchAll(/\.src\s*=\s*['"`](https?:)?\/\/([^/'"`]+)/g)) hosts.script.add(m[2]);
+    for (const m of text.matchAll(/(?:^|[.\s{])src\s*:\s*['"](https?:)?\/\/([^/'"]+)/gm)) hosts.script.add(m[2]);
+    for (const m of text.matchAll(/<link\b[^>]+>/g)) {
+      if (!/rel="stylesheet"/.test(m[0])) continue;
+      const href = /href="(https?:)?\/\/([^/"]+)/.exec(m[0]);
+      if (href) hosts.style.add(href[2]);
+    }
+    for (const m of text.matchAll(/<img[^>]+\bsrc="(https?:)?\/\/([^/"]+)/g)) hosts.img.add(m[2]);
+  }
+  return hosts;
+}
+
+function hostAllowed(host, sources) {
+  return (sources || []).some((source) => {
+    const match = /^[a-z+]+:\/\/(.+)$/i.exec(source);
+    if (!match) return false;
+    const pattern = match[1];
+    if (pattern.startsWith('*.')) return host === pattern.slice(2) || host.endsWith('.' + pattern.slice(2));
+    return host === pattern;
+  });
+}
+
+function assertLoadableHosts(texts, directives, target) {
+  for (const [kind, directive] of [
+    ['script', 'script-src'],
+    ['style', 'style-src'],
+    ['img', 'img-src']
+  ]) {
+    for (const host of loadedHosts(texts)[kind]) {
+      assert.ok(
+        hostAllowed(host, directives[directive]),
+        `${host} is loaded as ${kind} by the ${target} tree but ${directive} does not allow it`
+      );
+    }
+  }
+}
+
 test.after(() => fs.rmSync(OUT, { recursive: true, force: true }));
 
 test('the marketing tree promotes every ADLC page to the root', () => {
@@ -150,16 +231,7 @@ test('firebase publishes the generated tree as the www root and rewrites every l
 });
 
 test('the CSP matches what the published pages actually load', () => {
-  const firebase = JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));
-  const www = firebase.hosting.find((site) => site.target === 'www');
-  const block = www.headers.find((rule) => rule.source === '/**');
-  const csp = block.headers.find((h) => h.key === 'Content-Security-Policy').value;
-  const directives = Object.fromEntries(
-    csp.split(';').map((d) => d.trim()).filter(Boolean).map((d) => {
-      const [name, ...sources] = d.split(/\s+/);
-      return [name, sources];
-    })
-  );
+  const directives = cspDirectives('www');
 
   for (const name of ['default-src', 'object-src', 'base-uri', 'form-action', 'frame-ancestors']) {
     assert.ok(directives[name], `${name} must be set`);
@@ -169,26 +241,48 @@ test('the CSP matches what the published pages actually load', () => {
 
   // The landing page ships inline <script>/<style> blocks, so a stricter policy
   // would break it; the external origin is the xterm terminal assets on unpkg.
-  const html = [...built.files].filter((rel) => rel.endsWith('.html'));
-  const inlines = html.filter((rel) => /<script>|<style>/.test(read(rel)));
-  assert.ok(inlines.length, 'expected inline script/style blocks in the published tree');
-  if (inlines.length) {
-    assert.ok(directives['script-src'].includes("'unsafe-inline'"), 'inline scripts need unsafe-inline');
-    assert.ok(directives['style-src'].includes("'unsafe-inline'"), 'inline styles need unsafe-inline');
-  }
+  const texts = [...built.files].filter((rel) => rel.endsWith('.html')).map((rel) => read(rel));
+  assert.ok(
+    texts.some((t) => /<script>|<style>/.test(t)),
+    'expected inline script/style blocks in the published tree'
+  );
+  assert.ok(directives['script-src'].includes("'unsafe-inline'"), 'inline scripts need unsafe-inline');
+  assert.ok(directives['style-src'].includes("'unsafe-inline'"), 'inline styles need unsafe-inline');
+  assertLoadableHosts(texts, directives, 'www');
+});
 
-  const externalOrigins = new Set();
-  for (const rel of html) {
-    const text = read(rel);
-    for (const m of text.matchAll(/<script[^>]+\bsrc="(https?:)?\/\/([^/"]+)/g)) externalOrigins.add(m[2]);
-    for (const m of text.matchAll(/<link[^>]+rel="stylesheet"[^>]+\bhref="(https?:)?\/\/([^/"]+)/g)) {
-      externalOrigins.add(m[2]);
-    }
+test('the platform SPA CSP covers every origin it loads, including the injected ones', () => {
+  const directives = cspDirectives('app');
+  const texts = sourceTexts('public');
+  assertLoadableHosts(texts, directives, 'app');
+
+  // The app shell has inline <script> blocks and an onload attribute on the
+  // print-media stylesheet, so 'unsafe-inline' is load-bearing here as it is on www.
+  assert.ok(directives['script-src'].includes("'unsafe-inline'"));
+  assert.ok(directives['connect-src'].length, 'the gateway origin must be reachable');
+
+  // Calls capture the microphone and the screen. A Permissions-Policy copied from
+  // the marketing target would silently break public/js/views/calls.js.
+  const firebase = JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8'));
+  const block = firebase.hosting.find((s) => s.target === 'app').headers.find((r) => r.source === '/**');
+  const permissions = block.headers.find((h) => h.key === 'Permissions-Policy');
+  if (permissions) {
+    assert.doesNotMatch(permissions.value, /microphone=\(\)/, 'the platform needs the microphone for agent calls');
+    assert.doesNotMatch(permissions.value, /display-capture=\(\)/, 'the platform needs screen capture for agent calls');
   }
-  const allowed = new Set([...directives['script-src'], ...directives['style-src']].filter((s) => !s.startsWith("'")));
-  for (const origin of externalOrigins) {
-    assert.ok(allowed.has(origin), `${origin} is loaded by a published page but absent from the CSP`);
-  }
+});
+
+test('the secrets CSP stays tight because that app has no inline scripts', () => {
+  const directives = cspDirectives('secrets');
+  const texts = sourceTexts('secrets');
+  assertLoadableHosts(texts, directives, 'secrets');
+
+  assert.equal(
+    texts.filter((t) => /<script>/.test(t)).length,
+    0,
+    'a new inline <script> in secrets/ must move to a file or be reported here'
+  );
+  assert.deepEqual(directives['script-src'], ["'self'"], 'secrets loads only local scripts, so no widening');
 });
 
 test('deploy-www builds the marketing tree before publishing it', () => {

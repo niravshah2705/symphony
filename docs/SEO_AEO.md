@@ -341,6 +341,41 @@ behind Firebase Hosting, which would need a new hosting target here —
 `scripts/marketing-site.test.js` currently pins that the `www` target has no
 `redirects` block).
 
+## Content Security Policy
+
+All three Firebase Hosting targets publish a CSP from their `/**` rule in
+`firebase.json`, and `scripts/marketing-site.test.js` compares each policy against
+the tree that target actually serves — scan markup for `<script src>` /
+`<link rel=stylesheet>` / `<img src>`, plus the JS that injects vendor SDKs at
+runtime. A new third-party origin therefore fails the test instead of failing
+silently in production.
+
+| Target | Host | `script-src` | Why |
+|---|---|---|---|
+| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. |
+| `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, GA4, and the two payment SDKs are injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
+| `secrets` | secrets.archagentix.com | `'self'` only | Verified to have no inline script and to load its vendored Firebase compat SDKs locally. The test pins this, so an added inline `<script>` fails rather than being blocked. |
+
+Two decisions worth knowing about:
+
+- **No `Permissions-Policy` on the `app` target.** The platform records audio and
+  screen share (`public/js/views/calls.js` uses `getUserMedia`, `getDisplayMedia`,
+  `MediaRecorder`), so the marketing target's `microphone=()` would break agent
+  calls if copied across. The test asserts this if the header is ever added.
+- **`'unsafe-inline'` is still required for script and style** on `www` and `app`,
+  because the page shells contain inline blocks and `public/index.html` has an
+  `onload` attribute on its print-media stylesheet. The policies therefore constrain
+  *where* code can come from and where it can send data (`connect-src` is closed to
+  the gateway, Google, and the two payment vendors), but they do not stop an
+  injected inline script. Removing `'unsafe-inline'` means hashing or externalising
+  those blocks first.
+
+`public/contact/index.html` renders its QR code from `https://api.qrserver.com`, so
+that host is in `img-src` on both hosts serving the contact page. It is a
+third-party request that carries the encoded URL, and it lets that host log every
+contact-page view — generating the QR locally (the page already has the data string)
+would remove both the CSP allowance and the leak.
+
 ## Verification
 
 ```bash
