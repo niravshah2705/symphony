@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ADLC’s Seven Stages: Inside the Workflow — Archagentix Blog</title>
+    <title>ADLC’s Seven Stages: Inside the Workflow — ArchAgentix Blog</title>
     <meta
       name="description"
       content="Each stage of the agentic development lifecycle, from intent capture through operational learning, with examples of humans and agents collaborating."
     />
-    <meta name="theme-color" content="#16201d" />
+    <meta name="theme-color" content="#f8f9f9" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
@@ -20,57 +20,49 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://www.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://www.archagentix.com/adlc/blog/lifecycle/" />
+    <link rel="describedby" type="text/markdown" href="/llms.txt" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/adlc/styles.css" />
-    <style>
-      .article-content { max-width: 680px; margin: 0 auto; padding: clamp(32px, 5vw, 64px) clamp(18px, 5vw, 72px); }
-      .article-header { margin-bottom: 48px; }
-      .article-header .blog-tag { display: inline-block; padding: 4px 10px; margin-bottom: 12px; background: #f0f5f3; color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; border-radius: 4px; }
-      .article-header h1 { margin-bottom: 16px; }
-      .article-content > section { margin-bottom: 48px; }
-      .article-content > section > h2 { margin-top: 32px; margin-bottom: 18px; }
-      .article-content > section > h3 { margin-top: 24px; margin-bottom: 12px; }
-      .article-content p, .article-content li { color: var(--muted); line-height: 1.7; margin-bottom: 16px; }
-      .article-content ul, .article-content ol { margin: 0 0 24px; padding-left: 24px; }
-      .article-content li { margin-bottom: 8px; }
-      .article-content strong { color: var(--ink); font-weight: 700; }
-      .article-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
-      .article-content a { color: var(--blue); text-decoration: none; }
-      .article-content a:hover { text-decoration: underline; }
-      .metadata { color: var(--muted); font-size: 13px; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
-      .back-link { display: inline-block; margin-bottom: 32px; color: var(--blue); text-decoration: none; font-size: 14px; }
-      .back-link:hover { text-decoration: underline; }
-      .stage-example { margin: 24px 0; padding: 16px; background: #f9fbf8; border-left: 3px solid var(--blue); }
-      .stage-example strong { color: var(--blue); }
-    </style>
-    <script src="/adlc/config.js"></script>
-    <script defer src="/adlc/app.js"></script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
+
     <header class="site-header">
-      <a class="brand" href="/adlc/" aria-label="Archagentix home">
+      <a class="brand wm" href="/adlc/" aria-label="ArchAgentix home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span>Archagentix</span>
+        <span>ArchAgentix</span>
       </a>
-      <nav aria-label="Primary">
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/#process">Process</a>
-        <a href="/adlc/#evidence">Evidence</a>
-        <a href="/adlc/blog/">Blog</a>
-      </nav>
-      <a class="header-cta" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      <div class="header-side">
+        <details class="nav-menu">
+          <summary>Menu</summary>
+          <nav aria-label="Primary">
+            <a href="/adlc/">ADLC</a>
+            <a href="/archagentix/">Model intelligence</a>
+            <a href="/pricing/">Pricing</a>
+            <a href="/adlc/blog/">Blog</a>
+            <a href="/about/">About</a>
+            <a href="/contact/">Contact</a>
+          </nav>
+        </details>
+        <a class="key" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      </div>
     </header>
 
-    <main>
-      <article class="article-content">
-        <a href="/adlc/blog/" class="back-link">← Back to Blog</a>
 
-        <div class="article-header">
-          <span class="blog-tag">Guide</span>
-          <h1>The Seven Stages: A Deep Dive into ADLC Workflow</h1>
-          <div class="metadata">
-            <span>10 min read</span> • <span>Aug 12, 2026</span>
-          </div>
+    <main id="main">
+      <section class="page-head" aria-labelledby="post-title">
+        <div class="container">
+          <nav class="crumb" aria-label="Breadcrumb"><a class="textlink" href="/adlc/blog/">All posts</a></nav>
+          <h1 id="post-title">The Seven Stages: A Deep Dive into ADLC Workflow</h1>
+          <p class="byline"><span class="tag">Guide</span><time datetime="2026-08-12">12 August 2026</time><span>10 min read</span></p>
         </div>
+      </section>
+
+      <article class="prose" aria-labelledby="post-title">
+        <div class="container">
+          <div class="measure">
 
         <section>
           <p>
@@ -318,48 +310,49 @@
           </p>
         </section>
 
-        <section>
-          <p>
-            <strong>Read the full brief:</strong> <a href="/adlc/brief/">ADLC Brief</a>
-            <br>
-            <strong>Back to blog:</strong> <a href="/adlc/blog/">All posts</a>
-          </p>
-        </section>
+        </div>
+      </div>
       </article>
+
+      <section class="close-band band" aria-labelledby="next-title">
+        <div class="container">
+          <div>
+            <h2 id="next-title">The whole lifecycle, in one document</h2>
+            <p>The brief covers the stages, the gates and the evidence without the article breaks.</p>
+          </div>
+          <div class="head-actions">
+            <a class="key key--primary" href="/adlc/brief/">Read the full brief</a>
+            <a class="textlink" href="/adlc/blog/">All posts</a>
+          </div>
+        </div>
+      </section>
+    
     </main>
     
     <footer class="site-footer" aria-label="Site footer">
-      <div class="footer-brand">
-        <a class="brand" href="/adlc/" aria-label="Archagentix home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Archagentix</span>
-        </a>
+      <div class="container colophon">
+        <p class="wordmark wm"><span class="brand"><span class="brand-mark" aria-hidden="true"></span> ArchAgentix</span></p>
         <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>
-      </div>
-      <nav class="footer-col" aria-label="Company">
-        <h3>Company</h3>
-        <a href="/about/">About Company</a>
-        <a href="/careers/">Careers</a>
-        <a href="/newsroom/">Newsroom</a>
-        <a href="/contact/">Contact Us</a>
-      </nav>
-      <nav class="footer-col" aria-label="Explore">
-        <h3>Explore</h3>
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/adlc/brief/">Full brief</a>
-        <a href="https://platform.archagentix.com/" rel="noopener">Archagentix Platform</a>
-      </nav>
-      <div class="footer-col footer-legal">
-        <p>&copy; 2026 Archagentix Private Limited &middot; Hinjewadi IT Park, Pune 411057, Maharashtra, India</p>
-        <p><a href="tel:+919370580836">+91 93705 80836</a> &middot; <a href="mailto:support@archagentix.com">support@archagentix.com</a></p>
-        <nav aria-label="Legal">
-          <a href="/terms/">Terms of Service</a>
-          <a href="/privacy/">Privacy Policy</a>
-          <a href="/refund-policy/">Refund &amp; Cancellation</a>
-          <a href="/shipping-policy/">Delivery Policy</a>
+        <nav aria-label="Site">
+          <a href="/about/">About Company</a>
+          <a href="/careers/">Careers</a>
+          <a href="/newsroom/">Newsroom</a>
+          <a href="/contact/">Contact Us</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/adlc/blog/">Blog</a>
+          <a href="/archagentix/">Model intelligence</a>
+          <a href="/adlc/brief/">Full brief</a>
+          <a href="https://platform.archagentix.com/" rel="noopener">ArchAgentix Platform</a>
         </nav>
+        <p class="legal">
+            © 2026 Archagentix Private Limited<br />
+            Hinjewadi IT Park, Pune 411057, Maharashtra, India
+            <span class="legal-links"><a href="tel:+919370580836">+91 93705 80836</a><a href="mailto:support@archagentix.com">support@archagentix.com</a></span>
+            <span class="legal-links"><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a><a href="/refund-policy/">Refund &amp; Cancellation</a><a href="/shipping-policy/">Delivery Policy</a></span>
+          </p>
       </div>
     </footer>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
 </body>
 </html>
