@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 // with zero calls when it is off, which would make every "no calls happened"
 // assertion here true for the wrong reason.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'flexprice-isolation-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.FLEXPRICE_ENABLED = 'true';
 delete process.env.BILLING_GATE_POLICY;
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
