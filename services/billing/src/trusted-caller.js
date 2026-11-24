@@ -34,10 +34,10 @@
  */
 
 const crypto = require('node:crypto');
-const { CONFIG } = require('@ai-fleet/shared-core/config');
-const log = require('@ai-fleet/shared-core/logger');
-const { SHARED_ORG_ID } = require('@ai-fleet/shared-core/billing/org-context');
-const { verifyPushToken } = require('@ai-fleet/shared-core/messaging/oidc');
+const { CONFIG } = require('@software-factory/shared-core/config');
+const log = require('@software-factory/shared-core/logger');
+const { SHARED_ORG_ID } = require('@software-factory/shared-core/billing/org-context');
+const { verifyPushToken } = require('@software-factory/shared-core/messaging/oidc');
 
 const BILLING_ORG_HEADER = 'x-ai-fleet-billing-org-id';
 const BILLING_ROLE_HEADER = 'x-ai-fleet-billing-org-role';
