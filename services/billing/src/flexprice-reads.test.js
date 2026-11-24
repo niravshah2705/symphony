@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
 // routes are only supposed to answer on a deployment that has a wallet to read,
 // and `guard()` short-circuits with zero calls when it is off.
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'flexprice-reads-'));
-process.env.AI_FLEET_DATA_DIR = TMP_DIR;
+process.env.SOFTWARE_FACTORY_DATA_DIR = TMP_DIR;
 process.env.FLEXPRICE_ENABLED = 'true';
 test.after(() => { try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (_) {} });
 
