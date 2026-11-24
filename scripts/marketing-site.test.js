@@ -104,6 +104,17 @@ function assertLoadableHosts(texts, directives, target) {
       );
     }
   }
+
+  // A third-party script or stylesheet also fetches its own sourceMappingURL,
+  // which is governed by connect-src, not script-src. Missing it only surfaces as
+  // a DevTools console error, so it has to be asserted next to the load itself.
+  const hosts = loadedHosts(texts);
+  for (const host of new Set([...hosts.script, ...hosts.style])) {
+    assert.ok(
+      hostAllowed(host, directives['connect-src']),
+      `${host} serves code to the ${target} tree, so connect-src must allow its source map too`
+    );
+  }
 }
 
 test.after(() => fs.rmSync(OUT, { recursive: true, force: true }));
