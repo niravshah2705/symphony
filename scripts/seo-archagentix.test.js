@@ -178,7 +178,7 @@ test('pricing is linked on top navigation of every marketing page', () => {
 
 test('pricing page exposes plans, FAQ, and product schema for AEO', () => {
   const html = read('pricing/index.html');
-  assert.match(html, /<title>Archagentix Pricing/);
+  assert.match(html, /<title>ArchAgentix Pricing/);
   assert.match(html, /<link rel="canonical" href="https:\/\/www\.archagentix\.com\/pricing\/" \/>/);
   for (const plan of ['Pilot', 'Team', 'Enterprise']) {
     assert.ok(html.includes(plan), `pricing page missing ${plan} plan`);
@@ -300,16 +300,24 @@ test('the brand query has a landing page: every public title names Archagentix',
   };
   walk(PUBLIC);
   assert.ok(pages.length >= 16, `expected every public page, found ${pages.length}`);
+  // The SPA shell is the one surface still titled with the registered name; it
+  // keeps its own pass, so it is exempt from the wordmark rule rather than
+  // weakening the rule for every page.
+  const WORDMARK = /ArchAgentix\b/;
+  const REGISTERED_NAME_ONLY = new Set(['index.html']);
   for (const page of pages) {
     const title = read(page).match(/<title>([^<]*)<\/title>/)?.[1];
     assert.ok(title, `${page} has no <title>`);
-    assert.match(title, /Archagentix/, `${page} title drops the brand: ${title}`);
-    assert.doesNotMatch(title, /ArchAgentix/, `${page} misspells the brand`);
+    if (REGISTERED_NAME_ONLY.has(page)) {
+      assert.match(title, /Archagentix\b/, `${page} title drops the brand: ${title}`);
+      continue;
+    }
+    assert.match(title, WORDMARK, `${page} title drops the wordmark: ${title}`);
+    assert.doesNotMatch(title, /Archagentix\b/, `${page} uses the legal entity where the wordmark belongs`);
   }
   // The two surfaces a brand search must win lead with it.
-  for (const page of ['index.html', 'adlc/index.html']) {
-    assert.match(read(page), /<title>Archagentix\b/, `${page} must lead with the brand`);
-  }
+  assert.match(read('index.html'), /<title>Archagentix\b/, 'index.html must lead with the brand');
+  assert.match(read('adlc/index.html'), /<title>ArchAgentix\b/, 'adlc/index.html must lead with the wordmark');
 });
 
 test('platform owns its sitemap, and www never publishes it', () => {
@@ -360,7 +368,7 @@ test('the benchmarks panel is an indexed, self-canonical Archagentix page', () =
   assert.match(html, /<meta name="robots" content="index, follow/);
   const description = html.match(/name="description"\s+content="([^"]+)"/)?.[1];
   assert.ok(description && description.length >= 120 && description.length <= 175, `benchmarks description: ${description?.length}`);
-  assert.match(html, /<meta property="og:site_name" content="Archagentix"/);
+  assert.match(html, /<meta property="og:site_name" content="ArchAgentix"/);
   const blocks = [...html.matchAll(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/g)];
   assert.equal(blocks.length, 1, 'the panel page needs exactly one JSON-LD graph');
   const entities = JSON.parse(blocks[0][1])['@graph'];

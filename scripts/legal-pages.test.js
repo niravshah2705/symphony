@@ -15,7 +15,7 @@ const ROOT = path.resolve(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
 const read = (...parts) => fs.readFileSync(path.join(PUBLIC, ...parts), 'utf8');
 
-const { LEGAL_PAGES, POLICY_LINKS, renderMarkdown } = require('./build-legal-pages.js');
+const { LEGAL_PAGES, POLICY_LINKS, TOC_LABELS, renderMarkdown } = require('./build-legal-pages.js');
 
 test('generated policy pages match the markdown documents they come from', () => {
   execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'build-legal-pages.js'), '--check'], { stdio: 'pipe' });
@@ -118,6 +118,9 @@ test('internal links on a policy page resolve to a real published page', () => {
     // On the marketing host these promote out of /adlc/, but both forms exist in
     // the source tree, which is what the app host serves.
     '/adlc/', '/adlc/blog/', '/adlc/brief/', '/blog/', '/brief/',
+    // The model-intelligence panel lives on the app host only; promotion rewrites the
+    // link to its platform origin, so a reader on either host lands on a real page.
+    '/archagentix/',
     '/legal/terms.md', '/legal/privacy.md', '/legal/refund.md', '/legal/shipping.md',
     '/llms.txt', '/llms-full.txt', '/adlc/styles.css', '/styles.css',
     // Brand assets ride along as a directory on both hosts, so every file in the
@@ -131,6 +134,27 @@ test('internal links on a policy page resolve to a real published page', () => {
     }
     // A leftover #/route would bounce the reader into the app shell.
     assert.doesNotMatch(html, /href="#\//, `${page.slug} still links an SPA hash route`);
+  }
+});
+
+test('every contents label fits one line at 320px, and no label is stale', () => {
+  // The contents list is a column of links: a two-line entry reads as a broken
+  // control at the narrowest width, so a heading that outgrows the budget needs a
+  // short label in TOC_LABELS rather than a smaller font.
+  const BUDGET = 34;
+  for (const page of LEGAL_PAGES) {
+    const { headings } = renderMarkdown(read(page.source));
+    const ids = new Set();
+    for (const heading of headings.filter((h) => h.level === 2)) {
+      ids.add(heading.id);
+      const label = TOC_LABELS[`${page.slug}/${heading.id}`] || heading.text;
+      assert.ok(label.length <= BUDGET, `${page.slug} contents entry "${label}" is ${label.length} chars`);
+    }
+    for (const key of Object.keys(TOC_LABELS)) {
+      const [slug, id] = key.split('/');
+      if (slug !== page.slug) continue;
+      assert.ok(ids.has(id), `TOC_LABELS['${key}'] names a heading that no longer exists`);
+    }
   }
 });
 

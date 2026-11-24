@@ -42,33 +42,64 @@ const LEGAL_PAGES = [
     slug: 'terms',
     route: 'terms',
     source: 'legal/terms.md',
-    title: 'Terms of Service — Archagentix',
+    title: 'Terms of Service — ArchAgentix',
     ogType: 'website',
   },
   {
     slug: 'privacy',
     route: 'privacy',
     source: 'legal/privacy.md',
-    title: 'Privacy Policy — Archagentix',
+    title: 'Privacy Policy — ArchAgentix',
     ogType: 'website',
   },
   {
     slug: 'refund-policy',
     route: 'refund',
     source: 'legal/refund.md',
-    title: 'Refund and Cancellation Policy — Archagentix',
+    title: 'Refund and Cancellation Policy — ArchAgentix',
     ogType: 'website',
   },
   {
     slug: 'shipping-policy',
     route: 'shipping',
     source: 'legal/shipping.md',
-    title: 'Delivery Policy — Archagentix',
+    title: 'Delivery Policy — ArchAgentix',
     ogType: 'website',
   },
 ];
 
 const ROUTE_TO_SLUG = Object.fromEntries(LEGAL_PAGES.map((page) => [page.route, page.slug]));
+
+// One line per contents entry: a heading is cut to the clause a reader scans for, so no
+// link in the table of contents wraps at 320px (the full heading stays as the h2). Keyed
+// by the heading's generated id; an id that is not listed falls back to the full text.
+const TOC_LABELS = {
+  'terms/1-acceptance-of-this-agreement': '1. Acceptance',
+  'terms/5-ai-generated-output-your-responsibility': '5. AI-generated output',
+  'terms/6-autonomous-execution-and-local-shell-risk': '6. Autonomous execution',
+  'terms/7-third-party-services-and-data-processing': '7. Third-Party Services',
+  'terms/8-credentials-and-security-responsibility': '8. Credentials and security',
+  'terms/10-third-party-components-open-source-notice': '10. Third-Party Components',
+  'terms/14-term-subscriptions-and-termination': '14. Term and termination',
+  'terms/15-export-compliance-and-lawful-use': '15. Export and lawful use',
+  'terms/16-governing-law-and-dispute-resolution': '16. Governing law',
+  'privacy/1-who-we-are-and-your-two-possible-relationships-with-us': '1. Who we are',
+  'privacy/2-the-personal-data-we-handle-and-the-purpose-of-each': '2. The data we handle',
+  'privacy/3-consent-and-how-you-take-it-back': '3. Consent and withdrawal',
+  'privacy/4-identity-and-authentication-data': '4. Identity data',
+  'privacy/5-workspace-and-operational-data': '5. Workspace data',
+  'privacy/6-credentials-and-security-safeguards': '6. Credentials and safeguards',
+  'privacy/7-browser-storage-cookies-and-essential-functionality': '7. Cookies and storage',
+  'privacy/8-optional-google-analytics-4-telemetry': '8. Analytics telemetry',
+  'privacy/10-transfers-of-personal-data-outside-india': '10. Data outside India',
+  'privacy/11-how-long-we-keep-it-and-deletion': '11. Retention and deletion',
+  'privacy/12-your-rights-and-how-to-exercise-each': '12. Your rights',
+  'privacy/14-if-our-security-fails-breach-notification': '14. Breach notification',
+  'refund-policy/3-cancelling-your-subscription': '3. Cancelling',
+  'shipping-policy/2-what-is-delivered-and-how-fast': '2. What is delivered',
+  'shipping-policy/5-if-delivery-does-not-happen': '5. Failed delivery',
+  'shipping-policy/6-taxes-and-statutory-documents': '6. Taxes and documents',
+};
 
 // The footer an acquirer reads must name the entity, the office, the phone and all
 // five policy documents on every page, including the policy pages themselves.
@@ -268,9 +299,16 @@ function renderMarkdown(source) {
 function pageTemplate(page, bodyHtml, headings) {
   const url = `${CANONICAL_ORIGIN}/${page.slug}/`;
   const description = `${page.title.split(' — ')[0]} for the Archagentix platform: terms, cancellation and refund windows, and delivery timelines. Contact ${SUPPORT_EMAIL}.`;
+  // The published pages carry the wordmark in <title> and the registered name in
+  // og:title; the redesign edit caught one and not the other. Reproduced here so the
+  // generator emits the shipped bytes, and worth unifying in its own change.
+  const ogTitle = page.title.replace('ArchAgentix', 'Archagentix');
   const toc = headings
     .filter((heading) => heading.level === 2)
-    .map((heading) => `<li><a href="#${heading.id}">${escapeHtml(heading.text)}</a></li>`)
+    .map((heading) => {
+      const label = TOC_LABELS[`${page.slug}/${heading.id}`] || heading.text;
+      return `<li><a href="#${heading.id}">${escapeHtml(label)}</a></li>`;
+    })
     .join('\n          ');
   return `<!DOCTYPE html>
 <html lang="en">
@@ -280,18 +318,21 @@ function pageTemplate(page, bodyHtml, headings) {
     <title>${escapeHtml(page.title)}</title>
     <meta name="description" content="${escapeHtml(description)}" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <meta name="theme-color" content="#16201d" />
+    <meta name="theme-color" content="#f8f9f9" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png" />
     <link rel="canonical" href="${url}" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/adlc/styles.css" />
     <meta property="og:type" content="${page.ogType}" />
-    <meta property="og:site_name" content="Archagentix" />
+    <meta property="og:site_name" content="ArchAgentix" />
     <meta property="og:url" content="${url}" />
-    <meta property="og:title" content="${escapeHtml(page.title)}" />
+    <meta property="og:title" content="${escapeHtml(ogTitle)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:image" content="${CANONICAL_ORIGIN}/brand/og-image.png" />
     <meta property="og:image:width" content="1200" />
@@ -337,66 +378,81 @@ function pageTemplate(page, bodyHtml, headings) {
     </script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
+
     <header class="site-header">
-      <a class="brand" href="/adlc/" aria-label="Archagentix home">
+      <a class="brand wm" href="/adlc/" aria-label="ArchAgentix home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span>Archagentix</span>
+        <span>ArchAgentix</span>
       </a>
-      <nav aria-label="Primary">
-        <a href="/adlc/">ADLC</a>
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/about/">About</a>
-        <a href="/contact/">Contact</a>
-      </nav>
-      <a class="header-cta" href="${PLATFORM_ORIGIN}/" rel="noopener">Try now</a>
+      <div class="header-side">
+        <details class="nav-menu">
+          <summary>Menu</summary>
+          <nav aria-label="Primary">
+            <a href="/adlc/">ADLC</a>
+            <a href="/archagentix/">Model intelligence</a>
+            <a href="/pricing/">Pricing</a>
+            <a href="/adlc/blog/">Blog</a>
+            <a href="/about/">About</a>
+            <a href="/contact/">Contact</a>
+          </nav>
+        </details>
+        <a class="key" href="${PLATFORM_ORIGIN}/" data-try-now>Try now</a>
+      </div>
     </header>
 
-    <main>
-      <section class="marketing-hero" aria-labelledby="page-title">
-        <p class="eyebrow">Legal</p>
-        <h1 id="page-title">${escapeHtml(page.title.split(' — ')[0])}</h1>
-        <p class="lede">Published by ${ENTITY} (CIN ${CIN} · GSTIN ${GSTIN}), ${ADDRESS}. Questions: <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> · <a href="tel:${SUPPORT_PHONE_URI}">${SUPPORT_PHONE_DISPLAY}</a></p>
+    <main id="main">
+      <section class="page-head" aria-labelledby="page-title">
+        <div class="container">
+          <h1 id="page-title">${escapeHtml(page.title.split(' — ')[0])}</h1>
+          <p class="lede">Published by ${ENTITY}, ${ADDRESS}. CIN ${CIN}, GSTIN ${GSTIN}.</p>
+          <div class="head-actions">
+            <a class="textlink" href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>
+            <a class="textlink" href="tel:${SUPPORT_PHONE_URI}">${SUPPORT_PHONE_DISPLAY}</a>
+          </div>
+        </div>
       </section>
-      <section class="policy-prose" style="padding: 8px 6vw 48px; max-width: 900px;">
-        <nav aria-label="Contents">
+      <section class="prose">
+        <div class="container">
+          <div class="measure">
+        <nav class="toc" aria-label="Contents">
+          <p class="toc-title">Contents</p>
           <ul>
           ${toc}
           </ul>
         </nav>
 ${bodyHtml}
+                </div>
+        </div>
       </section>
+
     </main>
 
     <footer class="site-footer" aria-label="Site footer">
-      <div class="footer-brand">
-        <a class="brand" href="/adlc/" aria-label="Archagentix home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Archagentix</span>
-        </a>
+      <div class="container colophon">
+        <p class="wordmark wm"><span class="brand"><span class="brand-mark" aria-hidden="true"></span> ArchAgentix</span></p>
         <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>
-      </div>
-      <nav class="footer-col" aria-label="Company">
-        <h3>Company</h3>
-        <a href="/about/">About Company</a>
-        <a href="/careers/">Careers</a>
-        <a href="/newsroom/">Newsroom</a>
-        <a href="/contact/">Contact Us</a>
-      </nav>
-      <nav class="footer-col" aria-label="Explore">
-        <h3>Explore</h3>
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/adlc/brief/">Full brief</a>
-        <a href="${PLATFORM_ORIGIN}/" rel="noopener">Archagentix Platform</a>
-      </nav>
-      <div class="footer-col footer-legal">
-        <p>&copy; 2026 ${ENTITY} &middot; ${ADDRESS}</p>
-        <p><a href="tel:${SUPPORT_PHONE_URI}">${SUPPORT_PHONE_DISPLAY}</a> &middot; <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></p>
-        <nav aria-label="Legal">
-${POLICY_LINKS.map(([slug, label]) => `          <a href="/${slug}/">${escapeHtml(label)}</a>`).join('\n')}
+        <nav aria-label="Site">
+          <a href="/about/">About Company</a>
+          <a href="/careers/">Careers</a>
+          <a href="/newsroom/">Newsroom</a>
+          <a href="/contact/">Contact Us</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/adlc/blog/">Blog</a>
+          <a href="/archagentix/">Model intelligence</a>
+          <a href="/adlc/brief/">Full brief</a>
+          <a href="${PLATFORM_ORIGIN}/" rel="noopener">ArchAgentix Platform</a>
         </nav>
-      </div>    </footer>
+        <p class="legal">
+            © 2026 ${ENTITY}<br />
+            ${ADDRESS}
+            <span class="legal-links"><a href="tel:${SUPPORT_PHONE_URI}">${SUPPORT_PHONE_DISPLAY}</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></span>
+            <span class="legal-links">${POLICY_LINKS.map(([slug, label]) => `<a href="/${slug}/">${escapeHtml(label)}</a>`).join('')}</span>
+          </p>
+      </div>
+    </footer>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
   </body>
 </html>
 `;
@@ -459,6 +515,7 @@ module.exports = {
   LEGAL_PAGES,
   POLICY_LINKS,
   ROUTE_TO_SLUG,
+  TOC_LABELS,
   CIN,
   GSTIN,
   buildLegalPages,
