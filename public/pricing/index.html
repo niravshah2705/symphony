@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Archagentix Pricing — Plans for Teams Shipping with Agents</title>
+    <title>ArchAgentix Pricing — Plans for Teams Shipping with Agents</title>
     <meta
       name="description"
       content="Archagentix pricing: free pilot, team, and enterprise plans for ADLC — the Agentic Development Life Cycle. See what each plan includes."
     />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <meta name="theme-color" content="#16201d" />
+    <meta name="theme-color" content="#f8f9f9" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
@@ -22,9 +22,12 @@
     <meta name="twitter:image" content="https://www.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://www.archagentix.com/pricing/" />
     <link rel="describedby" type="text/markdown" href="/llms.txt" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/adlc/styles.css" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Archagentix" />
+    <meta property="og:site_name" content="ArchAgentix" />
     <meta property="og:url" content="https://www.archagentix.com/pricing/" />
     <meta property="og:title" content="Archagentix Pricing — Plans for Teams Shipping with Agents" />
     <meta property="og:description" content="Free pilot, team, and enterprise plans for ADLC. Transparent per-seat pricing with human review gates included." />
@@ -132,118 +135,145 @@
     </script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
+
     <header class="site-header">
-      <a class="brand" href="/adlc/" aria-label="Archagentix home">
+      <a class="brand wm" href="/adlc/" aria-label="ArchAgentix home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span>Archagentix</span>
+        <span>ArchAgentix</span>
       </a>
-      <nav aria-label="Primary">
-        <a href="/adlc/">ADLC</a>
-        <a href="/pricing/" class="active">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/about/">About</a>
-        <a href="/contact/">Contact</a>
-      </nav>
-      <a class="header-cta" href="https://platform.archagentix.com/" rel="noopener">Try now</a>
+      <div class="header-side">
+        <details class="nav-menu">
+          <summary>Menu</summary>
+          <nav aria-label="Primary">
+            <a href="/adlc/">ADLC</a>
+            <a href="/archagentix/">Model intelligence</a>
+            <a href="/pricing/" aria-current="page">Pricing</a>
+            <a href="/adlc/blog/">Blog</a>
+            <a href="/about/">About</a>
+            <a href="/contact/">Contact</a>
+          </nav>
+        </details>
+        <a class="key" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+      </div>
     </header>
 
-    <main>
-      <section class="marketing-hero" aria-labelledby="pricing-title">
-        <p class="eyebrow">Pricing</p>
-        <h1 id="pricing-title">Straightforward pricing for agent-assisted delivery.</h1>
-        <p class="lede">
-          Every plan includes the full ADLC lifecycle — intent, planning, isolated
-          implementation, verification evidence, and human review gates. You pay per
-          seat, not per agent run.
-        </p>
+    <main id="main">
+      <section class="offer" aria-labelledby="pricing-title">
+        <div class="container">
+          <div class="head-block split">
+            <h1 id="pricing-title">Per seat. Not per agent run.</h1>
+            <p class="lead">Three plans. The full ADLC lifecycle in each one.</p>
+          </div>
+          <div class="plans">
+            <article class="plan cut">
+              <h2>Pilot</h2>
+              <p class="price">$0<small> / forever</small></p>
+              <ul>
+                <li>1 project, up to 2 seats</li>
+                <li>Platform-managed model keys</li>
+                <li>Planner and coder runs</li>
+                <li>Community support</li>
+              </ul>
+              <a class="key" href="https://platform.archagentix.com/" data-try-now>Start free</a>
+            </article>
+            <article class="plan cut is-featured">
+              <h2>Team</h2>
+              <p class="price">$49<small> / seat / month</small></p>
+              <ul>
+                <li>Unlimited projects and repos</li>
+                <li>Encrypted per-org key vault</li>
+                <li>Egress-proxied agents</li>
+                <li>Review gates and delivery evidence</li>
+                <li>Priority support</li>
+              </ul>
+              <a class="key key--primary" href="https://platform.archagentix.com/" data-try-now>Try now</a>
+            </article>
+            <article class="plan cut">
+              <h2>Enterprise</h2>
+              <p class="price">Custom</p>
+              <ul>
+                <li>Dedicated or self-hosted deploy</li>
+                <li>SSO and policy controls</li>
+                <li>Long-retention audit evidence</li>
+                <li>Governance onboarding</li>
+              </ul>
+              <a class="key" href="/contact/">Talk to us</a>
+            </article>
+          </div>
+        </div>
       </section>
 
-      <section class="plan-grid" aria-label="Plans">
-        <article class="plan-card">
-          <h2>Pilot</h2>
-          <p class="plan-price">$0<small> / forever</small></p>
-          <ul>
-            <li>1 project, up to 2 seats</li>
-            <li>Platform-managed model keys</li>
-            <li>Planner + coder agent runs</li>
-            <li>Community support</li>
-          </ul>
-          <a class="primary-cta" href="https://platform.archagentix.com/" rel="noopener">Start free</a>
-        </article>
-
-        <article class="plan-card featured">
-          <h2>Team</h2>
-          <p class="plan-price">$49<small> / seat / month</small></p>
-          <ul>
-            <li>Unlimited projects and repositories</li>
-            <li>Per-organization encrypted key vault</li>
-            <li>Egress-proxied agents — no raw secrets in containers</li>
-            <li>Review gates, delivery evidence, and tracing</li>
-            <li>Priority support</li>
-          </ul>
-          <a class="primary-cta" href="https://platform.archagentix.com/" rel="noopener">Try now</a>
-        </article>
-
-        <article class="plan-card">
-          <h2>Enterprise</h2>
-          <p class="plan-price">Custom</p>
-          <ul>
-            <li>Dedicated deployment (GCP or self-hosted)</li>
-            <li>SSO, tenant isolation, and policy controls</li>
-            <li>Long-retention audit evidence</li>
-            <li>Governance onboarding for review gates</li>
-          </ul>
-          <a class="secondary-cta" href="/contact/" style="text-align:center">Talk to us</a>
-        </article>
+      <section class="section band" aria-labelledby="billing-title">
+        <div class="container">
+          <div class="head-block">
+            <h2 id="billing-title">How billing works</h2>
+          </div>
+          <dl class="facts">
+            <dt>Metered on</dt><dd>Seats, not agent runs. A plan covers every stage: intent, planning, isolated implementation, verification evidence, review gates.</dd>
+            <dt>Annual</dt><dd>Two months free versus monthly.</dd>
+            <dt>Invoicing</dt><dd>Enterprise terms and invoices at <a class="textlink" href="mailto:support@archagentix.com">support@archagentix.com</a>.</dd>
+          </dl>
+        </div>
       </section>
 
-      <section class="faq" aria-labelledby="pricing-faq">
-        <h2 id="pricing-faq">Pricing questions</h2>
-        <dl>
-          <dt>How is Archagentix priced?</dt>
-          <dd>Per seat per month. Pilot is free, Team is $49 per seat per month, and Enterprise is custom-priced for dedicated deployments and governance requirements.</dd>
-          <dt>Do agents need access to my raw API keys?</dt>
-          <dd>No. Credentials live in the per-organization encrypted vault or platform-managed storage. An egress proxy sidecar injects the real credential on outbound calls, so planner and coder containers never hold raw secrets.</dd>
-          <dt>Can I bring my own model keys?</dt>
-          <dd>Yes. Team and Enterprise plans support per-organization customer keys for LLM providers, GitHub, and Linear.</dd>
-          <dt>Is there a discount for annual billing?</dt>
-          <dd>Annual billing saves two months versus monthly. Contact support@archagentix.com for invoicing and Enterprise terms.</dd>
-        </dl>
+      <section class="section" aria-labelledby="faq-title">
+        <div class="container">
+          <div class="head-block">
+            <h2 id="faq-title">Pricing questions</h2>
+          </div>
+          <div class="rows">
+            <div class="row">
+              <h3>Do agents need my raw API keys?</h3>
+              <div>No. Credentials stay in the per-organization encrypted vault or platform-managed storage. The egress proxy injects the real credential on outbound calls, so planner and coder containers never hold raw secrets.</div>
+            </div>
+            <div class="row">
+              <h3>Can I bring my own model keys?</h3>
+              <div>Yes, on Team and Enterprise: per-organization keys for LLM providers, GitHub and Linear, resolved through the same settings service as managed keys.</div>
+            </div>
+            <div class="row">
+              <h3>What counts as a seat?</h3>
+              <div>A person who opens the workspace. Agents run under the project, not under a seat.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="close-band band" aria-labelledby="cta-title">
+        <div class="container">
+          <div>
+            <h2 id="cta-title">Deploying ADLC for a whole org?</h2>
+            <p>Dedicated deployment, SSO, tenant isolation and governance onboarding for the review gates.</p>
+          </div>
+          <a class="key key--primary" href="/contact/">Talk to us</a>
+        </div>
       </section>
     </main>
 
     <footer class="site-footer" aria-label="Site footer">
-      <div class="footer-brand">
-        <a class="brand" href="/adlc/" aria-label="Archagentix home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Archagentix</span>
-        </a>
+      <div class="container colophon">
+        <p class="wordmark wm"><span class="brand"><span class="brand-mark" aria-hidden="true"></span> ArchAgentix</span></p>
         <p>Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control.</p>
-      </div>
-      <nav class="footer-col" aria-label="Company">
-        <h3>Company</h3>
-        <a href="/about/">About Company</a>
-        <a href="/careers/">Careers</a>
-        <a href="/newsroom/">Newsroom</a>
-        <a href="/contact/">Contact Us</a>
-      </nav>
-      <nav class="footer-col" aria-label="Explore">
-        <h3>Explore</h3>
-        <a href="/pricing/">Pricing</a>
-        <a href="/adlc/blog/">Blog</a>
-        <a href="/adlc/brief/">Full brief</a>
-        <a href="https://platform.archagentix.com/" rel="noopener">Archagentix Platform</a>
-      </nav>
-      <div class="footer-col footer-legal">
-        <p>&copy; 2026 Archagentix Private Limited &middot; Hinjewadi IT Park, Pune 411057, Maharashtra, India</p>
-        <p><a href="tel:+919370580836">+91 93705 80836</a> &middot; <a href="mailto:support@archagentix.com">support@archagentix.com</a></p>
-        <nav aria-label="Legal">
-          <a href="/terms/">Terms of Service</a>
-          <a href="/privacy/">Privacy Policy</a>
-          <a href="/refund-policy/">Refund &amp; Cancellation</a>
-          <a href="/shipping-policy/">Delivery Policy</a>
+        <nav aria-label="Site">
+          <a href="/about/">About Company</a>
+          <a href="/careers/">Careers</a>
+          <a href="/newsroom/">Newsroom</a>
+          <a href="/contact/">Contact Us</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/adlc/blog/">Blog</a>
+          <a href="/archagentix/">Model intelligence</a>
+          <a href="/adlc/brief/">Full brief</a>
+          <a href="https://platform.archagentix.com/" rel="noopener">ArchAgentix Platform</a>
         </nav>
+        <p class="legal">
+            © 2026 Archagentix Private Limited<br />
+            Hinjewadi IT Park, Pune 411057, Maharashtra, India
+            <span class="legal-links"><a href="tel:+919370580836">+91 93705 80836</a><a href="mailto:support@archagentix.com">support@archagentix.com</a></span>
+            <span class="legal-links"><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a><a href="/refund-policy/">Refund &amp; Cancellation</a><a href="/shipping-policy/">Delivery Policy</a></span>
+          </p>
       </div>
     </footer>
+    <script src="/adlc/config.js"></script>
+    <script defer src="/adlc/app.js"></script>
   </body>
 </html>

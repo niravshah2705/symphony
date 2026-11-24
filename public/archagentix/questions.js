@@ -111,11 +111,14 @@ function renderAuthGate(authState, error) {
 
   const message = field('p', {
     text: error
-      ? error.message
+      ? 'The question bank lives inside the platform, and this page carries no sign-in configuration. Open the platform to read or edit an organization’s bank.'
       : 'Sign in to read or edit this organization’s discovery questions.',
   });
   gate.append(message);
-  if (error) return;
+  if (error) {
+    gate.append(field('a', { class: 'textlink', href: 'https://platform.archagentix.com/', text: 'Open the platform' }));
+    return;
+  }
 
   const actions = field('div', { class: 'auth-actions' });
   for (const [label, handler] of [['Sign in with Google', signIn], ['Sign in with Microsoft', signInWithMicrosoft]]) {
@@ -276,6 +279,7 @@ function renderTable() {
     row.append(field('td', {
       text: question.active === false ? 'hidden' : question.origin,
       class: `origin-cell origin-${question.origin}`,
+      'data-label': 'Origin',
     }));
 
     const actions = field('td', { 'data-actions-for': question.id });
@@ -289,6 +293,11 @@ function renderTable() {
     const active = state.questions.filter((question) => question.active !== false).length;
     count.textContent = `${visibleQuestions().length} shown · ${active} active of ${state.questions.length}`;
   }
+
+  // A bank that has not been read is not an empty bank: the register and its
+  // filters appear with the rows, so the gate is the only thing on screen.
+  const bank = document.querySelector('#questions .bank-body');
+  if (bank) bank.hidden = state.questions.length === 0;
 }
 
 /* -------------------------------- mutations -------------------------------- */
@@ -503,8 +512,11 @@ async function openBank() {
   try {
     authState = await initializeAuthentication();
   } catch (error) {
-    renderAuthGate(getAuthenticationState(), error);
-    setStatus('Sign-in is required before this bank can be opened.', 'error');
+    const settled = getAuthenticationState();
+    renderIdentity(settled);
+    renderAuthGate(settled, error);
+    renderTable();
+    setStatus('Sign-in is required before this bank can be opened.');
     return;
   }
   renderIdentity(authState);
@@ -516,6 +528,7 @@ async function openBank() {
   for (const node of document.querySelectorAll('#questions .edit-only')) node.hidden = !state.canEdit;
 
   if (!authState.authenticated) {
+    renderTable();
     setStatus('Sign in to load this organization’s bank.');
     return;
   }

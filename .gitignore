@@ -79,3 +79,9 @@ deploy/kagent/skills/*/build/
 # slipped in was committed before this rule existed.
 __pycache__/
 *.pyc
+
+# Hallmark design-run output: the dealt-theme log, pre-flight cache, before/
+# snapshots and the sloplint render screenshots, ~70 MB across the marketing
+# routes. Local review artifacts; the committed record is the stamp in each
+# stylesheet's first 40 lines.
+.hallmark/
