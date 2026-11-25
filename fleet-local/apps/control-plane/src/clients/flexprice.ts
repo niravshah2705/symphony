@@ -95,6 +95,17 @@ export const flexprice = {
       body: { customer_id: customerId, plan_id: planId, currency: 'INR', billing_period: 'MONTHLY' },
     });
   },
+  // Teardown cancels; it never deletes the customer or the wallet. Immediate
+  // cancellation WITH an invoice is the point: an open usage period that is simply
+  // abandoned is accrued spend that never reaches a statement, and the customer id
+  // is the bare org UUID — deleting it would break the audit trail the delete is
+  // required to keep.
+  cancelSubscription(subscriptionId: string) {
+    return fetchJson(url(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`), {
+      headers: headers(),
+      body: { cancellation_type: 'immediate', cancel_immediately_invoice_policy: 'generate_invoice' },
+    });
+  },
   bulkEvents(events: unknown[]) {
     return fetchJson(url('/v1/events/bulk'), { headers: headers(), body: { events } });
   },

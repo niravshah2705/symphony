@@ -3,6 +3,7 @@ import { A2A_CONTENT_TYPE, a2aFacadeBase } from '@fleet-local/shared';
 import { config } from '../config.ts';
 import { requireAuth } from '../auth/plugin.ts';
 import { assertMember } from '../db/users.ts';
+import { assertFacadeCallAllowed } from '../lifecycle.ts';
 import { A2ARequestError, toA2AErrorBody, truncate, type ErrorInfo } from '../a2a/contract.ts';
 import { routeFacadePath } from '../a2a/translate.ts';
 import {
@@ -94,6 +95,10 @@ export async function a2aRoutes(app: FastifyInstance): Promise<void> {
       const { orgId, projectId } = request.params as { orgId: string; projectId: string };
       const tail = (request.params as { '*': string })['*'] ?? '';
       const call = routeFacadePath(tail);
+      // The lifecycle gate is per call, not per route: a suspended org must not
+      // start a turn, but it must still be able to read, follow and cancel the turn
+      // it already has running. Cancelling is how a user stops being billed.
+      await assertFacadeCallAllowed(orgId, call.kind);
       // The controller authenticates the BFF's own minted token (the edge hands
       // the browser an ID token, which kagent would not accept); the browser's
       // Authorization header is deliberately never forwarded.

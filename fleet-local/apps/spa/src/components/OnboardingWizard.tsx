@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { STEP_META, type Org, type States, type StepState } from '../types';
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  running: 'Running',
-  done: 'Done',
-  failed: 'Failed',
-};
+import { StepList } from './StepList';
 
 export function OnboardingWizard({ org }: { org: Org }) {
   const [states, setStates] = useState<States>({});
@@ -79,21 +73,7 @@ export function OnboardingWizard({ org }: { org: Org }) {
       </div>
       {complete ? <p className="ok">Onboarding complete. The agent is attached and ready to chat.</p> : null}
       {error ? <p className="error">{error}</p> : null}
-      <ol className="steps">
-        {STEP_META.map((meta) => {
-          const s = states[meta.id];
-          const status = s?.status ?? 'pending';
-          return (
-            <li key={meta.id} className={`step status-${status}`}>
-              <span className="diagram">#{meta.diagram}</span>
-              <span className="step-label">{meta.label}</span>
-              <span className={`badge badge-${status}`}>{STATUS_LABEL[status]}</span>
-              {s && s.attempt > 1 ? <span className="muted small">attempt {s.attempt}</span> : null}
-              {s?.error ? <span className="error small">{s.error}</span> : null}
-            </li>
-          );
-        })}
-      </ol>
+      <StepList meta={STEP_META} states={states} />
     </section>
   );
 }

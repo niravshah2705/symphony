@@ -4,11 +4,23 @@ export interface User {
   name: string | null;
 }
 
+// Mirrors OrgStatus in apps/control-plane/src/lifecycle.ts. `deleted` never
+// reaches the SPA as a selected org: the teardown removes membership, so the row
+// drops out of /api/me.
+export type OrgStatus = 'active' | 'disabled' | 'offboarding' | 'deleted';
+
 export interface Org {
   id: string;
   slug: string;
   name: string;
+  status: OrgStatus;
+  /** The caller's own role, which is why the lifecycle controls can be hidden
+   *  rather than left to fail with a 403. Only the list endpoints carry it. */
+  role: string;
 }
+
+/** What the org mutations return: the row itself, without the membership join. */
+export type OrgRow = Omit<Org, 'role'>;
 
 export interface Project {
   id: string;
@@ -86,8 +98,8 @@ export type OnboardingStepId =
 
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed';
 
-export interface StepState {
-  step: OnboardingStepId;
+export interface StepState<S extends string = OnboardingStepId> {
+  step: S;
   status: StepStatus;
   attempt: number;
   idempotencyKey: string;
@@ -96,6 +108,22 @@ export interface StepState {
 }
 
 export type States = Partial<Record<OnboardingStepId, StepState>>;
+
+// Mirrors OFFBOARDING_STEPS in packages/shared/src/index.ts. The ids are the
+// teardown's own; the table is separate from onboarding_runs on purpose, so a
+// teardown never renders as onboarding progress.
+export type OffboardingStepId =
+  | 'release'
+  | 'detach'
+  | 'key'
+  | 'workspace'
+  | 'team'
+  | 'namespace'
+  | 'substrate'
+  | 'flexprice'
+  | 'access';
+
+export type OffboardStates = Partial<Record<OffboardingStepId, StepState<OffboardingStepId>>>;
 
 export interface Window {
   startTime: string;
@@ -156,7 +184,13 @@ export interface LangfuseTrace {
 
 // Diagram order (#) and human labels for the wizard. Execution order is the DAG
 // the BFF runs; this is just presentation.
-export const STEP_META: { id: OnboardingStepId; diagram: number; label: string }[] = [
+export interface StepMeta<S extends string> {
+  id: S;
+  diagram: number;
+  label: string;
+}
+
+export const STEP_META: StepMeta<OnboardingStepId>[] = [
   { id: 'org', diagram: 1, label: 'Default organisation' },
   { id: 'project', diagram: 2, label: 'Default project' },
   { id: 'workflow', diagram: 3, label: 'Copy coding workflow' },
@@ -166,4 +200,20 @@ export const STEP_META: { id: OnboardingStepId; diagram: number; label: string }
   { id: 'agent', diagram: 7, label: 'Create Agent' },
   { id: 'key', diagram: 8, label: 'LiteLLM virtual key' },
   { id: 'limits', diagram: 9, label: 'Org + project limits' },
+];
+
+// Teardown order, with the onboarding step (#) each one reverses. `key` precedes
+// `namespace` because the raw virtual key exists only inside that namespace's
+// Secret, and `flexprice` comes after all compute has stopped so the accrued
+// usage is invoiced rather than lost.
+export const OFFBOARD_META: StepMeta<OffboardingStepId>[] = [
+  { id: 'release', diagram: 3, label: 'Remove the tenant release' },
+  { id: 'detach', diagram: 4, label: 'Detach agents from projects' },
+  { id: 'key', diagram: 8, label: 'Delete the LiteLLM virtual key' },
+  { id: 'workspace', diagram: 6, label: 'Delete the worker pool' },
+  { id: 'team', diagram: 2, label: 'Delete the LiteLLM team' },
+  { id: 'namespace', diagram: 6, label: 'Delete the tenant namespace' },
+  { id: 'substrate', diagram: 6, label: 'Drop the substrate namespace policy' },
+  { id: 'flexprice', diagram: 5, label: 'Cancel the Flexprice subscription' },
+  { id: 'access', diagram: 1, label: 'Remove members and mark deleted' },
 ];

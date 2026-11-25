@@ -81,6 +81,11 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.ghost, .ghost { background: transparent; }
 button.link { background: none; border: none; color: var(--accent); padding: 0; cursor: pointer; }
 
+/* Destructive: red outline only, so it never reads as the accent fill a safe
+   action uses, and stays legible when disabled. */
+button.danger { background: transparent; color: var(--err); border-color: var(--err); }
+button.danger:not(:disabled):hover { background: rgba(248, 81, 73, 0.14); }
+
 input:not(.aui-root *), select:not(.aui-root *), textarea:not(.aui-root *) {
   font: inherit;
   background: var(--panel-2);

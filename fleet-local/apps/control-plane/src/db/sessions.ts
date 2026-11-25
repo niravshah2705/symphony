@@ -78,6 +78,17 @@ export async function listSessions(orgId: string, projectId?: string): Promise<S
   return res.rows;
 }
 
+// How many turns an org still has streaming. Offboarding waits on this before
+// deleting the namespace: a turn killed mid-pump classifies as upstream_error and
+// is NOT settled, so tearing down underneath it writes real compute off.
+export async function countRunningSessions(orgId: string): Promise<number> {
+  const row = await one<{ n: string }>(
+    "SELECT count(*)::text AS n FROM sessions WHERE org_id = $1 AND status = 'running'",
+    [orgId],
+  );
+  return Number(row?.n ?? 0);
+}
+
 // One turn of a conversation, settled. duration_seconds stays the session's wall
 // clock (the human-facing total); the billable amount is meter_seconds, the time
 // an agent stream actually ran. outcome says WHICH terminal it was and reason
@@ -180,6 +191,9 @@ export async function listContextIds(orgId: string, projectId: string): Promise<
 // stream windows against what has already been invoiced and never the wall
 // clock. A NULL meter_seconds means the row predates measurement, so the only
 // signal that it is still owing is metered_at.
+// Deliberately org-blind: offboarding removes an organisation's membership and its
+// infrastructure, never its accounting. A turn that ran while the org was live is
+// billed after the org is gone, so this must not grow a status join.
 export async function listUnmeteredSettled(): Promise<SessionRow[]> {
   const res = await query<SessionRow>(
     `SELECT ${COLS} FROM sessions

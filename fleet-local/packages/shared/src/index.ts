@@ -146,11 +146,34 @@ export const ONBOARDING_STEPS = [
   { id: 'limits', diagram: 9, deps: ['flexprice', 'key'] },
 ] as const;
 
+// The onboarding DAG run backwards: one teardown step per create step, so nothing
+// provisioned is left behind. Order is not decoration —
+//   key before namespace: the raw LiteLLM virtual key exists only in that Secret,
+//     so deleting the namespace first orphans a key that can still spend;
+//   workspace (WorkerPool) before namespace: namespace deletion alone can leave
+//     atelet-managed gVisor sandboxes running;
+//   flexprice last-but-one: cancelling the subscription invoices the open usage
+//     period, which must happen after the compute has actually stopped;
+//   access dead last: an incomplete teardown must not hide the org from the owner
+//     who has to retry it.
+export const OFFBOARDING_STEPS = [
+  { id: 'release', diagram: 3, deps: [] },
+  { id: 'detach', diagram: 4, deps: ['release'] },
+  { id: 'key', diagram: 8, deps: ['release'] },
+  { id: 'workspace', diagram: 6, deps: ['release'] },
+  { id: 'team', diagram: 2, deps: ['key'] },
+  { id: 'namespace', diagram: 6, deps: ['workspace', 'key'] },
+  { id: 'substrate', diagram: 6, deps: ['namespace'] },
+  { id: 'flexprice', diagram: 5, deps: ['team'] },
+  { id: 'access', diagram: 1, deps: ['substrate', 'flexprice'] },
+] as const;
+
 export type OnboardingStepId = (typeof ONBOARDING_STEPS)[number]['id'];
+export type OffboardingStepId = (typeof OFFBOARDING_STEPS)[number]['id'];
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed';
 
-export interface StepState {
-  step: OnboardingStepId;
+export interface StepState<S extends string = OnboardingStepId> {
+  step: S;
   status: StepStatus;
   attempt: number;
   idempotencyKey: string;
@@ -158,18 +181,42 @@ export interface StepState {
   error?: string;
 }
 
-export function stepDef(id: OnboardingStepId) {
-  const def = ONBOARDING_STEPS.find((s) => s.id === id);
-  if (!def) throw new Error(`unknown onboarding step: ${id}`);
+export interface StepDef<S extends string> {
+  readonly id: S;
+  readonly deps: readonly S[];
+}
+
+export function stepDef(id: OnboardingStepId | OffboardingStepId) {
+  const def = [...ONBOARDING_STEPS, ...OFFBOARDING_STEPS].find((s) => s.id === id);
+  if (!def) throw new Error(`unknown step: ${id}`);
   return def;
 }
 
-export function nextRunnableSteps(states: Partial<Record<OnboardingStepId, StepState>>): OnboardingStepId[] {
-  return ONBOARDING_STEPS.filter((def) => {
-    const own = states[def.id];
-    if (own && (own.status === 'done' || own.status === 'running')) return false;
-    return def.deps.every((dep) => states[dep]?.status === 'done');
-  }).map((def) => def.id);
+// Selectable = not yet done, not in flight, and every dependency already done.
+// A failed dependency blocks its dependents; an independent sibling still runs.
+export function runnableSteps<S extends string>(
+  steps: readonly StepDef<S>[],
+  states: Partial<Record<S, StepState<S>>>,
+): S[] {
+  return steps
+    .filter((def) => {
+      const own = states[def.id];
+      if (own && (own.status === 'done' || own.status === 'running')) return false;
+      return def.deps.every((dep) => states[dep]?.status === 'done');
+    })
+    .map((def) => def.id);
+}
+
+export function nextRunnableSteps(
+  states: Partial<Record<OnboardingStepId, StepState<OnboardingStepId>>>,
+): OnboardingStepId[] {
+  return runnableSteps(ONBOARDING_STEPS, states);
+}
+
+export function nextRunnableOffboardSteps(
+  states: Partial<Record<OffboardingStepId, StepState<OffboardingStepId>>>,
+): OffboardingStepId[] {
+  return runnableSteps(OFFBOARDING_STEPS, states);
 }
 
 export interface CostRow {

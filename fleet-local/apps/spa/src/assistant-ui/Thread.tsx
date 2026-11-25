@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AssistantRuntimeProvider, useAuiState } from '@assistant-ui/react';
 import { api } from '../api';
-import type { ModelOption, Org, Project, Session, SessionOutcome } from '../types';
+import type { ModelOption, Org, OrgStatus, Project, Session, SessionOutcome } from '../types';
 import { newThreadId, useFleetAgUi } from '../agui/useFleetAgUi';
 import { TaskStatusBar } from './TaskStatusBar';
 import { ThreadView } from './ui/ThreadView';
@@ -19,6 +19,15 @@ const OUTCOME_TONE: Record<SessionOutcome, string> = {
   client_abort: '',
 };
 
+// "You cannot send right now" has three honest answers, and only one of them is
+// fixable from this tab. The gate itself is server-side (routes/agui.ts), so this
+// text is explanation, not enforcement.
+function notReadyReason(orgStatus: OrgStatus): string {
+  if (orgStatus === 'disabled') return 'This organisation is disabled — agent calls are turned off until its owner enables it.';
+  if (orgStatus === 'offboarding') return 'This organisation is being removed — agent calls are turned off.';
+  return 'This project has no agent attached yet — finish onboarding first.';
+}
+
 interface ChatSurfaceProps {
   orgId: string;
   projectId: string;
@@ -30,6 +39,7 @@ interface ChatSurfaceProps {
   /** THIS conversation's AG-UI thread handle. See Thread: it never repeats. */
   threadId: string;
   ready: boolean;
+  orgStatus: OrgStatus;
   sessions: Session[];
   active: Session | undefined;
   /** A run has begun on this thread, so its agent is chosen and fixed. */
@@ -44,7 +54,7 @@ interface ChatSurfaceProps {
 // project or thread: the runtime holds the transcript, so a new conversation is
 // a new subtree rather than a reset of this one.
 function ChatSurface(props: ChatSurfaceProps) {
-  const { orgId, projectId, projects, models, model, ready, sessions, active, threadId, started } = props;
+  const { orgId, projectId, projects, models, model, ready, orgStatus, sessions, active, threadId, started } = props;
   const [runError, setRunError] = useState('');
   const runtime = useFleetAgUi({
     orgId,
@@ -103,10 +113,10 @@ function ChatSurface(props: ChatSurfaceProps) {
             <TaskStatusBar />
           </div>
 
-          {!ready ? <p className="error">This project has no agent attached yet — finish onboarding first.</p> : null}
+          {!ready ? <p className="error">{notReadyReason(orgStatus)}</p> : null}
           <ThreadView
-            welcome="Ask the agent to start working."
-            placeholder={ready ? 'Message the agent…' : 'Onboarding incomplete'}
+            welcome={ready ? 'Ask the agent to start working.' : notReadyReason(orgStatus)}
+            placeholder={ready ? 'Message the agent…' : orgStatus === 'active' ? 'Onboarding incomplete' : 'Agent calls are off'}
             sendDisabled={!ready}
             run={{ closeReason: active?.close_reason, transportError: runError }}
             onAnswerError={(message) => setRunError(message)}
@@ -244,7 +254,8 @@ export function Thread({ org }: { org: Org }) {
           model={model}
           onModel={setModel}
           threadId={threadId}
-          ready={Boolean(project?.agent_name)}
+          ready={Boolean(project?.agent_name) && org.status === 'active'}
+          orgStatus={org.status}
           sessions={sessions}
           active={active}
           started={started}

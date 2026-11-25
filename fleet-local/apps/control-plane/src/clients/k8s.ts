@@ -56,6 +56,61 @@ export async function labelResource(
   await kubectl(['label', kind, name, '-n', namespace, '--overwrite', ...pairs]);
 }
 
+// --- teardown ---
+//
+// Every delete here is written to be safe to retry, because the offboarding machine
+// resumes at the first step that did not report done — and a step that reported
+// done before the process died may still be re-run by an operator. "--gone is
+// already what we wanted" is the whole idempotency story.
+
+export async function deleteResource(kind: string, name: string, namespace?: string): Promise<void> {
+  const args = ['delete', kind, name, '--ignore-not-found=true'];
+  if (namespace) args.push('-n', namespace);
+  await kubectl(args);
+}
+
+export async function deleteAll(kind: string, namespace: string, labelSelector: string): Promise<void> {
+  await kubectl(['delete', kind, '-n', namespace, '-l', labelSelector, '--ignore-not-found=true']);
+}
+
+// True when the resource is absent. A timeout is reported as false rather than
+// thrown: a namespace stuck in Terminating is a fact the caller has to see, and
+// the machine must not wedge on it.
+export async function waitForGone(
+  kind: string,
+  name: string,
+  namespace?: string,
+  timeoutSeconds = 120,
+): Promise<boolean> {
+  const args = ['wait', '--for=delete', `${kind}/${name}`, `--timeout=${timeoutSeconds}s`];
+  if (namespace) args.push('-n', namespace);
+  try {
+    await kubectl(args);
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/^error: timed out/.test(message) || message.includes('timed out')) return false;
+    throw err;
+  }
+}
+
+// Returns false when the release was already gone, so the caller can record which
+// of the two it did. Anything else (a helm failure, not a missing release) throws.
+export async function helmUninstall(release: string, namespace: string): Promise<boolean> {
+  try {
+    await helm(['uninstall', release, '-n', namespace]);
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isMissingRelease(message)) return false;
+    throw err;
+  }
+}
+
+export function isMissingRelease(message: string): boolean {
+  return /release: not found|not found|Error: uninstall: Release not loaded/i.test(message);
+}
+
 // helm upgrade --install with --wait=false; callers poll readiness explicitly so a
 // slow tenant render never blocks the onboarding machine's retry budget. Nested
 // values go through a temp JSON file (-f), which helm accepts verbatim.
@@ -85,10 +140,13 @@ export async function helmUpgradeInstall(opts: {
 }
 
 // Current user-supplied values of a release (for read-modify-write patches such
-// as appending a substrate credentialProvider.namespacePolicy).
+// as appending a substrate credentialProvider.namespacePolicy). A release with no
+// user values prints the literal `null`, which JSON.parse hands back as null and
+// every property read then throws on — the normalisation belongs here, at the one
+// place that knows the wire format.
 export async function helmGetValues(release: string, namespace: string): Promise<Record<string, unknown>> {
   const { stdout } = await helm(['get', 'values', release, '-n', namespace, '-o', 'json']);
-  return JSON.parse(stdout || '{}') as Record<string, unknown>;
+  return (JSON.parse(stdout || '{}') ?? {}) as Record<string, unknown>;
 }
 
 export async function waitForReady(kind: string, name: string, namespace: string, timeoutSeconds = 120): Promise<void> {
