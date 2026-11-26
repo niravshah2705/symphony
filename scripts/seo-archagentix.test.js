@@ -340,6 +340,24 @@ test('platform owns its sitemap, and www never publishes it', () => {
   }
 });
 
+test('the app host never serves the www sitemap', () => {
+  const app = JSON.parse(fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8')).hosting
+    .find((site) => site.target === 'app');
+
+  // public/sitemap.xml is the generator source for www, so it lives in git beside the
+  // app tree; uploading it would publish www urls from the platform host, and a sitemap
+  // may only list urls for the host that serves it.
+  assert.ok(app.ignore.includes('sitemap.xml'), 'the www sitemap must not be uploaded to the app host');
+
+  // A crawler that already queued the old path must get valid same-host xml, not the
+  // SPA shell that the catch-all would otherwise answer with.
+  const catchAll = app.rewrites.findIndex((rule) => rule.source === '**');
+  const mapped = app.rewrites.findIndex((rule) => rule.source === '/sitemap.xml');
+  assert.ok(mapped !== -1 && catchAll !== -1 && mapped < catchAll, 'the first rewrite must precede the catch-all');
+  assert.equal(app.rewrites[mapped].destination, '/sitemap-platform.xml');
+  assert.ok(fs.existsSync(path.join(PUBLIC, 'sitemap-platform.xml')), 'the rewrite must target a real file');
+});
+
 test('robots.txt advertises a sitemap for each host', () => {
   const robots = read('robots.txt');
   assert.match(robots, new RegExp(`Sitemap: ${PLATFORM_URL.replace(/[/.]/g, '\\$&')}sitemap-platform\\.xml`));
