@@ -5,6 +5,16 @@ import { assertMember } from '../db/users.ts';
 import { findProjectById } from '../db/projects.ts';
 import { getSession, settleTurn } from '../db/sessions.ts';
 import { a2aHeaders, agentCard, makeTraceparent } from '../kagent/a2a.ts';
+import type { ModelCatalogEntry } from '@fleet-local/shared';
+
+// The picker's rows. An experimental entry is rendered in the tenant but not
+// offered: selecting it would fail the turn instead of degrading the others, and
+// the runtime is deliberately never sent to the browser.
+export function chatModels(catalog: readonly ModelCatalogEntry[]) {
+  return catalog
+    .filter((m) => !m.experimental)
+    .map((m) => ({ id: m.id, label: m.label, model: m.model, default: m.default === true }));
+}
 
 export async function chatRoutes(app: FastifyInstance): Promise<void> {
   // P6: the model picker's source of truth (catalog; BFF restarts on FLEET_MODELS).
@@ -13,9 +23,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     await assertMember(orgId, request.fleetUser!.id);
     const project = await findProjectById(projectId);
     if (!project || project.org_id !== orgId) return reply.code(404).send({ error: 'project not found' });
-    return {
-      models: config.modelCatalog.map((m) => ({ id: m.id, label: m.label, model: m.model, default: m.default === true })),
-    };
+    return { models: chatModels(config.modelCatalog) };
   });
 
   app.get('/api/orgs/:orgId/projects/:projectId/agent-card', { preHandler: requireAuth }, async (request, reply) => {

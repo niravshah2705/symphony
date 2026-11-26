@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runOnboarding, idempotencyKey, type StepExecutor } from '../src/onboarding/machine.ts';
-import { ONBOARDING_STEPS, type OnboardingStepId, type StepState } from '@fleet-local/shared';
+import { ONBOARDING_STEPS, type ModelCatalogEntry, type OnboardingStepId, type StepState } from '@fleet-local/shared';
+import { readyAgentNames } from '../src/onboarding/steps/agent.ts';
+import { chatModels } from '../src/routes/chat.ts';
 
 const ctx = {
   orgId: 'org-uuid',
@@ -140,8 +142,7 @@ test('resume retries a previously failed step with a fresh attempt budget', asyn
   assert.equal(states.org?.attempt, 1);
 });
 
-test('an independent step still runs when a sibling fails', async () => {
-  const executors = {
+test('an independent step still runs when a sibling fails', async () => {  const executors = {
     ...ok,
     namespace: async () => {
       throw new Error('ns boom');
@@ -160,4 +161,26 @@ test('an independent step still runs when a sibling fails', async () => {
   assert.equal(states.workflow, undefined);
   assert.equal(states.agent, undefined);
   assert.equal(states.attach, undefined);
+});
+
+// The qoder agent is rendered but unproven, so neither the wait nor the picker
+// may touch it: an entry with experimental: true is skipped by the agent step and
+// hidden from /models. Both helpers are the pure predicate the step/route loop.
+const gatingCatalog: ModelCatalogEntry[] = [
+  { id: 'mock', label: 'Mock GPT (offline)', model: 'mock-gpt', default: true },
+  { id: 'qoder', label: 'Qoder', model: 'openrouter/qwen/qwen3.8-flash', runtime: 'qoder', experimental: true },
+];
+
+test('the agent step waits only for non-experimental agents', () => {
+  assert.deepEqual(readyAgentNames('demo', gatingCatalog), ['demo-agent-mock-worker']);
+  assert.deepEqual(readyAgentNames('demo', gatingCatalog.map((m) => ({ ...m, experimental: false }))), [
+    'demo-agent-mock-worker',
+    'demo-agent-qoder-worker',
+  ]);
+});
+
+test('the chat picker hides experimental models and sends no runtime', () => {
+  const rows = chatModels(gatingCatalog);
+  assert.deepEqual(rows, [{ id: 'mock', label: 'Mock GPT (offline)', model: 'mock-gpt', default: true }]);
+  assert.equal('runtime' in (rows[0] as object), false);
 });

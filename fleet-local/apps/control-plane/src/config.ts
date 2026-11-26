@@ -2,7 +2,7 @@
 // k8s Secrets in deploy/bff); nothing secret is baked into the repo. Defaults
 // point at the in-cluster service DNS of the kind cluster `flexprice-local`.
 
-import { parseModelCatalog } from '@fleet-local/shared';
+import { DIGEST_PIN, parseModelCatalog, withQoderCatalog } from '@fleet-local/shared';
 
 function req(name: string): string {
   const v = process.env[name];
@@ -12,6 +12,15 @@ function req(name: string): string {
 
 function opt(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
+}
+
+// Qoder runtime. Empty image ⇒ no qoder harness/agent is rendered anywhere, so
+// a deployment without the digest-pinned image cannot produce a dead agent. The
+// CRD rejects a tag with a worse error, after onboarding has mutated the tenant,
+// so validate the pin here.
+const qoderRuntimeImage = opt('QODER_RUNTIME_IMAGE', '');
+if (qoderRuntimeImage && !DIGEST_PIN.test(qoderRuntimeImage)) {
+  throw new Error('QODER_RUNTIME_IMAGE must be pinned by @sha256 digest — the kagent Harness CRD rejects tags');
 }
 
 export const config = {
@@ -71,7 +80,13 @@ export const config = {
   budgetDuration: opt('DEFAULT_BUDGET_DURATION', '30d'),
   sweeperIntervalSeconds: Number(opt('SWEEPER_INTERVAL_SECONDS', '60')),
   // P6 model catalog (id/label/litellm model per chat-selectable model).
-  modelCatalog: parseModelCatalog(process.env.FLEET_MODELS),
+  // Qoder appends itself only when its runtime image is configured.
+  qoderRuntimeImage,
+  qoderAdapterCommand: opt('QODER_ADAPTER_COMMAND', '/usr/local/bin/qoder-runtime'),
+  // Env name the tenant Secret carries the LiteLLM virtual key under, for the
+  // qoder BYOK provider. It is a name we author, not a qodercli built-in.
+  qoderApiKeyEnv: opt('QODER_API_KEY_ENV', 'QODER_API_KEY'),
+  modelCatalog: withQoderCatalog(parseModelCatalog(process.env.FLEET_MODELS), qoderRuntimeImage),
 } as const;
 
 export type Config = typeof config;

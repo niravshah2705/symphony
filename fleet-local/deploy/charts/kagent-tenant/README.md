@@ -68,6 +68,12 @@ cleanly and then never reconcile:
 - `harnesses[].type` must be one of `kagent|codex|claude|byo` (the CRD enforces
   `ExactlyOneOf`), `byo` requires both a digest-pinned `image` and a `command`,
   and `codex`/`claude` reject `command`/`args`.
+- A `byo` Harness may not put a credential name (`QODER_API_KEY`,
+  `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CODEX_API_KEY`, `LITELLM_API_KEY`) in
+  `env`: `spec.env` has no `valueFrom`, so the value would be plaintext in the
+  release, visible to `helm get values` and every Actor snapshot. Reference the
+  Secret from `models[].apiKeySecret` / `apiKeySecretKey` instead;
+  `allowLiteralKey: true` acknowledges the plaintext deliberately.
 - Every entry needs a `name`, and names must be unique within a list — two
   entries sharing one would render one object and silently drop the other.
 - `templates[].modelConfig`, `agents[].template` and `agents[].harness` must name

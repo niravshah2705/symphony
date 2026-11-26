@@ -58,7 +58,10 @@ models:
     # API default is chatCompletions. The codex runtime requires "responses".
     apiFormat: responses
     stream: true
-    # Per-model overrides of the litellm block; empty inherits it.
+    # Per-model overrides of the litellm block; empty inherits it. A runtime that
+    # reads its credential under its own env name — the qoder BYO harness uses
+    # QODER_API_KEY — sets apiKeySecret + apiKeySecretKey here rather than
+    # repeating the Secret.
     baseUrl: ""
     apiKeySecret: ""
     apiKeySecretKey: ""
@@ -74,7 +77,8 @@ harnesses:
     # must be digest-pinned (the CRD pattern is
     # `^[^[:space:]@]+@sha256:[a-f0-9]{64}$`). Empty uses the release default.
     # command and args are accepted by kagent and byo only, and byo requires
-    # both image and command.
+    # both image and command — with a digest, validated here because the CRD
+    # rejects the whole Harness with a message that does not name the field.
     image: ""
     command: []
     args: []
@@ -89,7 +93,13 @@ harnesses:
     # The fleet uses this to turn on W3C propagation inside the actor so the
     # caller's baggage (fleet_org_id/fleet_project_id/fleet_user_id) reaches
     # LiteLLM: OTEL_PROPAGATORS=tracecontext,baggage plus an OTLP endpoint.
+    # spec.env has no valueFrom, so every value here is plaintext in the release:
+    # a byo Harness may not set a known credential name (QODER_API_KEY,
+    # ANTHROPIC_API_KEY, OPENAI_API_KEY, CODEX_API_KEY, LITELLM_API_KEY) unless it
+    # also sets allowLiteralKey: true, which acknowledges the plaintext.
     env: []
+    # byo only, and only to opt in to the credential-env exception above.
+    allowLiteralKey: false
 
 # RemoteMCPServer objects: MCP servers the templates may bind. `name` is
 # suffixed onto <tenant.id>-mcp- and referenced from templates[].mcp below.

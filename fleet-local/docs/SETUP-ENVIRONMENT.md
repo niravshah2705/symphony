@@ -75,11 +75,25 @@ Entries may set `"runtime":"codex"` (P8): the agent compiles on the kagent `code
 forced to `apiFormat: responses` and `defaultHeaders` dropped (codex rejects them); the key is
 likewise egress-injected. New harness + provider block render automatically via `FLEET_MODELS` —
 no code change to add another entry.
+Entries may set `"runtime":"qoder"`: there is no kagent `qoder` runtime, so the agent compiles on a
+kagent **`byo`** Harness — `workload.image` = `QODER_RUNTIME_IMAGE` (**must** be `@sha256`-pinned; the
+CRD rejects a tag and `src/config.ts` refuses to boot on one) and `workload.command` = the image
+ENTRYPOINT. Its ModelConfig stays on the OpenAI wire and reads the tenant key from the same Secret
+under **`QODER_API_KEY`** (`apiKeySecretKey`; the key step writes `key` and `QODER_API_KEY` with one
+value), because `Harness.spec.env` has no `valueFrom` and a credential there would be plaintext in the
+release. `QODER_SDK_CUSTOM_BASE_URL_BYOK=1` is set in Harness env to unlock qodercli's custom-provider
+path; the account's `allow_byok` switch is outside this repo. The entry ships as
+`"experimental": true`: onboarding renders it but does not wait for it, and `/models` hides it, until a
+canary turn proves it.
 
 **Existing tenants do not pick a catalog change up by themselves** — run
 `scripts/fixes/t26-tenant-model-catalog.sh` (idempotent; team/key model list +
 helm upgrade + wait Ready + `projects.agent_name` → default worker). T-15 item 27
-records the API/shell traps it navigates.
+records the API/shell traps it navigates. For a **single** new runtime, use
+`scripts/fixes/t32-qoder-harness.sh` instead: it merges the qoder harness/model/template/agent into
+`helm get values` rather than mirroring `FLEET_MODELS`, so values a release carries that no code renders
+(org-test's probe harness `custom-claude`) survive. `ORG_FILTER=<slug>` runs one tenant; it patches the
+Secret key, pre-flights with `helm template`, and reports — never fails on — the new Agent's conditions.
 
 ## Headless wake probe (step 11, no browser)
 

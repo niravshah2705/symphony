@@ -15,7 +15,15 @@ export const attachStep: StepExecutor = async (ctx) => {
   const name = modelAgentName(ctx.orgSlug, def.id);
   await attachAgent(projectId, name, ns);
   for (const m of config.modelCatalog) {
-    await labelResource('agents.api.kagent.dev', modelAgentName(ctx.orgSlug, m.id), ns, { 'fleet.local/project-id': projectId });
+    const name = modelAgentName(ctx.orgSlug, m.id);
+    try {
+      await labelResource('agents.api.kagent.dev', name, ns, { 'fleet.local/project-id': projectId });
+    } catch (err) {
+      // An experimental agent may legitimately be absent (its objects are skipped
+      // when no runtime image is configured); the project binding above is what
+      // chat needs, so a missing label here is not a failed onboarding.
+      if (!/not found/i.test(String(err))) throw err;
+    }
   }
   return { projectId, agentName: name, namespace: ns };
 };
