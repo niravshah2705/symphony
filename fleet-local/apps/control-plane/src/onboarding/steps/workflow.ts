@@ -86,6 +86,10 @@ export const workflowStep: StepExecutor = async (ctx) => {
       ...(hasClaude ? [{ name: 'claude', type: 'claude', image: CLAUDE_HARNESS_IMAGE, env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }] : []),
       // Empty image = the codex-harness shipped with the installed kagent release.
       ...(hasCodex ? [{ name: 'codex', type: 'codex', env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] }] : []),
+      // custom-claude: the claude adapter on the fleet-published claude-runtime
+      // image (config.CUSTOM_CLAUDE_IMAGE), rendered in every tenant namespace as
+      // <tenant>-harness-custom-claude so an Agent can harnessRef it locally.
+      { name: 'custom-claude', type: 'claude', image: config.customClaudeImage, env: [...OTEL_ENV, fleetOrgAttr(ctx.orgId)] },
     ],
     mcp: [WEBFETCH_MCP],
     templates: catalog.map((m) => ({

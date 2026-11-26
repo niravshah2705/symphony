@@ -59,6 +59,13 @@ export const config = {
   workerImage: opt('WORKER_IMAGE', 'ghcr.io/kagent-dev/substrate/ateworker-gvisor:v1.0.0'),
   snapshotRoot: opt('SNAPSHOT_ROOT', 's3://ate-snapshots'),
   tenantChartPath: opt('TENANT_CHART_PATH', '/charts/kagent-tenant'),
+  // The `custom-claude` Harness runs the claude adapter on a fleet-published
+  // claude-runtime image instead of the release-bundled one. Pinned by @sha256
+  // digest: the Harness CRD rejects tag references (see kagent-tenant validation).
+  customClaudeImage: opt(
+    'CUSTOM_CLAUDE_IMAGE',
+    'ghcr.io/niravshah2705/symphony/claude-runtime@sha256:d88bbb3b8c823df38b31aebddd1b25469be3db9f43f9e3793aba08efdd27cf45',
+  ),
   defaultOrgBudgetUsd: Number(opt('DEFAULT_ORG_BUDGET_USD', '50')),
   defaultProjectBudgetUsd: Number(opt('DEFAULT_PROJECT_BUDGET_USD', '20')),
   budgetDuration: opt('DEFAULT_BUDGET_DURATION', '30d'),
