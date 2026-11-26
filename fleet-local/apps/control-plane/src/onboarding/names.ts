@@ -7,6 +7,10 @@ export const tenantId = (orgSlug: string) => orgSlug;
 export const helmRelease = (orgSlug: string) => `${orgSlug}-kagent-tenant`;
 export const litellmSecretName = (orgSlug: string, projectSlug: string) => `litellm-${orgSlug}-${projectSlug}`;
 export const litellmSecretKey = 'key';
+// The same virtual key, under the env name the qoder BYOK provider declares.
+// A Secret written before Qoder existed is healed by the key step (names only
+// live here; the value never leaves the Secret).
+export const qoderSecretKey = 'QODER_API_KEY';
 export const keyAlias = (orgId: string, projectId: string) => `fleet:${orgId}:${projectId}`;
 
 // The chart renders <tenant.id>-agent-<name>; P6 renders one agent per catalog

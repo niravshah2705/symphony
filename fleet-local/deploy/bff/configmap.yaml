@@ -19,9 +19,12 @@ data:
   DEFAULT_BUDGET_DURATION: 30d
   SWEEPER_INTERVAL_SECONDS: "60"
   # P6 chat model catalog (id = k8s name fragment + sessions.model; model = the
-  # LiteLLM model_name the tenant ModelConfig calls). First default:true entry
+  # LiteLLM model name the tenant ModelConfig calls). First default:true entry
   # is the wizard's attached agent. openrouter/* ids rely on the passthrough
   # model in litellm values-base + the wildcard in team/key model lists.
+  # The qoder row is experimental:true: its agent is rendered but not waited on
+  # during onboarding and is hidden from the chat picker until the BYO canary
+  # passes (fleet-local/scripts/fixes/t32-qoder-harness.sh).
   FLEET_MODELS: >-
     [{"id":"mock","label":"Mock GPT (offline)","model":"mock-gpt","default":true},
      {"id":"claude","label":"Claude Sonnet 4","model":"claude-sonnet-4"},
@@ -30,4 +33,18 @@ data:
      {"id":"nemotron-claude","label":"Nemotron 550B (Claude Code runtime)",
       "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free","runtime":"claude"},
      {"id":"nemotron-codex","label":"Nemotron 550B (Codex runtime)",
-      "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free","runtime":"codex"}]
+      "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free","runtime":"codex"},
+     {"id":"qoder","label":"Qwen3.8 Flash (Qoder runtime)",
+      "model":"openrouter/qwen/qwen3.8-flash","runtime":"qoder","experimental":true}]
+  # Qoder BYO harness image. Empty = no qoder objects are rendered for anyone.
+  # It MUST be a @sha256 digest: the Harness CRD pattern rejects a tag, and
+  # config.ts refuses to boot on one. Set it to the digest that
+  # .github/workflows/build-runtime-images.yml publishes for
+  # ghcr.io/niravshah2705/symphony/qoder-runtime AFTER the ADK-boot fix
+  # (go/harness/qoder/config.Load) has landed — the pre-fix build cannot start
+  # under a BYO bundle. Then re-run scripts/fixes/t32-qoder-harness.sh.
+  QODER_RUNTIME_IMAGE: ""
+  # The image ENTRYPOINT, and the env name the tenant Secret carries the
+  # LiteLLM virtual key under for the qoder BYOK provider.
+  QODER_ADAPTER_COMMAND: /usr/local/bin/qoder-runtime
+  QODER_API_KEY_ENV: QODER_API_KEY

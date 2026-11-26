@@ -46,7 +46,7 @@ export const MODELS = {
 
 // P6: the chat model is configuration. FLEET_MODELS (BFF configmap) holds a JSON
 // array of these entries; MODELS remains the fallback for the two originals.
-export type HarnessRuntime = 'kagent' | 'claude' | 'codex';
+export type HarnessRuntime = 'kagent' | 'claude' | 'codex' | 'qoder';
 
 export interface ModelCatalogEntry {
   id: string;
@@ -57,8 +57,13 @@ export interface ModelCatalogEntry {
   // Anthropic-provider ModelConfig (egress-injected x-api-key) on the
   // claude-harness image; 'codex' stays on the OpenAI provider but requires
   // apiFormat responses and rejects defaultHeaders; 'kagent' (default) keeps
-  // the OpenAI wire + headers.
+  // the OpenAI wire + headers. 'qoder' compiles a kagent `byo` Harness running
+  // the published qoder-runtime image, with the LiteLLM key read from the
+  // tenant Secret under QODER_API_KEY.
   runtime?: HarnessRuntime;
+  // An experimental entry is rendered for the tenant but is never waited on
+  // during onboarding and is hidden from the chat picker until it is proven.
+  experimental?: boolean;
 }
 
 export const DEFAULT_MODEL_CATALOG: readonly ModelCatalogEntry[] = [
@@ -92,12 +97,38 @@ export function parseModelCatalog(json: string | undefined): ModelCatalogEntry[]
     if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(m.id ?? '') || !m.model || !m.label) {
       throw new Error(`FLEET_MODELS entry invalid: ${JSON.stringify(m)}`);
     }
-    if (m.runtime !== undefined && m.runtime !== 'kagent' && m.runtime !== 'claude' && m.runtime !== 'codex') {
-      throw new Error(`FLEET_MODELS entry runtime must be kagent|claude|codex: ${JSON.stringify(m)}`);
+    if (m.runtime !== undefined && m.runtime !== 'kagent' && m.runtime !== 'claude' && m.runtime !== 'codex' && m.runtime !== 'qoder') {
+      throw new Error(`FLEET_MODELS entry runtime must be kagent|claude|codex|qoder: ${JSON.stringify(m)}`);
+    }
+    if (m.experimental !== undefined && typeof m.experimental !== 'boolean') {
+      throw new Error(`FLEET_MODELS entry experimental must be a boolean: ${JSON.stringify(m)}`);
     }
   }
   if (!out.some((m) => m.default)) out[0] = { ...out[0]!, default: true };
   return out;
+}
+
+// The Qoder entry is opt-in: it is only appended to the catalog when the BFF is
+// configured with a digest-pinned qoder-runtime image (config.qoderRuntimeImage),
+// so a deployment without the image never renders a dead agent.
+export const QODER_CATALOG_ENTRY: ModelCatalogEntry = {
+  id: 'qoder',
+  label: 'Qwen3.8 Flash (Qoder runtime)',
+  model: 'openrouter/qwen/qwen3.8-flash',
+  runtime: 'qoder',
+  experimental: true,
+};
+
+// DigestPin is what the kagent Harness CRD demands of workload.image: a tag is
+// rejected at apply time, after onboarding has already mutated the tenant.
+export const DIGEST_PIN = /@sha256:[a-f0-9]{64}$/;
+
+// withQoderCatalog appends the Qoder entry only when the deployment has a
+// qoder-runtime image to render. An explicit runtime:'qoder' row in
+// FLEET_MODELS wins, so an operator can override the label/model/policy.
+export function withQoderCatalog(catalog: ModelCatalogEntry[], image: string): ModelCatalogEntry[] {
+  if (!image || catalog.some((m) => m.runtime === 'qoder')) return catalog;
+  return [...catalog, { ...QODER_CATALOG_ENTRY }];
 }
 
 export function encodeBaggage(entries: Record<string, string | undefined>): string {
