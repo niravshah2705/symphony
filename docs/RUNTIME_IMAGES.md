@@ -22,6 +22,14 @@ intentional. Integrating them behind `substratePlannerImage` /
 > translator, and their drivers are bounded stdout→TextDelta passthroughs. So the images build and run
 > standalone, but the fleet cannot dispatch a turn to them through kagent yet. `qoder` additionally fails
 > closed under the egress proxy (see `docs/HARNESS_CAPABILITY_MATRIX.md`).
+>
+> **One of them has a generic door.** `qoder-runtime` reads either configuration author: the compiler's
+> strict document, or the ADK document a kagent `byo` Harness hands an unmanaged runtime
+> (`harness/qoder/config.Load`). So it can be mounted in-cluster as a `byo` Harness with
+> `workload.image` + `workload.command`, without waiting for a `spec.qoder` CRD key or a controller
+> translator. On that path `strict_version` is off — a BYO bundle cannot assert the image's CLI pin — and
+> no translator exists, so nothing validates the Agent↔Harness wiring for it. `fleet-local` renders it
+> that way (catalog runtime `qoder`).
 
 ## Layout
 

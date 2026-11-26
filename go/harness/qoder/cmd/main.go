@@ -1,5 +1,8 @@
 // Command qoder-runtime runs the Qoder Harness runtime adapter.
-// EXPERIMENTAL SCAFFOLD — not published to runtime-images.csv; no controller translator.
+// EXPERIMENTAL SCAFFOLD — no upstream kagent `spec.qoder` key or controller
+// translator, so in-cluster it runs as a kagent `byo` Harness: the bootstrap
+// config is then the ADK document, which config.Load accepts alongside the
+// compiler's own strict shape.
 package main
 
 import (
@@ -55,7 +58,7 @@ func run(ctx context.Context, check bool, getenv func(string) string, environmen
 	if card.Name == "" {
 		return fmt.Errorf("agent card name is required")
 	}
-	cfg, err := config.Parse(configJSON)
+	cfg, configSource, err := config.Load(configJSON)
 	if err != nil {
 		return err
 	}
@@ -65,6 +68,7 @@ func run(ctx context.Context, check bool, getenv func(string) string, environmen
 		return err
 	}
 	ctx = logging.IntoContext(ctx, logger)
+	logger.InfoContext(ctx, "loaded harness configuration", "source", configSource)
 	providers, err := telemetry.Init(ctx, telemetry.Options{
 		Config:       cfg.RuntimeTelemetry.ExporterConfig(),
 		Identity:     cfg.RuntimeTelemetry.ResourceIdentity(),
