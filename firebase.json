@@ -6,8 +6,9 @@
     {
       "target": "app",
       "public": "public",
-      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "sitemap.xml"],
       "rewrites": [
+        { "source": "/sitemap.xml", "destination": "/sitemap-platform.xml" },
         { "source": "**", "destination": "/index.html" }
       ],
       "headers": [
