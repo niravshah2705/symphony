@@ -25,7 +25,7 @@ type Input struct {
 // New validates the configuration, materializes Qoder-owned state, and
 // constructs its driver.
 func New(_ context.Context, input Input) (*driver.Driver, error) {
-	cfg, err := config.Parse(input.ConfigJSON)
+	cfg, _, err := config.Load(input.ConfigJSON)
 	if err != nil {
 		return nil, err
 	}

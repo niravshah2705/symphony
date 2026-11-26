@@ -50,7 +50,7 @@ func New(ctx context.Context, cfg Config) (a2asrv.AgentExecutor, io.Closer, erro
 		_ = runner.Close()
 		return nil, nil, err
 	}
-	parsed, err := config.Parse(cfg.ConfigJSON)
+	parsed, _, err := config.Load(cfg.ConfigJSON)
 	if err != nil {
 		_ = runner.Close()
 		return nil, nil, err

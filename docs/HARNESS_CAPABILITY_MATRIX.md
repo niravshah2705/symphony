@@ -71,6 +71,12 @@ Notes:
 - Every `❓` for the 6 new runtimes means: the scaffold's driver maps **stdout text only** and does
   **not** claim a tool/subagent/MCP event contract. That is a deliberate honesty stance — the real
   event protocol must be confirmed per CLI before any of these cells become `✅`/`⛔`.
+- `qoder` is the one scaffold with a generic in-cluster door: its image accepts the
+  ADK bootstrap document a kagent **`byo`** Harness hands it, so it needs no
+  `spec.qoder` CRD key — see `docs/RUNTIME_IMAGES.md` and
+  `fleet-local/apps/control-plane/src/onboarding/tenant-values.ts`. The cell above stays
+  `⛔` until a rebuilt image is canaried in a tenant, because the published build still
+  exits on an ADK bundle.
 - The `Subagents` `◑` cells are load-bearing for the pack track, not cosmetic:
   [`egm`](../deploy/kagent/egm) is the first pack whose core workflow *is* a
   fresh-eyes child session (`agents/comprehension.md` etc. mounted at the plugin
