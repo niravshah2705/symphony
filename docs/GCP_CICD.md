@@ -30,8 +30,9 @@ llms.txt,llms-full.txt}`, `scripts/build-marketing-site.js`, `firebase.json`,
 `.firebaserc`, and itself). It regenerates the ADLC runtime config, **builds the
 `marketing/` tree** (`node scripts/build-marketing-site.js` promotes
 `public/adlc/**` to the site root, copies the company pages and discovery files,
-and rewrites `sitemap.xml` for the new URL scheme), then publishes it to the
-second Hosting site `adlc-9e72f-marketing`
+rewrites `sitemap.xml` for the new URL scheme, and injects the GA4 gtag snippet
+when the `GOOGLE_ANALYTICS_MEASUREMENT_ID` repo variable is set), then publishes
+it to the second Hosting site `adlc-9e72f-marketing`
 (`firebase deploy --only hosting:www`). `marketing/` is a gitignored artifact —
 never edit it by hand; change `public/adlc/**` and let the build re-promote it.
 The old `www` URLs under `/adlc/` are rewrite sources on that target only (one
@@ -235,11 +236,12 @@ gh variable set TF_STATE_BUCKET  --repo niravshah2705/symphony --body "adlc-9e72
 # gh variable set EMAIL_PUBLIC_APP_URL --repo niravshah2705/symphony --body "https://adlc-9e72f.web.app"
 ```
 
-`deploy-spa` validates that optional Analytics variable, writes it to the
-no-store `config.js`, and leaves collection disabled when the variable is absent.
-A repo-variable-only change does not satisfy the path filter, so manually run the
-workflow with `deploy_all=true` after adding, rotating, or removing the
-measurement ID.
+Both SPA and marketing deploys validate that optional Analytics variable:
+`deploy-spa` writes it to the no-store `config.js` and `deploy-www` forwards it to
+the marketing generator (empty/unset leaves both trees analytics-free). A
+repo-variable-only change does not satisfy either workflow's path filter, so after
+adding, rotating, or removing the measurement ID manually run `deploy.yml` with
+`deploy_all=true` and `gh workflow run deploy-www.yml`.
 See [Google Analytics](GOOGLE_ANALYTICS.md) for the GA4 stream settings and
 verification steps.
 

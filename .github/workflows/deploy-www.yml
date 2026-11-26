@@ -68,6 +68,9 @@ jobs:
       # marketing tree; regenerated per release from repo variables, then promoted
       # by the build step below. The SPA runtime config (public/config.js with the
       # gateway origin) belongs to the app site, so this job no longer writes it.
+      # The same step also injects the per-page GA4 gtag snippet into marketing/
+      # from GOOGLE_ANALYTICS_MEASUREMENT_ID (empty = no tag; validation and the
+      # id format gate live in scripts/build-marketing-site.js).
       - name: Generate the ADLC runtime config
         env:
           ADLC_TRY_NOW_URL: ${{ vars.ADLC_TRY_NOW_URL || 'https://platform.archagentix.com/' }}
@@ -77,7 +80,11 @@ jobs:
 
       # marketing/ is a build artifact: it promotes public/adlc/** to the site root,
       # copies the company pages, and rewrites the sitemap for the new url scheme.
+      # GA4: the public web-stream id from the same repo variable the SPA deploy
+      # uses; unset keeps the published tree analytics-free.
       - name: Build the marketing tree
+        env:
+          GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ vars.GOOGLE_ANALYTICS_MEASUREMENT_ID }}
         run: node scripts/build-marketing-site.js
 
       - name: Publish www to Firebase Hosting

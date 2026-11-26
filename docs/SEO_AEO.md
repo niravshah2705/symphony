@@ -189,10 +189,12 @@ Two consequences of moving the marketing site to the root, both intentional:
 - The www root no longer serves the workspace shell, so `#/privacy` / `#/terms`
   hash routes are rewritten to `https://platform.archagentix.com/#/…` in the
   generated tree (the SPA that implements them lives on the app host).
-- Google Analytics is injected by the SPA (`public/js/google-analytics.mjs` via
-  `public/config.js`), so the static marketing pages on www carry no GA tag. The
-  platform host keeps reporting as before. Add a per-page `gtag` snippet to the
-  generator if www traffic must be measured too.
+- Google Analytics is injected by the SPA on the platform host
+  (`public/js/google-analytics.mjs` via `public/config.js`), and the marketing
+  generator injects a per-page `gtag` snippet into every `www` page from the
+  same `GOOGLE_ANALYTICS_MEASUREMENT_ID` repo variable (empty = no tag), so
+  pre-signup traffic on www joins the same GA4 stream. See
+  `docs/GOOGLE_ANALYTICS.md`.
 
 `platform.archagentix.com` keeps serving the application and the `/adlc/` copy of
 every page; each of those **copies** declares the `www.archagentix.com` canonical
@@ -373,7 +375,7 @@ in `the sign-in flow can frame the auth handler and load the GIS stylesheet`.
 
 | Target | Host | `script-src` | Why |
 |---|---|---|---|
-| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. No sign-in, so no Google code. |
+| `www` | www.archagentix.com | `'self' 'unsafe-inline' https://unpkg.com https://www.googletagmanager.com` | Landing page has inline `<script>` blocks and xterm is loaded from unpkg. No sign-in; the GA4 tag arrives at build time (`scripts/build-marketing-site.js` injects the gtag snippet, so `connect-src`/`img-src` also allow the collect hosts). |
 | `app` | platform.archagentix.com | adds `https://accounts.google.com`, `https://apis.google.com`, `https://www.googletagmanager.com`, `https://sdk.cashfree.com`, `https://checkout.razorpay.com` | Google One Tap, the gapi bundle Firebase auth loads, GA4, and the two payment SDKs — all injected by JS (`public/js/auth.js`, `public/js/recharge.js`), so no markup scan would have found them. |
 | `secrets` | secrets.archagentix.com | `'self' https://apis.google.com`, in the header *and* the meta | Serves only local code plus the gapi bundle its vendored `firebase-auth-compat.js` loads for `signInWithPopup`. Still no `'unsafe-inline'`: verified to contain no inline `<script>`. |
 

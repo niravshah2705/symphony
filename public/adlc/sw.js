@@ -1,4 +1,4 @@
-const CACHE_NAME = 'adlc-landing-v2';
+const CACHE_NAME = 'adlc-landing-v3';
 const ASSETS = [
   '/adlc/',
   '/adlc/index.html',
