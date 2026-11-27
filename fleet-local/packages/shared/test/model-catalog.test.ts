@@ -41,7 +41,9 @@ test('the shipped catalog does not carry qoder by default', () => {
     false,
   );
   assert.equal(QODER_CATALOG_ENTRY.runtime, 'qoder');
-  assert.equal(QODER_CATALOG_ENTRY.experimental, true);
+  // Not experimental: the BYO canary passed, so the row is offered in the chat picker
+  // and a new tenant's onboarding waits on its agent like every other runtime.
+  assert.equal(QODER_CATALOG_ENTRY.experimental, undefined);
 });
 
 test('withQoderCatalog appends only when an image is configured', () => {

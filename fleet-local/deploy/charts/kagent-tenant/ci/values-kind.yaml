@@ -33,3 +33,17 @@ agents:
   - name: assistant
     template: assistant
     harness: app
+    # The model that leaves LiteLLM needs its origin granted explicitly, and an
+    # unbound egress entry is itself a render failure — a policy nothing references
+    # is an unexamined credential grant sitting in the namespace.
+    egress:
+      - openrouter
+
+egress:
+  - name: openrouter
+    destinations:
+      - origin: https://openrouter.ai
+        authentication:
+          header: authorization
+          prefix: "Bearer "
+          secretRef: { name: kagent-openrouter, key: OPENROUTER_API_KEY }

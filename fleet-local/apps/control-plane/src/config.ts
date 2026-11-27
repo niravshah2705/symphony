@@ -14,6 +14,13 @@ function opt(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
+function splitList(value: string): string[] {
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s !== '');
+}
+
 // Qoder runtime. Empty image ⇒ no qoder harness/agent is rendered anywhere, so
 // a deployment without the digest-pinned image cannot produce a dead agent. The
 // CRD rejects a tag with a worse error, after onboarding has mutated the tenant,
@@ -83,9 +90,37 @@ export const config = {
   // Qoder appends itself only when its runtime image is configured.
   qoderRuntimeImage,
   qoderAdapterCommand: opt('QODER_ADAPTER_COMMAND', '/usr/local/bin/qoder-runtime'),
-  // Env name the tenant Secret carries the LiteLLM virtual key under, for the
-  // qoder BYOK provider. It is a name we author, not a qodercli built-in.
+  // Env name (and tenant Secret key) carrying the org's Qoder token, which the
+  // EgressPolicy substitutes into the Authorization header on each call. It is a
+  // name we author, not a qodercli built-in; it is NOT the LiteLLM virtual key.
+  // Under the job-token design below it holds the DERIVED `jt-...` token.
   qoderApiKeyEnv: opt('QODER_API_KEY_ENV', 'QODER_API_KEY'),
+  // Qoder authenticates a request two ways at once, and only one of them is a
+  // header. The personal access token (`pt-...`) travels in the JSON *body* of
+  // POST /api/v1/jobToken/exchange; the returned job token (`jt-...`, 24h) travels
+  // as `Authorization: Bearer jt-...`. kagent substitutes headers only, so the
+  // exchange runs here — outside the Actor — and the tenant Secret carries the
+  // derived token. Verified against the pinned 1.1.92 bundle: with
+  // QODER_JOB_TOKEN set to an inert placeholder and the gateway swapping in a real
+  // jt, a model turn completes; with a bogus jt, /api/v1/userinfo returns
+  // TOKEN_EXPIRE and the turn aborts.
+  qoderPatSecretKey: opt('QODER_PAT_SECRET_KEY', 'QODER_PAT'),
+  qoderRefreshSecretKey: opt('QODER_REFRESH_SECRET_KEY', 'QODER_REFRESH_TOKEN'),
+  // Where the exchange lives, and the origins that carry a `Bearer jt-...`: the API
+  // host (userinfo) plus the control host (region/endpoint election, metrics).
+  qoderAuthBaseUrl: opt('QODER_AUTH_BASE_URL', 'https://openapi.qoder.sh'),
+  qoderBearerOrigins: splitList(
+    opt('QODER_BEARER_ORIGINS', 'https://openapi.qoder.sh,https://center.qoder.sh'),
+  ),
+  // The model host the CLI elects at runtime (api1|api2|api3.qoder.sh) authenticates
+  // with a locally-built `Bearer COSY.<envelope>` derived from the userinfo the
+  // substituted jt returns, so it needs a plain network grant, never a credential.
+  qoderGrantOrigins: splitList(opt('QODER_GRANT_ORIGINS', 'https://*.qoder.sh,https://*.qoder.com')),
+  qoderModelBaseUrl: opt('QODER_MODEL_BASE_URL', 'https://api.qoder.sh'),
+  // Rotate the jt inside its last skew window so a turn never starts on an
+  // expired token; the interval only has to be well under the 24h lifetime.
+  qoderTokenSkewSeconds: Number(opt('QODER_TOKEN_SKEW_SECONDS', '21600')),
+  qoderTokenIntervalSeconds: Number(opt('QODER_TOKEN_INTERVAL_SECONDS', '300')),
   modelCatalog: withQoderCatalog(parseModelCatalog(process.env.FLEET_MODELS), qoderRuntimeImage),
 } as const;
 

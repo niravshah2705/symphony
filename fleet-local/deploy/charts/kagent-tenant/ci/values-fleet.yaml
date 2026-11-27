@@ -29,6 +29,19 @@ models:
     defaultHeaders:
       x-fleet-org-id: ORG_UUID
       x-fleet-project-id: PROJECT_UUID
+  # The qoder row bypasses LiteLLM: baseUrl is Qoder's own API origin and the
+  # credential the gateway substitutes is named on the egress policy below.
+  - name: qoder
+    provider: OpenAI
+    model: qwen3.8-flash
+    apiFormat: chatCompletions
+    stream: true
+    baseUrl: https://api.qoder.sh
+    apiKeySecret: litellm-demo-default
+    apiKeySecretKey: QODER_API_KEY
+    defaultHeaders:
+      x-fleet-org-id: ORG_UUID
+      x-fleet-project-id: PROJECT_UUID
 harnesses:
   - name: app
     type: kagent
@@ -39,16 +52,54 @@ harnesses:
         value: http://opentelemetry-collector.otel-system.svc:4317
       - name: OTEL_RESOURCE_ATTRIBUTES
         value: fleet.org_id=ORG_UUID
+  # Mirrors what apps/control-plane/src/onboarding/tenant-values.ts renders: the BYO
+  # harness carries only the inert job-token envelope. QODER_JOB_TOKEN with a real
+  # jt-/jrt-/pt- value is rejected, because it is frozen into the Actor snapshot.
+  - name: qoder
+    type: byo
+    image: ghcr.io/niravshah2705/symphony/qoder-runtime@sha256:ae3b3fbbc22899b1db705254d817b39e1f2453f1c3d5ff26e97a99491dd611e8
+    command:
+      - /usr/local/bin/qoder-runtime
+    env:
+      - name: QODER_JOB_TOKEN
+        value: '{"token":"kagent-egress-placeholder","expireTime":4102444800}'
 templates:
   - name: coding
     modelConfig: mock
     description: Fleet coding workflow
     systemPrompt: |
       You are a concise coding agent. Plan, then act.
+  - name: qoder-coding
+    modelConfig: qoder
+    description: Fleet coding workflow (Qoder runtime)
+    systemPrompt: |
+      You are a concise coding agent. Plan, then act.
 agents:
   - name: worker
     template: coding
     harness: app
+  - name: qoder-worker
+    template: qoder-coding
+    harness: qoder
+    egress:
+      - qoder
+# Two bearer origins share one credential; the model hosts the runtime elects at
+# runtime are granted without authentication, because their Authorization is a
+# locally-derived signature the rewrite would invalidate.
+egress:
+  - name: qoder
+    destinations:
+      - origin: https://openapi.qoder.sh
+        authentication:
+          header: authorization
+          prefix: "Bearer "
+          secretRef: { name: litellm-demo-default, key: QODER_API_KEY }
+      - origin: https://center.qoder.sh
+        authentication:
+          prefix: "Bearer "
+          secretRef: { name: litellm-demo-default, key: QODER_API_KEY }
+      - origin: https://*.qoder.sh
+      - origin: https://*.qoder.com
 commonLabels:
   fleet.local/org-id: ORG_UUID
   fleet.local/project-id: PROJECT_UUID

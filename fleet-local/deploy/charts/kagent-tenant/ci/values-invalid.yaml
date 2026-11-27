@@ -1,0 +1,60 @@
+# EXPECTED TO FAIL. This file is the negative fixture for the render-time checks in
+# _helpers.tpl; it must never render. Check it with:
+#   helm template bad ./charts/kagent-tenant -f ./charts/kagent-tenant/ci/values-invalid.yaml
+# which must exit non-zero. helm stops at the FIRST failure, and validateRefs checks
+# egress before harnesses, so the four defects below surface in this order — remove an
+# earlier one to see the next:
+#   1. an authenticated destination pointing at the tenant's LiteLLM virtual key;
+#   2. the same origin listed twice in one policy;
+#   3. an egress policy no agent references;
+#   4. a real job token written into Harness env.
+tenant:
+  id: teama
+  snapshotRoot: s3://ate-snapshots/teama
+
+models:
+  - name: qoder
+    model: qwen3.8-flash
+    baseUrl: https://api.qoder.sh
+    apiKeySecret: litellm-teama-default
+    apiKeySecretKey: QODER_API_KEY
+
+harnesses:
+  - name: qoder
+    type: byo
+    image: ghcr.io/niravshah2705/symphony/qoder-runtime@sha256:ae3b3fbbc22899b1db705254d817b39e1f2453f1c3d5ff26e97a99491dd611e8
+    command:
+      - /usr/local/bin/qoder-runtime
+    # Reason 4: a live token here is frozen into the ActorTemplate snapshot and
+    # cannot be rotated. The inert envelope is the only legal value.
+    env:
+      - name: QODER_JOB_TOKEN
+        value: '{"token":"jt-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expireTime":4102444800}'
+
+egress:
+  # Reason 3: no agent below references "orphan".
+  - name: orphan
+    destinations:
+      - origin: https://example.com
+  - name: qoder
+    destinations:
+      # Reason 1: "key" is the LiteLLM virtual key — a third-party origin would be
+      # handed the platform's billing credential.
+      - origin: https://openapi.qoder.sh
+        authentication:
+          secretRef: { name: litellm-teama-default, key: key }
+      # Reason 2: one destination per origin, or which authentication wins is undefined.
+      - origin: https://*.qoder.sh
+      - origin: https://*.qoder.sh
+
+templates:
+  - name: assistant
+    modelConfig: qoder
+    systemPrompt: You are a helpful assistant.
+
+agents:
+  - name: assistant
+    template: assistant
+    harness: qoder
+    egress:
+      - qoder

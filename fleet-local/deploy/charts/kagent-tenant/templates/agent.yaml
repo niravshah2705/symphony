@@ -13,4 +13,12 @@ spec:
       name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "template" "name" $agent.template) }}
   harnessRef:
     name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "harness" "name" $agent.harness) }}
+  {{- with $agent.egress }}
+  # Grants beyond the ones kagent infers from the model and tool references. The
+  # credential itself stays in the EgressPolicy's secretKeyRef, never here.
+  egressPolicyRefs:
+    {{- range $r := . }}
+    - name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "egress" "name" $r) }}
+    {{- end }}
+  {{- end }}
 {{- end }}

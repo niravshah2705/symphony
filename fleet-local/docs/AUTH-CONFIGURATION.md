@@ -143,6 +143,8 @@ wallet/alerts. No custom enforcement code is deployed.
 | `langfuse-stores` (langfuse) | postgres pw, salt, encryption key, nextauth, S3 pair, admin pw, LF secret key | `20-langfuse.sh` | generated once; stable across re-runs BY DESIGN (salt/keys are encryption inputs) |
 | `fleet-bff-env` (fleet-system) | assembled inline from the secrets above | `50-bff-spa.sh` | re-run script to refresh after rotation |
 | per-tenant `litellm-<org>-<proj>` (org-ns) | team virtual key | wizard step 3 | rotate via LiteLLM admin API, then re-secret |
+| same Secret, key `QODER_PAT` (org-ns) | long-lived Qoder personal access token (`pt-…`) | operator: `QODER_TOKEN=… scripts/fixes/t32-qoder-harness.sh` (Secret → stdin, never argv) | read only by the BFF, never mounted on the Actor; delete the key to disconnect the org |
+| same Secret, keys `QODER_API_KEY` + `QODER_REFRESH_TOKEN` (org-ns) | control-plane-minted 24h job token (`jt-…`) + its refresh token | the BFF (`src/credentials/qoderTokens.ts`) | derived, not seeded: the loop renews inside the last `QODER_TOKEN_SKEW_SECONDS` and records expiry in the Secret's annotations. `EgressPolicy` substitutes `QODER_API_KEY` as `Bearer …` at the gateway |
 | `kagent-rustfs-credentials`, `substrate-postgres-*` (ate-system) | platform stores | substrate installer | do not copy fleet-side |
 
 Rotation rule of thumb: delete the Secret, re-run the owning script (all

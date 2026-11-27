@@ -79,7 +79,7 @@ Names first: a missing name would otherwise surface as a Go type error out of
 printf, or as an object literally named "acme-model-", which is worse — it
 applies cleanly and then never resolves.
 */}}
-{{- $lists := dict "models" "model" "harnesses" "harness" "templates" "template" "agents" "agent" "mcp" "mcp" }}
+{{- $lists := dict "models" "model" "harnesses" "harness" "templates" "template" "agents" "agent" "mcp" "mcp" "egress" "egress" }}
 {{- range $list, $kind := $lists }}
 {{- $seen := dict }}
 {{- range $entry := index $.Values $list }}
@@ -99,6 +99,39 @@ applies cleanly and then never resolves.
 {{- $templates := dict }}
 {{- range $t := .Values.templates }}{{ $_ := set $templates $t.name "" }}{{ end }}
 {{- $mcps := dict }}
+{{- $egress := dict }}
+{{- range $e := .Values.egress | default list }}
+{{- if not $e.destinations }}
+  {{- fail (printf "egress entry %q has no destinations — an EgressPolicy with no destination grants nothing and the Agent's EgressPoliciesApplied never turns True" $e.name) }}
+{{- end }}
+{{- $origins := dict }}
+{{- range $d := $e.destinations }}
+{{- $origin := $d.origin | default "" }}
+{{- if hasKey $origins $origin }}
+  {{- fail (printf "egress entry %q lists origin %q twice: one destination per origin, otherwise which authentication wins is undefined" $e.name $origin) }}
+{{- end }}
+{{- $_ := set $origins $origin "" }}
+{{- $host := regexReplaceAll "^https?://" $origin "" }}
+{{- if or (not (regexMatch "^https?://" $origin)) (not $host) (contains "/" $host) }}
+  {{- fail (printf "egress entry %q destination %q is not an origin: the CRD pattern is ^https?://<host>(:port)?$ — a path (or a bare host) rejects the whole EgressPolicy" $e.name $origin) }}
+{{- end }}
+{{- if and (contains "*" $host) (not (regexMatch "^\\*\\.[^*]+(:[0-9]+)?$" $host)) }}
+  {{- fail (printf "egress entry %q destination %q misuses the wildcard: it replaces exactly one leftmost label, e.g. https://*.qoder.sh" $e.name $origin) }}
+{{- end }}
+{{- with $d.authentication }}
+{{- if contains "*" $origin }}
+  {{- fail (printf "egress entry %q cannot substitute a credential into the wildcard %q: kagent requires an exact HTTP(S) origin for authentication, so grant the wildcard without authentication and authenticate the host the API is actually called on" $e.name $origin) }}
+{{- end }}
+{{- if or (not .secretRef) (not .secretRef.name) (not .secretRef.key) }}
+  {{- fail (printf "egress entry %q destination %q needs authentication.secretRef{name,key}: the gateway substitutes the credential from that Secret key on every matching call" $e.name $origin) }}
+{{- end }}
+{{- if eq .secretRef.key "key" }}
+  {{- fail (printf "egress entry %q destination %q authenticates with Secret key \"key\", which is the LiteLLM virtual key: a third-party origin would be handed the platform's billing credential. Point secretRef at the origin's own key (e.g. QODER_API_KEY, the control-plane-minted job token)" $e.name $origin) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $_ := set $egress $e.name "" }}
+{{- end }}
 {{- range $mcp := .Values.mcp }}
 {{- if not $mcp.url }}
   {{- fail (printf "mcp entry %q has no url" $mcp.name) }}
@@ -127,8 +160,11 @@ applies cleanly and then never resolves.
   {{- fail (printf "harnesses[%q].image %q must be pinned by @sha256 digest — the Harness CRD rejects tags" $h.name $h.image) }}
 {{- end }}
 {{- range $e := $h.env | default list }}
-{{- if and (has $e.name (list "QODER_API_KEY" "ANTHROPIC_API_KEY" "OPENAI_API_KEY" "CODEX_API_KEY" "LITELLM_API_KEY")) (not $h.allowLiteralKey) }}
+{{- if and (has $e.name (list "QODER_API_KEY" "QODER_PAT" "QODER_REFRESH_TOKEN" "ANTHROPIC_API_KEY" "OPENAI_API_KEY" "CODEX_API_KEY" "LITELLM_API_KEY")) (not $h.allowLiteralKey) }}
   {{- fail (printf "harnesses[%q].env sets %q with a literal value — Harness spec.env has no valueFrom, so this writes the credential into the release (visible to helm get values, kubectl get -o yaml, and every Actor snapshot). Supply it via ModelConfig.apiKeySecret/apiKeySecretKey instead; set allowLiteralKey: true to acknowledge the plaintext deliberately." $h.name $e.name) }}
+{{- end }}
+{{- if and (eq $e.name "QODER_JOB_TOKEN") (regexMatch "(jt-|jrt-|pt-)[A-Za-z0-9]" $e.value) }}
+  {{- fail (printf "harnesses[%q].env QODER_JOB_TOKEN carries a real Qoder token. The CLI must be handed the inert placeholder envelope ({\"token\":\"kagent-egress-placeholder\",...}) and the EgressPolicy substitutes the live job token at the gateway; a literal here is frozen into the ActorTemplate snapshot and cannot be rotated." $h.name) }}
 {{- end }}
 {{- end }}
 {{- end }}
@@ -162,6 +198,20 @@ applies cleanly and then never resolves.
 {{- end }}
 {{- if not (hasKey $harnesses $a.harness) }}
   {{- fail (printf "agents[%q].harness %q names no entry in harnesses" $a.name $a.harness) }}
+{{- end }}
+{{- range $r := $a.egress | default list }}
+{{- if not (hasKey $egress $r) }}
+  {{- fail (printf "agents[%q].egress %q names no entry in egress: the Agent would report EgressPolicyNotFound and stay not-Applied" $a.name $r) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- $egressUsed := dict }}
+{{- range $a := .Values.agents }}
+{{- range $r := $a.egress | default list }}{{ $_ := set $egressUsed $r "" }}{{ end }}
+{{- end }}
+{{- range $name := keys $egress }}
+{{- if not (hasKey $egressUsed $name) }}
+  {{- fail (printf "egress entry %q is referenced by no agent: the policy applies and reports Ready while nothing can use it, so a credential grant sits in the namespace unexamined" $name) }}
 {{- end }}
 {{- end }}
 {{- end -}}

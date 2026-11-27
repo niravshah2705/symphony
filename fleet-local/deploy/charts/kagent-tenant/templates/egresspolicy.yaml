@@ -1,0 +1,34 @@
+{{- range $e := .Values.egress | default list }}
+---
+apiVersion: api.kagent.dev/v1alpha3
+kind: EgressPolicy
+metadata:
+  name: {{ include "kagent-tenant.objectName" (dict "root" $ "kind" "egress" "name" $e.name) }}
+  namespace: {{ include "kagent-tenant.namespace" $ }}
+  labels:
+    {{- include "kagent-tenant.labels" (dict "root" $) | nindent 4 }}
+spec:
+  # Each destination grants one origin (scheme + host, optional port). `authentication`
+  # additionally rewrites a request header at the gateway: the runtime only ever sends
+  # a placeholder there, so the credential stays in the Secret and never enters the
+  # Actor. kagent requires an EXACT origin for that rewrite — a wildcard may be granted,
+  # but cannot carry a substituted credential — which is why authentication is
+  # per-destination rather than per-policy. Several exact origins can carry the same
+  # credential (one API needs it on each host that sends `Bearer <token>`); a host whose
+  # Authorization is a value the runtime derives from a signature must be granted
+  # WITHOUT authentication, or the rewrite invalidates the request it signs.
+  destinations:
+    {{- range $d := $e.destinations }}
+    - origin: {{ $d.origin | quote }}
+      {{- with $d.authentication }}
+      authentication:
+        header: {{ .header | default "authorization" | quote }}
+        {{- with .prefix }}
+        prefix: {{ . | quote }}
+        {{- end }}
+        secretKeyRef:
+          name: {{ required "destination.authentication.secretRef.name is required" .secretRef.name | quote }}
+          key: {{ required "destination.authentication.secretRef.key is required" .secretRef.key | quote }}
+      {{- end }}
+    {{- end }}
+{{- end }}
