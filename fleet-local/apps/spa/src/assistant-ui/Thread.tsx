@@ -3,6 +3,7 @@ import { AssistantRuntimeProvider, useAuiState } from '@assistant-ui/react';
 import { api } from '../api';
 import type { ModelOption, Org, OrgStatus, Project, Session, SessionOutcome } from '../types';
 import { newThreadId, useFleetAgUi } from '../agui/useFleetAgUi';
+import { addBranch, buildTree, labelFromMessage, loadBranches, type Branch, type BranchNode } from './branches';
 import { TaskStatusBar } from './TaskStatusBar';
 import { ThreadView } from './ui/ThreadView';
 
@@ -48,13 +49,20 @@ interface ChatSurfaceProps {
   onResume: (session: Session) => void;
   onRunEnd: () => void;
   onRunStart: () => void;
+  /** Fork-point tree for this (org, project); see branches.ts for what a branch is. */
+  branches: BranchNode[];
+  /** Fork a new conversation from the given user message, off the current thread. */
+  onFork: (fromText: string) => void;
+  onSwitchBranch: (threadId: string) => void;
+  /** Text to prefill the composer with on mount (set by a fork, cleared by any switch). */
+  composerSeed?: string;
 }
 
 // Mounted only when a project is selected, and remounted on every change of
 // project or thread: the runtime holds the transcript, so a new conversation is
 // a new subtree rather than a reset of this one.
 function ChatSurface(props: ChatSurfaceProps) {
-  const { orgId, projectId, projects, models, model, ready, orgStatus, sessions, active, threadId, started } = props;
+  const { orgId, projectId, projects, models, model, ready, orgStatus, sessions, active, threadId, started, branches, onFork, onSwitchBranch, composerSeed } = props;
   const [runError, setRunError] = useState('');
   const runtime = useFleetAgUi({
     orgId,
@@ -120,10 +128,22 @@ function ChatSurface(props: ChatSurfaceProps) {
             sendDisabled={!ready}
             run={{ closeReason: active?.close_reason, transportError: runError }}
             onAnswerError={(message) => setRunError(message)}
+            onFork={onFork}
+            composerSeed={composerSeed}
           />
         </div>
 
         <aside className="chat-side">
+          <h3>Branches</h3>
+          {branches.length === 0 ? (
+            <p className="muted small">Fork a conversation from any of your messages to explore another direction.</p>
+          ) : (
+            <ul className="session-list">
+              {branches.map((node) => (
+                <BranchRow key={node.branch.threadId} node={node} current={threadId} onSwitch={onSwitchBranch} />
+              ))}
+            </ul>
+          )}
           <h3>Sessions</h3>
           {sessions.length === 0 ? <p className="muted small">No sessions yet.</p> : null}
           <ul className="session-list">
@@ -157,6 +177,23 @@ function ChatSurface(props: ChatSurfaceProps) {
   );
 }
 
+function BranchRow({ node, current, onSwitch, depth = 0 }: { node: BranchNode; current: string; onSwitch: (threadId: string) => void; depth?: number }) {
+  const { branch, children } = node;
+  return (
+    <>
+      <li className={branch.threadId === current ? 'active' : ''} style={depth ? { paddingLeft: `${depth * 14}px` } : undefined}>
+        <button className="link" onClick={() => onSwitch(branch.threadId)} title={`Forked from ${branch.parentThreadId?.slice(0, 8) ?? 'a chat'} · ${branch.threadId.slice(0, 8)}`}>
+          {depth > 0 ? '↳ ' : ''}
+          {branch.label || branch.threadId.slice(0, 8)}
+        </button>
+      </li>
+      {children.map((child) => (
+        <BranchRow key={child.branch.threadId} node={child} current={current} onSwitch={onSwitch} depth={depth + 1} />
+      ))}
+    </>
+  );
+}
+
 // The bridge from protocol state back to app state. There is no conversation id
 // to learn from the stream any more — the thread handle is the app's own — so
 // what comes back is the two edges of a run: the first one fixes the agent, and
@@ -185,6 +222,8 @@ export function Thread({ org }: { org: Org }) {
   // it, and reusing a value would resume the conversation it belongs to.
   const [threadId, setThreadId] = useState(newThreadId);
   const [started, setStarted] = useState(false);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [forkSeed, setForkSeed] = useState<string | undefined>();
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -218,9 +257,36 @@ export function Thread({ org }: { org: Org }) {
     refreshSessions();
   }, [org.id, projectId, refreshSessions]);
 
+  useEffect(() => {
+    if (projectId) setBranches(loadBranches(org.id, projectId));
+  }, [org.id, projectId]);
+
   function newChat() {
+    setForkSeed(undefined);
     setThreadId(newThreadId());
     setStarted(false);
+  }
+
+  // A fork is a new conversation that remembers its fork point: kagent cannot
+  // clone a context, so the child starts clean and the tree is the local map of
+  // which directions the human tried. The seed lands in the new composer, ready
+  // to edit before the branch runs.
+  function fork(fromText: string) {
+    const branch: Branch = { threadId: newThreadId(), parentThreadId: threadId, label: labelFromMessage(fromText), createdAt: Date.now() };
+    setBranches(addBranch(org.id, projectId, branch));
+    setForkSeed(fromText);
+    setThreadId(branch.threadId);
+    setStarted(false);
+  }
+
+  function switchBranch(nextThreadId: string) {
+    setForkSeed(undefined);
+    setThreadId(nextThreadId);
+    const session = sessions.find((s) => s.thread_id === nextThreadId);
+    if (session) {
+      setStarted(true);
+      if (session.model) setModel(session.model);
+    }
   }
 
   function changeProject(next: string) {
@@ -230,6 +296,7 @@ export function Thread({ org }: { org: Org }) {
 
   function resume(session: Session) {
     if (!session.thread_id) return;
+    setForkSeed(undefined);
     setThreadId(session.thread_id);
     setStarted(true);
     setModel(session.model ?? model);
@@ -263,6 +330,10 @@ export function Thread({ org }: { org: Org }) {
           onResume={resume}
           onRunStart={noteRunStart}
           onRunEnd={refreshSessions}
+          branches={buildTree(branches)}
+          onFork={fork}
+          onSwitchBranch={switchBranch}
+          composerSeed={forkSeed}
         />
       ) : null}
     </>

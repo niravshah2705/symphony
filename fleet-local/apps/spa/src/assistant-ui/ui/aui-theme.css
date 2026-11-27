@@ -461,3 +461,44 @@
   font-family: ui-monospace, monospace;
   font-size: 0.75rem;
 }
+
+/* Fork sits beside a user bubble; quiet until hover so it never outshouts the text. */
+.aui-message-fork {
+  margin-top: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid hsl(var(--aui-border));
+  border-radius: 999px;
+  background: transparent;
+  color: hsl(var(--aui-muted-foreground));
+  font-size: 0.6875rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.aui-user-message-content:hover .aui-message-fork,
+.aui-message-fork:focus-visible {
+  opacity: 1;
+}
+
+/* Follow-up chips derived from the last answer; click fills the composer. */
+.aui-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.aui-suggestion {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid hsl(var(--aui-border));
+  border-radius: 999px;
+  background: hsl(var(--aui-background));
+  color: hsl(var(--aui-muted-foreground));
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.aui-suggestion:hover {
+  border-color: hsl(var(--aui-primary));
+  color: hsl(var(--aui-primary));
+}

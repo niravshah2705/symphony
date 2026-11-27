@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { FC, KeyboardEvent } from 'react';
 import {
   AuiIf,
@@ -15,6 +16,7 @@ import { MarkdownText } from './Markdown';
 import { AddAttachment, AgentFile, ComposerAttachments, FILE_CUSTOM_EVENT, UserFile, UserImage } from './Attachments';
 import { HitlCard } from './HitlCard';
 import { UI_CUSTOM_EVENT, GenerativeUI } from './GenerativeUI';
+import { Suggestions } from './Suggestions';
 import { SOURCES_CUSTOM_EVENT, Sources } from './Sources';
 import { ArrowDownIcon, SendIcon, StopIcon } from './icons';
 
@@ -42,9 +44,13 @@ export interface ThreadViewProps {
   run: RunFacts;
   /** Reporting a resume the endpoint refused, in the same place as a run error. */
   onAnswerError?: (message: string) => void;
+  /** Fork a new conversation from this message; see assistant-ui/branches.ts. */
+  onFork?: (text: string) => void;
+  /** Prefill the composer on mount — the fork seed the previous surface handed up. */
+  composerSeed?: string;
 }
 
-export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerError }: ThreadViewProps) {
+export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerError, onFork, composerSeed }: ThreadViewProps) {
   return (
     <ThreadPrimitive.Root className="aui-root aui-thread-root">
       <ThreadPrimitive.Viewport className="aui-thread-viewport">
@@ -58,7 +64,7 @@ export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerEr
 
         <ThreadPrimitive.Messages
           components={{
-            UserMessage: () => <UserMessage />,
+            UserMessage: () => <UserMessage onFork={onFork} />,
             AssistantMessage: () => <AssistantMessage {...run} />,
           }}
         />
@@ -80,24 +86,42 @@ export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerEr
               <ArrowDownIcon />
             </button>
           </ThreadPrimitive.ScrollToBottom>
+          <Suggestions />
           {/* A structured pause (tool approval, ask-user) asks for decisions, not
               prose; the card sits above the composer, which stays the free-text
               answer path for a plain input-required. */}
           <HitlCard onAnswerError={onAnswerError} />
-          <Composer placeholder={placeholder} disabled={sendDisabled} onAnswerError={onAnswerError} />
+          <Composer placeholder={placeholder} disabled={sendDisabled} onAnswerError={onAnswerError} seed={composerSeed} />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   );
 }
 
-const UserMessage: FC = () => (
-  <MessagePrimitive.Root className="aui-user-message-root">
-    <div className="aui-user-message-content">
-      <MessagePrimitive.Parts components={{ Text: PlainText, Image: UserImage, File: UserFile }} />
-    </div>
-  </MessagePrimitive.Root>
-);
+const UserMessage: FC<{ onFork?: (text: string) => void }> = ({ onFork }) => {
+  // Fork only hands the text up: the surface remounts on a new thread handle
+  // (Thread.tsx keys it), so anything done to THIS runtime would be discarded.
+  // The seed arrives back as `initialComposerText` on the fresh subtree.
+  const text = useAuiState((s) => s.message.content.filter((part) => part.type === 'text').map((part) => part.text).join('\n'));
+  return (
+    <MessagePrimitive.Root className="aui-user-message-root">
+      <div className="aui-user-message-content">
+        <MessagePrimitive.Parts components={{ Text: PlainText, Image: UserImage, File: UserFile }} />
+        {onFork && text !== '' ? (
+          <button
+            type="button"
+            className="aui-button aui-button-outline aui-message-fork"
+            aria-label="Fork a new conversation from this message"
+            title="Fork a branch from this message"
+            onClick={() => onFork(text)}
+          >
+            Fork
+          </button>
+        ) : null}
+      </div>
+    </MessagePrimitive.Root>
+  );
+};
 
 const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
   const status = useAuiState((s) => s.message.status);
@@ -204,16 +228,26 @@ function Composer({
   placeholder,
   disabled,
   onAnswerError,
+  seed,
 }: {
   placeholder: string;
   disabled: boolean;
   onAnswerError?: (message: string) => void;
+  seed?: string;
 }) {
   const aui = useAui();
   const text = useAuiState((s) => s.composer.text);
   const pending = useAgUiInterrupts()[0];
   const submit = useAgUiSubmitInterruptResponses();
   const paused = pending !== undefined;
+
+  // A fork mounts this composer (via the keyed subtree) carrying the message it
+  // forked from. Seed it once — the human can edit before running the branch.
+  useEffect(() => {
+    if (seed) aui.composer.setText(seed);
+    // Mount-only by design: a later re-render must not overwrite what they typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // An open interrupt blocks an ordinary send — the runtime refuses to start a
   // second run over a conversation the agent is still waiting on — so the typed
