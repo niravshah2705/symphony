@@ -9,6 +9,7 @@ import { a2aRoutes } from './routes/a2a.ts';
 import { aguiRoutes } from './routes/agui.ts';
 import { migrate, close } from './db/client.ts';
 import { startSweeper } from './metering/sweeper.ts';
+import { startQoderTokenLoop } from './credentials/qoderTokens.ts';
 import { shutdownMetrics } from './metering/otlp.ts';
 
 async function build() {
@@ -53,10 +54,12 @@ async function main() {
   await migrate();
   const app = await build();
   const sweeper = startSweeper();
+  const qoderTokens = startQoderTokenLoop();
   await app.listen({ port: config.port, host: config.host });
 
   const shutdown = async () => {
     clearInterval(sweeper);
+    clearInterval(qoderTokens);
     await app.close();
     await shutdownMetrics().catch(() => undefined);
     await close();

@@ -19,12 +19,15 @@ data:
   DEFAULT_BUDGET_DURATION: 30d
   SWEEPER_INTERVAL_SECONDS: "60"
   # P6 chat model catalog (id = k8s name fragment + sessions.model; model = the
-  # LiteLLM model name the tenant ModelConfig calls). First default:true entry
-  # is the wizard's attached agent. openrouter/* ids rely on the passthrough
-  # model in litellm values-base + the wildcard in team/key model lists.
-  # The qoder row is experimental:true: its agent is rendered but not waited on
-  # during onboarding and is hidden from the chat picker until the BYO canary
-  # passes (fleet-local/scripts/fixes/t32-qoder-harness.sh).
+  # upstream model id the tenant ModelConfig calls — a LiteLLM alias for every
+  # runtime that dials LiteLLM, a Qoder-native id for the qoder row).
+  # First default:true entry is the wizard's attached agent. openrouter/* ids
+  # rely on the passthrough model in litellm values-base + the wildcard in
+  # team/key model lists.
+  # The qoder row is a normal catalog entry: onboarding waits for its agent and the
+  # chat picker offers it. Set "experimental":true on a row to render the agent
+  # without waiting on it and without offering it (see scripts/fixes/t32-qoder-harness.sh
+  # for the canary that has to pass before an entry is un-flagged).
   FLEET_MODELS: >-
     [{"id":"mock","label":"Mock GPT (offline)","model":"mock-gpt","default":true},
      {"id":"claude","label":"Claude Sonnet 4","model":"claude-sonnet-4"},
@@ -35,16 +38,44 @@ data:
      {"id":"nemotron-codex","label":"Nemotron 550B (Codex runtime)",
       "model":"openrouter/nvidia/nemotron-3-ultra-550b-a55b:free","runtime":"codex"},
      {"id":"qoder","label":"Qwen3.8 Flash (Qoder runtime)",
-      "model":"openrouter/qwen/qwen3.8-flash","runtime":"qoder","experimental":true}]
+      "model":"qwen3.8-flash","runtime":"qoder"}]
   # Qoder BYO harness image. Empty = no qoder objects are rendered for anyone.
   # It MUST be a @sha256 digest: the Harness CRD pattern rejects a tag, and
-  # config.ts refuses to boot on one. Set it to the digest that
-  # .github/workflows/build-runtime-images.yml publishes for
-  # ghcr.io/niravshah2705/symphony/qoder-runtime AFTER the ADK-boot fix
-  # (go/harness/qoder/config.Load) has landed — the pre-fix build cannot start
-  # under a BYO bundle. Then re-run scripts/fixes/t32-qoder-harness.sh.
-  QODER_RUNTIME_IMAGE: ""
-  # The image ENTRYPOINT, and the env name the tenant Secret carries the
-  # LiteLLM virtual key under for the qoder BYOK provider.
+  # config.ts refuses to boot on one. This is the index digest that
+  # .github/workflows/build-runtime-images.yml published for
+  # ghcr.io/niravshah2705/symphony/qoder-runtime:1.1.92 AFTER the ADK-boot fix
+  # (#362, go/harness/qoder/config.Load); the pre-fix build cannot start under a
+  # BYO bundle. Verified locally: booting the arm64 manifest of this digest with
+  # an ADK bundle logs `loaded harness configuration source=adk`. Existing
+  # tenants were synced with scripts/fixes/t32-qoder-harness.sh.
+  QODER_RUNTIME_IMAGE: "ghcr.io/niravshah2705/symphony/qoder-runtime@sha256:ae3b3fbbc22899b1db705254d817b39e1f2453f1c3d5ff26e97a99491dd611e8"
+  # The image ENTRYPOINT, and the Secret key the tenant's Qoder token lives under.
+  # The latter is an env name WE author (it is the EgressPolicy's secretRef key and
+  # the BYOK envKey we configure the CLI with) — qodercli has no built-in
+  # QODER_API_KEY.
   QODER_ADAPTER_COMMAND: /usr/local/bin/qoder-runtime
+  # Secret key holding the CONTROL-PLANE-MINTED job token (`jt-...`, 24h) that the
+  # EgressPolicy substitutes as `Bearer ...`. It is not qodercli's own env name and
+  # it is not the long-lived credential: the PAT the operator seeds lives beside it
+  # under QODER_PAT_SECRET_KEY, and the CLI never sees either.
   QODER_API_KEY_ENV: QODER_API_KEY
+  QODER_PAT_SECRET_KEY: QODER_PAT
+  QODER_REFRESH_SECRET_KEY: QODER_REFRESH_TOKEN
+  # Where POST /api/v1/jobToken/exchange lives: the BFF calls it outside the Actor,
+  # because the PAT it wants travels in a JSON body and kagent substitutes headers.
+  QODER_AUTH_BASE_URL: https://openapi.qoder.sh
+  # The ModelConfig origin. The runtime elects its own model host from Qoder's region
+  # endpoint API (api1|api2|api3.qoder.sh), so this is network config, not the host a
+  # turn necessarily dials.
+  QODER_MODEL_BASE_URL: https://api.qoder.sh
+  # Comma-separated; each must satisfy the EgressPolicy origin pattern. Only these
+  # exact origins send `Authorization: Bearer <job token>`, so only these carry the
+  # substitution — the model hosts send a locally-derived `Bearer COSY.<envelope>`
+  # instead and must be granted WITHOUT authentication.
+  QODER_BEARER_ORIGINS: "https://openapi.qoder.sh,https://center.qoder.sh"
+  # A wildcard replaces exactly one leftmost label.
+  QODER_GRANT_ORIGINS: "https://*.qoder.sh,https://*.qoder.com"
+  # Rotate inside the last 6h of the 24h lifetime; the tick only has to stay well
+  # under the lifetime (each tick is one Secret list, not one per tenant).
+  QODER_TOKEN_SKEW_SECONDS: "21600"
+  QODER_TOKEN_INTERVAL_SECONDS: "300"

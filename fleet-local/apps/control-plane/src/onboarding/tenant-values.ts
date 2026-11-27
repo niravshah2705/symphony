@@ -9,6 +9,19 @@ import { litellmSecretKey, orgNamespace, tenantId, workerPoolName } from './name
 
 export const ACTOR_OTLP = 'http://opentelemetry-collector.otel-system.svc:4317';
 
+// What the qodercli inside the Actor is given: a job-token envelope whose token is
+// inert. Verified against the published 1.1.92 bundle —
+// QODER_JOB_TOKEN is parsed and handed straight to loginWithJobToken, which skips
+// /api/v1/jobToken/exchange entirely (the PAT that endpoint wants travels in a JSON
+// body, and kagent substitutes headers only). The CLI then sends this value as
+// `Authorization: Bearer <value>` on the origins the EgressPolicy authenticates, and
+// refuses to run if it is absent ("Not logged in"). expireTime is a far-future
+// constant: the CLI's own expiry check must never trigger a refresh it cannot do.
+export const QODER_TOKEN_PLACEHOLDER_ENV = 'QODER_JOB_TOKEN';
+export const QODER_TOKEN_PLACEHOLDER = 'kagent-egress-placeholder';
+export const qoderJobTokenPlaceholder = (token = QODER_TOKEN_PLACEHOLDER) =>
+  JSON.stringify({ token, expireTime: 4102444800 });
+
 // P9: the shared web-fetch MCP server (deploy/webfetch) — streamable-HTTP is
 // the only MCP protocol all harnesses speak, and the tenant renders a
 // same-namespace RemoteMCPServer pointing at it, bound on every template.
@@ -38,6 +51,9 @@ export interface TenantValuesConfig {
   qoderRuntimeImage: string;
   qoderAdapterCommand: string;
   qoderApiKeyEnv: string;
+  qoderBearerOrigins: readonly string[];
+  qoderGrantOrigins: readonly string[];
+  qoderModelBaseUrl: string;
   customClaudeImage: string;
 }
 
@@ -83,9 +99,9 @@ export function buildTenantValues(input: TenantValuesInput) {
     // on the key). runtime:"codex" → OpenAI provider with apiFormat responses and
     // NO defaultHeaders (codex rejects them); the adapter compiles
     // OPENAI_API_KEY/CODEX_HOME/AWS_* from the ModelConfig, so those names stay out
-    // of Harness env. runtime:"qoder" → the same OpenAI wire, but the key is read
-    // from the tenant Secret under the BYOK env name (QODER_API_KEY) rather than
-    // the default one.
+    // of Harness env. runtime:"qoder" → the Qoder endpoint itself, not LiteLLM: the
+    // baseUrl is kagent's own network config for that origin, and the credential the
+    // gateway substitutes on each call is the tenant Secret key named below.
     models: catalog.map((m) =>
       m.runtime === 'claude'
         ? { name: m.id, provider: 'Anthropic', model: m.model }
@@ -99,6 +115,12 @@ export function buildTenantValues(input: TenantValuesInput) {
                 apiFormat: 'chatCompletions',
                 stream: true,
                 defaultHeaders: fleetHeaders,
+                // Direct to Qoder, not through LiteLLM. The runtime elects its own
+                // model host (api1|api2|api3.qoder.sh) from Qoder's region endpoint
+                // API, so this baseUrl is kagent's network config for the API origin;
+                // the credential the gateway substitutes lives on the egress
+                // destinations below, and it never enters the Actor.
+                baseUrl: cfg.qoderModelBaseUrl,
                 apiKeySecret: secretName,
                 apiKeySecretKey: cfg.qoderApiKeyEnv,
               }
@@ -128,15 +150,48 @@ export function buildTenantValues(input: TenantValuesInput) {
               type: 'byo',
               image: cfg.qoderRuntimeImage,
               command: [cfg.qoderAdapterCommand],
-              // QODER_SDK_CUSTOM_BASE_URL_BYOK unlocks qodercli's custom-provider
-              // path (the account's allow_byok switch must also be on). The
-              // credential itself is never here: Harness env has no valueFrom, so
-              // a key in this list would be plaintext in the CR.
-              env: [...orgEnv, { name: 'QODER_SDK_CUSTOM_BASE_URL_BYOK', value: '1' }],
+              // The CLI needs *a* credential to put in its Authorization header and to
+              // build its request signing from; the EgressPolicy replaces that header
+              // at the gateway with the tenant's live job token, so this value stays
+              // inert. Harness spec.env has no valueFrom, which is exactly why no
+              // credential can live here.
+              env: [...orgEnv, { name: QODER_TOKEN_PLACEHOLDER_ENV, value: qoderJobTokenPlaceholder() }],
             },
           ]
         : []),
     ],
+    // EgressPolicy objects: the outward origins an Agent may reach, and — on the
+    // origins that carry a bearer credential — the Secret key the gateway substitutes
+    // on every call. This is the only place the tenant's Qoder credential is named,
+    // and it is named as a reference, so the value never reaches the Actor.
+    //
+    // Which origins those are was measured, not guessed: capture of one successful
+    // 1.1.92 turn shows `Bearer jt-...` on openapi.qoder.sh (userinfo) and
+    // center.qoder.sh (region/endpoint election, metrics), while the model call on the
+    // elected api*.qoder.sh carries a locally-built `Bearer COSY.<envelope>` derived
+    // from that userinfo — so the model hosts need a plain grant, and authenticating
+    // them would substitute over a signature and break it.
+    //
+    // kagent refuses `authentication` on a wildcard origin ("authentication requires an
+    // exact HTTP(S) origin"), which is why the grant list stays wildcard-only.
+    egress: hasQoder
+      ? [
+          {
+            name: 'qoder',
+            destinations: [
+              ...[...new Set(cfg.qoderBearerOrigins)].map((origin) => ({
+                origin,
+                authentication: {
+                  header: 'authorization',
+                  prefix: 'Bearer ',
+                  secretRef: { name: secretName, key: cfg.qoderApiKeyEnv },
+                },
+              })),
+              ...cfg.qoderGrantOrigins.filter((origin) => !cfg.qoderBearerOrigins.includes(origin)).map((origin) => ({ origin })),
+            ],
+          },
+        ]
+      : [],
     mcp: [WEBFETCH_MCP],
     templates: catalog.map((m) => ({
       name: `${m.id}-coding`,
@@ -149,6 +204,10 @@ export function buildTenantValues(input: TenantValuesInput) {
       name: `${m.id}-worker`,
       template: `${m.id}-coding`,
       harness: harnessName(m.runtime),
+      // The Qoder endpoint is a third-party origin, so it is granted explicitly
+      // rather than inferred; every other runtime stays on the in-cluster LiteLLM
+      // grant kagent derives from its ModelConfig.
+      ...(m.runtime === 'qoder' ? { egress: ['qoder'] } : {}),
     })),
     commonLabels: { 'fleet.local/org-id': orgId, 'fleet.local/project-id': projectId },
   };

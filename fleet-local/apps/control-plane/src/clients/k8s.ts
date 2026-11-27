@@ -46,6 +46,48 @@ export async function getJson<T = unknown>(kind: string, name: string, namespace
   }
 }
 
+// Every object of a kind across all namespaces, filtered by label. The reader that
+// needs cluster-wide state (which tenants exist, from their own labelled Secrets)
+// must not have to know a namespace list, and `getJson` above is single-object only.
+export async function listJson<T = unknown>(kind: string, labelSelector: string): Promise<T[]> {
+  try {
+    const { stdout } = await kubectl(['get', kind, '-A', '-l', labelSelector, '-o', 'json']);
+    const parsed = JSON.parse(stdout) as { items?: T[] };
+    return parsed.items ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Merge-patch a Secret's data and annotations. applyManifest is deliberately not
+// used for this: `kubectl apply -f` submits a whole object, so a manifest that
+// lists two keys silently deletes every other key in the Secret — including the
+// LiteLLM virtual key the tenant cannot function without.
+//
+// The patch goes through a 0600 temp file rather than stdin: `kubectl patch` has no
+// stdin form (`-p` would put the credential in argv, and run() echoes the argv on
+// failure), and `--patch-file /dev/stdin` cannot work here — kubectl *opens* the
+// path, and reopening Node's stdio socketpair fails with ENXIO ("unable to read
+// patch file: no such device or address"), which is how this was found. A file keeps
+// the value out of argv and out of every log line, and it is unlinked in finally.
+export async function patchSecret(
+  name: string,
+  namespace: string,
+  patch: { data?: Record<string, string>; annotations?: Record<string, string> },
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (patch.data) body.data = patch.data;
+  if (patch.annotations) body.metadata = { annotations: patch.annotations };
+  const dir = mkdtempSync(join(tmpdir(), 'fleet-patch-'));
+  try {
+    const file = join(dir, 'patch.json');
+    writeFileSync(file, JSON.stringify(body), { mode: 0o600 });
+    await kubectl(['patch', 'secret', name, '-n', namespace, '--type', 'merge', '--patch-file', file]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 export async function labelResource(
   kind: string,
   name: string,

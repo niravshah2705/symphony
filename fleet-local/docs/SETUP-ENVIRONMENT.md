@@ -78,22 +78,76 @@ no code change to add another entry.
 Entries may set `"runtime":"qoder"`: there is no kagent `qoder` runtime, so the agent compiles on a
 kagent **`byo`** Harness — `workload.image` = `QODER_RUNTIME_IMAGE` (**must** be `@sha256`-pinned; the
 CRD rejects a tag and `src/config.ts` refuses to boot on one) and `workload.command` = the image
-ENTRYPOINT. Its ModelConfig stays on the OpenAI wire and reads the tenant key from the same Secret
-under **`QODER_API_KEY`** (`apiKeySecretKey`; the key step writes `key` and `QODER_API_KEY` with one
-value), because `Harness.spec.env` has no `valueFrom` and a credential there would be plaintext in the
-release. `QODER_SDK_CUSTOM_BASE_URL_BYOK=1` is set in Harness env to unlock qodercli's custom-provider
-path; the account's `allow_byok` switch is outside this repo. The entry ships as
-`"experimental": true`: onboarding renders it but does not wait for it, and `/models` hides it, until a
-canary turn proves it.
+ENTRYPOINT. **Qoder dials Qoder, not LiteLLM**: the ModelConfig carries `baseUrl` =
+`QODER_MODEL_BASE_URL` (default `https://api.qoder.sh`) and a Qoder-native model id, and the agent binds
+an **`EgressPolicy`** whose `authentication` replaces the `authorization` header with the tenant Secret
+key `QODER_API_KEY` on every call — kagent's documented per-call substitution, so the credential never
+enters the Actor. That substitution needs an **exact** origin, so it rides on `QODER_BEARER_ORIGINS`
+(default `https://openapi.qoder.sh,https://center.qoder.sh` — the two hosts that send a bearer token)
+while `QODER_GRANT_ORIGINS` (`https://*.qoder.sh,https://*.qoder.com`) is granted **without**
+authentication: the model call's `Authorization` is a value the CLI signs locally, and rewriting it
+breaks the request it signs.
+Because `Harness.spec.env` has no `valueFrom`, the Harness carries only an **inert job-token envelope**
+in `QODER_JOB_TOKEN` (`{"token":"kagent-egress-placeholder","expireTime":<far future>}`): qodercli parses
+it and logs in without calling `/api/v1/jobToken/exchange` at all, which is the property that lets the
+gateway substitute the value. `src/config.ts` names the env; `_helpers.tpl` rejects a literal that
+carries a real `jt-`/`jrt-`/`pt-` token.
+
+Two keys live in the tenant Secret and only one of them is long-lived. The operator seeds
+**`QODER_PAT`** (`scripts/fixes/t32-qoder-harness.sh`, Secret → stdin, never argv). The control plane —
+never the Actor — exchanges that PAT for a 24h job token and writes the result into **`QODER_API_KEY`**
+(`src/clients/qoder.ts`), plus the refresh token into `QODER_REFRESH_TOKEN`. `src/credentials/qoderTokens.ts`
+keeps it current: onboarding mints once before `helm upgrade --install`, and `startQoderTokenLoop()`
+renews inside the last `QODER_TOKEN_SKEW_SECONDS` (default 6h) of the 24h life over `refresh`, falling
+back to `exchange` only when the refresh is rejected. Expiry state lives on the Secret's annotations
+(`fleet.local/qoder-token-expires-at`, `…-refresh-expires-at`, `…-synced-at`), so a BFF restart needs no
+table. A disabled org stops rotating and keeps its Secret; a Secret with no PAT is skipped.
 
 **Existing tenants do not pick a catalog change up by themselves** — run
 `scripts/fixes/t26-tenant-model-catalog.sh` (idempotent; team/key model list +
 helm upgrade + wait Ready + `projects.agent_name` → default worker). T-15 item 27
 records the API/shell traps it navigates. For a **single** new runtime, use
-`scripts/fixes/t32-qoder-harness.sh` instead: it merges the qoder harness/model/template/agent into
-`helm get values` rather than mirroring `FLEET_MODELS`, so values a release carries that no code renders
-(org-test's probe harness `custom-claude`) survive. `ORG_FILTER=<slug>` runs one tenant; it patches the
-Secret key, pre-flights with `helm template`, and reports — never fails on — the new Agent's conditions.
+`scripts/fixes/t32-qoder-harness.sh` instead: it merges the qoder harness/model/template/agent/egress
+into `helm get values` rather than mirroring `FLEET_MODELS`, so values a release carries that no code
+renders (org-test's probe harness `custom-claude`) survive. `ORG_FILTER=<slug>` runs one tenant; it
+seeds `QODER_PAT` from `QODER_TOKEN` and asks the BFF-owned mint path for the job token, pre-flights with
+`helm template`, and reports — never fails on — the new Harness, EgressPolicy and Agent conditions.
+
+**What one captured 1.1.92 turn shows** (mitmproxy in kagent's substitution semantics: a placeholder
+bearer in the actor, the real `jt-…` rewritten at the gateway, the body never touched). The gate is
+`17*23` → the assistant answers `391` with every response 200, and a negative control that substitutes a
+bogus token returns `401 {"code":"TOKEN_EXPIRE"}` — so the credential is genuinely required and genuinely
+never visible inside the Actor:
+
+| Origin | Path | Authorization | Policy |
+|---|---|---|---|
+| `openapi.qoder.sh` | `/api/v1/userinfo`, `/sash/api/v1/metrics/events` | `Bearer jt-…` | authenticated |
+| `center.qoder.sh` | `/algo/api/v5/service/region/endpoints`, metrics | `Bearer jt-…` | authenticated |
+| `api1\|api2\|api3.qoder.sh` (elected) | `/algo/api/v2/model/list`, `…/agent_chat_generation`, `…/business/finish` | `Bearer COSY.<envelope>`, derived locally | granted, no authentication |
+| `api2/center.qoder.sh` | `/algo/api/v1/ping` | none | granted |
+
+`/api/v1/jobToken/exchange` must **not** appear in the egress log: a `jt-…` never exchanges, and seeing
+that line means the actor is holding a PAT again. Three things the capture does not clear: qodercli
+bootstraps DNS through Aliyun HTTPDNS (`203.107.1.1`), which the policy **denies** ("actor egress policy
+denied destination") and the CLI recovers from, so that address stays ungranted — a public resolver, not
+a Qoder origin; `api2.qoder.sh /otel/v1/logs` answers `401` because the CLI's own telemetry bearer is
+sent to an origin that is granted without substitution, so the export is refused and the turn is unaffected;
+and one `center.qoder.sh /algo/api/v2/config/getDataPolicy` answers
+`403 {"code":"101","message":"Signature invalid"}` even with a real PAT in the actor, so it predates the
+substitution. The same shape reproduces in-cluster: after a `t32` run against a control-plane-minted
+`jt-…`, `test-agent-qoder-worker` reached `Ready=True` and the headless probe's turn came back with
+`agent_chat_generation`, `userinfo` and `region/endpoints` all `200` and no `jobToken/exchange` line.
+The catalog entry no longer carries `"experimental": true` (the canary above is what cleared it), so the
+row appears in `/models` and a new conversation dials `<org>-agent-qoder-worker`; the cost is that
+onboarding now *waits* on that agent too. Re-flag the row — in `FLEET_MODELS` or in
+`QODER_CATALOG_ENTRY` — to go back to rendered-but-not-offered. That matters because of one boot flake
+to fix in the adapter, not the chart:
+`go/harness/qoder/internal/driver/driver.go:45` validates the install by running
+`qodercli --version` under a 15 s budget, and that call is network-dependent (~5 s on an open network),
+so a denied lookup inside the sandbox can end the restore with `validate qodercli install: signal: killed`
+— the ADK supervisor retries and the Agent comes up, but the check should not be able to fail a boot.
+Read that evidence with `kubectl -n ate-system logs deploy/atenet-egress --since=10m | grep -E 'qoder\.sh' | grep -Ev ' 2[0-9][0-9] '`
+(the pod is a Deployment replica, so a bare `pod/atenet-egress` name does not exist).
 
 ## Headless wake probe (step 11, no browser)
 

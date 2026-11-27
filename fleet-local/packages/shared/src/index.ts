@@ -58,8 +58,8 @@ export interface ModelCatalogEntry {
   // claude-harness image; 'codex' stays on the OpenAI provider but requires
   // apiFormat responses and rejects defaultHeaders; 'kagent' (default) keeps
   // the OpenAI wire + headers. 'qoder' compiles a kagent `byo` Harness running
-  // the published qoder-runtime image, with the LiteLLM key read from the
-  // tenant Secret under QODER_API_KEY.
+  // the published qoder-runtime image, dialing Qoder directly with the org's own
+  // token (Secret key QODER_API_KEY) substituted per call by an EgressPolicy.
   runtime?: HarnessRuntime;
   // An experimental entry is rendered for the tenant but is never waited on
   // during onboarding and is hidden from the chat picker until it is proven.
@@ -114,9 +114,10 @@ export function parseModelCatalog(json: string | undefined): ModelCatalogEntry[]
 export const QODER_CATALOG_ENTRY: ModelCatalogEntry = {
   id: 'qoder',
   label: 'Qwen3.8 Flash (Qoder runtime)',
-  model: 'openrouter/qwen/qwen3.8-flash',
+  // A Qoder-native model id, not a LiteLLM alias: the qoder agent dials Qoder's own
+  // endpoint, so nothing here is resolved against the LiteLLM model list.
+  model: 'qwen3.8-flash',
   runtime: 'qoder',
-  experimental: true,
 };
 
 // DigestPin is what the kagent Harness CRD demands of workload.image: a tag is

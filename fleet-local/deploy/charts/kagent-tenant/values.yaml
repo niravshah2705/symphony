@@ -59,9 +59,9 @@ models:
     apiFormat: responses
     stream: true
     # Per-model overrides of the litellm block; empty inherits it. A runtime that
-    # reads its credential under its own env name — the qoder BYO harness uses
-    # QODER_API_KEY — sets apiKeySecret + apiKeySecretKey here rather than
-    # repeating the Secret.
+    # dials its own vendor — the qoder BYO harness, with baseUrl + the Secret key
+    # the EgressPolicy substitutes (QODER_API_KEY) — sets all three here instead of
+    # repeating the litellm block.
     baseUrl: ""
     apiKeySecret: ""
     apiKeySecretKey: ""
@@ -112,6 +112,32 @@ mcp: []
   #   protocol: STREAMABLE_HTTP   # default; SSE also exists
   #   timeout: 30s
 
+# EgressPolicy objects: the outward origins an Agent may reach, and the credential
+# the gateway substitutes on each matching call. `name` is suffixed onto
+# <tenant.id>-egress- and referenced from agents[].egress below.
+#
+# This is how a third-party credential reaches a run without ever entering the
+# Actor: the runtime sends a placeholder header and the gateway rewrites it from
+# `secretKeyRef` outside the sandbox. So a Secret key is only ever referenced
+# here (or from a ModelConfig), never copied into harnesses[].env.
+#
+# `authentication` requires an EXACT origin — kagent rejects a wildcard with
+# "authentication requires an exact HTTP(S) origin" — so a wildcard host is
+# granted by listing it with no `authentication` block.
+egress: []
+  # - name: qoder
+  #   destinations:
+  #     - origin: https://openapi.qoder.sh   # sends `Bearer <token>`: substituted here
+  #       authentication:
+  #         header: authorization            # default
+  #         prefix: "Bearer "
+  #         secretRef: { name: litellm-acme-default, key: QODER_API_KEY }
+  #     - origin: https://center.qoder.sh    # same credential, second bearer host
+  #       authentication:
+  #         prefix: "Bearer "
+  #         secretRef: { name: litellm-acme-default, key: QODER_API_KEY }
+  #     - origin: https://*.qoder.sh         # model hosts: granted, no credential
+
 # AgentTemplate objects: what an agent does. `modelConfig` is an unprefixed
 # name from `models` above; every other key below is passed through verbatim to
 # AgentTemplateSpec, so follow the CRD for their shape.
@@ -133,11 +159,13 @@ templates:
     plugins: []
 
 # Agent objects: pair a template with a harness. Both refs name entries above
-# and are validated at render time.
+# and are validated at render time. `egress` lists unprefixed names from `egress`
+# above (the CRD's egressPolicyRefs, namespace-local, max 16).
 agents:
   - name: assistant
     template: assistant
     harness: app
+    egress: []
 
 # Labels merged onto every object, in addition to the standard ones and
 # kagent.dev/tenant.

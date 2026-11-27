@@ -1,5 +1,6 @@
 import { config } from '../../config.ts';
 import { helmUpgradeInstall } from '../../clients/k8s.ts';
+import { mintQoderToken } from '../../credentials/qoderTokens.ts';
 import { helmRelease, orgNamespace, tenantId } from '../names.ts';
 import { buildTenantValues } from '../tenant-values.ts';
 import type { StepExecutor } from '../machine.ts';
@@ -27,9 +28,19 @@ export const workflowStep: StepExecutor = async (ctx) => {
       qoderRuntimeImage: config.qoderRuntimeImage,
       qoderAdapterCommand: config.qoderAdapterCommand,
       qoderApiKeyEnv: config.qoderApiKeyEnv,
+      qoderBearerOrigins: config.qoderBearerOrigins,
+      qoderGrantOrigins: config.qoderGrantOrigins,
+      qoderModelBaseUrl: config.qoderModelBaseUrl,
       customClaudeImage: config.customClaudeImage,
     },
   });
+
+  // Mint before the policy applies: an EgressPolicy whose Secret key still holds the
+  // operator-seeded PAT substitutes a `pt-...` where Qoder expects a `jt-...`, which
+  // is the failure this whole path exists to avoid. A tenant with no PAT returns
+  // 'skipped' rather than throwing, so onboarding never blocks on a credential the
+  // platform does not hold.
+  await mintQoderToken({ namespace: ns, secretName, orgId: ctx.orgId });
 
   const release = helmRelease(ctx.orgSlug);
   await helmUpgradeInstall({ release, chart: config.tenantChartPath, namespace: ns, values });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_MODEL_CATALOG, QODER_CATALOG_ENTRY, type ModelCatalogEntry } from '@fleet-local/shared';
-import { buildTenantValues, harnessName, type TenantValuesConfig } from '../src/onboarding/tenant-values.ts';
+import { buildTenantValues, harnessName, qoderJobTokenPlaceholder, QODER_TOKEN_PLACEHOLDER, QODER_TOKEN_PLACEHOLDER_ENV, type TenantValuesConfig } from '../src/onboarding/tenant-values.ts';
 
 const digest = `ghcr.io/niravshah2705/symphony/qoder-runtime@sha256:${'a'.repeat(64)}`;
 const claudeDigest = `ghcr.io/niravshah2705/symphony/claude-runtime@sha256:${'b'.repeat(64)}`;
@@ -11,6 +11,9 @@ const cfg = (over: Partial<TenantValuesConfig> = {}): TenantValuesConfig => ({
   qoderRuntimeImage: digest,
   qoderAdapterCommand: '/usr/local/bin/qoder-runtime',
   qoderApiKeyEnv: 'QODER_API_KEY',
+  qoderBearerOrigins: ['https://openapi.qoder.sh', 'https://center.qoder.sh'],
+  qoderGrantOrigins: ['https://*.qoder.sh'],
+  qoderModelBaseUrl: 'https://api.qoder.sh',
   customClaudeImage: claudeDigest,
   ...over,
 });
@@ -37,29 +40,75 @@ test('the qoder agent binds a byo harness carrying the pinned image and command'
   assert.equal(harnessName('qoder'), 'qoder');
 });
 
-test('the qoder credential travels as a Secret reference, never as harness env', () => {
+// The Qoder agent dials Qoder itself. LiteLLM is out of the path, and the tenant's
+// credential never enters the release: it is named as a Secret reference the egress
+// gateway substitutes per call.
+test('the qoder model config points at the Qoder endpoint with a Secret reference', () => {
   const v = input();
   const model = v.models.find((m) => m.name === 'qoder');
-  assert.equal(model?.apiKeySecret, 'litellm-demo-default');
-  assert.equal(model?.apiKeySecretKey, 'QODER_API_KEY');
+  assert.equal(model?.baseUrl, 'https://api.qoder.sh');
   assert.equal(model?.provider, 'OpenAI');
   assert.equal(model?.apiFormat, 'chatCompletions');
-  assert.equal(model?.model, 'openrouter/qwen/qwen3.8-flash');
+  assert.equal(model?.model, 'qwen3.8-flash');
+  assert.equal(model?.apiKeySecret, 'litellm-demo-default');
+  assert.equal(model?.apiKeySecretKey, 'QODER_API_KEY');
+  assert.equal(model?.defaultHeaders?.['x-fleet-org-id'], 'org-uuid');
+});
+
+test('the credential is substituted at the gateway, never written into the release', () => {
+  const v = input();
+  assert.equal(v.egress.length, 1);
+  const policy = v.egress[0];
+  assert.equal(policy.name, 'qoder');
+  // kagent requires an exact origin for authentication, so only the hosts that send
+  // `Bearer <job token>` carry the credential. The model hosts send a locally-derived
+  // `Bearer COSY.<envelope>` instead, so they are granted without authentication —
+  // substituting over a signature is what breaks the turn.
+  const auth = (key: string) => ({
+    header: 'authorization',
+    prefix: 'Bearer ',
+    secretRef: { name: 'litellm-demo-default', key },
+  });
+  assert.deepEqual(policy.destinations, [
+    { origin: 'https://openapi.qoder.sh', authentication: auth('QODER_API_KEY') },
+    { origin: 'https://center.qoder.sh', authentication: auth('QODER_API_KEY') },
+    { origin: 'https://*.qoder.sh' },
+  ]);
+  assert.equal(v.agents.find((a) => a.name === 'qoder-worker')?.egress?.join(','), 'qoder');
+
+  // The runtime needs *a* token to put in its header; the gateway swaps the
+  // placeholder for the Secret's value outside the sandbox.
   const harness = v.harnesses.find((h) => h.name === 'qoder');
-  assert.equal(
-    (harness?.env ?? []).some((e) => e.name === 'QODER_API_KEY'),
-    false,
-    'Harness spec.env has no valueFrom: a key there is plaintext in the release',
-  );
   assert.deepEqual(
-    (harness?.env ?? []).find((e) => e.name === 'QODER_SDK_CUSTOM_BASE_URL_BYOK'),
-    { name: 'QODER_SDK_CUSTOM_BASE_URL_BYOK', value: '1' },
+    (harness?.env ?? []).find((e) => e.name === QODER_TOKEN_PLACEHOLDER_ENV),
+    { name: QODER_TOKEN_PLACEHOLDER_ENV, value: qoderJobTokenPlaceholder() },
+  );
+  assert.equal(QODER_TOKEN_PLACEHOLDER, 'kagent-egress-placeholder');
+  for (const name of ['QODER_API_KEY', 'QODER_PAT', 'QODER_REFRESH_TOKEN']) {
+    assert.equal(
+      (harness?.env ?? []).some((e) => e.name === name),
+      false,
+      `Harness spec.env has no valueFrom: ${name} there is plaintext in the release`,
+    );
+  }
+});
+
+test('a bearer origin that is also in the grant list is authenticated once', () => {
+  const v = input({
+    cfg: cfg({
+      qoderBearerOrigins: ['https://openapi.qoder.sh', 'https://openapi.qoder.sh'],
+      qoderGrantOrigins: ['https://openapi.qoder.sh', 'https://*.qoder.sh'],
+    }),
+  });
+  assert.deepEqual(
+    v.egress[0].destinations.map((d) => d.origin),
+    ['https://openapi.qoder.sh', 'https://*.qoder.sh'],
   );
 });
 
 test('a qoder catalog entry with no image renders no qoder objects', () => {
   const v = input({ cfg: cfg({ qoderRuntimeImage: '' }) });
-  for (const list of ['harnesses', 'models', 'templates', 'agents'] as const) {
+  for (const list of ['harnesses', 'models', 'templates', 'agents', 'egress'] as const) {
     assert.equal(
       v[list].some((e) => JSON.stringify(e).includes('qoder')),
       false,

@@ -1,6 +1,8 @@
 // Package config defines the versioned, non-secret Qoder Harness runtime
 // configuration shared by its compiler and Actor entrypoint.
-// EXPERIMENTAL SCAFFOLD: QODER_PERSONAL_ACCESS_TOKEN; CANNOT run under egress proxy (fail closed).
+// The CLI authenticates from QODER_JOB_TOKEN, which a BYO Harness carries as an inert
+// envelope; the live job token is substituted at the egress gateway by kagent's
+// EgressPolicy, so no credential is compiled here.
 package config
 
 import (
@@ -33,13 +35,6 @@ func OwnsEnvironment(name string) bool {
 		return false
 	}
 }
-
-// QoderApiKeyEnvName is the env key the qodercli BYOK subsystem reads the model
-// credential from (declared by a custom provider entry, behind
-// QODER_SDK_CUSTOM_BASE_URL_BYOK=1). It is a fleet-authored name, not a CLI
-// built-in, and the fleet supplies it from the tenant's LiteLLM virtual key —
-// never as a literal in a Harness CR.
-const QoderApiKeyEnvName = "QODER_API_KEY"
 
 type Config struct {
 	MaxContentLength *int64   `json:"max_content_length,omitempty"`
