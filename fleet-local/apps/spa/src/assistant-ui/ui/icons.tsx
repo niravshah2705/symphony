@@ -61,3 +61,27 @@ export const CloseIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
     <path d="m6 6 12 12" />
   </svg>
 );
+
+export const MicIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...svg(props)}>
+    <rect x="9" y="2" width="6" height="12" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0" />
+    <path d="M12 18v4" />
+  </svg>
+);
+
+export const SpeakerIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...svg(props)}>
+    <path d="M11 5 6 9H3v6h3l5 4z" />
+    <path d="M16 9a4 4 0 0 1 0 6" />
+    <path d="M19 6a8 8 0 0 1 0 12" />
+  </svg>
+);
+
+export const SpeakerOffIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...svg(props)}>
+    <path d="M11 5 6 9H3v6h3l5 4z" />
+    <path d="m17 9 5 6" />
+    <path d="m22 9-5 6" />
+  </svg>
+);

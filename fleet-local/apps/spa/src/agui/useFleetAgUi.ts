@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useAgUiRuntime, type AgUiAssistantRuntime } from '@assistant-ui/react-ag-ui';
 import { fleetAttachments } from './attachments';
 import { FleetAgUiAgent } from './FleetAgUiAgent';
+import { fleetDictation, fleetSpeech } from './useVoice';
 
 export interface FleetAgUiOptions {
   orgId: string;
@@ -62,7 +63,7 @@ export function useFleetAgUi(options: FleetAgUiOptions): AgUiAssistantRuntime {
     agent,
     // Inline base64 attachments (image/pdf/text), sent when the composer
     // submits; the BFF turns them into A2A FileParts for kagent.
-    adapters: { attachments: fleetAttachments },
+    adapters: { attachments: fleetAttachments, dictation: fleetDictation, speech: fleetSpeech },
     // What the run endpoint said before it sent a single event: an expired
     // session, an unknown model, a run input it refused to parse, a suspended
     // organisation.
