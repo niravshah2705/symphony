@@ -14,17 +14,29 @@ export interface FleetIdentity {
   conversationId?: string;
 }
 
+// The A2A Part oneof, in the JSON form the controller accepts. Text is what a
+// turn says; file is what it hands over (base64 `bytes` or a `uri` reference),
+// per go's a2a Part (Text/Raw/Data/URL — FilePart carries the url/bytes pair).
+export interface A2APart {
+  text?: string;
+  file?: { bytes?: string; uri?: string; name?: string; mimeType?: string };
+}
+
 export interface A2AMessage {
   messageId: string;
   role: 'ROLE_USER';
-  parts: { text: string }[];
+  parts: A2APart[];
   contextId?: string;
   taskId?: string;
   metadata?: Record<string, unknown>;
+  // A message answering an extension payload (kagent's HITL approval/ask-user
+  // responses) must DECLARE the extension, or the controller never parses the
+  // metadata and rejects the resume (go/api/a2a/hitl.go ParseToolApprovalResponse).
+  extensions?: string[];
 }
 
-export function userMessage(text: string, contextId?: string, taskId?: string): A2AMessage {
-  const msg: A2AMessage = { messageId: randomUUID(), role: 'ROLE_USER', parts: [{ text }] };
+export function userMessage(parts: A2APart[], contextId?: string, taskId?: string): A2AMessage {
+  const msg: A2AMessage = { messageId: randomUUID(), role: 'ROLE_USER', parts };
   if (contextId) msg.contextId = contextId;
   if (taskId) msg.taskId = taskId;
   return msg;

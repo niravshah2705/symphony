@@ -18,13 +18,24 @@
 import { EventEncoder } from '@ag-ui/encoder';
 import type { Event as AgUiEvent } from '@ag-ui/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { streamMessage } from '../kagent/a2a.ts';
+import { cancelTask, streamMessage, type RpcResult } from '../kagent/a2a.ts';
 import { settleTurn, type SessionRow } from '../db/sessions.ts';
 import { classifyStreamEnd, type Settlement } from '../a2a/contract.ts';
 import { identityHeaders, openTurn, pumpTurn, sseHead, watchAbort, type FacadeContext } from '../a2a/facade.ts';
 import type { WireFrame } from '../a2a/translate.ts';
 import { createTurnEncoder } from './encode.ts';
 import { turnFromRunAgentInput } from './runinput.ts';
+
+// An abandoned resume's CancelTask reply, re-spoken as the one-frame SSE the
+// pump would have read from a live stream. Status stays 200 because the frame
+// itself carries the verdict: kagent reports "task not found" as a JSON-RPC
+// error member, which classifyStreamEnd turns into the run's reason.
+function cancelStream(result: RpcResult): Response {
+  return new Response(`data: ${JSON.stringify(result.body)}\n\n`, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
+}
 
 export async function aguiRun(
   ctx: FacadeContext,
@@ -46,12 +57,14 @@ export async function aguiRun(
     for (const event of events) reply.raw.write(sse.encodeSSE(event));
   };
 
-  const upstream = await streamMessage(
-    agent.namespace,
-    agent.agent,
-    identityHeaders(ctx, session.kagent_session_id ?? session.id),
-    message,
-  );
+  const headers = identityHeaders(ctx, session.kagent_session_id ?? session.id);
+  // An abandoned question is a CancelTask, not a turn. The controller's reply to
+  // the cancel is replayed as a one-frame stream, so settlement, the session row
+  // and the encoder all witness an ordinary task that ended cancelled — rather
+  // than a second bespoke closing path.
+  const upstream = turn.cancelTaskId
+    ? cancelStream(await cancelTask(agent.namespace, agent.agent, headers, turn.cancelTaskId))
+    : await streamMessage(agent.namespace, agent.agent, headers, message);
 
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text().catch(() => '');
@@ -85,6 +98,9 @@ export async function aguiRun(
       thoughts: false,
       onFrame,
       aborted: () => isAborted(),
+      // Stop (composer Cancel) aborts the fetch; the task must die with the
+      // stream, or kagent keeps running a turn nobody is watching.
+      onCancel: (taskId) => cancelTask(agent.namespace, agent.agent, headers, taskId).then(() => undefined),
       log: ctx.log,
     });
     // An abort means the reader is gone: the terminal event would go nowhere, and

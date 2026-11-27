@@ -40,14 +40,16 @@ test('makeTraceparent is a valid sampled W3C traceparent', () => {
   assert.notEqual(makeTraceparent(), tp);
 });
 
-test('userMessage carries text and optional context/task ids', () => {
-  const m = userMessage('hello');
+test('userMessage carries text and file parts, with optional context/task ids', () => {
+  const m = userMessage([{ text: 'hello' }]);
   assert.equal(m.role, 'ROLE_USER');
   assert.equal(m.parts[0]?.text, 'hello');
   assert.ok(m.messageId);
   assert.equal(m.contextId, undefined);
   assert.equal(m.taskId, undefined);
-  const cont = userMessage('again', 'ctx-1', 'task-1');
+  const cont = userMessage([{ text: 'look' }, { file: { bytes: 'aGk=', mimeType: 'text/plain', name: 'hi.txt' } }], 'ctx-1', 'task-1');
+  assert.equal(cont.parts.length, 2);
+  assert.equal(cont.parts[1]?.file?.bytes, 'aGk=');
   assert.equal(cont.contextId, 'ctx-1');
   assert.equal(cont.taskId, 'task-1');
 });

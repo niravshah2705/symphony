@@ -194,12 +194,96 @@ test('a thought streams as reasoning and closes before the answer opens', async 
   ]);
 });
 
+test('tool data parts become the AG-UI tool sequence, once across the final replay', async () => {
+  const call = { data: { id: 'tool-1', name: 'bash', args: { cmd: 'ls' } }, metadata: { 'kagent.dev/a2a/part-type': 'function_call' } };
+  const result = { data: { id: 'tool-1', name: 'bash', response: { exit: 0 } }, metadata: { 'kagent.dev/a2a/part-type': 'function_response' } };
+  const blocks = [
+    frame({ artifactUpdate: { ...TASK, artifact: { parts: [call] } } }),
+    frame({ artifactUpdate: { ...TASK, artifact: { parts: [result] } } }),
+    // The completed task replays every artifact of the turn; the tool card must
+    // not appear twice (fleet-local/docs/TROUBLESHOOTING.md calls this quirk out).
+    frame({ task: { ...TASK, id: 'task-9', status: { state: 'TASK_STATE_COMPLETED' }, artifacts: [{ parts: [call, result] }] } }),
+  ];
+  const { events, settlement } = await run(blocks);
+  assert.equal(settlement.outcome, 'completed');
+  assert.deepEqual(
+    events.filter((event) => String(event.type).startsWith('TOOL_CALL_')).map((event) => event.type),
+    ['TOOL_CALL_START', 'TOOL_CALL_ARGS', 'TOOL_CALL_END', 'TOOL_CALL_RESULT'],
+  );
+});
+
+test('an agent-produced file part reaches the browser as a CUSTOM artifact, once', async () => {
+  const png = { file: { bytes: 'aGVsbG8=', mimeType: 'image/png', name: 'shot.png' } };
+  const blocks = [
+    frame({ artifactUpdate: { ...TASK, artifact: { parts: [png] } } }),
+    frame({ task: { ...TASK, id: 'task-9', status: { state: 'TASK_STATE_COMPLETED' }, artifacts: [{ parts: [png] }] } }),
+  ];
+  const { events, settlement } = await run(blocks);
+  assert.equal(settlement.outcome, 'completed');
+  const custom = events.filter((event) => event.type === 'CUSTOM');
+  assert.equal(custom.length, 1);
+  assert.equal(custom[0]?.name, 'fleet.dev/file');
+  assert.equal((custom[0]?.value as { dataUri?: string }).dataUri, 'data:image/png;base64,aGVsbG8=');
+});
+
 test('an rpc error that never reached a terminal state is still a reason', async () => {
   const blocks = [frame({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: 'the agent is not ready' } })];
   const { settlement, types } = await run(blocks);
   assert.equal(settlement.outcome, 'failed');
   assert.match(String(settlement.reason), /the agent is not ready/);
   assert.deepEqual(types(), ['RUN_STARTED', 'RUN_ERROR']);
+});
+
+test('a browser abort cancels the live task upstream', async () => {
+  const blocks = [
+    frame({ artifactUpdate: { ...TASK, artifact: { parts: [{ text: 'streaming away' }] } } }),
+    frame({ statusUpdate: { ...TASK, status: { state: 'TASK_STATE_WORKING' } } }),
+  ];
+  const cancelled: string[] = [];
+  const settlement = await pumpTurn({
+    upstream: sseResponse(blocks),
+    session: row(),
+    thoughts: false,
+    aborted: () => true,
+    onCancel: async (taskId) => {
+      cancelled.push(taskId);
+    },
+  });
+  assert.equal(settlement.outcome, 'client_abort');
+  assert.deepEqual(cancelled, ['task-9'], 'the task the wire named is the one cancelled');
+});
+
+test('an abort after a terminal state does not cancel', async () => {
+  const blocks = [frame({ statusUpdate: { ...TASK, status: { state: 'TASK_STATE_COMPLETED' } } })];
+  const cancelled: string[] = [];
+  const settlement = await pumpTurn({
+    upstream: sseResponse(blocks),
+    session: row(),
+    thoughts: false,
+    aborted: () => true,
+    onCancel: async (taskId) => {
+      cancelled.push(taskId);
+    },
+  });
+  assert.equal(settlement.outcome, 'completed', 'a run that finished is not an abort');
+  assert.deepEqual(cancelled, []);
+});
+
+test('a cancel the upstream refuses settles the turn anyway', async () => {
+  const blocks = [frame({ statusUpdate: { ...TASK, status: { state: 'TASK_STATE_WORKING' } } })];
+  const logs: string[] = [];
+  const settlement = await pumpTurn({
+    upstream: sseResponse(blocks),
+    session: row(),
+    thoughts: false,
+    aborted: () => true,
+    onCancel: async () => {
+      throw new Error('task not found');
+    },
+    log: (message) => logs.push(message),
+  });
+  assert.equal(settlement.outcome, 'client_abort');
+  assert.ok(logs.some((line) => line.includes('failed to cancel aborted task')), 'the refusal is logged, not thrown');
 });
 
 test('no frames at all is a refusal the client is told about', async () => {

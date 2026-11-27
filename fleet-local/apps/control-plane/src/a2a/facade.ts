@@ -204,12 +204,12 @@ export async function openTurn(ctx: FacadeContext, turn: RestTurn): Promise<{ se
   // task whose answer the first one never sees.
   const taskId = turn.message.taskId ?? (found?.status === 'awaiting_input' ? found.kagent_task_id ?? undefined : undefined);
 
-  const message = userMessage(
-    turn.message.parts.map((part) => part.text).join('\n'),
-    session.kagent_session_id ?? turn.message.contextId,
-    taskId,
-  );
+  // Parts pass through as given: text is the turn's words, file is an inline
+  // attachment (runinput.ts has already checked its type and size). A fresh
+  // text-only turn lands on exactly the wire shape used before attachments.
+  const message = userMessage(turn.message.parts, session.kagent_session_id ?? turn.message.contextId, taskId);
   if (turn.message.metadata) message.metadata = turn.message.metadata;
+  if (turn.message.extensions) message.extensions = turn.message.extensions;
   return { session, message, agent };
 }
 
@@ -226,6 +226,13 @@ export interface Pump {
   /** Called for every frame the pump could parse, before anything is relayed. */
   onFrame?: (frame: WireFrame) => void;
   aborted?: () => boolean;
+  /**
+   * Cleanup when the browser went away while the task was still live: the pump
+   * owns the task handle, so this is where a disconnect becomes a CancelTask.
+   * Without it kagent keeps burning compute replying to a reader that is gone.
+   * A throw is logged, not surfaced — the run is already over for the client.
+   */
+  onCancel?: (taskId: string) => Promise<void>;
   log?: (message: string, extra?: Record<string, unknown>) => void;
 }
 
@@ -308,6 +315,12 @@ export async function pumpTurn(pump: Pump): Promise<Settlement> {
     framesSeen,
     answered,
   });
+  // The browser left and the task never reached a terminal state: kagent would
+  // otherwise keep streaming into nothing. A cancel the controller refuses (the
+  // task settled in the race) is not this turn's problem — log and move on.
+  if (settlement.outcome === 'client_abort' && taskId && pump.onCancel) {
+    await pump.onCancel(taskId).catch((err: Error) => pump.log?.(`failed to cancel aborted task: ${err.message}`));
+  }
   const seconds = (Date.now() - startedAt) / 1000;
   // A failed settle leaves the row 'running', which is not a lost billing:
   // meter_seconds is cumulative, so the next turn's settle bills this compute
@@ -365,8 +378,17 @@ export async function facadeStream(
 
   sseHead(reply);
   const aborted = watchAbort(request, reply);
+  const headers = identityHeaders(ctx, session.kagent_session_id ?? session.id);
   try {
-    await pumpTurn({ upstream, write: (chunk) => reply.raw.write(chunk), session, thoughts: true, aborted: () => aborted(), log: ctx.log });
+    await pumpTurn({
+      upstream,
+      write: (chunk) => reply.raw.write(chunk),
+      session,
+      thoughts: true,
+      aborted: () => aborted(),
+      onCancel: (taskId) => cancelTask(session.agent_namespace, session.agent_name, headers, taskId).then(() => undefined),
+      log: ctx.log,
+    });
   } finally {
     reply.raw.end();
   }

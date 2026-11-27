@@ -11,6 +11,11 @@ import {
   REASONING_ARTIFACT_ID,
   REASONING_ARTIFACT_NAME,
   isThoughtPart,
+  parseHitlPayload,
+  parseStructuredOutputPart,
+  parseToolActivityPart,
+  type StructuredOutput,
+  type ToolActivity,
 } from '@fleet-local/shared';
 import type { A2AMessage } from '../kagent/a2a.ts';
 import { A2ARequestError, normalizeState } from './contract.ts';
@@ -66,6 +71,26 @@ function answersOf(...candidates: unknown[]): string {
 
 export type FrameView = 'task' | 'status-update' | 'artifact-update' | 'message' | 'rpc-error' | 'unknown';
 
+// Tool calls ride the same containers thoughts do: artifact lists and bare part
+// lists, recursed through `parts`. Anything that is not a tagged data part is
+// skipped, so a text or file artifact simply contributes nothing here.
+function toolsOf(...candidates: unknown[]): ToolActivity[] {
+  const found: ToolActivity[] = [];
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    for (const item of candidate) {
+      if (!isObj(item)) continue;
+      if (Array.isArray(item.parts)) {
+        found.push(...toolsOf(item.parts));
+        continue;
+      }
+      const activity = parseToolActivityPart(item);
+      if (activity) found.push(activity);
+    }
+  }
+  return found;
+}
+
 // True if the list carries at least one agent-produced part. Both an artifact
 // list and a bare part list arrive here, and an artifact-update frame wraps
 // exactly one artifact — so a container with no parts must not count as output.
@@ -74,8 +99,73 @@ function carriesParts(list: unknown): boolean {
   return list.some((item) => {
     if (!isObj(item)) return false;
     if (Array.isArray(item.parts)) return item.parts.length > 0;
-    return ['text', 'raw', 'url', 'data'].some((kind) => item[kind] !== undefined);
+    return ['text', 'raw', 'url', 'data', 'file'].some((kind) => item[kind] !== undefined);
   });
+}
+
+// One agent-produced file as it rides the wire: inline bytes or a URI reference.
+// The AG-UI encoder re-speaks this as a CUSTOM event the SPA renders directly.
+export interface WireFile {
+  bytes?: string;
+  uri?: string;
+  mimeType?: string;
+  name?: string;
+}
+
+// An A2A FilePart in either JSON spelling: the REST binding's discriminated
+// `{kind:"file", file:{…}}`, and the proto-JSON oneof with the file fields flat
+// on the part. Read tolerantly like every other frame field.
+function readFilePart(part: Obj): WireFile | undefined {
+  const file = isObj(part.file) ? part.file : str(part.kind) === 'file' ? part : undefined;
+  if (!file) return undefined;
+  const bytes = str(file.bytes);
+  const uri = str(file.uri) ?? str(file.url);
+  if (bytes === undefined && uri === undefined) return undefined;
+  const out: WireFile = {};
+  if (bytes !== undefined) out.bytes = bytes;
+  if (uri !== undefined) out.uri = uri;
+  const mimeType = str(file.mimeType) ?? str(file.mime_type);
+  if (mimeType) out.mimeType = mimeType;
+  const name = str(file.name);
+  if (name) out.name = name;
+  return out;
+}
+
+// The structured terminal result (go/api/a2a/structured_output.go). A run carries
+// at most one, but the final task frame replays it, so the LAST read wins and the
+// encoder dedupes by content.
+function structuredOf(...candidates: unknown[]): StructuredOutput | undefined {
+  let found: StructuredOutput | undefined;
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    for (const item of candidate) {
+      if (!isObj(item)) continue;
+      if (Array.isArray(item.parts)) {
+        found = structuredOf(item.parts) ?? found;
+        continue;
+      }
+      const structured = parseStructuredOutputPart(item);
+      if (structured) found = structured;
+    }
+  }
+  return found;
+}
+
+function filesOf(...candidates: unknown[]): WireFile[] {
+  const found: WireFile[] = [];
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    for (const item of candidate) {
+      if (!isObj(item)) continue;
+      if (Array.isArray(item.parts)) {
+        found.push(...filesOf(item.parts));
+        continue;
+      }
+      const file = readFilePart(item);
+      if (file) found.push(file);
+    }
+  }
+  return found;
 }
 
 export interface WireFrame {
@@ -96,6 +186,28 @@ export interface WireFrame {
    * without producing answer text, and must not be reported as an empty turn.
    */
   producesOutput?: boolean;
+  /**
+   * Tool invocations carried by this frame's data parts (kagent's function_call
+   * / function_response convention). The AG-UI encoder turns these into the
+   * TOOL_CALL_* sequence; stdout-only harnesses never produce them.
+   */
+  toolCalls?: ToolActivity[];
+  /**
+   * Files produced by the agent (A2A FileParts: inline bytes or a URI). The AG-UI
+   * encoder re-speaks these as CUSTOM artifacts the SPA renders as thumbnails
+   * or links; a text-only harness never produces them.
+   */
+  files?: WireFile[];
+  /**
+   * The run's structured terminal result, when the harness enforced an output
+   * schema. The AG-UI encoder turns this into the generative-UI artifact.
+   */
+  structured?: StructuredOutput;
+  /**
+   * The typed HITL payload on this frame's status/message metadata, if any
+   * (tool-approval or ask-user request). Read for the interrupt in encode.ts.
+   */
+  hitl?: Record<string, unknown>;
   rpcError?: { code?: unknown; message?: unknown };
 }
 
@@ -175,6 +287,19 @@ export function inspectFrame(raw: string): WireFrame | undefined {
   const answer = answersOf(artifacts ?? [], parts ?? [], statusParts ?? []);
   if (answer) frame.answer = answer;
   if (carriesParts(artifacts) || carriesParts(parts) || carriesParts(statusParts)) frame.producesOutput = true;
+  const tools = toolsOf(artifacts ?? [], parts ?? [], statusParts ?? []);
+  if (tools.length > 0) frame.toolCalls = tools;
+  const files = filesOf(artifacts ?? [], parts ?? [], statusParts ?? []);
+  if (files.length > 0) frame.files = files;
+  const structured = structuredOf(artifacts ?? [], parts ?? [], statusParts ?? []);
+  if (structured) frame.structured = structured;
+  // A harness asking for approval puts its typed payload on the message that
+  // carries the input-required status (go/api/a2a/hitl.go AttachHITL), so the
+  // metadata lives on status.message — with the message view as the fallback
+  // spelling some bindings use.
+  const statusMessage = status && isObj(status.message) ? status.message : undefined;
+  const hitl = parseHitlPayload(statusMessage?.metadata) ?? parseHitlPayload(node.metadata);
+  if (hitl) frame.hitl = hitl;
   return frame;
 }
 
@@ -209,6 +334,11 @@ export interface RestTurn {
   modelId?: string;
   /** The AG-UI client's own conversation handle; never set on the A2A leg. */
   threadId?: string;
+  /**
+   * The resume abandoned the question rather than answered it (AG-UI resume
+   * status "cancelled"): the BFF cancels this task instead of streaming a turn.
+   */
+  cancelTaskId?: string;
   pushConfigRequested: boolean;
 }
 
