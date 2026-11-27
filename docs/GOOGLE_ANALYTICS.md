@@ -1,8 +1,10 @@
 # Google Analytics 4
 
 Software Factory supports an optional Google Analytics 4 web data stream. A deployment
-does not load the Google tag or queue events unless the SPA receives a valid
-`G-...` measurement ID at deploy time. On a configured deployment, analytics is
+does not load the Google tag or queue events unless it receives a valid
+`G-...` measurement ID at deploy time: the SPA reads it from `config.js`, and the
+static marketing pages on `www` get a per-page gtag snippet injected at build time
+by `scripts/build-marketing-site.js`. On a configured deployment, analytics is
 enabled by default for each browser and can be disabled at any time through the
 persistent **Cookie Preferences** control in the application footer.
 
@@ -67,7 +69,32 @@ for the deployment path you run:
 GitHub repository variable; running it with the value empty removes a stale
 variable. The committed `public/config.js` keeps the value empty, so local
 development and automated tests never contact Google Analytics. Removing the
-deployment variable and republishing the SPA disables collection again.
+deployment variable and republishing the SPA and the marketing site disables
+collection again.
+
+## Marketing site (www.archagentix.com)
+
+The same measurement ID flows to both hosts: `deploy.yml` writes it into the SPA
+runtime `config.js`, and `deploy-www.yml` passes it as
+`GOOGLE_ANALYTICS_MEASUREMENT_ID` to `scripts/build-marketing-site.js`, which
+injects the gtag bootstrap before `</head>` of every generated page. An unset or
+empty variable publishes the marketing tree with no tag at all, and a malformed
+one fails the build. Because these are full documents rather than an SPA, the
+snippet leaves GA4's automatic page view on — one `page_view` per marketing URL
+(landing, blog, pricing, contact, legal), which is what stitches the pre-signup
+part of the user journey to the platform's route views in the same stream.
+
+The snippet mirrors the platform's privacy posture: consent mode defaults to
+`analytics_storage: granted` unless `localStorage["ai-fleet.analytics-consent"]`
+reads `disabled` at page load, and all ad signals stay denied. The Cookie
+Preferences dialog itself lives in the SPA; the marketing origin shares neither
+its localStorage nor (by default) its `_ga` cookie with `platform`, so the two
+hosts join journeys through the shared stream and, for signed-in visitors, the
+`user_id` the SPA sets. The `www` CSP in `firebase.json` allows
+`www.googletagmanager.com` (script), `*.google-analytics.com` and
+`analytics.google.com` (collect beacons), and `www.google-analytics.com` (image
+fallback); `scripts/marketing-site.test.js` pins both the injection and these
+origins.
 
 ## Visitor analytics preference
 
@@ -110,6 +137,10 @@ it should contain `authentication_status=authenticated`, while `user_id` appears
 only on the GA configuration command. In reports, compare the custom
 **Authentication status** dimension or GA4's built-in **Signed in with user ID**
 dimension. Historical events are not reprocessed after either feature is added.
+For the marketing site, republish `www`, open `https://www.archagentix.com/`, and
+confirm exactly one `page_view` for the landing URL carries the full
+`https://www.archagentix.com/` location; setting the stored consent key to
+`disabled` before load must flip `analytics_storage` to `denied`.
 
 Software Factory intentionally does not show a first-visit banner because the selected
 model is opt-out by default. The footer control and Privacy Notice do not replace

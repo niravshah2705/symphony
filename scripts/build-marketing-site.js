@@ -46,6 +46,40 @@ const SHARED_SHEETS = ['tokens.css', 'base.css'];
 const BINARY_EXT = /\.(?:png|jpe?g|ico|webp|avif|gif|woff2?|ttf|otf)$/i;
 const isBinary = (rel) => BINARY_EXT.test(rel);
 
+// GA4 web-stream id, the same shape deploy.yml enforces for the SPA runtime
+// config. Empty means analytics stay off (local builds, tests, CI without the
+// repo variable); a set-but-malformed id fails the build instead of shipping a
+// tag Google would reject.
+const GA4_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
+
+// The static marketing pages have no SPA to load google-analytics.mjs, so the
+// generator inlines the gtag bootstrap before </head>. Page views are GA4's
+// automatic collection: one per marketing URL, which is the journey this exists
+// to log. Consent mirrors the platform contract
+// (public/js/google-analytics.mjs): the ai-fleet.analytics-consent opt-out
+// denies analytics_storage, ad signals are always denied, and the page_title /
+// URL carry no tenant data because these pages are public.
+function gaSnippet(measurementId) {
+  const id = String(measurementId || '').trim();
+  if (!id) return '';
+  if (!GA4_MEASUREMENT_ID.test(id)) {
+    throw new Error('GOOGLE_ANALYTICS_MEASUREMENT_ID must be empty or a GA4 id such as G-XXXXXXXXXX, found: ' + id);
+  }
+  return [
+    '<script>',
+    "window.dataLayer = window.dataLayer || [];",
+    "function gtag(){dataLayer.push(arguments);}",
+    "var gaConsent = 'granted';",
+    "try { if (localStorage.getItem('ai-fleet.analytics-consent') === 'disabled') gaConsent = 'denied'; } catch (e) {}",
+    "gtag('consent', 'default', { analytics_storage: gaConsent, ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });",
+    "gtag('js', new Date());",
+    "gtag('config', '" + id + "', { allow_google_signals: false, allow_ad_personalization_signals: false });",
+    '</script>',
+    '<script async src="https://www.googletagmanager.com/gtag/js?id=' + id + '"></script>',
+    '</head>',
+  ].join('\n    ');
+}
+
 // Specific rewrites first; the generic path promotion last.
 const REWRITES = [
   // Hash-routed legal pages live in the SPA, which the marketing root no longer serves.
@@ -53,7 +87,7 @@ const REWRITES = [
   // A root-scoped service worker must stay limited to its precached pages, or every
   // path on the origin becomes cache-first and never expires.
   ["url.pathname.startsWith('/adlc/')", 'ASSETS.includes(url.pathname)'],
-  ["'adlc-landing-v2'", "'archagentix-marketing-v1'"],
+  ["'adlc-landing-v3'", "'archagentix-marketing-v2'"],
   ['/adlc/', '/'],
 ];
 
@@ -92,13 +126,19 @@ function walkFiles(dir, prefix) {
   return found;
 }
 
-function copyFile(srcDir, outDir, rel) {
-  var out = isBinary(rel)
-    ? fs.readFileSync(path.join(srcDir, rel))
-    : rewriteText(fs.readFileSync(path.join(srcDir, rel), 'utf8'));
+// The GA head block (gaSnippet output, '' when analytics are off) is injected
+// before the page's single </head> - a string replace so the first occurrence
+// only; the generated pages are verified to carry exactly one.
+function copyFile(srcDir, outDir, rel, gaHead) {
   var dest = path.join(outDir, rel);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  fs.writeFileSync(dest, out);
+  if (isBinary(rel)) {
+    fs.writeFileSync(dest, fs.readFileSync(path.join(srcDir, rel)));
+    return;
+  }
+  var text = rewriteText(fs.readFileSync(path.join(srcDir, rel), 'utf8'));
+  if (gaHead && /\.html$/.test(rel)) text = text.replace('</head>', gaHead);
+  fs.writeFileSync(dest, text);
 }
 // public/sitemap.xml documents the app tree, where the ADLC pages sit under /adlc/.
 // On www those are legacy urls served by a rewrite, never canonical urls, so the
@@ -209,21 +249,28 @@ function buildMarketingSite(options) {
   var settings = options || {};
   var srcDir = settings.srcDir || path.join(ROOT, 'public');
   var outDir = settings.outDir || path.join(ROOT, 'marketing');
+  // The deploy pipeline passes the public GA4 web-stream id through the repo
+  // variable GOOGLE_ANALYTICS_MEASUREMENT_ID (same source as the SPA's
+  // public/config.js). Callers may override with { gaMeasurementId }.
+  var gaId = settings.gaMeasurementId !== undefined
+    ? settings.gaMeasurementId
+    : process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID || '';
+  var gaHead = gaSnippet(gaId);
   if (!fs.existsSync(srcDir)) throw new Error('missing source directory ' + srcDir);
   if (settings.clean !== false && fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });
 
   var adlcDir = path.join(srcDir, ADLC_DIR);
   var promoted = walkFiles(adlcDir);
-  for (var i = 0; i < promoted.length; i += 1) copyFile(adlcDir, outDir, promoted[i]);
-  for (i = 0; i < PUBLISHED_PAGES.length; i += 1) copyFile(srcDir, outDir, PUBLISHED_PAGES[i] + '/index.html');
-  for (i = 0; i < SHARED_SHEETS.length; i += 1) copyFile(srcDir, outDir, SHARED_SHEETS[i]);
-  for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i]);
-  for (i = 0; i < VERIFICATION_FILES.length; i += 1) copyFile(srcDir, outDir, VERIFICATION_FILES[i]);
+  for (var i = 0; i < promoted.length; i += 1) copyFile(adlcDir, outDir, promoted[i], gaHead);
+  for (i = 0; i < PUBLISHED_PAGES.length; i += 1) copyFile(srcDir, outDir, PUBLISHED_PAGES[i] + '/index.html', gaHead);
+  for (i = 0; i < SHARED_SHEETS.length; i += 1) copyFile(srcDir, outDir, SHARED_SHEETS[i], gaHead);
+  for (i = 0; i < DISCOVERY_FILES.length; i += 1) copyFile(srcDir, outDir, DISCOVERY_FILES[i], gaHead);
+  for (i = 0; i < VERIFICATION_FILES.length; i += 1) copyFile(srcDir, outDir, VERIFICATION_FILES[i], gaHead);
   var brandDir = path.join(srcDir, BRAND_DIR);
   if (fs.existsSync(brandDir)) {
     var brand = walkFiles(brandDir).map(function (rel) { return BRAND_DIR + '/' + rel; });
-    for (i = 0; i < brand.length; i += 1) copyFile(srcDir, outDir, brand[i]);
+    for (i = 0; i < brand.length; i += 1) copyFile(srcDir, outDir, brand[i], gaHead);
   }
   fs.writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemap(srcDir));
 
@@ -302,6 +349,7 @@ module.exports = {
   buildSitemap: buildSitemap,
   checkFresh: checkFresh,
   fileForUrl: fileForUrl,
+  gaSnippet: gaSnippet,
   legacyRewrites: legacyRewrites,
   parseArgs: parseArgs,
   rewriteText: rewriteText,

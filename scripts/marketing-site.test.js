@@ -11,10 +11,15 @@ const path = require('node:path');
 const test = require('node:test');
 
 const generator = require('./build-marketing-site.js');
-const { buildMarketingSite, sitemapLocs, run, CANONICAL_ORIGIN, PLATFORM_ORIGIN, LEGAL_PAGE_SLUGS } = generator;
+const { buildMarketingSite, sitemapLocs, run, gaSnippet, CANONICAL_ORIGIN, PLATFORM_ORIGIN, LEGAL_PAGE_SLUGS } = generator;
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'marketing-test-'));
+// The GA id is an optional deploy-time input; the shared build must not depend
+// on whether this machine's environment happens to carry it. The GA-specific
+// tests below pass { gaMeasurementId } explicitly instead.
+const savedGaEnv = process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
+delete process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID;
 const built = buildMarketingSite({ outDir: OUT });
 const read = (...parts) => fs.readFileSync(path.join(OUT, ...parts), 'utf8');
 const exists = (urlPath) => fs.existsSync(path.join(OUT, ...fileFor(urlPath)));
@@ -141,7 +146,10 @@ function assertLoadableHosts(texts, allows, target) {
   }
 }
 
-test.after(() => fs.rmSync(OUT, { recursive: true, force: true }));
+test.after(() => {
+  fs.rmSync(OUT, { recursive: true, force: true });
+  if (savedGaEnv !== undefined) process.env.GOOGLE_ANALYTICS_MEASUREMENT_ID = savedGaEnv;
+});
 
 test('the marketing tree promotes every ADLC page to the root', () => {
   const files = new Set(built.files);
@@ -191,7 +199,7 @@ test('service worker and manifest are root-scoped on www', () => {
   assert.equal(manifest.scope, '/');
 
   const worker = read('sw.js');
-  assert.match(worker, /'archagentix-marketing-v1'/, 'the root build needs its own cache key');
+  assert.match(worker, /'archagentix-marketing-v2'/, 'the root build needs its own cache key');
   assert.match(worker, /ASSETS\.includes\(url\.pathname\)/, 'a root-scoped worker must not cache-first the whole origin');
   assert.match(read('app.js'), /register\('\/sw\.js', \{ scope: '\/' \}\)/);
 
@@ -427,9 +435,68 @@ test('deploy-www builds the marketing tree before publishing it', () => {
   assert.ok(build >= 0, 'the generator must run in the www release job');
   assert.ok(publish > build, 'firebase must deploy after the tree is built');
   assert.ok(workflow.includes("- 'scripts/build-marketing-site.js'"), 'generator changes must republish www');
+  assert.ok(
+    workflow.includes('GOOGLE_ANALYTICS_MEASUREMENT_ID: ${{ vars.GOOGLE_ANALYTICS_MEASUREMENT_ID }}'),
+    'the build step must forward the GA id so the marketing pages measure the journey'
+  );
 
   const ignored = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8').split('\n');
   assert.ok(ignored.includes('marketing/'), 'the generated tree must stay out of git');
+});
+
+test('a GA id injects the gtag bootstrap into every marketing page', () => {
+  const gaOut = fs.mkdtempSync(path.join(os.tmpdir(), 'marketing-ga-'));
+  try {
+    const gaBuilt = buildMarketingSite({ outDir: gaOut, gaMeasurementId: 'G-TEST123' });
+    const pages = gaBuilt.files.filter(
+      (rel) => rel.endsWith('.html') && fs.readFileSync(path.join(gaOut, rel), 'utf8').includes('</head>')
+    );
+    // Landing, 6 blog posts, blog index, brief, 5 company pages, 4 legal pages.
+    assert.ok(pages.length >= 17, `expected the whole marketing site to carry GA, found ${pages.length} pages`);
+    for (const rel of pages) {
+      const html = fs.readFileSync(path.join(gaOut, rel), 'utf8');
+      assert.equal((html.match(/gtag\('config', 'G-TEST123'/g) || []).length, 1, `${rel} must configure GA exactly once`);
+      assert.equal((html.match(/gtag\/js\?id=G-TEST123/g) || []).length, 1, `${rel} must load the tag exactly once`);
+      assert.match(html, /analytics_storage: gaConsent/, `${rel} must gate on the stored consent choice`);
+      assert.match(html, /ai-fleet\.analytics-consent/, `${rel} must honour the platform opt-out key`);
+      assert.match(html, /ad_storage: 'denied'/, `${rel} must keep ad signals denied`);
+    }
+    // The Search Console token file is served byte-for-byte; no head, no injection.
+    assert.equal(
+      fs.readFileSync(path.join(gaOut, 'googleca0fdd26d71dc36f.html'), 'utf8'),
+      fs.readFileSync(path.join(ROOT, 'public', 'googleca0fdd26d71dc36f.html'), 'utf8'),
+      'the verification token file must stay untouched'
+    );
+  } finally {
+    fs.rmSync(gaOut, { recursive: true, force: true });
+  }
+});
+
+test('no GA id leaves the published tree analytics-free', () => {
+  for (const rel of built.files) {
+    if (!/\.(html|js|css|txt|xml|json|webmanifest)$/.test(rel)) continue;
+    assert.ok(!read(rel).includes('googletagmanager'), `marketing/${rel} carries a GA tag without a measurement id`);
+  }
+});
+
+test('a malformed GA id fails the build instead of shipping a dead tag', () => {
+  for (const bad of ['not-a-ga4-id', 'UA-123456-1', 'g-abc123', 'G-abc123', 'G-ABC 123']) {
+    assert.throws(() => gaSnippet(bad), /GA4 id/, `${bad} must be rejected`);
+  }
+  assert.equal(gaSnippet(''), '');
+  assert.match(gaSnippet('G-ABC123'), /gtag\('config', 'G-ABC123'/);
+});
+
+test('the www CSP allows the GA tag and its collect endpoints', () => {
+  // gtag.js loads from googletagmanager.com and sends hits to the GA4 collect
+  // hosts over XHR/beacon (connect-src) with an image fallback (img-src); none
+  // of these are markup-scannable, so the hosts are spelled out here.
+  const directives = cspDirectives('www');
+  assert.ok(hostAllowed('www.googletagmanager.com', directives['script-src']), 'script-src must load the Google tag');
+  for (const host of ['www.google-analytics.com', 'region1.google-analytics.com', 'analytics.google.com']) {
+    assert.ok(hostAllowed(host, directives['connect-src']), `connect-src must allow the GA4 collect host ${host}`);
+  }
+  assert.ok(hostAllowed('www.google-analytics.com', directives['img-src']), 'img-src must allow the GA4 image beacon');
 });
 
 test('a freshly built tree passes the staleness check', () => {
