@@ -13,6 +13,8 @@ import {
   TOOL_APPROVAL_RESPONSE_TYPE,
   a2aFacadeBase,
   isThoughtPart,
+  parseStructuredOutputPart,
+  sourcesFromToolResult,
 } from '../src/index.ts';
 
 test('the wire vocabulary is spelled exactly once', () => {
@@ -54,3 +56,51 @@ test('isThoughtPart recognises only a marked text part', () => {
   assert.equal(isThoughtPart('a string'), false);
   assert.equal(isThoughtPart([{ text: 'hmm', metadata: { [THOUGHT_PART_KEY]: true } }]), false);
 });
+
+test('sources come only from a web-shaped tool result', () => {
+  // A shell or filesystem result may contain a URL the agent never read.
+  assert.deepEqual(sourcesFromToolResult('bash', { stdout: 'see https://example.com/x' }), []);
+  assert.deepEqual(sourcesFromToolResult('WebSearch', undefined), []);
+});
+
+test('a search result list becomes titled citations, deduped and capped', () => {
+  const results = {
+    results: [
+      { url: 'https://a.example/one', title: ' One ' },
+      { link: 'https://b.example/two.md', name: 'Two' },
+      { url: 'https://a.example/one.', title: 'Duplicate with trailing punctuation' },
+    ],
+  };
+  const sources = sourcesFromToolResult('web_search', results);
+  assert.deepEqual(sources, [
+    { url: 'https://a.example/one', title: 'One' },
+    { url: 'https://b.example/two.md', title: 'Two' },
+  ]);
+});
+
+test('a fetched page with no structure still yields its links, with a readable label', () => {
+  const sources = sourcesFromToolResult('fetch_url', 'Read https://go.dev/doc and https://go.dev/doc/ again.');
+  assert.deepEqual(
+    sources.map((source) => source.url),
+    ['https://go.dev/doc', 'https://go.dev/doc/'],
+  );
+  // With no title anywhere, the host and the last path segment identify the page.
+  assert.equal(sources[0]?.title, 'go.dev · doc');
+});
+
+test('a structured result needs all three of Go\'s signature parts', () => {
+  const digest = 'kagent.dev/a2a/output-schema-sha256';
+  assert.deepEqual(
+    parseStructuredOutputPart({ data: { total: 3 }, mediaType: 'application/json', metadata: { [digest]: 'sha256:abc' } }),
+    { value: { total: 3 }, schemaSha256: 'sha256:abc' },
+  );
+  // The proto JSON binding spells the media type in snake_case.
+  assert.ok(parseStructuredOutputPart({ data: 1, media_type: 'application/json;charset=utf-8', metadata: { [digest]: 'x' } }));
+  // An ordinary data part — a tool call, a search result — is not a terminal result.
+  assert.equal(parseStructuredOutputPart({ data: { total: 3 } }), undefined);
+  assert.equal(parseStructuredOutputPart({ data: { total: 3 }, mediaType: 'application/json' }), undefined);
+  assert.equal(parseStructuredOutputPart({ data: { total: 3 }, mediaType: 'text/plain', metadata: { [digest]: 'x' } }), undefined);
+  assert.equal(parseStructuredOutputPart({ text: 'json', mediaType: 'application/json', metadata: { [digest]: 'x' } }), undefined);
+  assert.equal(parseStructuredOutputPart({ data: 1, mediaType: 'application/json', metadata: { [digest]: '' } }), undefined);
+});
+

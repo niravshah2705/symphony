@@ -24,6 +24,15 @@ const answer = (text: string, extra: Partial<WireFrame> = {}): WireFrame => ({ v
 const thought = (text: string): WireFrame => ({ view: 'artifact-update', thought: text });
 const status = (state: string, text: string): WireFrame => ({ view: 'status-update', state, statusMessage: text });
 
+const toolCallFrame = (id: string, name = 'bash', args: unknown = { cmd: 'ls' }): WireFrame => ({
+  view: 'artifact-update',
+  toolCalls: [{ kind: 'function_call', id, name, args }],
+});
+const toolResultFrame = (id: string, name = 'bash', response: unknown = { exit: 0 }): WireFrame => ({
+  view: 'artifact-update',
+  toolCalls: [{ kind: 'function_response', id, name, response }],
+});
+
 // started + frames, without settling: for asserting the opening of a stream.
 function streamed(...frames: WireFrame[]): Emit[] {
   const encoder = createTurnEncoder(IDENTITY);
@@ -55,6 +64,8 @@ function verifySequence(events: readonly Emit[]): string | undefined {
   if (first?.type !== 'RUN_STARTED') return `a run must open with RUN_STARTED, saw ${first?.type}`;
   let textOpen: string | undefined;
   let thoughtOpen: string | undefined;
+  // 'called' = started, args may follow; 'ended' = result may follow.
+  const calls = new Map<string, 'called' | 'ended'>();
   for (let i = 1; i < events.length; i += 1) {
     const event = events[i];
     if (!event) return 'missing event';
@@ -65,7 +76,20 @@ function verifySequence(events: readonly Emit[]): string | undefined {
       return `${event.type} at ${i} is terminal but ${events.length - i - 1} more event(s) follow`;
     }
     const id = typeof event.messageId === 'string' ? event.messageId : undefined;
-    if (event.type === 'TEXT_MESSAGE_START') {
+    const callId = typeof event.toolCallId === 'string' ? event.toolCallId : undefined;
+    if (event.type === 'TOOL_CALL_START') {
+      if (!callId) return 'TOOL_CALL_START without a toolCallId';
+      if (calls.has(callId)) return `TOOL_CALL_START reopens ${callId}`;
+      calls.set(callId, 'called');
+    } else if (event.type === 'TOOL_CALL_ARGS') {
+      if (calls.get(callId ?? '') !== 'called') return 'TOOL_CALL_ARGS without an open tool call';
+    } else if (event.type === 'TOOL_CALL_END') {
+      if (calls.get(callId ?? '') !== 'called') return 'TOOL_CALL_END without an open tool call';
+      calls.set(callId ?? '', 'ended');
+    } else if (event.type === 'TOOL_CALL_RESULT') {
+      if (calls.get(callId ?? '') !== 'ended') return 'TOOL_CALL_RESULT before TOOL_CALL_END';
+      calls.delete(callId ?? '');
+    } else if (event.type === 'TEXT_MESSAGE_START') {
       if (textOpen) return `TEXT_MESSAGE_START while ${textOpen} is still open`;
       textOpen = id;
     } else if (event.type === 'TEXT_MESSAGE_CONTENT') {
@@ -150,6 +174,146 @@ test('reasoning that never reaches an answer still closes before the run ends', 
     'REASONING_END',
     'RUN_FINISHED',
   ]);
+});
+
+test('a function_call part becomes the START/ARGS/END sequence', () => {
+  const events = ended([toolCallFrame('call-1')], { settlement: settle('completed'), state: 'completed' });
+  assert.deepEqual(types(events).slice(1, 4), ['TOOL_CALL_START', 'TOOL_CALL_ARGS', 'TOOL_CALL_END']);
+  assert.equal(events[1]?.toolCallId, 'call-1');
+  assert.equal(events[1]?.toolCallName, 'bash');
+  assert.deepEqual(JSON.parse(String(events[2]?.delta)), { cmd: 'ls' });
+});
+
+test('a function_response part closes its call with a result', () => {
+  const events = ended([toolCallFrame('call-1'), toolResultFrame('call-1')], {
+    settlement: settle('completed'),
+    state: 'completed',
+  });
+  const result = events.find((event) => event.type === 'TOOL_CALL_RESULT');
+  assert.equal(result?.toolCallId, 'call-1');
+  assert.equal(result?.role, 'tool');
+  assert.deepEqual(JSON.parse(String(result?.content)), { exit: 0 });
+});
+
+test('a result whose call was never streamed still opens a closed call first', () => {
+  const events = ended([toolResultFrame('call-9', 'read')], { settlement: settle('completed'), state: 'completed' });
+  assert.deepEqual(types(events).slice(1, 4), ['TOOL_CALL_START', 'TOOL_CALL_END', 'TOOL_CALL_RESULT']);
+});
+
+test('the final-task replay of a tool artifact does not double-emit', () => {
+  const events = ended([toolCallFrame('call-1'), toolCallFrame('call-1'), answer('done')], {
+    settlement: settle('completed'),
+    state: 'completed',
+  });
+  assert.equal(events.filter((event) => event.type === 'TOOL_CALL_START').length, 1);
+});
+
+test('tools do not interrupt an open answer: text stays one message', () => {
+  const events = ended(
+    [answer('running '), toolCallFrame('call-1'), toolResultFrame('call-1'), answer('done')],
+    { settlement: settle('completed'), state: 'completed' },
+  );
+  assert.deepEqual(types(events).filter((type) => type.startsWith('TEXT_MESSAGE')), [
+    'TEXT_MESSAGE_START',
+    'TEXT_MESSAGE_CONTENT',
+    'TEXT_MESSAGE_CONTENT',
+    'TEXT_MESSAGE_END',
+  ]);
+  const contents = events.filter((event) => event.type === 'TEXT_MESSAGE_CONTENT').map((event) => event.delta);
+  assert.deepEqual(contents, ['running ', 'done']);
+});
+
+test('a failed frame emits no tool card, only the error run', () => {
+  const events = ended([{ ...toolCallFrame('call-1'), state: 'failed', statusMessage: 'boom' }], {
+    settlement: settle('failed', 'boom'),
+    state: 'failed',
+  });
+  assert.equal(events.some((event) => event.type.startsWith('TOOL_CALL_')), false);
+  assert.equal(events.at(-1)?.type, 'RUN_ERROR');
+});
+
+const fileFrame = (...files: NonNullable<WireFrame['files']>): WireFrame => ({ view: 'artifact-update', files });
+
+test('an inline file becomes one CUSTOM artifact event and a URI keeps its address', () => {
+  const events = ended(
+    [fileFrame({ bytes: 'aGVsbG8=', mimeType: 'image/png', name: 'shot.png' }), fileFrame({ uri: 'https://x/y.pdf', mimeType: 'application/pdf' })],
+    { settlement: settle('completed'), state: 'completed' },
+  );
+  const custom = events.filter((event) => event.type === 'CUSTOM');
+  assert.deepEqual(custom.map((event) => event.name), ['fleet.dev/file', 'fleet.dev/file']);
+  assert.deepEqual(custom[0]?.value, { dataUri: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png', name: 'shot.png' });
+  assert.deepEqual(custom[1]?.value, { uri: 'https://x/y.pdf', mimeType: 'application/pdf' });
+});
+
+test('the file the final task frame replays is not shown twice', () => {
+  const file = [{ uri: 'https://x/out.png', mimeType: 'image/png' }];
+  const events = ended(
+    [fileFrame(...file), { ...fileFrame(...file), view: 'task', state: 'completed' }, answer('here it is')],
+    { settlement: settle('completed'), state: 'completed' },
+  );
+  assert.equal(events.filter((event) => event.type === 'CUSTOM').length, 1);
+  // The artifact is output on its own, so the answer still opens a message.
+  assert.equal(events.some((event) => event.type === 'TEXT_MESSAGE_CONTENT'), true);
+});
+
+test('a failed frame emits no file artifact', () => {
+  const events = ended([{ ...fileFrame({ uri: 'u' }), state: 'failed', statusMessage: 'boom' }], {
+    settlement: settle('failed', 'boom'),
+    state: 'failed',
+  });
+  assert.equal(events.some((event) => event.type === 'CUSTOM'), false);
+});
+
+test('a web tool result becomes citation chips under the answer, once', () => {
+  const search = { results: [{ url: 'https://go.dev/doc', title: 'Go documentation' }] };
+  const events = ended(
+    [
+      toolCallFrame('s1', 'WebSearch', { q: 'go a2a' }),
+      toolResultFrame('s1', 'WebSearch', search),
+      // The same result artifact inside the final task frame must not double the list.
+      toolResultFrame('s1', 'WebSearch', search),
+      answer('the docs say X'),
+    ],
+    { settlement: settle('completed'), state: 'completed' },
+  );
+  const sources = events.filter((event) => event.type === 'CUSTOM' && event.name === 'fleet.dev/sources');
+  assert.equal(sources.length, 1);
+  assert.deepEqual(sources[0]?.value, { sources: [{ url: 'https://go.dev/doc', title: 'Go documentation' }] });
+  // Under the answer, before the run closes.
+  const order = types(events);
+  assert.ok(order.indexOf('TEXT_MESSAGE_END') < order.indexOf('RUN_FINISHED'));
+  assert.ok(order.indexOf('TEXT_MESSAGE_END') < order.lastIndexOf('CUSTOM'));
+});
+
+test('a run that did not complete reports no citations', () => {
+  const events = ended([toolResultFrame('s1', 'WebFetch', { url: 'https://x.example/a' })], {
+    settlement: settle('failed', 'boom'),
+    state: 'failed',
+  });
+  assert.equal(events.some((event) => event.name === 'fleet.dev/sources'), false);
+});
+
+test('a structured result is spoken once, after the answer', () => {
+  const structured = { value: { kind: 'table', props: { rows: [{ a: 1 }] } }, schemaSha256: 'sha256:1' };
+  const events = ended(
+    [answer('three rows'), { view: 'task', state: 'completed', structured }, { view: 'artifact-update', structured }],
+    { settlement: settle('completed'), state: 'completed' },
+  );
+  const ui = events.filter((event) => event.type === 'CUSTOM' && event.name === 'fleet.dev/ui');
+  assert.deepEqual(ui.map((event) => event.value), [{ kind: 'table', props: { rows: [{ a: 1 }] } }]);
+  const order = types(events);
+  assert.ok(order.indexOf('TEXT_MESSAGE_END') < order.lastIndexOf('CUSTOM'));
+  assert.equal(order.at(-1), 'RUN_FINISHED');
+});
+
+test('a HITL request payload rides out on the interrupt metadata', () => {
+  const hitl = { type: 'tool_approval_request', tools: [{ id: 'call-1', call_id: 'call-1', name: 'bash' }] };
+  const events = ended(
+    [{ view: 'status-update', state: 'input-required', statusMessage: 'approve this?', hitl }],
+    { settlement: settle('awaiting_input'), state: 'input-required', taskId: 'task-9' },
+  );
+  const [interrupt] = interruptsOf(events.at(-1));
+  assert.deepEqual((interrupt?.metadata as { hitl?: unknown }).hitl, hitl);
 });
 
 test('a completed turn is a success outcome carrying the A2A identity', () => {

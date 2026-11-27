@@ -37,6 +37,10 @@ export async function aguiRoutes(app: FastifyInstance): Promise<void> {
   app.route({
     method: 'POST',
     url: BASE,
+    // The server-wide 4 MB gate would refuse an inline attachment before the
+    // turn parser ever sees it; runinput.ts enforces the real per-file 5 MB
+    // decoded limit, so this only bounds the whole request envelope.
+    bodyLimit: 16 * 1024 * 1024,
     preHandler: async (request, reply) => {
       await requireAuth(request, reply);
       const { orgId } = request.params as { orgId: string };

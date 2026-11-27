@@ -33,6 +33,88 @@ test('inspectFrame reads the flat kind form and the snake_case keys', () => {
   assert.equal(inspectFrame('{"status_update":{"taskId":"t1","contextId":"c1","status":{"state":"TASK_STATE_COMPLETED"}}}')?.state, 'completed');
 });
 
+test('inspectFrame reads tool data parts and the HITL metadata payload', () => {
+  const call = { data: { id: 'c1', name: 'bash', args: { cmd: 'ls' } }, metadata: { 'kagent.dev/a2a/part-type': 'function_call' } };
+  const result = { data: { id: 'c1', name: 'bash', response: { exit: 0 } }, metadata: { 'kagent.dev/a2a/part-type': 'function_response' } };
+  const frame = inspectFrame(
+    `{"artifactUpdate":{"taskId":"t1","contextId":"c1","artifact":{"parts":[${JSON.stringify(call)},${JSON.stringify(result)}]}}}`,
+  );
+  assert.deepEqual(frame?.toolCalls, [
+    { kind: 'function_call', id: 'c1', name: 'bash', args: { cmd: 'ls' } },
+    { kind: 'function_response', id: 'c1', name: 'bash', response: { exit: 0 } },
+  ]);
+  // A tool part carries no text, so it must not count as an answer.
+  assert.equal(frame?.answer, undefined);
+
+  const hitl = {
+    statusUpdate: {
+      taskId: 't1',
+      contextId: 'c1',
+      status: {
+        state: 'TASK_STATE_INPUT_REQUIRED',
+        message: {
+          parts: [{ text: 'approve this tool call?' }],
+          metadata: { 'https://kagent.dev/extensions/hitl/v1': { type: 'tool_approval_request', tools: [{ id: 'c1', call_id: 'c1', name: 'bash' }] } },
+        },
+      },
+    },
+  };
+  assert.deepEqual(inspectFrame(JSON.stringify(hitl))?.hitl?.type, 'tool_approval_request');
+  // An untagged data part is not tool activity.
+  const plain = inspectFrame('{"artifactUpdate":{"taskId":"t1","contextId":"c1","artifact":{"parts":[{"data":{"foo":1}}]}}}');
+  assert.equal(plain?.toolCalls, undefined);
+});
+
+test('inspectFrame reads the structured terminal result off its schema digest', () => {
+  const raw = JSON.stringify({
+    task: {
+      id: 't1',
+      contextId: 'c1',
+      status: { state: 'TASK_STATE_COMPLETED' },
+      artifacts: [
+        {
+          artifactId: 'a1',
+          parts: [{ data: { columns: [{ key: 'pkg' }], rows: [{ pkg: 'a2a' }] }, mediaType: 'application/json', metadata: { 'kagent.dev/a2a/output-schema-sha256': 'sha256:9f' } }],
+        },
+      ],
+    },
+  });
+  assert.deepEqual(inspectFrame(raw)?.structured, {
+    value: { columns: [{ key: 'pkg' }], rows: [{ pkg: 'a2a' }] },
+    schemaSha256: 'sha256:9f',
+  });
+  // An untagged data part is tool payload, not the run's result.
+  const untagged = JSON.stringify({ task: { id: 't1', artifacts: [{ parts: [{ data: { a: 1 } }] }] } });
+  assert.equal(inspectFrame(untagged)?.structured, undefined);
+});
+
+test('inspectFrame reads agent-produced files in both JSON spellings', () => {
+  const inline = JSON.stringify({
+    artifactUpdate: {
+      taskId: 't1',
+      contextId: 'c1',
+      artifact: { artifactId: 'a1', parts: [{ file: { bytes: 'aGVsbG8=', mime_type: 'image/png', name: 'shot.png' } }] },
+    },
+  });
+  assert.deepEqual(inspectFrame(inline)?.files, [{ bytes: 'aGVsbG8=', mimeType: 'image/png', name: 'shot.png' }]);
+  // A file is output even though it carries no text the BFF can read.
+  assert.equal(inspectFrame(inline)?.producesOutput, true);
+  assert.equal(inspectFrame(inline)?.answer, undefined);
+
+  const referenced = JSON.stringify({
+    kind: 'artifact-update',
+    taskId: 't1',
+    artifact: { parts: [{ kind: 'file', file: { uri: 'https://x/y.pdf', mimeType: 'application/pdf' } }] },
+  });
+  assert.deepEqual(inspectFrame(referenced)?.files, [{ uri: 'https://x/y.pdf', mimeType: 'application/pdf' }]);
+
+  // A file part with neither bytes nor a uri is not a file the UI can show.
+  assert.equal(
+    inspectFrame(JSON.stringify({ artifactUpdate: { taskId: 't1', artifact: { parts: [{ file: { name: 'x' } }] } } }))?.files,
+    undefined,
+  );
+});
+
 test('inspectFrame separates thinking from the answer', () => {
   const thought = { text: 'let me check the file', metadata: { [THOUGHT_PART_KEY]: true } };
   const answer = { text: 'the answer' };
