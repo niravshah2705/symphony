@@ -18,6 +18,7 @@ import { HitlCard } from './HitlCard';
 import { UI_CUSTOM_EVENT, GenerativeUI } from './GenerativeUI';
 import { Suggestions } from './Suggestions';
 import { SOURCES_CUSTOM_EVENT, Sources } from './Sources';
+import { AutoReadToggle, DictationPreview, MicButton, ReadAloud } from './Voice';
 import { ArrowDownIcon, SendIcon, StopIcon } from './icons';
 
 // The chat in the library's shape. Every element carries the `.aui-*` class that
@@ -173,6 +174,7 @@ const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
         />
         {question === '' ? null : <p className="aui-md-p">{question}</p>}
         <FailureNotice status={status} hasText={hasText || question !== ''} closeReason={closeReason} transportError={transportError} />
+        <ReadAloud />
       </div>
     </MessagePrimitive.Root>
   );
@@ -291,6 +293,7 @@ function Composer({
         {/* Attaching to an answer is a new turn, not a reply to the question the
             agent paused on — so the picker stays closed while an interrupt is open. */}
         {paused ? null : <AddAttachment disabled={disabled} />}
+        <MicButton disabled={disabled} />
         {paused ? (
           <button
             type="button"
@@ -312,6 +315,11 @@ function Composer({
           <StopIcon />
         </ComposerPrimitive.Cancel>
       </AuiIf>
+      {/* Last in the row, and outside the running branches: it is a preference,
+          armed once and left on, not a control for this particular turn. */}
+      <AutoReadToggle />
+      {/* What the browser heard that is not yet committed to the textarea. */}
+      <DictationPreview />
     </ComposerPrimitive.Root>
   );
 }

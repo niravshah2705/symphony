@@ -502,3 +502,54 @@
   border-color: hsl(var(--aui-primary));
   color: hsl(var(--aui-primary));
 }
+
+/* Voice. The mic is one of the composer's controls, but the listening state has
+   to be unmistakable — an open microphone deserves more than a colour shift on
+   an icon. */
+.aui-voice-mic.is-listening {
+  border-color: hsl(var(--aui-primary));
+  color: hsl(var(--aui-primary));
+  animation: aui-voice-pulse 1.4s ease-in-out infinite;
+}
+
+.aui-voice-auto.is-on {
+  border-color: hsl(var(--aui-primary));
+  color: hsl(var(--aui-primary));
+}
+
+@keyframes aui-voice-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aui-voice-mic.is-listening {
+    animation: none;
+  }
+}
+
+/* The interim transcript is not yet the message, so it sits under the input as
+   a preview rather than inside it — and takes a full row of the composer grid. */
+.aui-voice-interim {
+  flex-basis: 100%;
+  margin: 0.25rem 0.5rem 0;
+  color: hsl(var(--aui-muted-foreground));
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Read-aloud is metadata for the answer, like the fork control: present on
+   hover, never competing with the text. */
+.aui-voice-read {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.aui-assistant-message-root:hover .aui-voice-read,
+.aui-voice-read:focus-visible,
+.aui-voice-read[aria-label^='Stop'] {
+  opacity: 1;
+}
