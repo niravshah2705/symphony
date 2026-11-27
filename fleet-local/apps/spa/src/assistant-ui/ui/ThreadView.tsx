@@ -8,9 +8,14 @@ import {
   useAui,
   useAuiState,
 } from '@assistant-ui/react';
+import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useAgUiInterrupts, useAgUiSubmitInterruptResponses } from '@assistant-ui/react-ag-ui';
 import { FailureNotice } from '../FailureNotice';
 import { MarkdownText } from './Markdown';
+import { AddAttachment, AgentFile, ComposerAttachments, FILE_CUSTOM_EVENT, UserFile, UserImage } from './Attachments';
+import { HitlCard } from './HitlCard';
+import { UI_CUSTOM_EVENT, GenerativeUI } from './GenerativeUI';
+import { SOURCES_CUSTOM_EVENT, Sources } from './Sources';
 import { ArrowDownIcon, SendIcon, StopIcon } from './icons';
 
 // The chat in the library's shape. Every element carries the `.aui-*` class that
@@ -53,7 +58,7 @@ export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerEr
 
         <ThreadPrimitive.Messages
           components={{
-            UserMessage,
+            UserMessage: () => <UserMessage />,
             AssistantMessage: () => <AssistantMessage {...run} />,
           }}
         />
@@ -75,6 +80,10 @@ export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerEr
               <ArrowDownIcon />
             </button>
           </ThreadPrimitive.ScrollToBottom>
+          {/* A structured pause (tool approval, ask-user) asks for decisions, not
+              prose; the card sits above the composer, which stays the free-text
+              answer path for a plain input-required. */}
+          <HitlCard onAnswerError={onAnswerError} />
           <Composer placeholder={placeholder} disabled={sendDisabled} onAnswerError={onAnswerError} />
         </ThreadPrimitive.ViewportFooter>
       </ThreadPrimitive.Viewport>
@@ -85,14 +94,27 @@ export function ThreadView({ welcome, placeholder, sendDisabled, run, onAnswerEr
 const UserMessage: FC = () => (
   <MessagePrimitive.Root className="aui-user-message-root">
     <div className="aui-user-message-content">
-      <MessagePrimitive.Parts components={{ Text: PlainText }} />
+      <MessagePrimitive.Parts components={{ Text: PlainText, Image: UserImage, File: UserFile }} />
     </div>
   </MessagePrimitive.Root>
 );
 
 const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
   const status = useAuiState((s) => s.message.status);
-  const hasText = useAuiState((s) => s.message.content.some((part) => part.type === 'text' && part.text !== ''));
+  // Tool calls count as output: the shell ran, so the turn is not empty even if
+  // the answer is a raw/url part we cannot render as text.
+  const hasText = useAuiState((s) =>
+    s.message.content.some(
+      (part) =>
+        (part.type === 'text' && part.text !== '') ||
+        (part.type === 'tool-call' && (part.argsText !== '' || part.result !== undefined)) ||
+        // A file the agent produced is an answer the human can open, even when
+        // the turn said nothing about it in words.
+        part.type === 'image' ||
+        part.type === 'file' ||
+        (part.type === 'data' && part.name === FILE_CUSTOM_EVENT),
+    ),
+  );
   // A pause is not a failure: the run ended with an interrupt, and the question
   // it carries is the thing the human has to read. It reached the transcript as
   // text whenever the agent also said it in a part, and the encoder leaves it out
@@ -109,7 +131,22 @@ const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
         <span className="aui-avatar-fallback">A</span>
       </div>
       <div className="aui-assistant-message-content">
-        <MessagePrimitive.Parts components={{ Text: MarkdownText, Reasoning: Reasoning }} />
+        <MessagePrimitive.Parts
+          components={{
+            Text: MarkdownText,
+            Reasoning: Reasoning,
+            tools: { Fallback: ToolCall },
+            Image: UserImage,
+            File: UserFile,
+            data: {
+              by_name: {
+                [FILE_CUSTOM_EVENT]: AgentFile,
+                [SOURCES_CUSTOM_EVENT]: Sources,
+                [UI_CUSTOM_EVENT]: GenerativeUI,
+              },
+            },
+          }}
+        />
         {question === '' ? null : <p className="aui-md-p">{question}</p>}
         <FailureNotice status={status} hasText={hasText || question !== ''} closeReason={closeReason} transportError={transportError} />
       </div>
@@ -119,12 +156,49 @@ const AssistantMessage: FC<RunFacts> = ({ closeReason, transportError }) => {
 
 const PlainText: FC = () => <MessagePartPrimitive.Text className="aui-text" component="p" />;
 
-const Reasoning: FC<{ text: string }> = ({ text }) => (
-  <details className="aui-reasoning">
-    <summary>Thinking</summary>
-    <pre>{text}</pre>
-  </details>
-);
+// The tool payloads arrive whole from the BFF (one ARGS frame per call), so
+// there is nothing to stream here — the open question is whether the result has
+// come back yet, which is what the running status and the summary say.
+const MAX_TOOL_JSON = 4000;
+
+function prettyToolJson(value: string): string {
+  let text = value;
+  try {
+    text = JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    /* harnesses may send a plain string; show it verbatim */
+  }
+  return text.length > MAX_TOOL_JSON ? `${text.slice(0, MAX_TOOL_JSON)}\n… truncated` : text;
+}
+
+const ToolCall: FC<ToolCallMessagePartProps> = ({ toolName, argsText, result, status }) => {
+  const pending = result === undefined && status?.type === 'running';
+  return (
+    <details className="aui-toolcall" open={pending}>
+      <summary>
+        <span className="aui-toolcall-name">{toolName}</span>
+        {result === undefined ? (status?.type === 'running' ? ' running…' : '') : ' returned'}
+      </summary>
+      {argsText ? <pre className="aui-toolcall-json">{prettyToolJson(argsText)}</pre> : null}
+      {result !== undefined ? (
+        <pre className="aui-toolcall-json">{prettyToolJson(typeof result === 'string' ? result : JSON.stringify(result))}</pre>
+      ) : null}
+    </details>
+  );
+};
+
+// Open while the thought streams so the human sees the agent working; closed
+// once it ends so the answer, not the scratchpad, holds the transcript. The
+// details element keeps the browser's own toggle for after that.
+const Reasoning: FC<{ text: string; status?: { type: string } }> = ({ text, status }) => {
+  const running = status?.type === 'running';
+  return (
+    <details className="aui-reasoning" open={running}>
+      <summary>{running ? 'Thinking…' : 'Thought'}</summary>
+      <pre>{text}</pre>
+    </details>
+  );
+};
 
 function Composer({
   placeholder,
@@ -168,6 +242,9 @@ function Composer({
 
   return (
     <ComposerPrimitive.Root className="aui-composer-root">
+      {/* Pending files above the input: the human sees what is about to travel
+          with the prompt and can drop one before sending. */}
+      <ComposerAttachments />
       <ComposerPrimitive.Input
         className="aui-composer-input"
         rows={1}
@@ -177,6 +254,9 @@ function Composer({
         onKeyDown={onKeyDown}
       />
       <AuiIf condition={(s) => !s.thread.isRunning}>
+        {/* Attaching to an answer is a new turn, not a reply to the question the
+            agent paused on — so the picker stays closed while an interrupt is open. */}
+        {paused ? null : <AddAttachment disabled={disabled} />}
         {paused ? (
           <button
             type="button"

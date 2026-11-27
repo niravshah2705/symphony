@@ -48,3 +48,16 @@ export const CheckIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
     <path d="M20 6 9 17l-5-5" />
   </svg>
 );
+
+export const PaperclipIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...svg(props)}>
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </svg>
+);
+
+export const CloseIcon: FC<SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...svg(props)}>
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+);
