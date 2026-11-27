@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_MODEL_CATALOG, QODER_CATALOG_ENTRY, type ModelCatalogEntry } from '@fleet-local/shared';
-import { buildTenantValues, harnessName, type TenantValuesConfig } from '../src/onboarding/tenant-values.ts';
+import {
+  buildTenantValues,
+  harnessName,
+  mergeTenantBundles,
+  type BundleHarnessValue,
+  type TenantValuesConfig,
+} from '../src/onboarding/tenant-values.ts';
 
 const digest = `ghcr.io/niravshah2705/symphony/qoder-runtime@sha256:${'a'.repeat(64)}`;
 const claudeDigest = `ghcr.io/niravshah2705/symphony/claude-runtime@sha256:${'b'.repeat(64)}`;
@@ -97,4 +103,72 @@ test('the other runtimes render exactly as before', () => {
   assert.equal(v.tenant.snapshotRoot, 's3://ate-snapshots/demo');
   assert.equal(v.namespace, 'org-demo');
   assert.deepEqual(v.commonLabels, { 'fleet.local/org-id': 'org-uuid', 'fleet.local/project-id': 'proj-uuid' });
+});
+
+const bundleImage = `us-central1-docker.pkg.dev/p/r/claude-bundle@sha256:${'c'.repeat(64)}`;
+const bundle = (over: Partial<BundleHarnessValue> = {}): BundleHarnessValue => ({
+  name: 'bundle-claude',
+  type: 'claude',
+  image: bundleImage,
+  model: catalog[1]?.id ?? catalog[0].id,
+  ...over,
+});
+
+test('a bundle appends a harness, a template and a worker without touching the catalog objects', () => {
+  const before = input();
+  const v = input({ bundles: [bundle()] });
+  assert.deepEqual(
+    v.harnesses.map((h) => h.name),
+    [...before.harnesses.map((h) => h.name), 'bundle-claude'],
+  );
+  const h = v.harnesses.at(-1)!;
+  assert.equal(h.type, 'claude');
+  assert.ok(!('command' in h), 'a claude engine must carry no workload.command: the chart fails the release');
+  assert.deepEqual(h.env?.map((e) => e.name), ['OTEL_PROPAGATORS', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_RESOURCE_ATTRIBUTES']);
+  assert.equal(v.templates.at(-1)?.name, 'bundle-claude-coding');
+  assert.equal(v.templates.at(-1)?.modelConfig, bundle().model, 'a bundle may name its own model');
+  assert.equal(v.agents.at(-1)?.harness, 'bundle-claude');
+});
+
+test('a byo bundle carries its adapter command and an unpinned image carries nothing', () => {
+  const v = input({ bundles: [bundle({ name: 'bundle-goose', type: 'byo', adapter: '/usr/local/bin/goose-runtime' })] });
+  assert.deepEqual(v.harnesses.at(-1)?.command, ['/usr/local/bin/goose-runtime']);
+
+  // The CRD rejects a tag, and it does so after helm has mutated the release, so an
+  // unpinned bundle is dropped from every list rather than rendering a broken one.
+  const tagged = input({ bundles: [bundle({ image: 'ghcr.io/x/y:1.2.3' })] });
+  assert.deepEqual(tagged.harnesses.map((h) => h.name), input().harnesses.map((h) => h.name));
+  assert.equal(tagged.templates.some((t) => t.name === 'bundle-claude-coding'), false);
+  assert.equal(tagged.agents.some((a) => a.name === 'bundle-claude-worker'), false);
+
+  assert.throws(() => mergeTenantBundles({}, [bundle({ type: 'byo' })], 'org-uuid'), /needs its adapter command/);
+});
+
+test('merging onto a live release replaces the bundle entries and nothing else', () => {
+  const live = {
+    models: [{ name: 'openai-gpt-4o-mini' }, { name: 'claude-sonnet-4-5' }],
+    harnesses: [{ name: 'app', type: 'kagent' }, { name: 'bundle-claude', type: 'byo', image: 'old@sha256:' + '0'.repeat(64) }],
+    templates: [{ name: 'assistant', modelConfig: 'openai-gpt-4o-mini' }, { name: 'bundle-claude-coding', modelConfig: 'claude-sonnet-4-5' }],
+    agents: [{ name: 'assistant', template: 'assistant', harness: 'app' }, { name: 'bundle-claude-worker', template: 'bundle-claude-coding', harness: 'bundle-claude' }],
+  };
+  const merged = mergeTenantBundles(live, [bundle({ type: 'byo', adapter: '/usr/local/bin/claude-runtime' })], 'org-uuid') as typeof live;
+  assert.deepEqual(merged.harnesses.map((h) => h.name), ['app', 'bundle-claude'], 'one entry per bundle, replaced not appended');
+  assert.equal(merged.harnesses[1].image, bundleImage, 'the stale image is gone');
+  assert.deepEqual(merged.templates.map((t) => t.name), ['assistant', 'bundle-claude-coding']);
+  assert.deepEqual(merged.agents.map((a) => a.name), ['assistant', 'bundle-claude-worker']);
+});
+
+test('a merge falls back to a model the release has, and renders no template when it has none', () => {
+  const live = {
+    models: [{ name: 'openai-gpt-4o-mini' }],
+    harnesses: [{ name: 'app', type: 'kagent' }],
+    templates: [{ name: 'x-coding', modelConfig: 'openai-gpt-4o-mini' }],
+    agents: [{ name: 'x-worker', template: 'x-coding', harness: 'app' }],
+  };
+  const merged = mergeTenantBundles(live, [bundle()], 'org-uuid') as unknown as { templates: { modelConfig: string }[] };
+  assert.equal(merged.templates[1].modelConfig, 'openai-gpt-4o-mini', 'a bundle naming a model the release lacks falls back');
+
+  const bare = mergeTenantBundles({ harnesses: [] }, [bundle()], 'org-uuid') as unknown as { harnesses: unknown[]; templates: unknown[]; agents: unknown[] };
+  assert.equal(bare.harnesses.length, 1, 'the harness is still pullable infrastructure worth rendering');
+  assert.deepEqual([bare.templates, bare.agents], [[], []], 'a template with no ModelConfig to name would fail the chart');
 });

@@ -217,3 +217,85 @@ export const OFFBOARD_META: StepMeta<OffboardingStepId>[] = [
   { id: 'flexprice', diagram: 5, label: 'Cancel the Flexprice subscription' },
   { id: 'access', diagram: 1, label: 'Remove members and mark deleted' },
 ];
+// The bundle wizard's own step vocabulary — mirrors BUNDLE_STEPS in
+// packages/shared/src/bundle-bases.ts. Kept separate from OnboardingStepId and
+// OffboardingStepId because it is a third DAG with its own table (bundle_runs) and
+// its own key: one run per (org, target).
+export type BundleStepId =
+  | 'plan'
+  | 'base'
+  | 'generate'
+  | 'submit'
+  | 'poll'
+  | 'publish'
+  | 'mirror'
+  | 'apply'
+  | 'verify';
+
+export type BundleStates = Partial<Record<BundleStepId, StepState<BundleStepId>>>;
+
+// The nine steps in diagram order. `mirror` reads as a no-op in Artifact Registry
+// mode (`skipped: not-needed`), which StepList renders as a badge rather than a
+// silent Done.
+export const BUNDLE_META: StepMeta<BundleStepId>[] = [
+  { id: 'plan', diagram: 1, label: 'Validate the selection' },
+  { id: 'base', diagram: 2, label: 'Pin the base runtime image' },
+  { id: 'generate', diagram: 3, label: 'Render the Dockerfile' },
+  { id: 'submit', diagram: 4, label: 'Submit the Cloud Build job' },
+  { id: 'poll', diagram: 5, label: 'Wait for the build' },
+  { id: 'publish', diagram: 6, label: 'Read back the published digest' },
+  { id: 'mirror', diagram: 7, label: 'Mirror to the cluster registry' },
+  { id: 'apply', diagram: 8, label: 'Write the tenant Harness' },
+  { id: 'verify', diagram: 9, label: 'Probe a node pull' },
+];
+
+export type BundleAvailability =
+  | 'offerable'
+  | 'unblocks-here'
+  | 'blocked-elsewhere'
+  | 'no-column'
+  | 'not-listed';
+
+/** One runtime the bundle can be built on, as the control plane's catalog says it. */
+export interface BundleBaseOption {
+  runtime: string;
+  label: string;
+  family: 'apk' | 'apt';
+  harnessType: 'claude' | 'codex' | 'byo';
+  /** False means kagent cannot dispatch a turn on it yet: buildable, not runnable. */
+  dispatchable: boolean;
+  image: string;
+  selectable: string[];
+  packs: Record<string, { availability: BundleAvailability; reason: string }>;
+}
+
+export interface BundlePackOption {
+  id: string;
+  label: string;
+  kind: 'plugin' | 'skill';
+  version: string;
+  packages: string[];
+}
+
+/** What a finished build left in the tenant: the image the Harness now names. */
+export interface BundleBuild {
+  runtime: string;
+  image: string;
+  baseDigest: string;
+  plugins: { id: string; version: string }[];
+  dockerfileSha: string;
+  bundleKey: string;
+}
+
+export interface BundleRunSummary {
+  target: string;
+  states: BundleStates;
+}
+
+export interface BundleCatalog {
+  enabled: boolean;
+  bases: BundleBaseOption[];
+  packs: BundlePackOption[];
+  builds: BundleBuild[];
+  runs: BundleRunSummary[];
+}

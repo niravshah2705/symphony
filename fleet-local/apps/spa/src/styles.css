@@ -130,6 +130,10 @@ input:not(.aui-root *), select:not(.aui-root *), textarea:not(.aui-root *) {
   padding: 10px 12px;
 }
 .step .diagram { color: var(--muted); font-size: 12px; width: 28px; }
+
+.pack-list { list-style: none; padding: 0; margin: 0 0 16px; display: flex; flex-direction: column; gap: 6px; }
+.pack { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.pack label { display: flex; align-items: center; gap: 8px; flex: 1; }
 .step-label { flex: 1; }
 .status-running { border-color: var(--accent); }
 .status-failed { border-color: var(--err); }

@@ -5,6 +5,7 @@ import authPlugin from './auth/plugin.ts';
 import { authRoutes } from './routes/auth.ts';
 import { orgRoutes } from './routes/orgs.ts';
 import { chatRoutes } from './routes/chat.ts';
+import { bundleRoutes } from './routes/bundles.ts';
 import { a2aRoutes } from './routes/a2a.ts';
 import { aguiRoutes } from './routes/agui.ts';
 import { migrate, close } from './db/client.ts';
@@ -25,6 +26,9 @@ async function build() {
   app.get('/healthz', async () => ({ ok: true }));
   await app.register(authRoutes);
   await app.register(orgRoutes);
+  // Owner-facing bundle builds. Registered after orgs so a tenant that is not
+  // active is refused by the same status read the org routes use.
+  await app.register(bundleRoutes);
   await app.register(chatRoutes);
   // Registered as a child scope on purpose: the `application/a2a+json` parser and
   // the A2A-shaped error handler belong to the facade routes only, and must not

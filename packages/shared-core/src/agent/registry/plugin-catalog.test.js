@@ -17,6 +17,7 @@ const {
   isAgentPluginName,
   FULL_GIT_SHA,
   validatePluginCatalog,
+  requirementLines,
   eccSourceAgreement,
   buildMatrix,
   cellVersion,
@@ -172,6 +173,30 @@ test('requirement lines are appendable Dockerfile steps and carry no credential'
   }
   const errors = errorFor((catalog) => { catalog.plugins[0].requirements.dockerfile = ['ADD http://x/y /']; });
   assert.ok(errors.some((e) => /not an allowed instruction/.test(e)), errors.join('\n'));
+});
+
+test('an alpine base gets apk lines or nothing, never the Debian default', () => {
+  for (const plugin of CATALOG.plugins) {
+    const alpine = plugin.requirements.dockerfileAlpine;
+    if (alpine === undefined) continue;
+    assert.ok(alpine.length > 0, `${plugin.id}: dockerfileAlpine must not be empty`);
+    for (const line of alpine) {
+      assert.ok(DOCKERFILE_INSTRUCTIONS.includes(line.trim().split(/\s+/)[0].toUpperCase()), line);
+    }
+    // The point of the second array: an alpine image has no apt, so a family
+    // mismatch is a build that fails minutes into a Cloud Build job.
+    assert.ok(!alpine.some((l) => /apt-get/.test(l)), `${plugin.id}: apt line in the alpine array`);
+    assert.ok(!alpine.some((l) => /\/root\/\.local/.test(l)), `${plugin.id}: /root is unreadable by uid 65532`);
+    assert.ok(!plugin.requirements.dockerfile.some((l) => /apk add/.test(l)), `${plugin.id}: apk line in the default array`);
+  }
+  // A family with no lines resolves to null so the caller refuses the combination.
+  assert.equal(requirementLines({ dockerfile: ['RUN x'] }, 'apk'), null);
+  assert.deepEqual(requirementLines({ dockerfile: ['RUN x'], dockerfileAlpine: ['RUN y'] }, 'apk'), ['RUN y']);
+  assert.deepEqual(requirementLines({ dockerfile: ['RUN x'], dockerfileAlpine: ['RUN y'] }, 'apt'), ['RUN x']);
+  const errors = errorFor((catalog) => { catalog.plugins[0].requirements.dockerfileAlpine = ['ADD http://x/y /']; });
+  assert.ok(errors.some((e) => /dockerfileAlpine\[0\].*not an allowed instruction/.test(e)), errors.join('\n'));
+  const empty = errorFor((catalog) => { catalog.plugins[0].requirements.dockerfileAlpine = []; });
+  assert.ok(empty.some((e) => /when present, must be a non-empty array/.test(e)), empty.join('\n'));
 });
 
 test('promptAppend is present and inside the 4000-character per-plugin cap', () => {

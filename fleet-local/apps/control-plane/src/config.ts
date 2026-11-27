@@ -23,8 +23,41 @@ if (qoderRuntimeImage && !DIGEST_PIN.test(qoderRuntimeImage)) {
   throw new Error('QODER_RUNTIME_IMAGE must be pinned by @sha256 digest — the kagent Harness CRD rejects tags');
 }
 
-export const config = {
-  port: Number(opt('PORT', '8080')),
+// The bundle keys a deployment only has to supply once the feature is enabled.
+// Split out so `bundleEnabled: false` — the default — cannot break a boot.
+function configBundleChecks() {
+  if (opt('BUNDLE_ENABLED', '') !== 'true') {
+    return {
+      gcpProjectId: opt('GCP_PROJECT_ID', ''),
+      gcpRegion: opt('GCP_REGION', ''),
+      bundleArRepo: opt('BUNDLE_REPO', ''),
+      bundleStageBucket: opt('BUNDLE_STAGE_BUCKET', ''),
+      bundlePullHost: '',
+      bundleBuildTimeoutMs: Number(opt('BUNDLE_BUILD_TIMEOUT_MS', '1200000')),
+      gcpSaKeyPath: opt('GCP_SA_KEY_PATH', '/run/secrets/gcp/sa.json'),
+    };
+  }
+  const missing = ['GCP_PROJECT_ID', 'GCP_REGION', 'BUNDLE_REPO'].filter((k) => !process.env[k]);
+  if (missing.length) throw new Error(`BUNDLE_ENABLED requires ${missing.join(', ')}`);
+  const registry = opt('BUNDLE_REGISTRY', 'ar');
+  // `kind` exists for a deployment that refuses to make an AR repo anonymously
+  // readable: the Harness image must be pullable by a node with no GCP identity,
+  // so it names the local registry the nodes can actually reach instead.
+  if (registry === 'kind' && !process.env.BUNDLE_PULL_HOST) {
+    throw new Error('BUNDLE_REGISTRY=kind requires BUNDLE_PULL_HOST, the registry address the cluster nodes can reach');
+  }
+  return {
+    gcpProjectId: req('GCP_PROJECT_ID'),
+    gcpRegion: req('GCP_REGION'),
+    bundleArRepo: req('BUNDLE_REPO'),
+    bundleStageBucket: opt('BUNDLE_STAGE_BUCKET', ''),
+    bundlePullHost: opt('BUNDLE_PULL_HOST', ''),
+    bundleBuildTimeoutMs: Number(opt('BUNDLE_BUILD_TIMEOUT_MS', '1200000')),
+    gcpSaKeyPath: opt('GCP_SA_KEY_PATH', '/run/secrets/gcp/sa.json'),
+  };
+}
+
+export const config = {  port: Number(opt('PORT', '8080')),
   host: opt('HOST', '0.0.0.0'),
   publicOrigin: opt('PUBLIC_ORIGIN', 'https://app.fleet.dev'),
   spaRoot: opt('SPA_ROOT', ''),
@@ -86,6 +119,21 @@ export const config = {
   // Env name the tenant Secret carries the LiteLLM virtual key under, for the
   // qoder BYOK provider. It is a name we author, not a qodercli built-in.
   qoderApiKeyEnv: opt('QODER_API_KEY_ENV', 'QODER_API_KEY'),
+
+  // Bundle builds: the owner-facing pipeline that renders a plugin selection into
+  // a Dockerfile, builds it in Cloud Build, and points a tenant Harness at it.
+  // Off by default, because enabling it means the control plane holds a GCP
+  // service account that can spend Cloud Build seconds and write an AR repo.
+  bundleEnabled: opt('BUNDLE_ENABLED', '') === 'true',
+  bundleRegistry: (() => {
+    const v = opt('BUNDLE_REGISTRY', 'ar');
+    if (v !== 'ar' && v !== 'kind') throw new Error('BUNDLE_REGISTRY must be ar (Artifact Registry) or kind (a local registry the nodes can reach)');
+    return v as 'ar' | 'kind';
+  })(),
+  // Only validated once the feature is on: a deployment that has never heard of
+  // bundles must not fail to boot over an unused key.
+  ...(configBundleChecks()),
+
   modelCatalog: withQoderCatalog(parseModelCatalog(process.env.FLEET_MODELS), qoderRuntimeImage),
 } as const;
 

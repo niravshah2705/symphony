@@ -64,6 +64,9 @@
         "dockerfile": [
           "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
         ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates"
+        ],
         "writablePaths": [],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",
         "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
@@ -153,6 +156,9 @@
         "dockerfile": [
           "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
         ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates"
+        ],
         "writablePaths": [],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",
         "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
@@ -229,6 +235,9 @@
         "dockerfile": [
           "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
         ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates"
+        ],
         "writablePaths": [],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",
         "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
@@ -290,9 +299,14 @@
       "requirements": {
         "packages": ["python>=3.11", "uv", "git"],
         "dockerfile": [
-          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*",
-          "RUN pip install --no-cache-dir uv && uv tool install specify-cli==1.4.2",
-          "ENV PATH=\"/root/.local/bin:${PATH}\""
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv && rm -rf /var/lib/apt/lists/*",
+          "ENV UV_TOOL_DIR=/opt/uv UV_TOOL_BIN_DIR=/usr/local/bin",
+          "RUN python3 -m venv /opt/uv-venv && /opt/uv-venv/bin/pip install --no-cache-dir uv && /opt/uv-venv/bin/uv tool install specify-cli==1.4.2 && chmod -R a+rX /opt/uv"
+        ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates python3 py3-pip",
+          "ENV UV_TOOL_DIR=/opt/uv UV_TOOL_BIN_DIR=/usr/local/bin",
+          "RUN python3 -m venv /opt/uv-venv && /opt/uv-venv/bin/pip install --no-cache-dir uv && /opt/uv-venv/bin/uv tool install specify-cli==1.4.2 && chmod -R a+rX /opt/uv"
         ],
         "writablePaths": [".specify/"],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",
@@ -362,9 +376,14 @@
       "requirements": {
         "packages": ["python>=3.10", "uv", "git"],
         "dockerfile": [
-          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*",
-          "RUN pip install --no-cache-dir uv && uv tool install \"graphifyy[terraform]==0.9.112\"",
-          "ENV PATH=\"/root/.local/bin:${PATH}\""
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv && rm -rf /var/lib/apt/lists/*",
+          "ENV UV_TOOL_DIR=/opt/uv UV_TOOL_BIN_DIR=/usr/local/bin",
+          "RUN python3 -m venv /opt/uv-venv && /opt/uv-venv/bin/pip install --no-cache-dir uv && /opt/uv-venv/bin/uv tool install \"graphifyy[terraform]==0.9.112\" && chmod -R a+rX /opt/uv"
+        ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates python3 py3-pip",
+          "ENV UV_TOOL_DIR=/opt/uv UV_TOOL_BIN_DIR=/usr/local/bin",
+          "RUN python3 -m venv /opt/uv-venv && /opt/uv-venv/bin/pip install --no-cache-dir uv && /opt/uv-venv/bin/uv tool install \"graphifyy[terraform]==0.9.112\" && chmod -R a+rX /opt/uv"
         ],
         "writablePaths": ["graphify-out/"],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",
@@ -446,10 +465,14 @@
       "requirements": {
         "packages": ["python>=3.10", "uv", "git", "sqlite"],
         "dockerfile": [
-          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*",
-          "RUN pip install --no-cache-dir uv && uv tool install code-review-graph==2.4.0",
-          "ENV PATH=\"/root/.local/bin:${PATH}\"",
-          "ENV GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/workspace"
+          "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 python3-venv sqlite && rm -rf /var/lib/apt/lists/*",
+          "ENV UV_TOOL_DIR=/opt/uv UV_TOOL_BIN_DIR=/usr/local/bin",
+          "RUN python3 -m venv /opt/uv-venv && /opt/uv-venv/bin/pip install --no-cache-dir uv && /opt/uv-venv/bin/uv tool install code-review-graph==2.4.0 && chmod -R a+rX /opt/uv"
+        ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates python3 py3-pip sqlite",
+          "ENV UV_TOOL_DIR=/opt/uv UV_TOOL_BIN_DIR=/usr/local/bin",
+          "RUN python3 -m venv /opt/uv-venv && /opt/uv-venv/bin/pip install --no-cache-dir uv && /opt/uv-venv/bin/uv tool install code-review-graph==2.4.0 && chmod -R a+rX /opt/uv"
         ],
         "writablePaths": [".code-review-graph/"],
         "appliedTo": "go/harness/dsh/Dockerfile",
@@ -539,6 +562,9 @@
         "dockerfile": [
           "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
         ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates"
+        ],
         "writablePaths": [],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",
         "appliesTo": "harness runtime image, never the plugin image (the plugin image is FROM scratch)"
@@ -616,6 +642,9 @@
         "packages": ["git"],
         "dockerfile": [
           "RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*"
+        ],
+        "dockerfileAlpine": [
+          "RUN apk add --no-cache git ca-certificates"
         ],
         "writablePaths": [],
         "appliedTo": "go/harness/codex-sdk/Dockerfile",

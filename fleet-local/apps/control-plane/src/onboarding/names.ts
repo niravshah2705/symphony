@@ -15,6 +15,15 @@ export const keyAlias = (orgId: string, projectId: string) => `fleet:${orgId}:${
 
 // The chart renders <tenant.id>-agent-<name>; P6 renders one agent per catalog
 // model, named "<modelId>-worker" (the legacy single agent was just "worker").
+// A bundle harness is appended to the tenant's harness list, never replaces one:
+// the existing app|claude|codex|custom-claude|qoder objects keep their names, so
+// turning a bundle on or off cannot disturb an agent that is already serving.
+export const bundleHarnessName = (runtime: string) => `bundle-${runtime}`;
+export const bundleAgentName = (orgSlug: string, runtime: string) => agentName(orgSlug, `${bundleHarnessName(runtime)}-worker`);
+// One pod per (org, target); the key suffix keeps two builds of the same runtime
+// from colliding on a name, and the whole thing stays inside the 63-char limit.
+export const bundlePullProbe = (orgSlug: string, key: string) => `bundle-pull-${orgSlug}-${key.slice(0, 12)}`.slice(0, 63);
+
 export const agentName = (orgSlug: string, agent = 'worker') => `${orgSlug}-agent-${agent}`;
 export const modelAgentName = (orgSlug: string, modelId: string) => agentName(orgSlug, `${modelId}-worker`);
 

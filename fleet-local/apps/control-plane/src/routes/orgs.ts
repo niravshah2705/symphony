@@ -5,6 +5,7 @@ import { ensureOrg, findOrgById, findOrgBySlug, setOrgStatus, addMember } from '
 import { listProjects } from '../db/projects.ts';
 import { listSessions } from '../db/sessions.ts';
 import { loadOffboardStates, loadStates } from '../db/onboarding.ts';
+import { clearBundleBuilds } from '../db/bundle.ts';
 import { runOrgOnboarding } from '../onboarding/run.ts';
 import { isOffboarding, runOrgOffboarding } from '../offboarding/run.ts';
 import { assertRfc1123Slug } from '../onboarding/names.ts';
@@ -144,6 +145,11 @@ export async function orgRoutes(app: FastifyInstance): Promise<void> {
         { orgId, orgSlug: org.slug, orgName: org.name, userId: user.id, userEmail: user.email },
         ({ state }) => send('step', state),
       );
+      // The org row survives as 'deleted', so the cascade that would take the bundle
+      // state with it never fires. These two tables are the only fleet-local record of
+      // an image the released tenant pointed at, and leaving them would let a future
+      // re-onboard of a recycled slug render a Harness for a build nobody started.
+      if (complete) await clearBundleBuilds(orgId).catch(() => undefined);
       // An incomplete run leaves the org in offboarding: still gated, still visible
       // to its owner, and the next POST resumes at the first step that did not finish.
       send('done', { complete, states });

@@ -3,6 +3,7 @@
 # in-cluster secrets (never printed, never committed), and deploy the control plane.
 #   docker build -f deploy/bff/Dockerfile -t fleet-bff:local .   (context = workspace root)
 #   kind load docker-image fleet-bff:local --name flexprice-local
+#   GCP_SA_KEY_FILE=~/bundler.json ./50-bff-spa.sh   # also mount the bundle SA
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NS=fleet-system
@@ -46,6 +47,20 @@ else
 fi
 
 # --- config + rbac + deployment ----------------------------------------------
+# The bundle builder's GCP identity is a separate Secret mounted as a FILE, so it
+# is only assembled when the operator supplies a key: with no key and
+# BUNDLE_ENABLED=false the deployment is complete, and with the flag on but no key
+# the bundle route fails at its first step with a named error.
+if [ -n "${GCP_SA_KEY_FILE:-}" ]; then
+  [ -r "$GCP_SA_KEY_FILE" ] || { echo "GCP_SA_KEY_FILE=$GCP_SA_KEY_FILE is not readable" >&2; exit 1; }
+  kubectl -n "$NS" create secret generic fleet-bff-gcp \
+    --from-file=sa.json="$GCP_SA_KEY_FILE" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  echo "secret fleet-bff-gcp updated from $GCP_SA_KEY_FILE"
+elif kubectl -n "$NS" get secret fleet-bff-gcp >/dev/null 2>&1; then
+  echo "secret fleet-bff-gcp exists — keeping it (pass GCP_SA_KEY_FILE to rotate)"
+fi
+
 kubectl apply -f deploy/bff/configmap.yaml
 kubectl apply -f deploy/bff/rbac.yaml
 kubectl apply -f deploy/bff/deployment.yaml

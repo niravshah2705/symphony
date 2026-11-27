@@ -212,3 +212,37 @@ together: `deploy/litellm/values-base.yaml` `model_list` (e.g.
 `model` field — LiteLLM matches `model_name` verbatim, so one without the other
 just moves the failure. `/api/v1/models` lies with a 200 either way; only
 generation proves it.
+
+## Bundle builds: harness + plugins → image → tenant Harness (landed 2026-11-27, unverified live)
+
+An owner picks a runtime and plugin packs in the SPA's **Bundles** tab; the BFF
+renders the catalog's requirement lines into a Dockerfile, runs a Cloud Build job
+that pushes to Artifact Registry, and appends `bundle-<runtime>` (+
+`bundle-<runtime>-worker`, labelled experimental) to the tenant release. Nine
+steps on the generic run-machine (`src/bundle/steps.ts`, `src/bundle/run.ts`), so
+a BFF restart mid-build resumes on the same Cloud Build id.
+
+Shipped and green locally: the root catalog gained `requirements.dockerfileAlpine[]`
+(+ validator + `plugins:check` parity), `packages/shared/src/bundle-bases.ts`
+(all ten `current: true` runtimes), the generator, the GCP client, the routes,
+`mergeTenantBundles`, and the wizard. `cd fleet-local && npm test` = 172 + 30;
+`helm template` confirms a `byo` bundle renders `workload.command`, a `claude`
+bundle renders none, and an unpinned image renders zero bundle objects.
+
+**Not done — needs a cluster and a GCP project (the gates below are the only
+proof that counts):**
+1. Run `docs/SETUP-ENVIRONMENT.md` step 12, then a live `claude` + `graphify,
+   code-review-graph` build end to end. Close the tab mid-`poll`, reopen, and
+   confirm the run resumes and the GCP console shows exactly **one** build for
+   that key.
+2. `kubectl -n org-<slug> get harness bundle-claude -o yaml` shows a
+   `<region>-docker.pkg.dev/...@sha256:` ref, then chat one turn against
+   `bundle-claude-worker` — and inside it `graphify --version`, which is the
+   actual question this feature answers.
+3. Negative: an AR repo with no `allUsers` reader must fail **`verify`**, not
+   pass `apply`; a `kind` run with no mirror must fail `mirror` with the
+   copy-pasteable command and then succeed after `scripts/bundle-mirror.sh`.
+4. Six of the ten bases are `dispatchable: false` (docs/RUNTIME_IMAGES.md): the
+   wizard marks them buildable-but-not-runnable. Decide whether to hide them
+   once kagent gains the engine keys, and whether the per-org concurrent-build
+   cap (`submit` spends real Cloud Build seconds) is needed after owners click it.

@@ -76,6 +76,10 @@ harnesses:
     # workload.image overrides the built-in runtime image for any adapter, and
     # must be digest-pinned (the CRD pattern is
     # `^[^[:space:]@]+@sha256:[a-f0-9]{64}$`). Empty uses the release default.
+    # Nothing here carries pull credentials — the chart has no imagePullSecrets —
+    # so whatever address an owner-built bundle image uses must be anonymously
+    # readable FROM A NODE. That is why fleet-local names an Artifact Registry ref
+    # with allUsers/reader, or mirrors to a local registry (scripts/bundle-mirror.sh).
     # command and args are accepted by kagent and byo only, and byo requires
     # both image and command — with a digest, validated here because the CRD
     # rejects the whole Harness with a message that does not name the field.

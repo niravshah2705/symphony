@@ -68,6 +68,13 @@ cleanly and then never reconcile:
 - `harnesses[].type` must be one of `kagent|codex|claude|byo` (the CRD enforces
   `ExactlyOneOf`), `byo` requires both a digest-pinned `image` and a `command`,
   and `codex`/`claude` reject `command`/`args`.
+- No entry may name an image the node cannot pull anonymously. The chart renders
+  no `imagePullSecrets`, so an owner-built bundle image (`bundle-<runtime>`, from
+  the fleet-local bundle wizard) must live in a registry the cluster trusts:
+  an Artifact Registry repo granted `allUsers` / `roles/artifactregistry.reader`,
+  or a local registry mirrored into by `fleet-local/scripts/bundle-mirror.sh`.
+  A wrong address is not a render failure — it is an `ImagePullBackOff` at the
+  first chat turn, which is why the wizard ends with a pull-probe step.
 - A `byo` Harness may not put a credential name (`QODER_API_KEY`,
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `CODEX_API_KEY`, `LITELLM_API_KEY`) in
   `env`: `spec.env` has no `valueFrom`, so the value would be plaintext in the

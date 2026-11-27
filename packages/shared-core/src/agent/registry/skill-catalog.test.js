@@ -23,6 +23,7 @@ const {
   buildMatrix,
   findSkill,
   validateSkillCatalog,
+  requirementLines,
 } = require('./skill-catalog');
 const { MATRIX_COLUMNS, STATUSES, FULL_GIT_SHA, DOCKERFILE_INSTRUCTIONS } = require('./plugin-catalog');
 
@@ -151,6 +152,15 @@ test('requirements land in the harness runtime image, never in the skill artifac
     c.skills[0].requirements.appliedTo = 'deploy/kagent/skills/security-audit/Dockerfile.security-audit-skill';
   });
   assert.match(errors.join('\n'), /must be a harness runtime image/);
+});
+
+test('the alpine array installs with apk and never inherits the Debian default', () => {
+  const { requirements } = AUDIT;
+  const alpine = requirementLines(requirements, 'apk');
+  assert.ok(Array.isArray(alpine) && alpine.length > 0);
+  assert.match(alpine[0], /^RUN apk add/);
+  assert.ok(!alpine.some((l) => /apt-get/.test(l)), alpine.join('\n'));
+  assert.deepEqual(requirementLines(requirements, 'apt'), requirements.dockerfile);
 });
 
 test('every filled cell equals the artifact version, and blanks name a blocker', () => {

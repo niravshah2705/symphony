@@ -5,12 +5,14 @@ import { OnboardingWizard } from './OnboardingWizard';
 import { OffboardWizard } from './OffboardWizard';
 import { Thread } from '../assistant-ui/Thread';
 import { Costs } from './Costs';
+import { BundleWizard } from './BundleWizard';
 
-type Tab = 'onboard' | 'chat' | 'costs' | 'offboard';
+type Tab = 'onboard' | 'chat' | 'bundle' | 'costs' | 'offboard';
 
 const TAB_LABEL: Record<Tab, string> = {
   onboard: 'Onboarding',
   chat: 'Chat',
+  bundle: 'Bundles',
   costs: 'Costs',
   offboard: 'Offboarding',
 };
@@ -94,8 +96,12 @@ export function Shell({
     setTab('offboard');
   }
 
-  const tabs: Tab[] = ['onboard', 'chat', 'costs'];
+  const tabs: Tab[] = ['onboard', 'chat'];
   const owner = activeOrg?.role === 'owner';
+  // Bundles change what an organisation can spend (a Cloud Build job per selection),
+  // so they are owner-only, and a tenant being removed has nowhere to apply one.
+  if (owner && activeOrg && activeOrg.status === 'active') tabs.push('bundle');
+  tabs.push('costs');
   if (owner || activeOrg?.status === 'offboarding') tabs.push('offboard');
 
   return (
@@ -207,6 +213,7 @@ export function Shell({
           <main className="content">
             {tab === 'onboard' ? <OnboardingWizard key={activeOrg.id} org={activeOrg} /> : null}
             {tab === 'chat' ? <Thread key={activeOrg.id} org={activeOrg} /> : null}
+            {tab === 'bundle' ? <BundleWizard key={activeOrg.id} org={activeOrg} /> : null}
             {tab === 'costs' ? <Costs key={activeOrg.id} org={activeOrg} /> : null}
             {tab === 'offboard' ? (
               <OffboardWizard

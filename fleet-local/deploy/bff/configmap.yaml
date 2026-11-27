@@ -48,3 +48,32 @@ data:
   # LiteLLM virtual key under for the qoder BYOK provider.
   QODER_ADAPTER_COMMAND: /usr/local/bin/qoder-runtime
   QODER_API_KEY_ENV: QODER_API_KEY
+  # ---------------------------------------------------------------- bundle builds
+  # The owner-facing wizard that renders a plugin selection into a Dockerfile,
+  # builds it in Cloud Build, and points a tenant Harness at the result. Off by
+  # default because turning it on means this pod holds a service account that can
+  # spend Cloud Build seconds and write an Artifact Registry repo. Flip it only
+  # after the API + repo + bucket + SA grants in docs/SETUP-ENVIRONMENT.md step 12
+  # exist; with the flag on, config.ts refuses to boot if a required name is empty.
+  BUNDLE_ENABLED: "false"
+  # The GCP project that runs the builds and hosts the repo. GCP_SA_KEY_PATH is an
+  # env name so a non-standard mount can be named; the key itself is a Secret VOLUME
+  # (deploy/bff/deployment.yaml), never an env var — a value here would print in
+  # `kubectl get pod -o yaml`.
+  GCP_PROJECT_ID: ""
+  GCP_REGION: ""
+  # The Artifact Registry docker repo that receives `<project>/<repo>/<runtime>-bundle`.
+  BUNDLE_REPO: fleet-bundles
+  BUNDLE_STAGE_BUCKET: ""
+  GCP_SA_KEY_PATH: /run/secrets/gcp/sa.json
+  # ar = the Harness names the <region>-docker.pkg.dev ref, which requires the repo
+  # to be anonymously readable (allUsers / roles/artifactregistry.reader) because a
+  # kind node has no GCP identity. kind = the Harness names BUNDLE_PULL_HOST and the
+  # image is mirrored there by hand with scripts/bundle-mirror.sh.
+  BUNDLE_REGISTRY: ar
+  # Required only in kind mode: the registry address the CLUSTER NODES can reach
+  # (e.g. kind-registry:5000), which is not necessarily what the docker host calls it.
+  BUNDLE_PULL_HOST: ""
+  # A bundle build is a full runtime image plus installs; the step waits this long
+  # before failing `poll` (20 minutes).
+  BUNDLE_BUILD_TIMEOUT_MS: "1200000"

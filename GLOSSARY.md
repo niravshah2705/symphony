@@ -68,6 +68,25 @@ before its first run. Distinct from a run, and deliberately not implicit —
 configuration is an explicit, re-runnable action.
 _Avoid_: bootstrap, warm-up, tenant setup
 
+**Plugin data bundle**:
+An Agent Plugins 1.0.0 artifact — a `FROM scratch` OCI image carrying a pack's
+skills, agents and MCP config as files, with no shell and therefore no installed
+software. Mounted into a run by `AgentTemplate.spec.plugins[].source.oci`.
+_Avoid_: plugin image, bundle (bare), plugin install
+
+**Bundle image**:
+The *other* kind of bundle, and not interchangeable with a plugin data bundle: a
+runtime image an owner builds in fleet-local by installing a plugin pack's
+`requirements.dockerfile[]` lines on top of a `go/harness/` base. It is a real
+image with the tools present, referenced by `Harness.spec.<engine>.workload.image`,
+digest-pinned. One is data mounted into a harness; the other is the harness.
+_Avoid_: plugin bundle, data bundle, bundle (bare)
+
+**Bundle build**:
+One fleet-local run of that pipeline: selection → Dockerfile → Cloud Build →
+registry digest → the tenant's `bundle-<runtime>` Harness. Content-addressed, so
+the same selection short-circuits instead of paying for a second build.
+
 ### Money and limits
 
 **Budget**:

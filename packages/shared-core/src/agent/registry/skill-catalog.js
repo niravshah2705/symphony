@@ -29,6 +29,7 @@ const {
   FILLED_STATUSES,
   PROMPT_APPEND_MAX,
   validateRequirements,
+  requirementLines,
   isAgentPluginName,
 } = require('./plugin-catalog');
 
@@ -198,4 +199,5 @@ module.exports = {
   buildMatrix,
   findSkill,
   validateSkillCatalog,
+  requirementLines,
 };

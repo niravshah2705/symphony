@@ -1,5 +1,10 @@
 export * from './a2a.ts';
 export * from './agui.ts';
+export * from './bundle-bases.ts';
+
+// A bundle base carries no imports, so pulling the DAG vocabulary in here cannot
+// cycle back through the module's own re-export.
+import { BUNDLE_STEPS, type BundleStepId } from './bundle-bases.ts';
 
 export const FLEET_HEADERS = {
   orgId: 'x-fleet-org-id',
@@ -248,6 +253,12 @@ export function nextRunnableOffboardSteps(
   states: Partial<Record<OffboardingStepId, StepState<OffboardingStepId>>>,
 ): OffboardingStepId[] {
   return runnableSteps(OFFBOARDING_STEPS, states);
+}
+
+export type BundleStates = Partial<Record<BundleStepId, StepState<BundleStepId>>>;
+
+export function nextRunnableBundleSteps(states: BundleStates): BundleStepId[] {
+  return runnableSteps<BundleStepId>(BUNDLE_STEPS, states);
 }
 
 export interface CostRow {

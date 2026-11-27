@@ -73,9 +73,44 @@ CREATE TABLE IF NOT EXISTS offboarding_runs (
   PRIMARY KEY (org_id, step)
 );
 
+-- The bundle machine's durable state. Third table for the same reason the other
+-- two are separate: its step ids (key, apply) overlap the others', and it carries
+-- one extra dimension — an org can have a run in flight per (runtime, selection),
+-- so `target` is part of the key and a re-run with a different plugin set is a new
+-- run rather than an override of the last one's state.
+CREATE TABLE IF NOT EXISTS bundle_runs (
+  org_id          uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  target          text NOT NULL,
+  step            text NOT NULL,
+  status          text NOT NULL DEFAULT 'pending',
+  attempt         integer NOT NULL DEFAULT 0,
+  idempotency_key text NOT NULL,
+  result_json     jsonb,
+  error           text,
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, target, step)
+);
+
+-- Desired state the tenant render reads: one current image per (org, runtime).
+-- Kept apart from bundle_runs because the machine's rows are per selection while
+-- this is the one ref that a Harness points at, and a re-onboard must reproduce it
+-- without replaying a build. The offboard route clears an org's rows when a
+-- teardown completes — the org row itself survives as status 'deleted', so
+-- ON DELETE CASCADE alone would leave this table describing a removed tenant.
+CREATE TABLE IF NOT EXISTS bundle_builds (
+  org_id         uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  runtime        text NOT NULL,
+  image          text NOT NULL,
+  base_digest    text NOT NULL,
+  plugins        jsonb NOT NULL,
+  dockerfile_sha text NOT NULL,
+  bundle_key     text NOT NULL,
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, runtime)
+);
+
 -- Chat/agent sessions; the metering sweeper reads terminal rows to emit
--- fleet.actor_compute events and OTLP datapoints.
-CREATE TABLE IF NOT EXISTS sessions (
+-- fleet.actor_compute events and OTLP datapoints.CREATE TABLE IF NOT EXISTS sessions (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id            uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
   project_id        uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

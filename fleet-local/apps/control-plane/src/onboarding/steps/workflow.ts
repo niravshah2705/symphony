@@ -1,4 +1,6 @@
 import { config } from '../../config.ts';
+import { listBundleBuilds } from '../../db/bundle.ts';
+import { bundleHarnessInputs } from '../../bundle/harness.ts';
 import { helmUpgradeInstall } from '../../clients/k8s.ts';
 import { helmRelease, orgNamespace, tenantId } from '../names.ts';
 import { buildTenantValues } from '../tenant-values.ts';
@@ -15,6 +17,10 @@ export const workflowStep: StepExecutor = async (ctx) => {
 
   const ns = orgNamespace(ctx.orgSlug);
   const id = tenantId(ctx.orgSlug);
+  // A bundle harness is part of the tenant's desired state, not of the wizard run
+  // that created it: a re-onboard that ignored this table would drop the image the
+  // owner built and leave the agent pointing at a harness the release no longer has.
+  const bundles = bundleHarnessInputs(await listBundleBuilds(ctx.orgId), config.modelCatalog);
   const values = buildTenantValues({
     orgId: ctx.orgId,
     orgSlug: ctx.orgSlug,
@@ -29,6 +35,7 @@ export const workflowStep: StepExecutor = async (ctx) => {
       qoderApiKeyEnv: config.qoderApiKeyEnv,
       customClaudeImage: config.customClaudeImage,
     },
+    bundles,
   });
 
   const release = helmRelease(ctx.orgSlug);

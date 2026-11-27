@@ -122,6 +122,33 @@ lfcount=$(kubectl -n litellm exec deploy/litellm -c litellm -- sh -c \
 [ "${lfcount:-0}" -ge 3 ] && ok "pod env has LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST ($lfcount)" \
   || man "pod env unreadable (no shell?) — the two read-backs above are authoritative"
 
+echo "=== 15. bundle builds: the BFF can render an owner image into a Harness ==="
+# Read-backs only, because a real build spends Cloud Build seconds. The live half
+# (one build per key, a pinned AR ref, a chat turn against bundle-<runtime>-worker)
+# is docs/NEXT-ACTIONS.md's open gate list.
+bena=$(kubectl -n fleet-system get cm fleet-bff-config -o jsonpath='{.data.BUNDLE_ENABLED}' 2>/dev/null)
+if [ "$bena" != "true" ]; then
+  man "BUNDLE_ENABLED=$bena — skip; docs/SETUP-ENVIRONMENT.md step 12 turns bundle builds on"
+else
+  benv=$(kubectl -n fleet-system get cm fleet-bff-config -o jsonpath='{.data}' 2>/dev/null)
+  for k in GCP_PROJECT_ID GCP_REGION BUNDLE_REPO; do
+    echo "$benv" | grep -q "\"$k\":\"[^\"]" && ok "bundle config has $k" || bad "bundle config is missing $k"
+  done
+  # The key is a mounted FILE. If it were an envFrom entry it would print in
+  # `kubectl get deploy -o yaml`, which is the whole reason it is a volume.
+  kubectl -n fleet-system get deploy fleet-bff -o jsonpath='{.spec.template.spec.containers[0].volumeMounts[*].mountPath}' 2>/dev/null \
+    | grep -q '/run/secrets/gcp' && ok "bundle SA mounted at /run/secrets/gcp" \
+    || bad "no /run/secrets/gcp volumeMount — bundle steps cannot sign a token"
+  # fleet-bff-gcp must reach the pod as a VOLUME only. envFrom would put the key
+  # json in `kubectl get pod -o yaml`; note GCP_SA_KEY_PATH is a legitimate env
+  # name (a path, not a key), so the check is on the secretRef list, not on it.
+  kubectl -n fleet-system get deploy fleet-bff -o jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' 2>/dev/null \
+    | grep -q 'fleet-bff-gcp' && bad "fleet-bff-gcp is an envFrom secret — the key json is in the pod env" \
+    || ok "bundle key is not injected as env"
+  man "bundle wizard: runtime claude + graphify,code-review-graph -> Build; all 9 steps stream; close the tab mid-poll and reopen -> same Cloud Build id, exactly one build in the console"
+  man "kubectl -n org-<slug> get harness -o yaml | grep bundle- -> a @sha256 AR digest; then chat a turn on bundle-claude-worker and run graphify --version inside it"
+fi
+
 echo
 echo "RESULT  PASS=$PASS FAIL=$FAIL MANUAL=$MANUAL"
 [ "$FAIL" -eq 0 ] || exit 1

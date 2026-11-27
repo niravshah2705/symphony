@@ -7,10 +7,15 @@ This repo builds and publishes four **native agent-harness runtime images** to
 launches the vendor CLI as a subprocess, translates its output into the shared
 Harness runtime event model, and serves it over a private A2A endpoint.
 
-These images are **standalone artifacts**. They are *not* wired into the fleet's
-own `deploy/gcp/Dockerfile.coder` or the GCP Artifact Registry pipeline — that is
-intentional. Integrating them behind `substratePlannerImage` /
-`harness-catalog.json` is a separate effort.
+These images are **standalone artifacts**. They are *not* built into the fleet's
+own `deploy/gcp/Dockerfile.coder`, and this repo's publish path is `ghcr.io` —
+Artifact Registry is not one of their registries. That is intentional.
+One thing changed: the fleet-local **bundle** build takes each `current: true`
+image as its `FROM` and installs plugin requirements on top of it, pushing the
+derived image to a customer-side Artifact Registry repo
+(`fleet-local/docs/SETUP-ENVIRONMENT.md` step 12). The published images stay
+untouched; only a tenant's derived copy reaches GCP. Integrating the originals
+behind `substratePlannerImage` / `harness-catalog.json` remains a separate effort.
 
 > **Experimental, published-but-not-in-cluster.** Six additional harness scaffolds —
 > `opencode`, `gemini`, `pi`, `qoder`, `kilo`, `goose` — now have a single `current: true` row each in

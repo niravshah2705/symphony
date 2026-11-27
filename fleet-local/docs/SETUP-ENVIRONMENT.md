@@ -44,9 +44,68 @@ in-cluster Secrets / `deploy/flexprice/.env`, never printed).
 | 10 | auth documentation | — | [`AUTH-CONFIGURATION.md`](./AUTH-CONFIGURATION.md): every hop, header, claim and guard of the Google-OAuth → trusted-proxy → actor chain. |
 | 11 | e2e gate | `setup/s11-verify.sh` | `verify-e2e.sh` (12-point gate) + the headless wake recipe below. |
 
-## Model catalog & chat model selection (P6)
+Step **12** below is outside the orchestrator: optional, needs a GCP project, and
+nothing in steps 1–11 depends on it.
 
-The chat model list is **configuration**: `FLEET_MODELS` (JSON array of
+## 12 (optional) — bundle builds: Cloud Build → Artifact Registry → Harness
+
+Not in `setup-env.sh`: it needs a GCP project of its own, and the cluster is
+complete without it. An owner selects a harness runtime + plugin packs in the SPA's
+**Bundles** tab; the BFF renders the catalog's requirement lines into a Dockerfile,
+submits a Cloud Build job that pushes to Artifact Registry, and appends
+`bundle-<runtime>` to the tenant's `harnesses` (+ a `bundle-<runtime>-worker` agent).
+Everything below is the operator's one-time grant; `BUNDLE_ENABLED` stays `"false"`
+until it is done.
+
+```bash
+PROJ=<your-gcp-project> REGION=europe-west1 REPO=fleet-bundles
+gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com --project "$PROJ"
+
+# 1. the repo the bundle images land in
+gcloud artifacts repositories create "$REPO" --repository-format=docker \
+  --location "$REGION" --project "$PROJ"
+
+# 2. the bucket Cloud Build reads its (generated) Dockerfile context from
+gcloud storage buckets create "gs://$PROJ-fleet-bundle-context" --location "$REGION" --project "$PROJ"
+
+# 3. the identity the BFF signs with. Least privilege, and it is NOT a user credential:
+#    builder — starts builds, writes the repo, writes the context object.
+gcloud iam service-accounts create fleet-bff-bundler --project "$PROJ"
+SA=fleet-bff-bundler@"$PROJ".iam.gserviceaccount.com
+gcloud projects add-iam-policy-binding "$PROJ" --member "serviceAccount:$SA" \
+  --role roles/cloudbuild.builds.editor
+gcloud artifacts repositories add-iam-policy-binding "$REPO" --location "$REGION" \
+  --project "$PROJ" --member "serviceAccount:$SA" --role roles/artifactregistry.writer
+gcloud storage buckets add-iam-policy-binding "gs://$PROJ-fleet-bundle-context" \
+  --member "serviceAccount:$SA" --role roles/storage.objectCreator
+
+# 4. THE POSTURE CHANGE — only for BUNDLE_REGISTRY=ar. A kind node has no GCP
+#    identity and the kagent chart renders no imagePullSecrets, so the Harness image
+#    must be anonymously pullable by digest. Read-only, digest-pinned refs, no
+#    listing. Skip it and run BUNDLE_REGISTRY=kind instead (see bundle-mirror.sh).
+gcloud artifacts repositories add-iam-policy-binding "$REPO" --location "$REGION" \
+  --project "$PROJ" --member allUsers --role roles/artifactregistry.reader
+
+# 5. mount the key as a FILE, then redeploy the BFF with the ConfigMap values set
+gcloud iam service-accounts keys create ~/fleet-bff-bundler.json --iam-account "$SA"
+GCP_SA_KEY_FILE=~/fleet-bff-bundler.json scripts/50-bff-spa.sh
+shred -u ~/fleet-bff-bundler.json
+```
+
+Then in `deploy/bff/configmap.yaml`: `BUNDLE_ENABLED: "true"`, `GCP_PROJECT_ID`,
+`GCP_REGION`, `BUNDLE_REPO`, `BUNDLE_STAGE_BUCKET`, and `BUNDLE_REGISTRY` (`ar` |
+`kind`; `kind` also requires `BUNDLE_PULL_HOST` — the address the **nodes** reach,
+e.g. `kind-registry:5000`, with `PUSH_HOST=localhost:5001` for the docker side).
+`config.ts` refuses to boot with the flag on and a name missing, so a half-filled
+ConfigMap fails loudly at the rollout rather than at the first build.
+
+In `kind` mode the `mirror` step fails with the exact copy-pasteable command
+(`scripts/bundle-mirror.sh <pull-host> <project>/<repo>/<pkg> <tag> <region>`);
+run it on the docker host and re-run the build — `mirror` re-reads the destination
+digest (a retag recomputes it, so the AR digest is never carried forward) and
+`apply`/`verify` continue.
+
+## Model catalog & chat model selection (P6)The chat model list is **configuration**: `FLEET_MODELS` (JSON array of
 `{id,label,model,default?}`) in ConfigMap `fleet-system/fleet-bff-config`
 (`deploy/bff/configmap.yaml`; default seed = mock-gpt, claude-sonnet-4,
 `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free`). One entry per model, the

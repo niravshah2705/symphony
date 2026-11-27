@@ -78,7 +78,13 @@ graphify and code-review-graph, git plus node≥20 for security-audit — has it
 [`plugin-catalog.json`](../packages/shared-core/src/agent/registry/plugin-catalog.json)
 under `requirements.dockerfile[]` with `appliedTo` pointing at the **harness
 runtime image**. The validator rejects an `appliedTo` that names a plugin image,
-so the rule is an assertion rather than a comment.
+so the rule is an assertion rather than a comment. Because most published bases
+are Alpine while the recorded lines are Debian-shaped, the same object also
+carries `requirements.dockerfileAlpine[]`; a consumer picks one by the base's
+package family and **refuses** rather than emitting `apt-get` onto an Alpine
+image (`fleet-local/apps/control-plane/src/bundle/plugins.ts:requirementLines`).
+`fleet-local/scripts/bundle/sync-plugin-catalog.mjs` mirrors both arrays into that
+workspace's generated catalog, so the builder needs no checkout of this repo.
 
 **3. Plugin-declared `mcp.json` binds only on engine `kagent`.**
 `graphify` and `code-review-graph` are primarily MCP servers; their value splits
@@ -300,12 +306,14 @@ python3 deploy/kagent/select-published-rows.py --track plugin --mode changed \
 - **`byo` runtime images.** The destination those strings point at is now part
   real: `go/harness/` holds ten per-CLI Dockerfiles,
   [`go/harness/runtime-images.csv`](../go/harness/runtime-images.csv) pins their
-  versions and `build-runtime-images.yml` publishes them. What is still missing
-  is the pack-track half — the paths the records actually name
-  (`go/harness/codex-sdk/`, `go/harness/dsh/`) are not among those ten, no
-  matrix cell renders a `byo` engine today, and no build consumes
-  `requirements.dockerfile[]`, so the requirement lines stay reviewed text.
-  Tracked as the runtime-image issue.
+  versions and `build-runtime-images.yml` publishes them. **A build now does
+  consume `requirements.dockerfile[]`** — the fleet-local bundle wizard renders
+  those lines onto the selected base and pushes the result to Artifact Registry
+  (`fleet-local/docs/SETUP-ENVIRONMENT.md` step 12). Still open is the dispatch
+  half: the paths some records name (`go/harness/codex-sdk/`, `go/harness/dsh/`)
+  are not among those ten, and only the `claude`/`codex`/`byo` cells have a chart
+  engine, so a bundle built on the six experimental runtimes is an image without
+  an in-cluster runner yet. Tracked as the runtime-image issue.
 - **Isolated child agent sessions.** A pack whose workflow dispatches a fresh
   reviewer into a session of its own — EGM's `agents/*.md` prompts — mounts the
   prompts but cannot run them that way. The root manifest we author carries a

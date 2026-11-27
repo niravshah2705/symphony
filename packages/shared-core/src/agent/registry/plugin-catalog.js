@@ -178,21 +178,57 @@ function validateRequirements(requirements, where, errors) {
   push(errors, /^go\/harness\/[^/]+\/Dockerfile$/.test(applied),
     `${where}: requirements.appliedTo must be a harness runtime image (go/harness/<cli>/Dockerfile), not a plugin image — got ${JSON.stringify(applied)}`);
 
-  for (const [index, line] of (requirements.dockerfile || []).entries()) {
-    const at = `${where}: requirements.dockerfile[${index}]`;
-    if (typeof line !== 'string' || !line.trim()) {
-      errors.push(`${at}: must be a non-empty string`);
-      continue;
+  // One array per package family, because a harness runtime image is either
+  // Debian-derived (`apt-get`) or alpine (`apk`) and a line written for one fails
+  // on the other. `dockerfile` is required (the reviewed default);
+  // `dockerfileAlpine` is optional until a pack is proven on an alpine base.
+  for (const field of ['dockerfile', 'dockerfileAlpine']) {
+    const lines = requirements[field];
+    if (field === 'dockerfile') {
+      push(errors, Array.isArray(lines) && lines.length > 0,
+        `${where}: requirements.dockerfile must be a non-empty array of lines to append`);
+    } else {
+      push(errors, lines === undefined || (Array.isArray(lines) && lines.length > 0),
+        `${where}: requirements.dockerfileAlpine, when present, must be a non-empty array`);
     }
-    const instruction = line.trim().split(/\s+/)[0].toUpperCase();
-    push(errors, DOCKERFILE_INSTRUCTIONS.includes(instruction),
-      `${at}: "${instruction}" is not an allowed instruction (${DOCKERFILE_INSTRUCTIONS.join('|')})`);
-    push(errors, !SECRETISH.test(line), `${at}: credential-shaped text in a Dockerfile line`);
+    for (const [index, line] of (lines || []).entries()) {
+      const at = `${where}: requirements.${field}[${index}]`;
+      if (typeof line !== 'string' || !line.trim()) {
+        errors.push(`${at}: must be a non-empty string`);
+        continue;
+      }
+      const instruction = line.trim().split(/\s+/)[0].toUpperCase();
+      push(errors, DOCKERFILE_INSTRUCTIONS.includes(instruction),
+        `${at}: "${instruction}" is not an allowed instruction (${DOCKERFILE_INSTRUCTIONS.join('|')})`);
+      push(errors, !SECRETISH.test(line), `${at}: credential-shaped text in a Dockerfile line`);
+    }
   }
   for (const p of requirements.writablePaths || []) {
     push(errors, typeof p === 'string' && p.length > 0 && !p.startsWith('/') && !p.includes('..'),
       `${where}: writablePath must be relative and contain no ".." — got ${JSON.stringify(p)}`);
   }
+}
+
+/**
+ * The requirement lines for a base image's package family. An alpine base with
+ * only `dockerfile` (Debian-shaped) lines has nothing installable, so the
+ * caller gets `null` and must refuse the combination rather than build an image
+ * whose `RUN apt-get` fails on `apk`-only bases.
+ *
+ * @param {object} requirements a pack's `requirements` block
+ * @param {'apk'|'apt'} family the base image's package family
+ * @returns {string[]|null} the lines to append, or null when the family has none
+ */
+function requirementLines(requirements, family) {
+  if (!isPlainObject(requirements)) return null;
+  if (family === 'apk') {
+    return Array.isArray(requirements.dockerfileAlpine) && requirements.dockerfileAlpine.length
+      ? requirements.dockerfileAlpine
+      : null;
+  }
+  return Array.isArray(requirements.dockerfile) && requirements.dockerfile.length
+    ? requirements.dockerfile
+    : null;
 }
 
 function validateEnv(env, where, errors) {
@@ -409,6 +445,7 @@ module.exports = {
   enabledSkills,
   bundledSkills,
   validateRequirements,
+  requirementLines,
   validateEnv,
   findPlugin,
   pluginName,

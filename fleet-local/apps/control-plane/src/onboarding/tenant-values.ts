@@ -4,7 +4,7 @@
 // Agent per catalog entry, plus one Harness per runtime the catalog uses. It is a
 // pure function of its inputs (no config, no cluster) so the shape is testable and
 // the sync script (scripts/fixes) and onboarding cannot drift apart.
-import { FLEET_HEADERS, type ModelCatalogEntry } from '@fleet-local/shared';
+import { DIGEST_PIN, FLEET_HEADERS, type ModelCatalogEntry } from '@fleet-local/shared';
 import { litellmSecretKey, orgNamespace, tenantId, workerPoolName } from './names.ts';
 
 export const ACTOR_OTLP = 'http://opentelemetry-collector.otel-system.svc:4317';
@@ -32,6 +32,26 @@ const OTEL_ENV = [
 // so every harness can carry the org attribute.
 const fleetOrgAttr = (orgId: string) => ({ name: 'OTEL_RESOURCE_ATTRIBUTES', value: `fleet.org_id=${orgId}` });
 
+/** The env every harness in the tenant carries. Exported because the bundle
+ *  apply step merges into a live values document and must produce the identical
+ *  list rather than a second copy of it. */
+export const orgEnvironment = (orgId: string) => [...OTEL_ENV, fleetOrgAttr(orgId)];
+
+/**
+ * One built bundle, as the render needs it. `type` and `adapter` come from
+ * BUNDLE_BASES at the call site rather than being derived here: this module is a
+ * pure function of its inputs and must not gain a dependency on the runtime table,
+ * which would make the sync script and onboarding able to disagree silently.
+ */
+export interface BundleHarnessValue {
+  name: string;
+  type: 'claude' | 'codex' | 'byo';
+  image: string;
+  adapter?: string;
+  /** The model this bundle's agent talks to; defaults to the catalog's first entry. */
+  model?: string;
+}
+
 export interface TenantValuesConfig {
   snapshotRoot: string;
   litellmUrl: string;
@@ -48,6 +68,8 @@ export interface TenantValuesInput {
   secretName: string;
   catalog: readonly ModelCatalogEntry[];
   cfg: TenantValuesConfig;
+  /** Owner-built plugin bundles, appended after the catalog harnesses. */
+  bundles?: readonly BundleHarnessValue[];
 }
 
 export const harnessName = (runtime?: string) =>
@@ -136,22 +158,120 @@ export function buildTenantValues(input: TenantValuesInput) {
             },
           ]
         : []),
+      ...bundleHarnesses(input.bundles ?? [], orgEnv),
     ],
     mcp: [WEBFETCH_MCP],
-    templates: catalog.map((m) => ({
-      name: `${m.id}-coding`,
-      modelConfig: m.id,
-      description: `Fleet coding workflow (${m.label})`,
-      systemPrompt: 'You are a concise coding agent. Plan, then act.\n',
-      mcp: [WEBFETCH_MCP.name],
-    })),
-    agents: catalog.map((m) => ({
-      name: `${m.id}-worker`,
-      template: `${m.id}-coding`,
-      harness: harnessName(m.runtime),
-    })),
+    templates: [
+      ...catalogTemplates(catalog),
+      ...bundleTemplates(input.bundles ?? [], catalog.map((m) => m.id)),
+    ],
+    agents: [
+      ...catalogAgents(catalog),
+      ...bundleAgents(input.bundles ?? [], catalog.map((m) => m.id)),
+    ],
     commonLabels: { 'fleet.local/org-id': orgId, 'fleet.local/project-id': projectId },
   };
 }
+
+/**
+ * A built bundle as one Harness entry. Two rules, both learned from the objects
+ * above: an image that is not digest-pinned is dropped rather than rendered —
+ * the CRD rejects a tag, and it does so after the release has been mutated — and
+ * a `byo` harness must carry its adapter command, which the chart requires and
+ * the claude/codex engines forbid. A `byo` entry with no adapter is a caller bug
+ * rather than a configuration choice, so it throws instead of disappearing.
+ */
+export function bundleHarnessValue(b: BundleHarnessValue, orgEnv: { name: string; value: string }[]) {
+  if (b.type === 'byo' && !b.adapter) throw new Error(`bundle ${b.name}: a byo harness needs its adapter command`);
+  return {
+    name: b.name,
+    type: b.type,
+    image: b.image,
+    ...(b.type === 'byo' ? { command: [b.adapter!] } : {}),
+    env: orgEnv,
+  };
+}
+
+const renderable = (bundles: readonly BundleHarnessValue[]): BundleHarnessValue[] =>
+  bundles.filter((b) => DIGEST_PIN.test(b.image));
+
+export const bundleHarnesses = (
+  bundles: readonly BundleHarnessValue[],
+  orgEnv: { name: string; value: string }[],
+) => renderable(bundles).map((b) => bundleHarnessValue(b, orgEnv));
+
+// The bundle agent exists so an owner can chat a turn against the image they just
+// built; it is the only way `verify` in the wizard means anything beyond "the
+// cluster can pull this ref". It is labelled experimental in its description
+// because the chart has no experimental flag to render — nothing in the CR would
+// change if one were set here.
+export const bundleTemplates = (bundles: readonly BundleHarnessValue[], modelIds: readonly string[]) => {
+  const fallback = modelIds[0];
+  if (!fallback) return [];
+  return renderable(bundles).map((b) => ({
+    name: `${b.name}-coding`,
+    // A bundle may name its own model; one that this document does not carry would
+    // fail the chart's referential check, so it falls back rather than throwing.
+    modelConfig: b.model && modelIds.includes(b.model) ? b.model : fallback,
+    description: `Plugin bundle on ${b.name} (experimental)`,
+    systemPrompt: 'You are a concise coding agent. Plan, then act.\n',
+    mcp: [WEBFETCH_MCP.name],
+  }));
+};
+
+export const bundleAgents = (bundles: readonly BundleHarnessValue[], modelIds: readonly string[]) => {
+  if (!modelIds[0]) return [];
+  return renderable(bundles).map((b) => ({
+    name: `${b.name}-worker`,
+    template: `${b.name}-coding`,
+    harness: b.name,
+  }));
+};
+
+/**
+ * Add or replace the bundle objects on a values document that already exists — the
+ * read-modify-write `apply` step performs on the live release. Every bundle entry
+ * is keyed by the `bundle-` name prefix, so a re-apply converges onto the stored
+ * builds instead of accumulating a second copy of a runtime, and a bundle whose
+ * build row was removed disappears from the release on the next apply.
+ *
+ * The model id comes from the document's own `models` list rather than the caller's
+ * config, because the release is the thing being kept coherent: a template that
+ * names a model the release does not have fails the chart's referential check.
+ */
+export function mergeTenantBundles(
+  values: Record<string, unknown>,
+  bundles: readonly BundleHarnessValue[],
+  orgId: string,
+) {
+  const named = <T extends { name?: string }>(key: string) =>
+    Array.isArray(values[key]) ? (values[key] as T[]) : [];
+  const kept = <T extends { name?: string }>(key: string) =>
+    named<T>(key).filter((entry) => !String(entry.name ?? '').startsWith('bundle-'));
+  const modelIds = named<{ name: string }>('models').map((m) => String(m.name));
+
+  return {
+    ...values,
+    harnesses: [...kept('harnesses'), ...bundleHarnesses(bundles, orgEnvironment(orgId))],
+    templates: [...kept('templates'), ...bundleTemplates(bundles, modelIds)],
+    agents: [...kept('agents'), ...bundleAgents(bundles, modelIds)],
+  };
+}
+
+const catalogTemplates = (catalog: readonly ModelCatalogEntry[]) =>
+  catalog.map((m) => ({
+    name: `${m.id}-coding`,
+    modelConfig: m.id,
+    description: `Fleet coding workflow (${m.label})`,
+    systemPrompt: 'You are a concise coding agent. Plan, then act.\n',
+    mcp: [WEBFETCH_MCP.name],
+  }));
+
+const catalogAgents = (catalog: readonly ModelCatalogEntry[]) =>
+  catalog.map((m) => ({
+    name: `${m.id}-worker`,
+    template: `${m.id}-coding`,
+    harness: harnessName(m.runtime),
+  }));
 
 export type TenantValues = ReturnType<typeof buildTenantValues>;

@@ -1,4 +1,6 @@
 import type {
+  BundleCatalog,
+  BundleStates,
   LangfuseTrace,
   ModelOption,
   OffboardStates,
@@ -100,6 +102,20 @@ export const api = {
     json<{ status: OrgStatus; states: OffboardStates }>(`/api/orgs/${orgId}/offboard`),
   runOffboard: (orgId: string, onEvent: (e: string, d: string) => void, signal?: AbortSignal) =>
     postSSE(`/api/orgs/${orgId}/offboard`, {}, onEvent, signal),
+  // Bundle builds: the catalog the wizard renders, one run's durable state, and the
+  // build itself (a POST that streams the nine steps, resumable by re-POSTing the
+  // same selection — the target is derived from it server-side).
+  getBundles: (orgId: string) => json<BundleCatalog>(`/api/orgs/${orgId}/bundles`),
+  getBundleRun: (orgId: string, target: string) =>
+    json<{ target: string; running: boolean; states: BundleStates }>(
+      `/api/orgs/${orgId}/bundles/${encodeURIComponent(target)}`,
+    ),
+  runBundle: (
+    orgId: string,
+    sel: { runtime: string; plugins: string[] },
+    onEvent: (e: string, d: string) => void,
+    signal?: AbortSignal,
+  ) => postSSE(`/api/orgs/${orgId}/bundles`, sel, onEvent, signal),
   listProjects: (orgId: string) => json<{ projects: Project[] }>(`/api/orgs/${orgId}/projects`),
   listSessions: (orgId: string, projectId?: string) =>
     json<{ sessions: Session[] }>(
