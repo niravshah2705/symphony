@@ -3,14 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Archagentix Platform — ADLC (Agentic Development Life Cycle)</title>
+    <title>Archagentix Platform: ADLC (Agentic Development Life Cycle)</title>
     <meta
       name="description"
-      content="Archagentix platform — ADLC (Agentic Development Life Cycle): the human-governed workspace where AI agents plan, implement, test, review, and ship software."
+      content="Archagentix platform: the ADLC (Agentic Development Life Cycle) workspace where AI agents plan, implement, test, review, and ship software under human governance."
     />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="application-name" content="Archagentix" />
-    <meta name="theme-color" content="#15181f" />
+    <meta name="theme-color" content="#fafbfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#171b22" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href="/brand/favicon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
@@ -18,7 +19,7 @@
     <meta property="og:image" content="https://platform.archagentix.com/brand/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Archagentix — the Agentic Development Life Cycle" />
+    <meta property="og:image:alt" content="Archagentix: the Agentic Development Life Cycle" />
     <meta name="twitter:image" content="https://platform.archagentix.com/brand/og-image.png" />
     <link rel="canonical" href="https://platform.archagentix.com/" />
     <link rel="sitemap" type="application/xml" href="/sitemap-platform.xml" />
@@ -26,13 +27,13 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Archagentix" />
     <meta property="og:url" content="https://platform.archagentix.com/" />
-    <meta property="og:title" content="Archagentix Platform — ADLC (Agentic Development Life Cycle)" />
+    <meta property="og:title" content="Archagentix Platform: ADLC (Agentic Development Life Cycle)" />
     <meta
       property="og:description"
       content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Archagentix Platform — ADLC (Agentic Development Life Cycle)" />
+    <meta name="twitter:title" content="Archagentix Platform: ADLC (Agentic Development Life Cycle)" />
     <meta
       name="twitter:description"
       content="A human-governed agentic lifecycle for planning, implementing, testing, reviewing, delivering, and learning from software changes."
@@ -119,29 +120,38 @@
         "description": "Creators of the Agentic Development Life Cycle (ADLC). Ship software with agents in the loop and humans in control."
       }
     </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://unpkg.com/xterm@5.3.0/css/xterm.css" />
     <script src="https://unpkg.com/xterm@5.3.0/lib/xterm.js"></script>
     <script src="https://unpkg.com/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
     <style id="critical-css">
-      :root, :root[data-theme='dark'] {
-        color-scheme: dark; --bg: #11141a; --panel: #181c24; --panel-2: #20252f;
-        --sidebar: #151920; --topbar: #15181f; --surface-subtle: #1b2029;
-        --border: #2a303b; --border-strong: #363d49; --text: #edf0f5;
-        --muted: #9aa3b1; --accent: #7088ef; --accent-2: #91a4ff;
-        --accent-soft: #222d55; --green: #58b989; --green-soft: #1b3329;
+      /* Hallmark · stamp: mode redesign · depth full · scope app · theme Cobalt (by request) · genre modern-minimal · signature the live agent workspace itself */
+      /* critique: shell restyled in Cobalt paper (light) and graphite (dark); values mirror /styles.css token blocks verbatim */
+      /* Hallmark · waive 24b · first-paint shell paddings · the critical block copies the shipped sidebar, topbar and footer values exactly so pre-load layout matches loaded layout pixel-for-pixel */
+      :root, :root[data-theme='light'] {
+        color-scheme: light; --bg: oklch(98.6% 0.005 250); --panel: oklch(99.4% 0.003 250); --panel-2: oklch(96.2% 0.008 252);
+        --sidebar: oklch(96.2% 0.008 252); --topbar: oklch(98.6% 0.005 250); --surface-subtle: oklch(96.2% 0.008 252);
+        --border: oklch(90% 0.009 252); --border-strong: oklch(83% 0.012 252); --text: oklch(21% 0.028 262);
+        --muted: oklch(50% 0.018 258); --accent: oklch(52% 0.19 258); --accent-2: oklch(43% 0.2 262);
+        --accent-soft: oklch(95% 0.028 256); --green: oklch(50% 0.12 150); --green-soft: oklch(95% 0.035 150);
+        --overlay: oklch(21% 0.028 262 / 0.35);
         --topbar-height: 60px; --sidebar-width: 255px;
-        --font-serif: Georgia, 'Times New Roman', serif;
-        --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-display: 'Familjen Grotesk', system-ui, sans-serif;
+        --font-sans: 'IBM Plex Sans', ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
-      :root[data-theme='light'] {
-        color-scheme: light; --bg: #f6f5f1; --panel: #fff; --panel-2: #f1f0eb;
-        --sidebar: #f1f0eb; --topbar: #f8f7f4; --surface-subtle: #fbfbf9;
-        --border: #e3e4e0; --border-strong: #d4d6d3; --text: #172033;
-        --muted: #687083; --accent: #315cf5; --accent-2: #3158d8;
-        --accent-soft: #eef2ff; --green: #3f8b63; --green-soft: #e9f3ed;
+      :root[data-theme='dark'] {
+        color-scheme: dark; --bg: oklch(21% 0.024 262); --panel: oklch(26.5% 0.026 262); --panel-2: oklch(31% 0.028 262);
+        --sidebar: oklch(18.5% 0.022 262); --topbar: oklch(18.5% 0.022 262); --surface-subtle: oklch(28% 0.026 262);
+        --border: oklch(34% 0.03 262); --border-strong: oklch(42% 0.032 262); --text: oklch(93% 0.01 250);
+        --muted: oklch(69% 0.022 256); --accent: oklch(64% 0.17 258); --accent-2: oklch(76% 0.13 254);
+        --accent-soft: oklch(31% 0.08 262); --green: oklch(70% 0.13 155); --green-soft: oklch(30% 0.05 155);
+        --overlay: oklch(8% 0.01 262 / 0.6);
       }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; min-height: 100dvh; overflow: hidden; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font-sans); }
+      html { overflow-x: clip; }
+      body { margin: 0; min-height: 100vh; min-height: 100dvh; overflow-x: clip; overflow-y: hidden; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font-sans); }
       a { color: inherit; text-decoration: none; }
       button, textarea { font: inherit; }
       .skip-link { position: fixed; z-index: 200; top: 8px; left: 50%; padding: 8px 12px; transform: translate(-50%,-150%); border-radius: 7px; background: var(--text); color: var(--panel); font-size: 12px; font-weight: 700; }
@@ -157,7 +167,7 @@
                 mask: url('/brand/archagentix-mark.svg') center / contain no-repeat;
       }
       .topbar-context { justify-self: center; gap: 8px; color: var(--muted); font-size: 11px; }
-      .topbar-context > span { font-size: 8px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+      .topbar-context > span { font-size: 10px; font-weight: 600; }
       .topbar-context > span::after { content: '/'; margin-left: 8px; color: var(--border-strong); }
       .topbar-context strong { color: var(--text); font-size: 12px; }
       .topbar-actions { justify-self: end; gap: 10px; }
@@ -170,22 +180,20 @@
       .workspace-picker { min-height: 51px; border-bottom: 1px solid var(--border); }
       .sidebar-nav { display: flex; flex: 1; flex-direction: column; gap: 14px; padding-top: 16px; }
       .nav-section { display: flex; flex-direction: column; gap: 2px; } .nav-section-system { margin-top: auto; }
-      .nav-heading { padding: 0 10px 7px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+      .nav-heading { padding: 0 10px 7px; color: var(--muted); font-size: 11px; font-weight: 600; }
       .sidebar-nav a { min-height: 45px; display: grid; grid-template-columns: 27px minmax(0,1fr); gap: 8px; align-items: center; padding: 5px 8px; color: var(--muted); }
-      .nav-link-copy { min-width: 0; display: flex; flex-direction: column; } .nav-link-copy small { font-size: 8px; } .nav-link-copy strong { font-size: 11px; }
+      .nav-link-copy { min-width: 0; display: flex; flex-direction: column; } .nav-link-copy small { font-size: 10px; } .nav-link-copy strong { font-size: 12px; }
       .view { min-width: 0; min-height: 0; overflow: auto; background: var(--bg); }
       #view[data-initial-agent-view] { padding: 0; overflow: hidden; background: var(--panel); }
       .agent-workspace { width: 100%; height: 100%; display: grid; grid-template-columns: 248px minmax(0,1fr) 340px; overflow: hidden; background: var(--panel); }
       .conversation-rail { min-width: 0; border-right: 1px solid var(--border-strong); background: var(--panel-2); }
-      .conversation-rail-head { display: flex; justify-content: space-between; padding: 16px 12px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
+      .conversation-rail-head { display: flex; justify-content: space-between; padding: 16px 12px; color: var(--muted); font-size: 11px; font-weight: 600; }
       .scenario-reader { min-width: 0; min-height: 0; overflow: auto; background: var(--panel); }
       .reader-toolbar { min-height: 49px; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; }
       .conversation-wrap { width: min(100%,900px); min-height: calc(100% - 49px); margin: 0 auto; padding: clamp(52px,8vh,96px) 58px 0; }
-      .omnibox-hero { max-width: 720px; margin: 0 auto 24px; text-align: center; }
-      .omnibox-eyebrow { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 13px; color: var(--accent-2); font-size: 9px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; }
-      .omnibox-spark { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--accent-soft); font-size: 12px; }
-      .omnibox-hero h1 { margin: 0; font: 570 clamp(30px,4vw,46px)/1.08 var(--font-serif); letter-spacing: -.035em; }
-      .omnibox-hero p { max-width: 650px; margin: 13px auto 0; color: var(--muted); font: 14px/1.65 var(--font-serif); }
+      .omnibox-hero { max-width: 760px; margin: 0 0 24px; text-align: start; }
+      .omnibox-hero h1 { margin: 0; font: 600 clamp(27px,3vw,38px)/1.1 var(--font-display); letter-spacing: -.02em; overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+      .omnibox-hero p { max-width: 620px; margin: 12px 0 0; color: var(--muted); font: 15px/1.6 var(--font-sans); }
       .app-footer { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px 18px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border-strong); background: var(--topbar); color: var(--muted); }
       .footer-legal { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; font-size: 10px; }
       .footer-legal p { margin: 0; white-space: nowrap; }
@@ -202,14 +210,14 @@
       .chat-composer { margin: 0 auto; padding: 14px 0 20px; }
       .composer-surface { padding: 13px 14px 11px; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--panel); }
       .composer-surface textarea { width: 100%; min-height: 68px; padding: 3px; resize: none; border: 0; outline: 0; background: transparent; color: var(--text); }
-      .composer-actions { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--muted); font-size: 8px; }
+      .composer-actions { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--muted); font-size: 10px; }
       .privacy-chip { padding: 3px 7px; border-radius: 99px; background: var(--green-soft); color: var(--green); }
       .evidence-rail { min-width: 0; overflow: hidden; border-left: 1px solid var(--border-strong); background: var(--surface-subtle); }
       .rail-tabs { min-height: 49px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; }
       .rail-content { padding: 17px 14px; }
       .initial-skeleton { height: 8px; margin: 10px; border-radius: 99px; background: var(--border); opacity: .65; }
       .initial-skeleton.short { width: 52%; }
-      @media (max-width: 900px) { .topbar { grid-template-columns: minmax(0,1fr) auto auto; padding: 0 12px; } .mobile-nav-button { display: inline-grid; } .sidebar-collapse { display: none; } .app-frame { display: block; } .content-column { height: 100%; } .app-sidebar { width: min(88vw,310px); position: fixed; z-index: 46; top: var(--topbar-height); bottom: 0; inset-inline-start: 0; transform: translateX(-105%); } .app-sidebar.open { transform: translateX(0); } .sidebar-backdrop { position: fixed; z-index: 45; inset: var(--topbar-height) 0 0; display: block; padding: 0; border: 0; border-radius: 0; background: rgba(10,14,22,.54); } .sidebar-backdrop[hidden] { display: none; } .view { width: 100%; } }
+      @media (max-width: 900px) { .topbar { grid-template-columns: minmax(0,1fr) auto auto; padding: 0 12px; } .mobile-nav-button { display: inline-grid; } .sidebar-collapse { display: none; } .app-frame { display: block; } .content-column { height: 100%; } .app-sidebar { width: min(88vw,310px); position: fixed; z-index: 46; top: var(--topbar-height); bottom: 0; inset-inline-start: 0; transform: translateX(-105%); } .app-sidebar.open { transform: translateX(0); } .sidebar-backdrop { position: fixed; z-index: 45; inset: var(--topbar-height) 0 0; display: block; padding: 0; border: 0; border-radius: 0; background: var(--overlay); } .sidebar-backdrop[hidden] { display: none; } .view { width: 100%; } }
       @media (max-width: 780px) { .app-footer { grid-template-columns: minmax(0,1fr); } .adlc-ai-links { justify-self: start; } .agent-workspace { height: auto; min-height: 100%; display: block; overflow: visible; } .conversation-rail { display: none; } .evidence-rail { min-height: 320px; border-top: 1px solid var(--border-strong); border-left: 0; } #view[data-initial-agent-view] { overflow: auto; } .conversation-wrap { padding: 42px 30px 0; } }
       @media (max-width: 620px) { .topbar { grid-template-columns: minmax(0,1fr) auto; } .topbar-context { display: none; } .conversation-wrap { padding: 42px 20px 0; } .omnibox-hero p { font-size: 13px; } .evidence-rail { display: none; } }
       @media (max-width: 420px) { .app-footer { padding-inline: 10px; } .adlc-ai-links { width: 100%; justify-content: flex-start; padding: 5px; } .adlc-ai-label { flex: 1 0 100%; padding-inline: 4px; } }
@@ -434,7 +442,6 @@
             <div class="conversation-wrap agent-omnibox-wrap">
               <div class="agent-pause-host" hidden></div>
               <header class="omnibox-hero" data-agent-hero>
-                <span class="omnibox-eyebrow"><span class="omnibox-spark" aria-hidden="true">✳</span>ADLC · Agentic Development Life Cycle</span>
                 <h1>What should we move forward?</h1>
                 <p>Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.</p>
               </header>
