@@ -77,3 +77,61 @@ test('removing an account deletes the rewritten key, not the raw one', () => {
   assert.ok(deleted, 'the vanished account is deleted');
   assert.equal(deleted.id, '--shared--');
 });
+
+/**
+ * The catalog mirror (`scripts/seed-plugin-catalog.js --store`) is a process
+ * that writes and exits, and this backend both persists in the background and
+ * keeps snapshot listeners open. So `close()` is the only thing that can tell
+ * such a caller its writes are durable and its handles are gone — without it
+ * the CI job printed "9 record(s), 9 changed" and then sat on the listeners
+ * until its timeout cancelled the run.
+ */
+test('close waits for the commits still in flight, then releases the client', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let committed = 0;
+  let terminated = 0;
+  let unsubscribed = 0;
+  const drop = () => { unsubscribed += 1; };
+  const docRef = (path) => ({
+    path,
+    id: path.split('/').pop(),
+    collection: (name) => collRef(`${path}/${name}`),
+    get: async () => ({ exists: true, data: () => ({}) }),
+    onSnapshot: () => drop,
+  });
+  const collRef = (path) => ({
+    path,
+    doc: (id) => docRef(`${path}/${id}`),
+    get: async () => ({ docs: [] }),
+    onSnapshot: () => drop,
+  });
+  const client = {
+    collection: (name) => collRef(name),
+    batch: () => ({
+      set: () => {},
+      delete: () => {},
+      commit: async () => { await gate; committed += 1; return []; },
+    }),
+    terminate: async () => { terminated += 1; },
+  };
+  const store = create({
+    mainKeys: ['billingState'],
+    collectionKeys: ['billingAccounts'],
+    normalize: (raw) => ({ billingState: {}, billingAccounts: [], ...raw }),
+    seed: () => ({ billingState: {}, billingAccounts: [] }),
+    firestoreFactory: () => client,
+  });
+
+  await store.init();
+  store.write({ billingState: { lastAggregatedAt: 'now' }, billingAccounts: [{ id: 'a' }] });
+
+  const closing = store.close();
+  assert.equal(terminated, 0, 'the client stays open while a commit is still in flight');
+  release();
+  await closing;
+
+  assert.equal(committed, 1, 'the backgrounded write landed before anything was torn down');
+  assert.equal(terminated, 1, 'the gRPC pool is closed, so an exiting process has no handle left');
+  assert.ok(unsubscribed >= 2, `main and collection listeners are dropped (saw ${unsubscribed})`);
+});
