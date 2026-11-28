@@ -6,6 +6,9 @@ const assert = require('node:assert/strict');
 const SUBSTRATE_PATH = require.resolve('@software-factory/shared/agent/substrate');
 const RUNNER_PATH = require.resolve('@software-factory/shared/agent/substrate-runner');
 const ROUTER_PATH = require.resolve('./agent');
+// substrate-access owns the substrate calls both the substrate routes and the
+// fleet reads run through, so it must reload after the ateapi cache swap too.
+const SUBSTRATE_ACCESS_PATH = require.resolve('./substrate-access');
 
 const store = require('@software-factory/shared/store');
 
@@ -79,6 +82,7 @@ function stubSubstrate({ connected, actors, token = 'sa-projected-token', runCap
   }
   const originalGet = store.getSettings;
   store.getSettings = () => ({ agentPattern: 'substrate', substrateUrl: 'https://ateapi.ate-system.svc:8443' });
+  delete require.cache[SUBSTRATE_ACCESS_PATH];
   delete require.cache[ROUTER_PATH];
   return {
     router: require(ROUTER_PATH),
@@ -88,6 +92,7 @@ function stubSubstrate({ connected, actors, token = 'sa-projected-token', runCap
       delete require.cache[SUBSTRATE_PATH];
       delete require.cache[RUNNER_PATH];
       delete require.cache[ROUTER_PATH];
+      delete require.cache[SUBSTRATE_ACCESS_PATH];
     },
   };
 }

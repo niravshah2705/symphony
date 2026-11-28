@@ -8,6 +8,7 @@ const {
   readDocsHeader,
   isApiDocsEnabled,
   API_DOCS_HEADER,
+  swaggerDocument,
 } = require('./swagger');
 
 describe('swagger API docs gating', () => {
@@ -66,5 +67,28 @@ describe('swagger API docs gating', () => {
       assert.equal(API_DOCS_HEADER, 'x-ai-fleet-api-docs');
       assert.equal(API_DOCS_HEADER, API_DOCS_HEADER.toLowerCase());
     });
+  });
+
+  describe('Fleet endpoints are documented', () => {
+    const fleetPaths = [
+      '/api/agent/fleet/agents',
+      '/api/agent/fleet/actors',
+      '/api/agent/fleet/actors/usage',
+      '/api/agent/fleet/tokens/usage',
+    ];
+    it('declares a Fleet tag', () => {
+      assert.ok((swaggerDocument.tags || []).some((t) => t.name === 'Fleet'));
+    });
+    for (const path of fleetPaths) {
+      it(`documents GET ${path} with Bearer auth and the organization header`, () => {
+        const op = swaggerDocument.paths[path] && swaggerDocument.paths[path].get;
+        assert.ok(op, `${path} GET must exist`);
+        assert.deepEqual(op.tags, ['Fleet']);
+        assert.ok((op.security || []).some((s) => s && Object.prototype.hasOwnProperty.call(s, 'Bearer')));
+        const names = (op.parameters || []).map((p) => (p.$ref || '').split('/').pop() || p.name);
+        assert.ok(names.includes('OrganizationHeader'), `${path} must require the org header`);
+        assert.ok(names.includes('ProjectHeader'), `${path} must accept the project header`);
+      });
+    }
   });
 });
