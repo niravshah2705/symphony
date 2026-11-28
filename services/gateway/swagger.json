@@ -19,6 +19,179 @@
     }
   ],
   "paths": {
+    "/api/agent/fleet/agents": {
+      "get": {
+        "tags": ["Fleet"],
+        "summary": "List agents",
+        "description": "Configured agent profiles for the selected organization and project (platform defaults merged with tenant copies). Requires a valid Firebase bearer plus an organization selection header.",
+        "operationId": "fleetListAgents",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrganizationHeader" },
+          { "$ref": "#/components/parameters/ProjectHeader" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent profiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": { "type": "integer" },
+                    "agents": {
+                      "type": "array",
+                      "items": { "type": "object", "additionalProperties": true }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/OrganizationContextRequired" }
+        }
+      }
+    },
+    "/api/agent/fleet/actors": {
+      "get": {
+        "tags": ["Fleet"],
+        "summary": "List running actors",
+        "description": "Live substrate (gVisor) actors for the selected organization's namespace, read from the control plane. `projectId` narrows the list by the plan-<project>- actor-name prefix (a display filter, not a scope). Returns configured:false with an empty list when the substrate is not reachable/authenticatable.",
+        "operationId": "fleetListActors",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrganizationHeader" },
+          { "$ref": "#/components/parameters/ProjectHeader" },
+          { "name": "projectId", "in": "query", "required": false, "description": "Display filter on actor name prefix.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Substrate status and actor list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": { "type": "boolean" },
+                    "credentialConfigured": { "type": "boolean" },
+                    "atespace": { "type": "string" },
+                    "agentPattern": { "type": "string" },
+                    "workerPool": { "type": "string" },
+                    "ingressUrl": { "type": "string" },
+                    "status": { "type": "object", "additionalProperties": true },
+                    "contextProjectId": { "type": "string" },
+                    "projectFilter": { "type": "object", "nullable": true, "additionalProperties": true },
+                    "actors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "state": { "type": "string" },
+                          "workerPod": { "type": "string" },
+                          "nodeName": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/OrganizationContextRequired" }
+        }
+      }
+    },
+    "/api/agent/fleet/actors/usage": {
+      "get": {
+        "tags": ["Fleet"],
+        "summary": "List actor usage",
+        "description": "Per-actor compute sessions (metering ledger rows) for the selected organization and project.",
+        "operationId": "fleetListActorUsage",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrganizationHeader" },
+          { "$ref": "#/components/parameters/ProjectHeader" },
+          { "name": "status", "in": "query", "required": false, "description": "Filter sessions by lifecycle status.", "schema": { "type": "string", "enum": ["RUNNING", "CLOSED"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actor usage rows and totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "actorUsage": {
+                      "type": "array",
+                      "items": { "type": "object", "additionalProperties": true }
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "sessions": { "type": "integer" },
+                        "running": { "type": "integer" },
+                        "seconds": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/OrganizationContextRequired" }
+        }
+      }
+    },
+    "/api/agent/fleet/tokens/usage": {
+      "get": {
+        "tags": ["Fleet"],
+        "summary": "List token usage",
+        "description": "Per-run LLM token and credit usage rows for the selected organization and project, newest first.",
+        "operationId": "fleetListTokenUsage",
+        "security": [{ "Bearer": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrganizationHeader" },
+          { "$ref": "#/components/parameters/ProjectHeader" },
+          { "name": "since", "in": "query", "required": false, "description": "ISO timestamp lower bound on createdAt.", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limit", "in": "query", "required": false, "description": "Maximum number of rows to return.", "schema": { "type": "integer", "minimum": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token usage rows and totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tokenUsage": {
+                      "type": "array",
+                      "items": { "type": "object", "additionalProperties": true }
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "inputTokens": { "type": "number" },
+                        "outputTokens": { "type": "number" },
+                        "totalTokens": { "type": "number" },
+                        "costTokenCredits": { "type": "number" },
+                        "notionalCostTokenCredits": { "type": "number" },
+                        "records": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/OrganizationContextRequired" }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "summary": "Health check",
@@ -573,6 +746,41 @@
         "description": "Firebase ID token"
       }
     },
+    "parameters": {
+      "OrganizationHeader": {
+        "name": "x-ai-fleet-organization-id",
+        "in": "header",
+        "required": true,
+        "description": "Selected organization id. Operational fleet routes require it; a missing value is rejected with 403 organization_context_required.",
+        "schema": { "type": "string" }
+      },
+      "ProjectHeader": {
+        "name": "x-ai-fleet-project-id",
+        "in": "header",
+        "required": false,
+        "description": "Selected project id. When present, listings are narrowed to this project within the organization.",
+        "schema": { "type": "string" }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Not authenticated (missing or invalid Firebase bearer token)"
+      },
+      "OrganizationContextRequired": {
+        "description": "No organization selected",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": { "type": "string" },
+                "code": { "type": "string", "example": "organization_context_required" }
+              }
+            }
+          }
+        }
+      }
+    },
     "schemas": {
       "Error": {
         "type": "object",
@@ -637,6 +845,10 @@
     {
       "name": "Organization",
       "description": "Organization and workspace management"
+    },
+    {
+      "name": "Fleet",
+      "description": "Organization/project-scoped fleet inventory: agents, running actors, actor usage, token usage"
     }
   ]
 }

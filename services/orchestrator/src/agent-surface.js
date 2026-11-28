@@ -17,6 +17,7 @@ const { internalServiceAuth } = require('@software-factory/shared/internal-auth'
 const { sendError } = require('@software-factory/shared/util');
 
 const agentRoutes = require('./routes/agent');
+const fleetRoutes = require('./routes/fleet');
 const settingsRoutes = require('./routes/settings');
 const { router: codexRoutes } = require('./routes/codex');
 const { router: claudeRoutes } = require('./routes/claude');
@@ -64,6 +65,10 @@ function createAgentSurface({
   // paths are not swallowed by it.
   const api = [apiJson, authenticate, bindStoreContext];
   app.use('/api/agent/global-questions', ...api, globalQuestionsRoutes);
+  // Fleet reads mount before the general /api/agent router so these exact
+  // paths are not swallowed by it. Tenancy comes from req.fleetContext (bound
+  // by bindStoreContext below), never from raw headers.
+  app.use('/api/agent/fleet', ...api, fleetRoutes);
   app.use('/api/agent', ...api, agentRoutes);
   app.use('/api/settings/codex', ...api, codexRoutes);
   app.use('/api/settings/claude', ...api, claudeRoutes);
