@@ -359,10 +359,6 @@ function ensureAgentScaffold(view, generation) {
         el('div', { class: 'conversation-wrap agent-omnibox-wrap' }, [
           el('div', { class: 'agent-pause-host', hidden: true }),
           el('header', { class: 'omnibox-hero', dataset: { agentHero: '' } }, [
-            el('span', { class: 'omnibox-eyebrow' }, [
-              el('span', { class: 'omnibox-spark', 'aria-hidden': 'true' }, '✳'),
-              'ADLC · Agentic Development Life Cycle',
-            ]),
             el('h1', {}, 'What should we move forward?'),
             el('p', {}, 'Ask a question, search workspace memory, pressure-test a business, troubleshoot a run, or turn an implementation change into a task.'),
           ]),
